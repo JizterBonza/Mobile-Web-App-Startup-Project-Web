@@ -20,7 +20,7 @@ export default function Welcome({ auth }) {
                   Welcome to Agrify Connect
                 </h1>
                 <p className="text-gray-600 mb-8">
-                  Your Laravel application with Inertia.js and React is ready!
+                  
                 </p>
                 
                 {auth.user ? (
@@ -35,7 +35,7 @@ export default function Welcome({ auth }) {
                     </div>
                     <Link
                       href="/dashboard"
-                      className="inline-block w-full bg-white hover:bg-gray-50 text-primary-500 font-bold py-3 px-4 rounded-lg border-2 border-primary-500 transition-colors"
+                      className="inline-block w-full bg-white hover:bg-gray-50 text-primary-500 font-bold py-3 px-4 rounded-lg border-2 border-primary-500 transition-colors duration-200"
                     >
                       Go to Dashboard
                     </Link>
@@ -44,13 +44,13 @@ export default function Welcome({ auth }) {
                   <div className="space-y-4">
                     <Link
                       href="/login"
-                      className="inline-block w-full bg-white hover:bg-gray-50 text-primary-500 font-bold py-3 px-4 rounded-lg border-2 border-primary-500 transition-colors"
+                      className="inline-block w-full bg-white hover:bg-gray-50 text-primary-500 font-bold py-3 px-4 rounded-lg border-2 border-primary-500 transition-colors duration-200"
                     >
                       Sign In
                     </Link>
                     <Link
                       href="/register"
-                      className="inline-block w-full bg-white hover:bg-gray-50 text-primary-500 font-bold py-3 px-4 rounded-lg border-2 border-primary-500 transition-colors"
+                      className="inline-block w-full bg-white hover:bg-gray-50 text-primary-500 font-bold py-3 px-4 rounded-lg border-2 border-primary-500 transition-colors duration-200"
                     >
                       Create Account
                     </Link>
