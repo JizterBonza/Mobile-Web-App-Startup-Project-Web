@@ -8,10 +8,15 @@ A complete authentication system has been implemented for the Agrify Connect Lar
 ### 🔐 Authentication Features
 - **User Registration** - Create new accounts with validation
 - **User Login** - Secure login with email/password
-- **User Logout** - Secure session termination
+- **User Logout** - Complete session destruction and cleanup
 - **Remember Me** - Optional persistent login
 - **Protected Routes** - Dashboard requires authentication
-- **Session Management** - Secure session handling
+- **Advanced Session Management** - Enhanced session handling with:
+  - Session timeout (2 hours)
+  - Activity-based session validation
+  - Automatic session cleanup on logout
+  - Session status monitoring
+  - Real-time session validation
 
 ### 🎨 UI/UX Features
 - **Modern Design** - Beautiful, responsive UI with Tailwind CSS
@@ -25,11 +30,12 @@ A complete authentication system has been implemented for the Agrify Connect Lar
 ```
 app/
 ├── Http/Controllers/Auth/
-│   └── AuthController.php          # Authentication logic
+│   └── AuthController.php          # Enhanced authentication logic with session management
+├── Http/Middleware/
+│   ├── HandleInertiaRequests.php   # Shares auth data (already existed)
+│   └── CheckSessionValidity.php    # Session validation middleware
 ├── Models/
 │   └── User.php                    # User model (already existed)
-└── Http/Middleware/
-    └── HandleInertiaRequests.php   # Shares auth data (already existed)
 
 resources/js/Pages/
 ├── Auth/
@@ -54,11 +60,12 @@ database/
 |--------|-----|--------|-------------|
 | GET | `/` | Welcome | Landing page with login/register links |
 | GET | `/login` | AuthController@showLogin | Display login form |
-| POST | `/login` | AuthController@login | Process login |
+| POST | `/login` | AuthController@login | Process login with session creation |
 | GET | `/register` | AuthController@showRegister | Display registration form |
-| POST | `/register` | AuthController@register | Process registration |
-| POST | `/logout` | AuthController@logout | Process logout |
-| GET | `/dashboard` | Dashboard | Protected dashboard (requires auth) |
+| POST | `/register` | AuthController@register | Process registration with session creation |
+| POST | `/logout` | AuthController@logout | Process logout with session destruction |
+| GET | `/session/check` | AuthController@checkSession | Check session validity and status |
+| GET | `/dashboard` | Dashboard | Protected dashboard (requires auth + session validation) |
 
 ## Test Credentials
 
@@ -99,14 +106,51 @@ npm run dev
 4. **Logout**:
    - Click the "Logout" button in the dashboard
    - You'll be redirected to the welcome page
+   - Session is completely destroyed and cleaned up
+
+5. **Test Session Management**:
+   - Login and check the dashboard for session information
+   - Session details are displayed including login time, last activity, and timeout
+   - Session is automatically validated every 5 minutes
+   - Try waiting for session timeout or inactivity to test automatic logout
 
 ## Security Features
 
 - **Password Hashing** - Passwords are securely hashed using Laravel's Hash facade
 - **CSRF Protection** - All forms include CSRF tokens
-- **Session Security** - Sessions are regenerated on login/logout
+- **Enhanced Session Security** - Advanced session management with:
+  - Session ID regeneration on login/logout
+  - Complete session data cleanup on logout
+  - Session timeout enforcement (2 hours)
+  - Activity-based session validation
+  - Automatic session invalidation on timeout
 - **Input Validation** - Server-side validation for all inputs
 - **SQL Injection Protection** - Using Eloquent ORM prevents SQL injection
+
+## Session Management Details
+
+### Session Lifecycle
+1. **Login**: Session is created with timeout and activity tracking
+2. **Activity**: Last activity timestamp is updated on each request
+3. **Validation**: Sessions are checked for timeout and inactivity
+4. **Logout**: Complete session destruction and cleanup
+
+### Session Data Stored
+- `user_id` - Associated user ID
+- `login_time` - When the user logged in
+- `last_activity` - Last user activity timestamp
+- `session_timeout` - When the session expires
+
+### Session Validation
+- **Timeout Check**: Sessions expire after 2 hours
+- **Activity Check**: Sessions expire after 2 hours of inactivity
+- **Automatic Cleanup**: Expired sessions are automatically cleared
+- **Real-time Monitoring**: Dashboard shows session status and information
+
+### New Routes Added
+| Method | URI | Action | Description |
+|--------|-----|--------|-------------|
+| GET | `/session/check` | AuthController@checkSession | Check session validity and status |
 
 ## Customization
 

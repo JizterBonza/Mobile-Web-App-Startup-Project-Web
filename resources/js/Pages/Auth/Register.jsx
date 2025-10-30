@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Link, useForm, Head } from '@inertiajs/react';
+import { Link, useForm } from '@inertiajs/react';
+import AuthLayout from '../../Layouts/AuthLayout';
 
 export default function Register() {
     const { data, setData, post, processing, errors } = useForm({
@@ -15,134 +16,120 @@ export default function Register() {
     };
 
     return (
-        <>
-            <Head title="Register" />
-            <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
-                <div className="max-w-md w-full space-y-8">
-                    <div>
-                        <div className="text-center mb-6">
-                            <h1 className="text-2xl font-bold text-gray-900">Agrify Connect</h1>
-                        </div>
-                        <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
-                            Create your account
-                        </h2>
-                    <p className="mt-2 text-center text-sm text-gray-600">
-                        Or{' '}
-                        <Link
-                            href="/login"
-                            className="font-medium text-primary-500 hover:text-primary-600"
-                        >
-                            sign in to your existing account
-                        </Link>
-                    </p>
-                </div>
-                <form className="mt-8 space-y-6" onSubmit={submit}>
-                    <div className="space-y-4">
-                        <div>
-                            <label htmlFor="name" className="block text-sm font-medium text-gray-700">
-                                Full Name
-                            </label>
-                            <input
-                                id="name"
-                                name="name"
-                                type="text"
-                                autoComplete="name"
-                                required
-                                className="mt-1 appearance-none relative block w-full px-3 py-3 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm bg-white"
-                                placeholder="Enter your full name"
-                                value={data.name}
-                                onChange={(e) => setData('name', e.target.value)}
-                            />
-                            {errors.name && (
-                                <p className="mt-1 text-sm text-red-600">{errors.name}</p>
-                            )}
-                        </div>
-
-                        <div>
-                            <label htmlFor="email" className="block text-sm font-medium text-gray-700">
-                                Email Address
-                            </label>
-                            <input
-                                id="email"
-                                name="email"
-                                type="email"
-                                autoComplete="email"
-                                required
-                                className="mt-1 appearance-none relative block w-full px-3 py-3 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm bg-white"
-                                placeholder="Enter your email"
-                                value={data.email}
-                                onChange={(e) => setData('email', e.target.value)}
-                            />
-                            {errors.email && (
-                                <p className="mt-1 text-sm text-red-600">{errors.email}</p>
-                            )}
-                        </div>
-
-                        <div>
-                            <label htmlFor="password" className="block text-sm font-medium text-gray-700">
-                                Password
-                            </label>
-                            <input
-                                id="password"
-                                name="password"
-                                type="password"
-                                autoComplete="new-password"
-                                required
-                                className="mt-1 appearance-none relative block w-full px-3 py-3 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm bg-white"
-                                placeholder="Enter your password"
-                                value={data.password}
-                                onChange={(e) => setData('password', e.target.value)}
-                            />
-                            {errors.password && (
-                                <p className="mt-1 text-sm text-red-600">{errors.password}</p>
-                            )}
-                        </div>
-
-                        <div>
-                            <label htmlFor="password_confirmation" className="block text-sm font-medium text-gray-700">
-                                Confirm Password
-                            </label>
-                            <input
-                                id="password_confirmation"
-                                name="password_confirmation"
-                                type="password"
-                                autoComplete="new-password"
-                                required
-                                className="mt-1 appearance-none relative block w-full px-3 py-3 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm bg-white"
-                                placeholder="Confirm your password"
-                                value={data.password_confirmation}
-                                onChange={(e) => setData('password_confirmation', e.target.value)}
-                            />
-                            {errors.password_confirmation && (
-                                <p className="mt-1 text-sm text-red-600">{errors.password_confirmation}</p>
-                            )}
+        <AuthLayout title="Register">
+            <p className="login-box-msg">Register a new membership</p>
+            
+            <form onSubmit={submit}>
+                <div className="input-group mb-3">
+                    <input
+                        type="text"
+                        className={`form-control ${errors.name ? 'is-invalid' : ''}`}
+                        placeholder="Full name"
+                        value={data.name}
+                        onChange={(e) => setData('name', e.target.value)}
+                        required
+                    />
+                    <div className="input-group-append">
+                        <div className="input-group-text">
+                            <span className="fas fa-user"></span>
                         </div>
                     </div>
-
-                    <div>
+                    {errors.name && (
+                        <div className="invalid-feedback">
+                            {errors.name}
+                        </div>
+                    )}
+                </div>
+                
+                <div className="input-group mb-3">
+                    <input
+                        type="email"
+                        className={`form-control ${errors.email ? 'is-invalid' : ''}`}
+                        placeholder="Email"
+                        value={data.email}
+                        onChange={(e) => setData('email', e.target.value)}
+                        required
+                    />
+                    <div className="input-group-append">
+                        <div className="input-group-text">
+                            <span className="fas fa-envelope"></span>
+                        </div>
+                    </div>
+                    {errors.email && (
+                        <div className="invalid-feedback">
+                            {errors.email}
+                        </div>
+                    )}
+                </div>
+                
+                <div className="input-group mb-3">
+                    <input
+                        type="password"
+                        className={`form-control ${errors.password ? 'is-invalid' : ''}`}
+                        placeholder="Password"
+                        value={data.password}
+                        onChange={(e) => setData('password', e.target.value)}
+                        required
+                    />
+                    <div className="input-group-append">
+                        <div className="input-group-text">
+                            <span className="fas fa-lock"></span>
+                        </div>
+                    </div>
+                    {errors.password && (
+                        <div className="invalid-feedback">
+                            {errors.password}
+                        </div>
+                    )}
+                </div>
+                
+                <div className="input-group mb-3">
+                    <input
+                        type="password"
+                        className={`form-control ${errors.password_confirmation ? 'is-invalid' : ''}`}
+                        placeholder="Retype password"
+                        value={data.password_confirmation}
+                        onChange={(e) => setData('password_confirmation', e.target.value)}
+                        required
+                    />
+                    <div className="input-group-append">
+                        <div className="input-group-text">
+                            <span className="fas fa-lock"></span>
+                        </div>
+                    </div>
+                    {errors.password_confirmation && (
+                        <div className="invalid-feedback">
+                            {errors.password_confirmation}
+                        </div>
+                    )}
+                </div>
+                
+                <div className="row">
+                    <div className="col-8">
+                        <div className="icheck-primary">
+                            <input type="checkbox" id="agreeTerms" name="terms" value="agree" required />
+                            <label htmlFor="agreeTerms">
+                                I agree to the <a href="#">terms</a>
+                            </label>
+                        </div>
+                    </div>
+                    <div className="col-4">
                         <button
                             type="submit"
+                            className="btn btn-primary btn-block"
                             disabled={processing}
-                            className="inline-block w-full bg-white hover:bg-gray-50 text-primary-500 font-bold py-3 px-4 rounded-lg border-2 border-primary-500 transition-colors duration-200"
                         >
-                            {processing ? 'Creating account...' : 'Create account'}
+                            {processing ? 'Registering...' : 'Register'}
                         </button>
                     </div>
+                </div>
+            </form>
 
-                    <div className="text-sm text-gray-600">
-                        By creating an account, you agree to our{' '}
-                        <Link href="/terms" className="text-primary-500 hover:text-primary-600">
-                            Terms of Service
-                        </Link>{' '}
-                        and{' '}
-                        <Link href="/privacy" className="text-primary-500 hover:text-primary-600">
-                            Privacy Policy
-                        </Link>
-                        .
-                    </div>
-                </form>
-            </div>
-        </div>
-        </>
+            <p className="mb-0">
+                <Link href="/login" className="text-center">
+                    I already have a membership
+                </Link>
+            </p>
+        </AuthLayout>
     );
 }

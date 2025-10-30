@@ -4,54 +4,58 @@ export default function Welcome({ auth }) {
   return (
     <>
       <Head title="Welcome" />
-      <div className="min-h-screen bg-gradient-to-br from-primary-50 to-primary-100">
-        <div className="flex items-center justify-center min-h-screen">
-          <div className="max-w-md mx-auto bg-white rounded-xl shadow-lg overflow-hidden">
-            <div className="p-8">
+      <div className="hold-transition login-page">
+        <div className="login-box">
+          <div className="login-logo">
+            <Link href="/">
+              <b>Agrify</b>Connect
+            </Link>
+          </div>
+          
+          <div className="card">
+            <div className="card-body login-card-body">
               <div className="text-center">
-                <div className="mb-6">
-                  <div className="mx-auto h-12 w-12 bg-primary-500 rounded-full flex items-center justify-center">
-                    <svg className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                    </svg>
+                <div className="mb-4">
+                  <div className="mx-auto d-inline-block" style={{width: '60px', height: '60px', backgroundColor: '#007bff', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center'}}>
+                    <i className="fas fa-seedling text-white" style={{fontSize: '24px'}}></i>
                   </div>
                 </div>
-                <h1 className="text-3xl font-bold text-gray-900 mb-4">
+                <h3 className="login-box-msg mb-4">
                   Welcome to Agrify Connect
-                </h1>
-                <p className="text-gray-600 mb-8">
-                  
+                </h3>
+                <p className="text-muted mb-4">
+                  Your agricultural management platform
                 </p>
                 
                 {auth.user ? (
-                  <div className="space-y-4">
-                    <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                      <p className="text-green-800 font-medium">
-                        Hello, {auth.user.name}!
-                      </p>
-                      <p className="text-green-600 text-sm">
-                        You are successfully logged in.
-                      </p>
+                  <div className="mb-4">
+                    <div className="alert alert-success">
+                      <h5><i className="icon fas fa-check"></i> Welcome back!</h5>
+                      Hello, <strong>{auth.user.name}</strong>!<br />
+                      You are successfully logged in.
                     </div>
                     <Link
                       href="/dashboard"
-                      className="inline-block w-full bg-white hover:bg-gray-50 text-primary-500 font-bold py-3 px-4 rounded-lg border-2 border-primary-500 transition-colors duration-200"
+                      className="btn btn-primary btn-block"
                     >
+                      <i className="fas fa-tachometer-alt mr-2"></i>
                       Go to Dashboard
                     </Link>
                   </div>
                 ) : (
-                  <div className="space-y-4">
+                  <div className="mb-4">
                     <Link
                       href="/login"
-                      className="inline-block w-full bg-white hover:bg-gray-50 text-primary-500 font-bold py-3 px-4 rounded-lg border-2 border-primary-500 transition-colors duration-200"
+                      className="btn btn-primary btn-block mb-2"
                     >
+                      <i className="fas fa-sign-in-alt mr-2"></i>
                       Sign In
                     </Link>
                     <Link
                       href="/register"
-                      className="inline-block w-full bg-white hover:bg-gray-50 text-primary-500 font-bold py-3 px-4 rounded-lg border-2 border-primary-500 transition-colors duration-200"
+                      className="btn btn-outline-primary btn-block"
                     >
+                      <i className="fas fa-user-plus mr-2"></i>
                       Create Account
                     </Link>
                   </div>
