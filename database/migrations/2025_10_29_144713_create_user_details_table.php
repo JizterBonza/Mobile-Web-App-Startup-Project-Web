@@ -17,6 +17,7 @@ return new class extends Migration
             $table->string('middle_name', 100)->nullable();
             $table->string('last_name', 100);
             $table->string('email', 150)->unique();
+            $table->boolean('email_confirmed')->default(false);
             $table->string('mobile_number', 20)->nullable();
             $table->text('shipping_address')->nullable();
             $table->string('profile_image_url', 255)->nullable();
