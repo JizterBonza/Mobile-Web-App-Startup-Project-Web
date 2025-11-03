@@ -12,6 +12,14 @@ class User extends Authenticatable
     use HasFactory, Notifiable;
 
     /**
+     * User type constants
+     */
+    const TYPE_SUPER_ADMIN = 'super_admin';
+    const TYPE_ADMIN = 'admin';
+    const TYPE_VENDOR = 'vendor';
+    const TYPE_VETERINARIAN = 'veterinarian';
+
+    /**
      * The attributes that are mass assignable.
      *
      * @var array<int, string>
@@ -20,6 +28,7 @@ class User extends Authenticatable
         'name',
         'email',
         'password',
+        'user_type',
     ];
 
     /**
@@ -43,5 +52,32 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
         ];
+    }
+
+    /**
+     * Get the dashboard URL based on user type.
+     *
+     * @return string
+     */
+    public function getDashboardUrl(): string
+    {
+        return match($this->user_type) {
+            self::TYPE_SUPER_ADMIN => '/dashboard/super-admin',
+            self::TYPE_ADMIN => '/dashboard/admin',
+            self::TYPE_VENDOR => '/dashboard/vendor',
+            self::TYPE_VETERINARIAN => '/dashboard/veterinarian',
+            default => '/dashboard',
+        };
+    }
+
+    /**
+     * Check if user is a specific type.
+     *
+     * @param string $type
+     * @return bool
+     */
+    public function isType(string $type): bool
+    {
+        return $this->user_type === $type;
     }
 }
