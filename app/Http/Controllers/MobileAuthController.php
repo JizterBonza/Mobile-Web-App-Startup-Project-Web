@@ -74,34 +74,59 @@ class MobileAuthController extends Controller
     public function login(Request $request)
     {
         $data = $request->validate([
-            'email' => 'required|email',
+            'email' => 'required_without:username|email',
+            'username' => 'required_without:email|string',
             'password' => 'required'
         ]);
 
-        // Find UserDetail by email
-        $userDetail = UserDetail::where('email', $data['email'])->first();
+        $user = null;
 
-        if (! $userDetail) {
-            throw ValidationException::withMessages([
-                'email' => ['The provided credentials are incorrect.'],
-            ]);
-        }
+        // Check if login is by email or username
+        if (isset($data['email'])) {
+            // Login by email
+            $userDetail = UserDetail::where('email', $data['email'])->first();
 
-        // Find User through UserDetail
-        $user = User::where('user_detail_id', $userDetail->id)->first();
+            if (! $userDetail) {
+                throw ValidationException::withMessages([
+                    'email' => ['The provided credentials are incorrect.'],
+                ]);
+            }
 
-        if (! $user) {
-            throw ValidationException::withMessages([
-                'email' => ['The provided credentials are incorrect.'],
-            ]);
+            // Find User through UserDetail
+            $user = User::where('user_detail_id', $userDetail->id)->first();
+
+            if (! $user) {
+                throw ValidationException::withMessages([
+                    'email' => ['The provided credentials are incorrect.'],
+                ]);
+            }
+        } else {
+            // Login by username
+            $userCredential = UserCredential::where('username', $data['username'])->first();
+
+            if (! $userCredential) {
+                throw ValidationException::withMessages([
+                    'username' => ['The provided credentials are incorrect.'],
+                ]);
+            }
+
+            // Find User through UserCredential
+            $user = User::where('user_credential_id', $userCredential->id)->first();
+
+            if (! $user) {
+                throw ValidationException::withMessages([
+                    'username' => ['The provided credentials are incorrect.'],
+                ]);
+            }
         }
 
         // Load UserCredential to check password
         $user->load('userCredential');
 
         if (! $user->userCredential || ! Hash::check($data['password'], $user->userCredential->password_hash)) {
+            $field = isset($data['email']) ? 'email' : 'username';
             throw ValidationException::withMessages([
-                'email' => ['The provided credentials are incorrect.'],
+                $field => ['The provided credentials are incorrect.'],
             ]);
         }
 
