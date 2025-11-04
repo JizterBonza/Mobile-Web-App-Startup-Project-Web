@@ -16,7 +16,25 @@ Route::post('/register', [AuthController::class, 'register']);
 Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
 Route::get('/session/check', [AuthController::class, 'checkSession'])->middleware('auth');
 
-// Protected Routes
+// Protected Routes - User Type Specific Dashboards
+Route::get('/dashboard/super-admin', function () {
+    return Inertia::render('Dashboard/SuperAdminDashboard');
+})->middleware(['auth', 'session.valid', 'user.type:super_admin'])->name('dashboard.super-admin');
+
+Route::get('/dashboard/admin', function () {
+    return Inertia::render('Dashboard/AdminDashboard');
+})->middleware(['auth', 'session.valid', 'user.type:admin'])->name('dashboard.admin');
+
+Route::get('/dashboard/vendor', function () {
+    return Inertia::render('Dashboard/VendorDashboard');
+})->middleware(['auth', 'session.valid', 'user.type:vendor'])->name('dashboard.vendor');
+
+Route::get('/dashboard/veterinarian', function () {
+    return Inertia::render('Dashboard/VeterinarianDashboard');
+})->middleware(['auth', 'session.valid', 'user.type:veterinarian'])->name('dashboard.veterinarian');
+
+// Legacy dashboard route - redirect to user's specific dashboard
 Route::get('/dashboard', function () {
-    return Inertia::render('Dashboard');
+    $user = auth()->user();
+    return redirect($user->getDashboardUrl());
 })->middleware(['auth', 'session.valid']);

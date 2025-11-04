@@ -13,6 +13,14 @@ class User extends Authenticatable
     use HasApiTokens, HasFactory, Notifiable;
 
     /**
+     * User type constants
+     */
+    const TYPE_SUPER_ADMIN = 'super_admin';
+    const TYPE_ADMIN = 'admin';
+    const TYPE_VENDOR = 'vendor';
+    const TYPE_VETERINARIAN = 'veterinarian';
+
+    /**
      * The attributes that are mass assignable.
      *
      * @var array<int, string>

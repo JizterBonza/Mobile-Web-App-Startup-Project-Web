@@ -63,6 +63,16 @@ class AuthController extends Controller
         ]);
 
         if (Auth::attempt($request->only('email', 'password'), $request->boolean('remember'))) {
+            $user = Auth::user();
+            
+            // Check if user has a valid user_type
+            if (!$user->user_type) {
+                Auth::logout();
+                throw ValidationException::withMessages([
+                    'email' => 'Your account is not properly configured. Please contact support.',
+                ]);
+            }
+            
             // Regenerate session ID for security
             $request->session()->regenerate();
             
@@ -74,7 +84,8 @@ class AuthController extends Controller
             // Set session timeout (2 hours)
             $request->session()->put('session_timeout', now()->addHours(2));
 
-            return redirect()->intended('/dashboard');
+            // Redirect to user-type specific dashboard
+            return redirect()->intended($user->getDashboardUrl());
         }
 
         throw ValidationException::withMessages([
@@ -105,6 +116,7 @@ class AuthController extends Controller
             'name' => $request->name,
             'email' => $request->email,
             'password' => Hash::make($request->password),
+            'user_type' => $request->user_type ?? User::TYPE_VENDOR, // Default to vendor if not specified
         ]);
 
         // Login the user after registration
@@ -121,7 +133,8 @@ class AuthController extends Controller
         // Set session timeout (2 hours)
         $request->session()->put('session_timeout', now()->addHours(2));
 
-        return redirect('/dashboard');
+        // Redirect to user-type specific dashboard
+        return redirect($user->getDashboardUrl());
     }
 
     /**
