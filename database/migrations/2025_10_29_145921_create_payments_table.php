@@ -18,10 +18,10 @@ return new class extends Migration
             $table->unsignedBigInteger('order_id');
 
             // Payment details
-            $table->string('payment_method', 50); // e.g., gcash, maya, card
-            $table->string('payment_status', 50)->default('pending'); // e.g., pending, completed
+            $table->string('payment_method', 50);
+            $table->string('payment_status', 50)->default('pending');
             $table->decimal('amount_paid', 10, 2);
-            $table->string('transaction_id', 100)->nullable(); // from wallets or banks
+            $table->string('transaction_id', 100)->nullable(); 
             $table->text('payment_details')->nullable(); // receipt or response
             $table->timestamp('paid_at')->nullable();
 

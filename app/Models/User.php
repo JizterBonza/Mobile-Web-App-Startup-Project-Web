@@ -6,10 +6,11 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Laravel\Sanctum\HasApiTokens;
 
 class User extends Authenticatable
 {
-    use HasFactory, Notifiable;
+    use HasApiTokens, HasFactory, Notifiable;
 
     /**
      * User type constants
@@ -25,10 +26,9 @@ class User extends Authenticatable
      * @var array<int, string>
      */
     protected $fillable = [
-        'name',
-        'email',
-        'password',
-        'user_type',
+        'user_detail_id',
+        'user_credential_id',
+        'status',
     ];
 
     /**
@@ -37,7 +37,6 @@ class User extends Authenticatable
      * @var array<int, string>
      */
     protected $hidden = [
-        'password',
         'remember_token',
     ];
 
@@ -49,35 +48,24 @@ class User extends Authenticatable
     protected function casts(): array
     {
         return [
-            'email_verified_at' => 'datetime',
-            'password' => 'hashed',
+            'created_at' => 'datetime',
+            'updated_at' => 'datetime',
         ];
     }
 
     /**
-     * Get the dashboard URL based on user type.
-     *
-     * @return string
+     * Get the user detail for the user.
      */
-    public function getDashboardUrl(): string
+    public function userDetail()
     {
-        return match($this->user_type) {
-            self::TYPE_SUPER_ADMIN => '/dashboard/super-admin',
-            self::TYPE_ADMIN => '/dashboard/admin',
-            self::TYPE_VENDOR => '/dashboard/vendor',
-            self::TYPE_VETERINARIAN => '/dashboard/veterinarian',
-            default => '/dashboard',
-        };
+        return $this->belongsTo(UserDetail::class, 'user_detail_id');
     }
 
     /**
-     * Check if user is a specific type.
-     *
-     * @param string $type
-     * @return bool
+     * Get the user credential for the user.
      */
-    public function isType(string $type): bool
+    public function userCredential()
     {
-        return $this->user_type === $type;
+        return $this->belongsTo(UserCredential::class, 'user_credential_id');
     }
 }
