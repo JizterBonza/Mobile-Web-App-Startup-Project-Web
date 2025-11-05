@@ -81,104 +81,123 @@ export default function AdminLayout({ children, auth, title = 'Dashboard' }) {
             {/* Sidebar Menu */}
             <nav className="mt-2">
               <ul className="nav nav-pills nav-sidebar flex-column" data-widget="treeview" role="menu" data-accordion="false">
-                <li className="nav-item">
-                  <Link href="/dashboard" className="nav-link">
-                    <i className="nav-icon fas fa-tachometer-alt"></i>
-                    <p>Dashboard</p>
-                  </Link>
-                </li>
-                <li className="nav-item">
-                  <a href="#" className="nav-link">
-                    <i className="nav-icon fas fa-chart-pie"></i>
-                    <p>
-                      Charts
-                      <i className="right fas fa-angle-left"></i>
-                    </p>
-                  </a>
-                  <ul className="nav nav-treeview">
+                {auth.user.user_type === 'super_admin' ? (
+                  <>
                     <li className="nav-item">
-                      <a href="#" className="nav-link">
-                        <i className="far fa-circle nav-icon"></i>
-                        <p>ChartJS</p>
-                      </a>
+                      <Link href="/dashboard/super-admin" className="nav-link">
+                        <i className="nav-icon fas fa-tachometer-alt"></i>
+                        <p>Dashboard</p>
+                      </Link>
+                    </li>
+                    <li className="nav-item">
+                      <Link href="/dashboard/super-admin/users" className="nav-link">
+                        <i className="nav-icon fas fa-users"></i>
+                        <p>User Management</p>
+                      </Link>
+                    </li>
+                  </>
+                ) : (
+                  <>
+                    <li className="nav-item">
+                      <Link href="/dashboard" className="nav-link">
+                        <i className="nav-icon fas fa-tachometer-alt"></i>
+                        <p>Dashboard</p>
+                      </Link>
                     </li>
                     <li className="nav-item">
                       <a href="#" className="nav-link">
-                        <i className="far fa-circle nav-icon"></i>
-                        <p>Flot</p>
+                        <i className="nav-icon fas fa-chart-pie"></i>
+                        <p>
+                          Charts
+                          <i className="right fas fa-angle-left"></i>
+                        </p>
                       </a>
-                    </li>
-                  </ul>
-                </li>
-                <li className="nav-item">
-                  <a href="#" className="nav-link">
-                    <i className="nav-icon fas fa-tree"></i>
-                    <p>
-                      UI Elements
-                      <i className="fas fa-angle-left right"></i>
-                    </p>
-                  </a>
-                  <ul className="nav nav-treeview">
-                    <li className="nav-item">
-                      <a href="#" className="nav-link">
-                        <i className="far fa-circle nav-icon"></i>
-                        <p>General</p>
-                      </a>
-                    </li>
-                    <li className="nav-item">
-                      <a href="#" className="nav-link">
-                        <i className="far fa-circle nav-icon"></i>
-                        <p>Icons</p>
-                      </a>
-                    </li>
-                  </ul>
-                </li>
-                <li className="nav-item">
-                  <a href="#" className="nav-link">
-                    <i className="nav-icon fas fa-edit"></i>
-                    <p>
-                      Forms
-                      <i className="fas fa-angle-left right"></i>
-                    </p>
-                  </a>
-                  <ul className="nav nav-treeview">
-                    <li className="nav-item">
-                      <a href="#" className="nav-link">
-                        <i className="far fa-circle nav-icon"></i>
-                        <p>General Elements</p>
-                      </a>
+                      <ul className="nav nav-treeview">
+                        <li className="nav-item">
+                          <a href="#" className="nav-link">
+                            <i className="far fa-circle nav-icon"></i>
+                            <p>ChartJS</p>
+                          </a>
+                        </li>
+                        <li className="nav-item">
+                          <a href="#" className="nav-link">
+                            <i className="far fa-circle nav-icon"></i>
+                            <p>Flot</p>
+                          </a>
+                        </li>
+                      </ul>
                     </li>
                     <li className="nav-item">
                       <a href="#" className="nav-link">
-                        <i className="far fa-circle nav-icon"></i>
-                        <p>Advanced Elements</p>
+                        <i className="nav-icon fas fa-tree"></i>
+                        <p>
+                          UI Elements
+                          <i className="fas fa-angle-left right"></i>
+                        </p>
                       </a>
+                      <ul className="nav nav-treeview">
+                        <li className="nav-item">
+                          <a href="#" className="nav-link">
+                            <i className="far fa-circle nav-icon"></i>
+                            <p>General</p>
+                          </a>
+                        </li>
+                        <li className="nav-item">
+                          <a href="#" className="nav-link">
+                            <i className="far fa-circle nav-icon"></i>
+                            <p>Icons</p>
+                          </a>
+                        </li>
+                      </ul>
                     </li>
-                  </ul>
-                </li>
-                <li className="nav-item">
-                  <a href="#" className="nav-link">
-                    <i className="nav-icon fas fa-table"></i>
-                    <p>
-                      Tables
-                      <i className="fas fa-angle-left right"></i>
-                    </p>
-                  </a>
-                  <ul className="nav nav-treeview">
                     <li className="nav-item">
                       <a href="#" className="nav-link">
-                        <i className="far fa-circle nav-icon"></i>
-                        <p>Simple Tables</p>
+                        <i className="nav-icon fas fa-edit"></i>
+                        <p>
+                          Forms
+                          <i className="fas fa-angle-left right"></i>
+                        </p>
                       </a>
+                      <ul className="nav nav-treeview">
+                        <li className="nav-item">
+                          <a href="#" className="nav-link">
+                            <i className="far fa-circle nav-icon"></i>
+                            <p>General Elements</p>
+                          </a>
+                        </li>
+                        <li className="nav-item">
+                          <a href="#" className="nav-link">
+                            <i className="far fa-circle nav-icon"></i>
+                            <p>Advanced Elements</p>
+                          </a>
+                        </li>
+                      </ul>
                     </li>
                     <li className="nav-item">
                       <a href="#" className="nav-link">
-                        <i className="far fa-circle nav-icon"></i>
-                        <p>DataTables</p>
+                        <i className="nav-icon fas fa-table"></i>
+                        <p>
+                          Tables
+                          <i className="fas fa-angle-left right"></i>
+                        </p>
                       </a>
+                      <ul className="nav nav-treeview">
+                        <li className="nav-item">
+                          <a href="#" className="nav-link">
+                            <i className="far fa-circle nav-icon"></i>
+                            <p>Simple Tables</p>
+                          </a>
+                        </li>
+                        <li className="nav-item">
+                          <a href="#" className="nav-link">
+                            <i className="far fa-circle nav-icon"></i>
+                            <p>DataTables</p>
+                          </a>
+                        </li>
+                      </ul>
                     </li>
-                  </ul>
-                </li>
+                  </>
+                )}
               </ul>
             </nav>
           </div>

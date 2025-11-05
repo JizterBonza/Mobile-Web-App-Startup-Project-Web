@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Auth\AuthController;
+use App\Http\Controllers\UserController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
@@ -20,6 +21,14 @@ Route::get('/session/check', [AuthController::class, 'checkSession'])->middlewar
 Route::get('/dashboard/super-admin', function () {
     return Inertia::render('Dashboard/SuperAdminDashboard');
 })->middleware(['auth', 'session.valid', 'user.type:super_admin'])->name('dashboard.super-admin');
+
+// User Management Routes
+Route::middleware(['auth', 'session.valid', 'user.type:super_admin'])->prefix('dashboard/super-admin/users')->name('dashboard.super-admin.users.')->group(function () {
+    Route::get('/', [UserController::class, 'index'])->name('index');
+    Route::post('/', [UserController::class, 'store'])->name('store');
+    Route::put('/{id}', [UserController::class, 'update'])->name('update');
+    Route::delete('/{id}', [UserController::class, 'deactivate'])->name('deactivate');
+});
 
 Route::get('/dashboard/admin', function () {
     return Inertia::render('Dashboard/AdminDashboard');
