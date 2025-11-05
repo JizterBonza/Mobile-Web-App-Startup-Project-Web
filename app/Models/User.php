@@ -29,6 +29,7 @@ class User extends Authenticatable
         'user_detail_id',
         'user_credential_id',
         'status',
+        'user_type',
     ];
 
     /**
@@ -67,5 +68,19 @@ class User extends Authenticatable
     public function userCredential()
     {
         return $this->belongsTo(UserCredential::class, 'user_credential_id');
+    }
+
+    /**
+     * Get the dashboard URL based on user type.
+     */
+    public function getDashboardUrl()
+    {
+        return match($this->user_type) {
+            self::TYPE_SUPER_ADMIN => '/dashboard/super-admin',
+            self::TYPE_ADMIN => '/dashboard/admin',
+            self::TYPE_VENDOR => '/dashboard/vendor',
+            self::TYPE_VETERINARIAN => '/dashboard/veterinarian',
+            default => '/dashboard',
+        };
     }
 }

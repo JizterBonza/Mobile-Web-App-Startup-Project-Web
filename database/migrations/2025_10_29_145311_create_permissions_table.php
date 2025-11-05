@@ -11,7 +11,8 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('permissions', function (Blueprint $table) {
+        if (!Schema::hasTable('permissions')) {
+            Schema::create('permissions', function (Blueprint $table) {
             $table->id(); // Primary key
 
             $table->string('permission_name', 150)->unique();
@@ -20,7 +21,8 @@ return new class extends Migration
             $table->string('action', 50);
 
             $table->timestamp('created_at')->useCurrent();
-        });
+            });
+        }
     }
 
     /**

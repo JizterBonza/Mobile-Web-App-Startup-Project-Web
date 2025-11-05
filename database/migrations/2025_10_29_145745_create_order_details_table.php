@@ -11,7 +11,8 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('order_details', function (Blueprint $table) {
+        if (!Schema::hasTable('order_details')) {
+            Schema::create('order_details', function (Blueprint $table) {
             $table->id(); // Primary key
 
             // Unique order code
@@ -34,7 +35,8 @@ return new class extends Migration
 
             // Timestamps
             $table->timestamps();
-        });
+            });
+        }
     }
 
     /**

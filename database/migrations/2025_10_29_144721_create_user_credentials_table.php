@@ -11,7 +11,8 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('user_credentials', function (Blueprint $table) {
+        if (!Schema::hasTable('user_credentials')) {
+            Schema::create('user_credentials', function (Blueprint $table) {
             $table->id(); // Primary key (auto increment)
 
             $table->string('username', 100)->unique();
@@ -21,7 +22,8 @@ return new class extends Migration
             $table->timestamp('last_login')->nullable();
 
             $table->timestamps(); // created_at, updated_at
-        });
+            });
+        }
     }
 
     /**

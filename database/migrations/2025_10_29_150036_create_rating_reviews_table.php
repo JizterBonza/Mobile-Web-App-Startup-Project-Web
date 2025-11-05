@@ -11,7 +11,8 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('rating_reviews', function (Blueprint $table) {
+        if (!Schema::hasTable('rating_reviews')) {
+            Schema::create('rating_reviews', function (Blueprint $table) {
             $table->id(); // Primary key
 
             // Foreign keys
@@ -33,7 +34,8 @@ return new class extends Migration
             // $table->foreign('item_id')->references('id')->on('items')->onDelete('cascade');
             // $table->foreign('shop_id')->references('id')->on('shops')->onDelete('cascade');
             // $table->foreign('order_id')->references('id')->on('orders')->onDelete('set null');
-        });
+            });
+        }
     }
 
     /**

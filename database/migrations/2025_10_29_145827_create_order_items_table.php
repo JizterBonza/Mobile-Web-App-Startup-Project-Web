@@ -11,7 +11,8 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('order_items', function (Blueprint $table) {
+        if (!Schema::hasTable('order_items')) {
+            Schema::create('order_items', function (Blueprint $table) {
             $table->id(); // Primary key
 
             // Foreign keys
@@ -31,7 +32,8 @@ return new class extends Migration
             // $table->foreign('order_id')->references('id')->on('orders')->onDelete('cascade');
             // $table->foreign('item_id')->references('id')->on('items')->onDelete('cascade');
             // $table->foreign('shop_id')->references('id')->on('shops')->onDelete('cascade');
-        });
+            });
+        }
     }
 
     /**

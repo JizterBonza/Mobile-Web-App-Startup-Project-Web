@@ -11,23 +11,25 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('users', function (Blueprint $table) {
-            $table->id(); // Primary Key (int, auto increment)
+        if (!Schema::hasTable('users')) {
+            Schema::create('users', function (Blueprint $table) {
+                $table->id(); // Primary Key (int, auto increment)
 
-            // Foreign Keys
-            $table->unsignedBigInteger('user_detail_id');
-            $table->unsignedBigInteger('user_credential_id');
+                // Foreign Keys
+                $table->unsignedBigInteger('user_detail_id');
+                $table->unsignedBigInteger('user_credential_id');
 
-            // Other columns
-            $table->string('status', 100)->nullable();
-            
-            // Timestamps
-            $table->timestamps();
+                // Other columns
+                $table->string('status', 100)->nullable();
+                
+                // Timestamps
+                $table->timestamps();
 
-            // Define foreign key constraints
-            // $table->foreign('user_detail_id')->references('id')->on('user_details')->onDelete('cascade');
-            // $table->foreign('user_credential_id')->references('id')->on('user_credentials')->onDelete('cascade');
-        });
+                // Define foreign key constraints
+                // $table->foreign('user_detail_id')->references('id')->on('user_details')->onDelete('cascade');
+                // $table->foreign('user_credential_id')->references('id')->on('user_credentials')->onDelete('cascade');
+            });
+        }
     }
 
     /**

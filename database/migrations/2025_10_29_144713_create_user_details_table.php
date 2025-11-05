@@ -11,7 +11,8 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('user_details', function (Blueprint $table) {
+        if (!Schema::hasTable('user_details')) {
+            Schema::create('user_details', function (Blueprint $table) {
             $table->id(); // Primary key (int, auto increment)
             $table->string('first_name', 100);
             $table->string('middle_name', 100)->nullable();
@@ -22,7 +23,8 @@ return new class extends Migration
             $table->text('shipping_address')->nullable();
             $table->string('profile_image_url', 255)->nullable();
             $table->timestamps(); // created_at, updated_at
-        });
+            });
+        }
     }
 
     /**

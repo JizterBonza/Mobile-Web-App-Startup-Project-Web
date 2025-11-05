@@ -11,7 +11,8 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('shops', function (Blueprint $table) {
+        if (!Schema::hasTable('shops')) {
+            Schema::create('shops', function (Blueprint $table) {
             $table->id(); // Primary key
 
             // Foreign key linking to users table
@@ -38,7 +39,8 @@ return new class extends Migration
 
             // Foreign key constraint
             //$table->foreign('user_id')->references('id')->on('users')->onDelete('cascade');
-        });
+            });
+        }
     }
 
     /**

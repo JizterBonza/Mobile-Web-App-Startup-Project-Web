@@ -11,14 +11,16 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('roles', function (Blueprint $table) {
+        if (!Schema::hasTable('roles')) {
+            Schema::create('roles', function (Blueprint $table) {
             $table->id(); // Primary key (auto increment)
             $table->string('role_name', 100)->unique();
             $table->text('role_description')->nullable();
             $table->integer('role_level')->default(1);
             $table->string('status', 50)->default('active');
             $table->timestamps(); // created_at, updated_at
-        });
+            });
+        }
     }
 
     /**

@@ -11,7 +11,8 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('carts', function (Blueprint $table) {
+        if (!Schema::hasTable('carts')) {
+            Schema::create('carts', function (Blueprint $table) {
             $table->id(); // Primary key
 
             // Foreign keys
@@ -30,7 +31,8 @@ return new class extends Migration
             // Foreign key constraints
             // $table->foreign('user_id')->references('id')->on('users')->onDelete('cascade');
             // $table->foreign('item_id')->references('id')->on('items')->onDelete('cascade');
-        });
+            });
+        }
     }
 
     /**
