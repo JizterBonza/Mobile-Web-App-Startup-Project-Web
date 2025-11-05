@@ -19,6 +19,8 @@ class User extends Authenticatable
     const TYPE_ADMIN = 'admin';
     const TYPE_VENDOR = 'vendor';
     const TYPE_VETERINARIAN = 'veterinarian';
+    const TYPE_CUSTOMER = 'customer';
+    const TYPE_RIDER = 'rider';
 
     /**
      * The attributes that are mass assignable.
@@ -29,6 +31,7 @@ class User extends Authenticatable
         'user_detail_id',
         'user_credential_id',
         'status',
+        'user_type',
     ];
 
     /**

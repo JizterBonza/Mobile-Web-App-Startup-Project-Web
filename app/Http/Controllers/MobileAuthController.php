@@ -52,6 +52,7 @@ class MobileAuthController extends Controller
                 'user_detail_id' => $userDetail->id,
                 'user_credential_id' => $userCredential->id,
                 'status' => 'active', // Default status
+                'user_type' => 'customer',
             ]);
 
             // Load relationships for response
