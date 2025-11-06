@@ -108,7 +108,7 @@ export default function UserManagement({ auth, users = [], flash }) {
 
   const handleAddUser = (e) => {
     e.preventDefault()
-    addForm.post('/dashboard/super-admin/users', {
+    addForm.post(getBaseRoute(), {
       preserveScroll: true,
       onSuccess: () => {
         addForm.reset()
@@ -136,7 +136,7 @@ export default function UserManagement({ auth, users = [], flash }) {
 
   const handleUpdateUser = (e) => {
     e.preventDefault()
-    editForm.put(`/dashboard/super-admin/users/${selectedUser.id}`, {
+    editForm.put(`${getBaseRoute()}/${selectedUser.id}`, {
       preserveScroll: true,
       onSuccess: () => {
         closeEditModal()
@@ -153,7 +153,7 @@ export default function UserManagement({ auth, users = [], flash }) {
 
   const confirmRemoveUser = () => {
     if (userToRemove) {
-      router.delete(`/dashboard/super-admin/users/${userToRemove.id}`, {
+      router.delete(`${getBaseRoute()}/${userToRemove.id}`, {
         preserveScroll: true,
         onSuccess: () => {
           closeRemoveModal()
@@ -162,14 +162,35 @@ export default function UserManagement({ auth, users = [], flash }) {
     }
   }
 
-  const userTypes = [
-    { value: 'super_admin', label: 'Super Admin' },
-    { value: 'admin', label: 'Admin' },
-    { value: 'vendor', label: 'Vendor' },
-    { value: 'veterinarian', label: 'Veterinarian' },
-    { value: 'customer', label: 'Customer' },
-    { value: 'rider', label: 'Rider' },
-  ]
+  // Get allowed user types based on current user's role
+  const getAllowedUserTypes = () => {
+    if (auth?.user?.user_type === 'admin') {
+      // Admin can only add/edit Vendors, Veterinarians, and Riders
+      return [
+        { value: 'vendor', label: 'Vendor' },
+        { value: 'veterinarian', label: 'Veterinarian' },
+        { value: 'rider', label: 'Rider' },
+      ]
+    }
+    // Super Admin can add/edit all user types
+    return [
+      { value: 'super_admin', label: 'Super Admin' },
+      { value: 'admin', label: 'Admin' },
+      { value: 'vendor', label: 'Vendor' },
+      { value: 'veterinarian', label: 'Veterinarian' },
+      { value: 'customer', label: 'Customer' },
+      { value: 'rider', label: 'Rider' },
+    ]
+  }
+
+  const userTypes = getAllowedUserTypes()
+  
+  // Determine base route based on user type
+  const getBaseRoute = () => {
+    return auth?.user?.user_type === 'admin' 
+      ? '/dashboard/admin/users' 
+      : '/dashboard/super-admin/users'
+  }
 
   const getStatusBadge = (status) => {
     if (status === 'active') {
@@ -189,7 +210,14 @@ export default function UserManagement({ auth, users = [], flash }) {
       {flash?.success && (
         <div className="alert alert-success alert-dismissible fade show" role="alert">
           <strong>Success!</strong> {flash.success}
-          <button type="button" className="close" data-dismiss="alert" aria-label="Close" onClick={() => router.reload({ only: ['flash'] })}>
+          <button type="button" className="close" data-dismiss="alert" aria-label="Close" onClick={(e) => {
+            e.preventDefault()
+            router.visit(window.location.pathname, { 
+              only: ['users', 'auth'],
+              preserveState: true,
+              preserveScroll: true
+            })
+          }}>
             <span aria-hidden="true">&times;</span>
           </button>
         </div>
@@ -198,7 +226,14 @@ export default function UserManagement({ auth, users = [], flash }) {
       {flash?.error && (
         <div className="alert alert-danger alert-dismissible fade show" role="alert">
           <strong>Error!</strong> {flash.error}
-          <button type="button" className="close" data-dismiss="alert" aria-label="Close" onClick={() => router.reload({ only: ['flash'] })}>
+          <button type="button" className="close" data-dismiss="alert" aria-label="Close" onClick={(e) => {
+            e.preventDefault()
+            router.visit(window.location.pathname, { 
+              only: ['users', 'auth'],
+              preserveState: true,
+              preserveScroll: true
+            })
+          }}>
             <span aria-hidden="true">&times;</span>
           </button>
         </div>

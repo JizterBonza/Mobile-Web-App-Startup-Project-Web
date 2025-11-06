@@ -18,8 +18,15 @@ class UserController extends Controller
      */
     public function index()
     {
-        $users = User::with(['userDetail', 'userCredential'])
-            ->orderBy('created_at', 'desc')
+        $currentUser = auth()->user();
+        $query = User::with(['userDetail', 'userCredential']);
+
+        // If current user is Admin, filter to show only Vendors, Veterinarians, and Riders
+        if ($currentUser->user_type === 'admin') {
+            $query->whereIn('user_type', ['vendor', 'veterinarian', 'rider']);
+        }
+
+        $users = $query->orderBy('created_at', 'desc')
             ->get()
             ->map(function ($user) {
                 return [
@@ -47,6 +54,15 @@ class UserController extends Controller
      */
     public function store(Request $request)
     {
+        $currentUser = auth()->user();
+        
+        // Determine allowed user types based on current user's role
+        $allowedUserTypes = ['super_admin', 'admin', 'vendor', 'veterinarian', 'customer', 'rider'];
+        if ($currentUser->user_type === 'admin') {
+            // Admin can only create Vendors, Veterinarians, and Riders
+            $allowedUserTypes = ['vendor', 'veterinarian', 'rider'];
+        }
+
         $request->validate([
             'first_name' => 'required|string|max:100',
             'middle_name' => 'nullable|string|max:100',
@@ -55,7 +71,7 @@ class UserController extends Controller
             'mobile_number' => 'nullable|string|max:20',
             'password' => 'required|string|min:6|confirmed',
             'username' => 'nullable|string|max:100|unique:user_credentials,username',
-            'user_type' => 'required|string|in:super_admin,admin,vendor,veterinarian,customer,rider',
+            'user_type' => ['required', 'string', 'in:' . implode(',', $allowedUserTypes)],
             'status' => 'nullable|string|in:active,inactive',
         ]);
 
@@ -90,7 +106,12 @@ class UserController extends Controller
 
             DB::commit();
 
-            return redirect()->route('dashboard.super-admin.users.index')
+            // Redirect based on current user's role
+            $redirectRoute = $currentUser->user_type === 'admin' 
+                ? 'dashboard.admin.users.index' 
+                : 'dashboard.super-admin.users.index';
+
+            return redirect()->route($redirectRoute)
                 ->with('success', 'User created successfully.');
         } catch (\Exception $e) {
             DB::rollBack();
@@ -105,7 +126,23 @@ class UserController extends Controller
      */
     public function update(Request $request, $id)
     {
+        $currentUser = auth()->user();
         $user = User::with(['userDetail', 'userCredential'])->findOrFail($id);
+
+        // If current user is Admin, ensure they can't edit Admin or Super Admin users
+        if ($currentUser->user_type === 'admin') {
+            if (in_array($user->user_type, ['admin', 'super_admin'])) {
+                return redirect()->back()
+                    ->withErrors(['error' => 'You do not have permission to edit this user.']);
+            }
+        }
+
+        // Determine allowed user types based on current user's role
+        $allowedUserTypes = ['super_admin', 'admin', 'vendor', 'veterinarian', 'customer', 'rider'];
+        if ($currentUser->user_type === 'admin') {
+            // Admin can only update to Vendors, Veterinarians, and Riders
+            $allowedUserTypes = ['vendor', 'veterinarian', 'rider'];
+        }
 
         $request->validate([
             'first_name' => 'required|string|max:100',
@@ -115,7 +152,7 @@ class UserController extends Controller
             'mobile_number' => 'nullable|string|max:20',
             'password' => 'nullable|string|min:6|confirmed',
             'username' => 'nullable|string|max:100|unique:user_credentials,username,' . $user->user_credential_id,
-            'user_type' => 'required|string|in:super_admin,admin,vendor,veterinarian,customer,rider',
+            'user_type' => ['required', 'string', 'in:' . implode(',', $allowedUserTypes)],
             'status' => 'nullable|string|in:active,inactive',
         ]);
 
@@ -151,7 +188,12 @@ class UserController extends Controller
 
             DB::commit();
 
-            return redirect()->route('dashboard.super-admin.users.index')
+            // Redirect based on current user's role
+            $redirectRoute = $currentUser->user_type === 'admin' 
+                ? 'dashboard.admin.users.index' 
+                : 'dashboard.super-admin.users.index';
+
+            return redirect()->route($redirectRoute)
                 ->with('success', 'User updated successfully.');
         } catch (\Exception $e) {
             DB::rollBack();
@@ -166,14 +208,28 @@ class UserController extends Controller
      */
     public function deactivate($id)
     {
+        $currentUser = auth()->user();
         $user = User::findOrFail($id);
+
+        // If current user is Admin, ensure they can't deactivate Admin or Super Admin users
+        if ($currentUser->user_type === 'admin') {
+            if (in_array($user->user_type, ['admin', 'super_admin'])) {
+                return redirect()->back()
+                    ->withErrors(['error' => 'You do not have permission to deactivate this user.']);
+            }
+        }
 
         try {
             $user->update([
                 'status' => 'inactive',
             ]);
 
-            return redirect()->route('dashboard.super-admin.users.index')
+            // Redirect based on current user's role
+            $redirectRoute = $currentUser->user_type === 'admin' 
+                ? 'dashboard.admin.users.index' 
+                : 'dashboard.super-admin.users.index';
+
+            return redirect()->route($redirectRoute)
                 ->with('success', 'User deactivated successfully.');
         } catch (\Exception $e) {
             return redirect()->back()

@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
+use App\Models\Agrivet;
 
 class User extends Authenticatable
 {
@@ -84,5 +85,15 @@ class User extends Authenticatable
             self::TYPE_VETERINARIAN => '/dashboard/veterinarian',
             default => '/dashboard',
         };
+    }
+
+    /**
+     * Get the agrivets associated with this vendor.
+     */
+    public function agrivets()
+    {
+        return $this->belongsToMany(Agrivet::class, 'agrivet_vendor', 'vendor_id', 'agrivet_id')
+            ->withPivot('status')
+            ->withTimestamps();
     }
 }

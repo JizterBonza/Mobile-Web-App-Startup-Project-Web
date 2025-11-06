@@ -95,6 +95,72 @@ export default function AdminLayout({ children, auth, title = 'Dashboard' }) {
                         <p>User Management</p>
                       </Link>
                     </li>
+                    <li className="nav-item">
+                      <Link href="/dashboard/super-admin/agrivets" className="nav-link">
+                        <i className="nav-icon fas fa-clinic-medical"></i>
+                        <p>Agrivet Management</p>
+                      </Link>
+                    </li>
+                  </>
+                ) : auth.user.user_type === 'admin' ? (
+                  <>
+                    <li className="nav-item">
+                      <Link href="/dashboard/admin" className="nav-link">
+                        <i className="nav-icon fas fa-tachometer-alt"></i>
+                        <p>Dashboard</p>
+                      </Link>
+                    </li>
+                    <li className="nav-item">
+                      <Link href="/dashboard/admin/users" className="nav-link">
+                        <i className="nav-icon fas fa-users"></i>
+                        <p>User Management</p>
+                      </Link>
+                    </li>
+                    <li className="nav-item">
+                      <Link href="/dashboard/admin/agrivets" className="nav-link">
+                        <i className="nav-icon fas fa-clinic-medical"></i>
+                        <p>Agrivet Management</p>
+                      </Link>
+                    </li>
+                  </>
+                ) : auth.user.user_type === 'vendor' ? (
+                  <>
+                    <li className="nav-item">
+                      <Link href="/dashboard/vendor" className="nav-link">
+                        <i className="nav-icon fas fa-tachometer-alt"></i>
+                        <p>Dashboard</p>
+                      </Link>
+                    </li>
+                    <li className="nav-item">
+                      <Link href="/dashboard/vendor/store" className="nav-link">
+                        <i className="nav-icon fas fa-store"></i>
+                        <p>Store Management</p>
+                      </Link>
+                    </li>
+                    <li className="nav-item">
+                      <Link href="/dashboard/vendor/products" className="nav-link">
+                        <i className="nav-icon fas fa-box"></i>
+                        <p>Products</p>
+                      </Link>
+                    </li>
+                    <li className="nav-item">
+                      <Link href="/dashboard/vendor/inventory" className="nav-link">
+                        <i className="nav-icon fas fa-warehouse"></i>
+                        <p>Inventory</p>
+                      </Link>
+                    </li>
+                    <li className="nav-item">
+                      <Link href="/dashboard/vendor/orders" className="nav-link">
+                        <i className="nav-icon fas fa-shopping-bag"></i>
+                        <p>Orders</p>
+                      </Link>
+                    </li>
+                    <li className="nav-item">
+                      <Link href="/dashboard/vendor/payouts" className="nav-link">
+                        <i className="nav-icon fas fa-money-bill-wave"></i>
+                        <p>Payouts</p>
+                      </Link>
+                    </li>
                   </>
                 ) : (
                   <>

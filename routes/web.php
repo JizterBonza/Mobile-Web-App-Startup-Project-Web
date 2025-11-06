@@ -2,6 +2,8 @@
 
 use App\Http\Controllers\Auth\AuthController;
 use App\Http\Controllers\UserController;
+use App\Http\Controllers\AgrivetController;
+use App\Http\Controllers\VendorController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
@@ -30,13 +32,77 @@ Route::middleware(['auth', 'session.valid', 'user.type:super_admin'])->prefix('d
     Route::delete('/{id}', [UserController::class, 'deactivate'])->name('deactivate');
 });
 
+// Agrivet Management Routes
+Route::middleware(['auth', 'session.valid', 'user.type:super_admin'])->prefix('dashboard/super-admin/agrivets')->name('dashboard.super-admin.agrivets.')->group(function () {
+    Route::get('/', [AgrivetController::class, 'index'])->name('index');
+    Route::post('/', [AgrivetController::class, 'store'])->name('store');
+    
+    // Agrivet Vendors Routes (must come before /{id} routes)
+    Route::get('/{id}/vendors', [AgrivetController::class, 'showVendors'])->name('vendors.index');
+    Route::post('/{id}/vendors', [AgrivetController::class, 'storeVendor'])->name('vendors.store');
+    Route::put('/{id}/vendors/{vendorId}', [AgrivetController::class, 'updateVendor'])->name('vendors.update');
+    Route::delete('/{id}/vendors/{vendorId}', [AgrivetController::class, 'removeVendor'])->name('vendors.remove');
+    Route::post('/{id}/vendors/add-existing', [AgrivetController::class, 'addExistingVendor'])->name('vendors.add-existing');
+    
+    Route::put('/{id}', [AgrivetController::class, 'update'])->name('update');
+    Route::delete('/{id}', [AgrivetController::class, 'destroy'])->name('destroy');
+});
+
 Route::get('/dashboard/admin', function () {
     return Inertia::render('Dashboard/AdminDashboard');
 })->middleware(['auth', 'session.valid', 'user.type:admin'])->name('dashboard.admin');
 
+// Admin User Management Routes
+Route::middleware(['auth', 'session.valid', 'user.type:admin'])->prefix('dashboard/admin/users')->name('dashboard.admin.users.')->group(function () {
+    Route::get('/', [UserController::class, 'index'])->name('index');
+    Route::post('/', [UserController::class, 'store'])->name('store');
+    Route::put('/{id}', [UserController::class, 'update'])->name('update');
+    Route::delete('/{id}', [UserController::class, 'deactivate'])->name('deactivate');
+});
+
+// Admin Agrivet Management Routes
+Route::middleware(['auth', 'session.valid', 'user.type:admin'])->prefix('dashboard/admin/agrivets')->name('dashboard.admin.agrivets.')->group(function () {
+    Route::get('/', [AgrivetController::class, 'index'])->name('index');
+    Route::post('/', [AgrivetController::class, 'store'])->name('store');
+    
+    // Agrivet Vendors Routes (must come before /{id} routes)
+    Route::get('/{id}/vendors', [AgrivetController::class, 'showVendors'])->name('vendors.index');
+    Route::post('/{id}/vendors', [AgrivetController::class, 'storeVendor'])->name('vendors.store');
+    Route::put('/{id}/vendors/{vendorId}', [AgrivetController::class, 'updateVendor'])->name('vendors.update');
+    Route::delete('/{id}/vendors/{vendorId}', [AgrivetController::class, 'removeVendor'])->name('vendors.remove');
+    Route::post('/{id}/vendors/add-existing', [AgrivetController::class, 'addExistingVendor'])->name('vendors.add-existing');
+    
+    Route::put('/{id}', [AgrivetController::class, 'update'])->name('update');
+    Route::delete('/{id}', [AgrivetController::class, 'destroy'])->name('destroy');
+});
+
 Route::get('/dashboard/vendor', function () {
     return Inertia::render('Dashboard/VendorDashboard');
 })->middleware(['auth', 'session.valid', 'user.type:vendor'])->name('dashboard.vendor');
+
+// Vendor Management Routes
+Route::middleware(['auth', 'session.valid', 'user.type:vendor'])->prefix('dashboard/vendor')->name('dashboard.vendor.')->group(function () {
+    // Store Management
+    Route::get('/store', [VendorController::class, 'storeIndex'])->name('store.index');
+    Route::post('/store', [VendorController::class, 'storeUpdate'])->name('store.update');
+    
+    // Products
+    Route::get('/products', [VendorController::class, 'productsIndex'])->name('products.index');
+    Route::post('/products', [VendorController::class, 'productsStore'])->name('products.store');
+    Route::put('/products/{id}', [VendorController::class, 'productsUpdate'])->name('products.update');
+    Route::delete('/products/{id}', [VendorController::class, 'productsDestroy'])->name('products.destroy');
+    
+    // Inventory
+    Route::get('/inventory', [VendorController::class, 'inventoryIndex'])->name('inventory.index');
+    Route::put('/inventory/{id}', [VendorController::class, 'inventoryUpdate'])->name('inventory.update');
+    
+    // Orders
+    Route::get('/orders', [VendorController::class, 'ordersIndex'])->name('orders.index');
+    Route::put('/orders/{id}', [VendorController::class, 'ordersUpdate'])->name('orders.update');
+    
+    // Payouts
+    Route::get('/payouts', [VendorController::class, 'payoutsIndex'])->name('payouts.index');
+});
 
 Route::get('/dashboard/veterinarian', function () {
     return Inertia::render('Dashboard/VeterinarianDashboard');

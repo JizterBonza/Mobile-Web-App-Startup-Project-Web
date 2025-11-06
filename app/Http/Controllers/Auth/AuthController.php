@@ -104,6 +104,16 @@ class AuthController extends Controller
             ]);
         }
 
+        // For vendors, check if they are associated with an Agrivet
+        if ($user->user_type === 'vendor') {
+            $user->load('agrivets');
+            if ($user->agrivets->isEmpty()) {
+                throw ValidationException::withMessages([
+                    'email' => 'You are not associated with any Agrivet. Please contact an administrator to be assigned to an Agrivet.',
+                ]);
+            }
+        }
+
         // Login the user
         Auth::login($user, $request->boolean('remember'));
         
