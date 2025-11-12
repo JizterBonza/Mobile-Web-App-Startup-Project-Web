@@ -29,7 +29,8 @@ class UserDetail extends Model
         'email_confirmed',
         'mobile_number',
         'shipping_address',
-        'profile_image_url',
+        'profile_image_url', 
+        'avatar',
     ];
 
     /**
