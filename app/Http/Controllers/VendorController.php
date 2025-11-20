@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 use App\Models\User;
 use App\Models\Agrivet;
@@ -162,6 +163,31 @@ class VendorController extends Controller
         }
 
         $products = $products->map(function ($item) {
+            // Normalize image URLs to ensure they're properly formatted
+            $images = $item->item_images ? json_decode($item->item_images, true) : [];
+            if (!empty($images)) {
+                $images = array_map(function ($image) {
+                    // If URL doesn't start with /storage/, ensure it does
+                    if (is_string($image)) {
+                        // Check if it's already a full URL (http/https)
+                        if (preg_match('/^https?:\/\//', $image)) {
+                            return $image;
+                        }
+                        // Check if it starts with /storage/
+                        if (strpos($image, '/storage/') === 0) {
+                            return $image;
+                        }
+                        // If it contains products/, prepend /storage/
+                        if (strpos($image, 'products/') !== false) {
+                            return '/storage/' . $image;
+                        }
+                        // Otherwise, assume it's a filename and prepend full path
+                        return '/storage/products/' . basename($image);
+                    }
+                    return $image;
+                }, $images);
+            }
+            
             return [
                 'id' => $item->id,
                 'item_name' => $item->item_name,
@@ -169,7 +195,7 @@ class VendorController extends Controller
                 'item_price' => $item->item_price,
                 'item_quantity' => $item->item_quantity,
                 'category' => $item->category,
-                'item_images' => $item->item_images ? json_decode($item->item_images, true) : [],
+                'item_images' => $images,
                 'item_status' => $item->item_status,
                 'average_rating' => $item->average_rating,
                 'total_reviews' => $item->total_reviews,
@@ -203,9 +229,20 @@ class VendorController extends Controller
             'item_price' => 'required|numeric|min:0',
             'item_quantity' => 'required|integer|min:0',
             'category' => 'nullable|string|max:100',
-            'item_images' => 'nullable|array',
+            'item_images' => 'required|array|min:1',
+            'item_images.*' => 'required|image|mimes:jpeg,png,jpg,gif|max:5120',
             'item_status' => 'nullable|string|in:active,inactive',
         ]);
+
+        // Handle file uploads
+        $imagePaths = [];
+        if ($request->hasFile('item_images')) {
+            foreach ($request->file('item_images') as $image) {
+                $path = $image->store('products', 'public');
+                // Generate URL: /storage/products/filename.jpg
+                $imagePaths[] = '/storage/' . $path;
+            }
+        }
 
         $hasAgrivetId = DB::getSchemaBuilder()->hasColumn('items', 'agrivet_id');
         
@@ -215,7 +252,7 @@ class VendorController extends Controller
             'item_price' => $request->item_price,
             'item_quantity' => $request->item_quantity,
             'category' => $request->category,
-            'item_images' => $request->item_images ? json_encode($request->item_images) : null,
+            'item_images' => !empty($imagePaths) ? json_encode($imagePaths) : null,
             'item_status' => $request->item_status ?? 'active',
             'average_rating' => 0.00,
             'total_reviews' => 0,
@@ -325,21 +362,66 @@ class VendorController extends Controller
             'item_quantity' => 'required|integer|min:0',
             'category' => 'nullable|string|max:100',
             'item_images' => 'nullable|array',
+            'item_images.*' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:5120',
+            'existing_images' => 'nullable|array',
+            'existing_images.*' => 'nullable|string',
             'item_status' => 'nullable|string|in:active,inactive',
         ]);
 
+        $updateData = [
+            'item_name' => $request->item_name,
+            'item_description' => $request->item_description,
+            'item_price' => $request->item_price,
+            'item_quantity' => $request->item_quantity,
+            'category' => $request->category,
+            'item_status' => $request->item_status ?? $product->item_status,
+            'updated_at' => now(),
+        ];
+
+        // Get current images from database
+        $oldImages = $product->item_images ? json_decode($product->item_images, true) : [];
+        $oldImages = is_array($oldImages) ? $oldImages : [];
+        
+        // Get existing images that should be kept (from frontend)
+        $existingImages = $request->input('existing_images', []);
+        $existingImages = is_array($existingImages) ? $existingImages : [];
+        
+        // Collect all final images (existing + new)
+        $finalImages = [];
+        
+        // Add existing images that should be kept
+        foreach ($existingImages as $existingImage) {
+            if (!empty($existingImage)) {
+                $finalImages[] = $existingImage;
+            }
+        }
+        
+        // Handle new file uploads
+        if ($request->hasFile('item_images')) {
+            // Upload new images
+            foreach ($request->file('item_images') as $image) {
+                $path = $image->store('products', 'public');
+                // Generate URL: /storage/products/filename.jpg
+                $finalImages[] = '/storage/' . $path;
+            }
+        }
+        
+        // Delete old images that are not in the final list
+        foreach ($oldImages as $oldImage) {
+            if (!in_array($oldImage, $finalImages)) {
+                $oldPath = str_replace('/storage/', '', parse_url($oldImage, PHP_URL_PATH));
+                if (Storage::disk('public')->exists($oldPath)) {
+                    Storage::disk('public')->delete($oldPath);
+                }
+            }
+        }
+        
+        // Update images in database
+        $updateData['item_images'] = !empty($finalImages) ? json_encode($finalImages) : null;
+
         DB::table('items')
             ->where('id', $id)
-            ->update([
-                'item_name' => $request->item_name,
-                'item_description' => $request->item_description,
-                'item_price' => $request->item_price,
-                'item_quantity' => $request->item_quantity,
-                'category' => $request->category,
-                'item_images' => $request->item_images ? json_encode($request->item_images) : null,
-                'item_status' => $request->item_status ?? $product->item_status,
-                'updated_at' => now(),
-            ]);
+            ->update($updateData);
 
         return redirect()->route('dashboard.vendor.products.index')
             ->with('success', 'Product updated successfully.');

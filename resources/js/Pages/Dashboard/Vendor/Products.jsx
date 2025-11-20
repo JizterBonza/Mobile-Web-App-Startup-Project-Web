@@ -11,6 +11,9 @@ export default function Products({ auth, products = [], store, flash }) {
   const [showRemoveModalAnimation, setShowRemoveModalAnimation] = useState(false)
   const [selectedProduct, setSelectedProduct] = useState(null)
   const [productToRemove, setProductToRemove] = useState(null)
+  const [imagePreviews, setImagePreviews] = useState([])
+  const [editImagePreviews, setEditImagePreviews] = useState([])
+  const [editExistingImages, setEditExistingImages] = useState([])
 
   const addForm = useForm({
     item_name: '',
@@ -61,7 +64,30 @@ export default function Products({ auth, products = [], store, flash }) {
     setTimeout(() => {
       setShowAddModal(false)
       addForm.reset()
+      setImagePreviews([])
     }, 300)
+  }
+
+  const handleImageChange = (e) => {
+    const files = Array.from(e.target.files)
+    if (files.length > 0) {
+      addForm.setData('item_images', files)
+      
+      // Create previews
+      const previews = files.map(file => URL.createObjectURL(file))
+      setImagePreviews(previews)
+    }
+  }
+
+  const removeImage = (index) => {
+    const newFiles = Array.from(addForm.data.item_images)
+    newFiles.splice(index, 1)
+    addForm.setData('item_images', newFiles)
+    
+    const newPreviews = [...imagePreviews]
+    URL.revokeObjectURL(newPreviews[index])
+    newPreviews.splice(index, 1)
+    setImagePreviews(newPreviews)
   }
 
   const closeEditModal = () => {
@@ -70,7 +96,37 @@ export default function Products({ auth, products = [], store, flash }) {
       setShowEditModal(false)
       setSelectedProduct(null)
       editForm.reset()
+      setEditImagePreviews([])
+      setEditExistingImages([])
     }, 300)
+  }
+
+  const handleEditImageChange = (e) => {
+    const files = Array.from(e.target.files)
+    if (files.length > 0) {
+      editForm.setData('item_images', files)
+      
+      // Create previews
+      const previews = files.map(file => URL.createObjectURL(file))
+      setEditImagePreviews(previews)
+    }
+  }
+
+  const removeEditImage = (index) => {
+    const newFiles = Array.from(editForm.data.item_images)
+    newFiles.splice(index, 1)
+    editForm.setData('item_images', newFiles)
+    
+    const newPreviews = [...editImagePreviews]
+    URL.revokeObjectURL(newPreviews[index])
+    newPreviews.splice(index, 1)
+    setEditImagePreviews(newPreviews)
+  }
+
+  const removeEditExistingImage = (index) => {
+    const newExisting = [...editExistingImages]
+    newExisting.splice(index, 1)
+    setEditExistingImages(newExisting)
   }
 
   const closeRemoveModal = () => {
@@ -95,31 +151,72 @@ export default function Products({ auth, products = [], store, flash }) {
     e.preventDefault()
     addForm.post('/dashboard/vendor/products', {
       preserveScroll: true,
+      forceFormData: true,
       onSuccess: () => {
         addForm.reset()
+        setImagePreviews([])
       },
     })
   }
 
   const handleEditProduct = (product) => {
     setSelectedProduct(product)
+    const existingImages = product.item_images || []
     editForm.setData({
       item_name: product.item_name,
       item_description: product.item_description || '',
       item_price: product.item_price,
       item_quantity: product.item_quantity,
       category: product.category || '',
-      item_images: product.item_images || [],
+      item_images: [],
       item_status: product.item_status,
     })
+    setEditExistingImages(existingImages)
+    setEditImagePreviews([])
     setShowEditModal(true)
     setShowEditModalAnimation(false)
   }
 
   const handleUpdateProduct = (e) => {
     e.preventDefault()
+    if (!selectedProduct) {
+      return
+    }
+    
+    const hasNewImages = editForm.data.item_images && editForm.data.item_images.length > 0
+    
+    // Explicitly set all form data to ensure everything is included when using FormData
+    // Use current form values, ensuring they're not undefined
+    const currentData = { ...editForm.data }
+    
+    // Ensure all required fields have values
+    // When using FormData, all values should be strings or proper types
+    const formData = {
+      item_name: String(currentData.item_name || ''),
+      item_description: String(currentData.item_description || ''),
+      item_price: currentData.item_price !== '' && currentData.item_price !== null && currentData.item_price !== undefined
+        ? String(currentData.item_price)
+        : '0',
+      item_quantity: currentData.item_quantity !== '' && currentData.item_quantity !== null && currentData.item_quantity !== undefined
+        ? String(currentData.item_quantity)
+        : '0',
+      category: String(currentData.category || ''),
+      item_status: String(currentData.item_status || 'active'),
+      existing_images: editExistingImages, // Array - FormData will handle this
+    }
+    
+    // Include item_images only if there are new images
+    if (hasNewImages) {
+      formData.item_images = currentData.item_images
+    }
+    
+    // Set all data at once
+    editForm.setData(formData)
+    
+    // Use FormData only when there are new images, otherwise use JSON
     editForm.put(`/dashboard/vendor/products/${selectedProduct.id}`, {
       preserveScroll: true,
+      forceFormData: hasNewImages,
       onSuccess: () => {
         closeEditModal()
       },
@@ -258,7 +355,7 @@ export default function Products({ auth, products = [], store, flash }) {
         <>
           <div className={`modal-backdrop fade ${showAddModalAnimation ? 'show' : ''}`} onClick={closeAddModal}></div>
           <div className={`modal fade ${showAddModalAnimation ? 'show' : ''} d-block`} tabIndex="-1" style={{ zIndex: 1050 }}>
-            <div className="modal-dialog modal-lg modal-dialog-centered">
+            <div className="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
               <div className="modal-content">
                 <div className="modal-header">
                   <h4 className="modal-title">Add New Product</h4>
@@ -341,6 +438,50 @@ export default function Products({ auth, products = [], store, flash }) {
                       )}
                     </div>
                     <div className="form-group">
+                      <label>Product Images <span className="text-danger">*</span></label>
+                      <input
+                        type="file"
+                        className={`form-control ${addForm.errors.item_images ? 'is-invalid' : ''}`}
+                        onChange={handleImageChange}
+                        accept="image/*"
+                        multiple
+                        required
+                      />
+                      {addForm.errors.item_images && (
+                        <div className="invalid-feedback">{addForm.errors.item_images}</div>
+                      )}
+                      {addForm.errors['item_images.0'] && (
+                        <div className="invalid-feedback">{addForm.errors['item_images.0']}</div>
+                      )}
+                      <small className="form-text text-muted">
+                        Upload at least one product image (JPEG, PNG, JPG, GIF - Max 5MB per image)
+                      </small>
+                      {imagePreviews.length > 0 && (
+                        <div className="mt-3">
+                          <div className="row">
+                            {imagePreviews.map((preview, index) => (
+                              <div key={index} className="col-md-3 mb-2 position-relative">
+                                <img
+                                  src={preview}
+                                  alt={`Preview ${index + 1}`}
+                                  className="img-thumbnail"
+                                  style={{ width: '100%', height: '150px', objectFit: 'cover' }}
+                                />
+                                <button
+                                  type="button"
+                                  className="btn btn-sm btn-danger position-absolute"
+                                  style={{ top: '5px', right: '5px' }}
+                                  onClick={() => removeImage(index)}
+                                >
+                                  <i className="fas fa-times"></i>
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    <div className="form-group">
                       <label>Status <span className="text-danger">*</span></label>
                       <select
                         className={`form-control ${addForm.errors.item_status ? 'is-invalid' : ''}`}
@@ -376,7 +517,7 @@ export default function Products({ auth, products = [], store, flash }) {
         <>
           <div className={`modal-backdrop fade ${showEditModalAnimation ? 'show' : ''}`} onClick={closeEditModal}></div>
           <div className={`modal fade ${showEditModalAnimation ? 'show' : ''} d-block`} tabIndex="-1" style={{ zIndex: 1050 }}>
-            <div className="modal-dialog modal-lg modal-dialog-centered">
+            <div className="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
               <div className="modal-content">
                 <div className="modal-header">
                   <h4 className="modal-title">Edit Product</h4>
@@ -459,6 +600,75 @@ export default function Products({ auth, products = [], store, flash }) {
                       )}
                     </div>
                     <div className="form-group">
+                      <label>Product Images</label>
+                      {editExistingImages.length > 0 && (
+                        <div className="mb-3">
+                          <label className="d-block">Current Images:</label>
+                          <div className="row">
+                            {editExistingImages.map((image, index) => (
+                              <div key={index} className="col-md-3 mb-2 position-relative">
+                                <img
+                                  src={image}
+                                  alt={`Existing ${index + 1}`}
+                                  className="img-thumbnail"
+                                  style={{ width: '100%', height: '150px', objectFit: 'cover' }}
+                                />
+                                <button
+                                  type="button"
+                                  className="btn btn-sm btn-danger position-absolute"
+                                  style={{ top: '5px', right: '5px' }}
+                                  onClick={() => removeEditExistingImage(index)}
+                                >
+                                  <i className="fas fa-times"></i>
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      <input
+                        type="file"
+                        className={`form-control ${editForm.errors.item_images ? 'is-invalid' : ''}`}
+                        onChange={handleEditImageChange}
+                        accept="image/*"
+                        multiple
+                      />
+                      {editForm.errors.item_images && (
+                        <div className="invalid-feedback">{editForm.errors.item_images}</div>
+                      )}
+                      {editForm.errors['item_images.0'] && (
+                        <div className="invalid-feedback">{editForm.errors['item_images.0']}</div>
+                      )}
+                      <small className="form-text text-muted">
+                        Upload new images to replace existing ones (JPEG, PNG, JPG, GIF - Max 5MB per image)
+                      </small>
+                      {editImagePreviews.length > 0 && (
+                        <div className="mt-3">
+                          <label className="d-block">New Image Previews:</label>
+                          <div className="row">
+                            {editImagePreviews.map((preview, index) => (
+                              <div key={index} className="col-md-3 mb-2 position-relative">
+                                <img
+                                  src={preview}
+                                  alt={`Preview ${index + 1}`}
+                                  className="img-thumbnail"
+                                  style={{ width: '100%', height: '150px', objectFit: 'cover' }}
+                                />
+                                <button
+                                  type="button"
+                                  className="btn btn-sm btn-danger position-absolute"
+                                  style={{ top: '5px', right: '5px' }}
+                                  onClick={() => removeEditImage(index)}
+                                >
+                                  <i className="fas fa-times"></i>
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    <div className="form-group">
                       <label>Status <span className="text-danger">*</span></label>
                       <select
                         className={`form-control ${editForm.errors.item_status ? 'is-invalid' : ''}`}
@@ -494,7 +704,7 @@ export default function Products({ auth, products = [], store, flash }) {
         <>
           <div className={`modal-backdrop fade ${showRemoveModalAnimation ? 'show' : ''}`} onClick={closeRemoveModal}></div>
           <div className={`modal fade ${showRemoveModalAnimation ? 'show' : ''} d-block`} tabIndex="-1" style={{ zIndex: 1050 }}>
-            <div className="modal-dialog modal-dialog-centered">
+            <div className="modal-dialog modal-dialog-centered modal-dialog-scrollable">
               <div className="modal-content">
                 <div className="modal-header">
                   <h4 className="modal-title">Confirm Delete</h4>

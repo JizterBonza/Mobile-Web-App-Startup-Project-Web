@@ -137,7 +137,7 @@ export default function StoreManagement({ auth, store, flash }) {
         <>
           <div className={`modal-backdrop fade ${showModalAnimation ? 'show' : ''}`} onClick={closeModal}></div>
           <div className={`modal fade ${showModalAnimation ? 'show' : ''} d-block`} tabIndex="-1" style={{ zIndex: 1050 }}>
-            <div className="modal-dialog modal-lg modal-dialog-centered">
+            <div className="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
               <div className="modal-content">
                 <div className="modal-header">
                   <h4 className="modal-title">Edit Agrivet Information</h4>

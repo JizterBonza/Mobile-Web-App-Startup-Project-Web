@@ -169,7 +169,7 @@ export default function Orders({ auth, orders = [], store, flash }) {
         <>
           <div className={`modal-backdrop fade ${showStatusModalAnimation ? 'show' : ''}`} onClick={closeStatusModal}></div>
           <div className={`modal fade ${showStatusModalAnimation ? 'show' : ''} d-block`} tabIndex="-1" style={{ zIndex: 1050 }}>
-            <div className="modal-dialog modal-dialog-centered">
+            <div className="modal-dialog modal-dialog-centered modal-dialog-scrollable">
               <div className="modal-content">
                 <div className="modal-header">
                   <h4 className="modal-title">Update Order Status</h4>
