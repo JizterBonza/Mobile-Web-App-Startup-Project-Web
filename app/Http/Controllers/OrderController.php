@@ -172,7 +172,7 @@ class OrderController extends Controller
 
         // Create order detail first
         $orderDetailData = [
-            'order_code' => $request->order_code ?? '#ORD-' . strtoupper(Str::random(10)),
+            'order_code' => '#ORD-' . $request->order_code ?? '#ORD-' . strtoupper(Str::random(10)),
             'subtotal' => $request->subtotal,
             'shipping_fee' => $request->shipping_fee ?? 0.00,
             'total_amount' => $request->total_amount,
