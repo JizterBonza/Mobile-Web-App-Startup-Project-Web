@@ -5,6 +5,7 @@ use App\Http\Controllers\MobileAuthController;
 use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\ItemController;
 use App\Http\Controllers\OrderController;
+use App\Http\Controllers\CartController;
 use Illuminate\Http\Request;
 
 Route::post('register', [MobileAuthController::class, 'register']);
@@ -44,4 +45,13 @@ Route::get('orders/{id}', [OrderController::class, 'show']);
 Route::post('orders', [OrderController::class, 'store']);
 Route::put('orders/{id}', [OrderController::class, 'update']);
 Route::delete('orders/{id}', [OrderController::class, 'destroy']);
+
+// Cart routes
+Route::get('carts', [CartController::class, 'index']);
+Route::get('carts/user/{userId}', [CartController::class, 'getByUser']);
+Route::get('carts/{id}', [CartController::class, 'show']);
+Route::post('carts', [CartController::class, 'store']);
+Route::put('carts/{id}', [CartController::class, 'update']);
+Route::delete('carts/delete/{id}', [CartController::class, 'destroy']);
+Route::post('carts/clear', [CartController::class, 'clear']);
 
