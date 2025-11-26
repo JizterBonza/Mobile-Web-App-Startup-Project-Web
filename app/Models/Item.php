@@ -61,5 +61,13 @@ class Item extends Model
     {
         return $this->belongsTo(Shop::class);
     }
+
+    /**
+     * Get the rating reviews for the item.
+     */
+    public function ratingReviews()
+    {
+        return $this->hasMany(RatingReview::class);
+    }
 }
 

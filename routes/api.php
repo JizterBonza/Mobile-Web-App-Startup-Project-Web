@@ -30,6 +30,7 @@ Route::get('categories/{id}', [CategoryController::class, 'show']);
 // Item routes
 Route::get('items', [ItemController::class, 'index']);
 Route::get('items/random', [ItemController::class, 'random']);
+Route::get('items/{id}/reviews', [ItemController::class, 'getItemWithReviews']);
 Route::get('items/{id}', [ItemController::class, 'show']);
 Route::post('items', [ItemController::class, 'store']);
 Route::put('items/{id}', [ItemController::class, 'update']);

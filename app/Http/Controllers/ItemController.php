@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Item;
+use App\Models\RatingReview;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 
@@ -73,6 +74,52 @@ class ItemController extends Controller
         return response()->json([
             'success' => true,
             'data' => $item
+        ]);
+    }
+
+    public function getItemWithReviews($id)
+    {
+        $item = Item::with(['ratingReviews' => function ($query) {
+            $query->orderBy('created_at', 'desc')
+                  ->with(['user.userCredential' => function ($query) {
+                      $query->select('id', 'username');
+                  }]);
+        }])->find($id);
+
+        if (!$item) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Item not found'
+            ], 404);
+        }
+        
+        //$itemData = $item->toArray();
+        // Get item data without the rating_reviews relationship
+        $itemData = $item->only([
+            'id', 'shop_id', 'item_name', 'item_description', 'item_price',
+            'item_quantity', 'category', 'item_images', 'item_status',
+            'average_rating', 'total_reviews', 'sold_count', 'created_at', 'updated_at'
+        ]);
+        
+        // Add reviews
+        $itemData['reviews'] = $item->ratingReviews->map(function ($review) {
+            return [
+                'id' => $review->id,
+                'user_id' => $review->user_id,
+                'username' => $review->user->userCredential->username ?? null,
+                'rating' => $review->rating,
+                'comment' => $review->review_text,
+                'review_images' => $review->review_images,
+                'order_id' => $review->order_id,
+                'created_at' => $review->created_at,
+                'updated_at' => $review->updated_at,
+                'verified' => 'false',
+            ];
+        });
+
+        return response()->json([
+            'success' => true,
+            'data' => $itemData
         ]);
     }
 
