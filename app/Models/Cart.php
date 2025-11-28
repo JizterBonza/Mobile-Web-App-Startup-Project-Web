@@ -27,7 +27,7 @@ class Cart extends Model
         'quantity',
         'price_snapshot',
         'status',
-        'added_at',
+        'created_at',
     ];
 
     /**
@@ -40,7 +40,7 @@ class Cart extends Model
         return [
             'quantity' => 'integer',
             'price_snapshot' => 'decimal:2',
-            'added_at' => 'datetime',
+            'created_at' => 'datetime',
             'updated_at' => 'datetime',
         ];
     }

@@ -50,7 +50,7 @@ Route::delete('orders/{id}', [OrderController::class, 'destroy']);
 Route::get('carts', [CartController::class, 'index']);
 Route::get('carts/user/{userId}', [CartController::class, 'getByUser']);
 Route::get('carts/{id}', [CartController::class, 'show']);
-Route::post('carts', [CartController::class, 'store']);
+Route::post('carts/add', [CartController::class, 'store']);
 Route::put('carts/{id}', [CartController::class, 'update']);
 Route::delete('carts/delete/{id}', [CartController::class, 'destroy']);
 Route::post('carts/clear', [CartController::class, 'clear']);
