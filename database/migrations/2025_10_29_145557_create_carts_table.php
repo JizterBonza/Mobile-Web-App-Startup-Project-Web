@@ -25,13 +25,16 @@ return new class extends Migration
             $table->string('status', 50)->default('active'); // e.g. active, purchased, removed
 
             // Timestamps
-            $table->timestamp('added_at')->useCurrent();
-            $table->timestamp('updated_at')->useCurrent()->useCurrentOnUpdate();
+            // $table->timestamp('added_at')->useCurrent();
+            // $table->timestamp('updated_at')->useCurrent()->useCurrentOnUpdate();
+            $table->timestamps();
 
             // Foreign key constraints
             // $table->foreign('user_id')->references('id')->on('users')->onDelete('cascade');
             // $table->foreign('item_id')->references('id')->on('items')->onDelete('cascade');
             });
+
+            
         }
     }
 

@@ -32,8 +32,8 @@ class CartController extends Controller
             $query->where('status', 'active');
         }
 
-        // Order by added_at descending (newest first)
-        $query->orderBy('added_at', 'desc');
+        // Order by created_at descending (newest first)
+        $query->orderBy('created_at', 'desc');
 
         $carts = $query->get();
 
@@ -78,7 +78,7 @@ class CartController extends Controller
         $carts = Cart::with(['item'])
             ->where('user_id', $userId)
             ->where('status', 'active')
-            ->orderBy('added_at', 'desc')
+            ->orderBy('created_at', 'desc')
             ->get();
 
         return response()->json([
@@ -146,7 +146,7 @@ class CartController extends Controller
             'quantity' => $request->quantity ?? 1,
             'price_snapshot' => $item->item_price,
             'status' => $request->status ?? 'active',
-            'added_at' => now(),
+            'created_at' => now(),
         ]);
 
         return response()->json([
