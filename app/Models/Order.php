@@ -17,6 +17,27 @@ class Order extends Model
     protected $table = 'orders';
 
     /**
+     * Indicates if the model should be timestamped.
+     *
+     * @var bool
+     */
+    public $timestamps = true;
+
+    /**
+     * The name of the "created at" column.
+     *
+     * @var string
+     */
+    const CREATED_AT = 'ordered_at';
+
+    /**
+     * The name of the "updated at" column.
+     *
+     * @var string
+     */
+    const UPDATED_AT = 'updated_at';
+
+    /**
      * The attributes that are mass assignable.
      *
      * @var array<int, string>
@@ -37,7 +58,6 @@ class Order extends Model
     {
         return [
             'ordered_at' => 'datetime',
-            'created_at' => 'datetime',
             'updated_at' => 'datetime',
         ];
     }
