@@ -2,10 +2,12 @@
 
 use App\Http\Controllers\Api\SocialAuthController;
 use App\Http\Controllers\MobileAuthController;
+use App\Http\Controllers\UserController;
 use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\ItemController;
 use App\Http\Controllers\OrderController;
 use App\Http\Controllers\CartController;
+use App\Http\Controllers\FavoriteController;
 use Illuminate\Http\Request;
 
 Route::post('register', [MobileAuthController::class, 'register']);
@@ -16,6 +18,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('profile', function (Request $request) {
         return response()->json($request->user());
     });
+    Route::put('profile/update', [UserController::class, 'updateMobile']);
+    Route::put('profile/change-password', [UserController::class, 'updatePasswordMobile']);
     // add other protected routes here
 });
 
@@ -42,7 +46,7 @@ Route::get('orders', [OrderController::class, 'index']);
 Route::get('orders/user/{userId}', [OrderController::class, 'getByUser']);
 Route::get('orders/details/user/{userId}', [OrderController::class, 'getOrderDetailsByUser']);
 Route::get('orders/{id}', [OrderController::class, 'show']);
-Route::post('orders', [OrderController::class, 'store']);
+Route::post('orders/create', [OrderController::class, 'store']);
 Route::put('orders/{id}', [OrderController::class, 'update']);
 Route::delete('orders/{id}', [OrderController::class, 'destroy']);
 
@@ -54,4 +58,14 @@ Route::post('carts/add', [CartController::class, 'store']);
 Route::put('carts/{id}', [CartController::class, 'update']);
 Route::delete('carts/delete/{id}', [CartController::class, 'destroy']);
 Route::post('carts/clear', [CartController::class, 'clear']);
+
+// Favorite routes
+Route::get('favorites', [FavoriteController::class, 'index']);
+Route::get('favorites/user/{userId}', [FavoriteController::class, 'getByUser']);
+Route::get('favorites/{id}', [FavoriteController::class, 'show']);
+Route::post('favorites/add', [FavoriteController::class, 'store']);
+Route::delete('favorites/delete/{id}', [FavoriteController::class, 'destroy']);
+Route::post('favorites/remove', [FavoriteController::class, 'removeByUserAndItem']);
+Route::post('favorites/toggle', [FavoriteController::class, 'toggle']);
+Route::post('favorites/check', [FavoriteController::class, 'check']);
 

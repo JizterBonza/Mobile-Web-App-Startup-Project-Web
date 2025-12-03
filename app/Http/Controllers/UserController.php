@@ -204,6 +204,118 @@ class UserController extends Controller
     }
 
     /**
+     * Update the authenticated mobile user's profile.
+     */
+    public function updateMobile(Request $request)
+    {
+        $user = auth()->user();
+        $user->load(['userDetail', 'userCredential']);
+
+        $request->validate([
+            'first_name' => 'nullable|string|max:100',
+            'middle_name' => 'nullable|string|max:100',
+            'last_name' => 'nullable|string|max:100',
+            'email' => 'nullable|string|email|max:255|unique:user_details,email,' . $user->user_detail_id,
+            'mobile_number' => 'nullable|string|max:20',
+            'shipping_address' => 'nullable|string',
+            'profile_image_url' => 'nullable|url|max:255',
+            'username' => 'nullable|string|max:100|unique:user_credentials,username,' . $user->user_credential_id,
+        ]);
+
+        try {
+            DB::beginTransaction();
+
+            // Update UserDetail - only update fields that are provided
+            $userDetailData = [];
+            if ($request->filled('first_name')) {
+                $userDetailData['first_name'] = $request->first_name;
+            }
+            if ($request->filled('middle_name')) {
+                $userDetailData['middle_name'] = $request->middle_name;
+            }
+            if ($request->filled('last_name')) {
+                $userDetailData['last_name'] = $request->last_name;
+            }
+            if ($request->filled('email')) {
+                $userDetailData['email'] = $request->email;
+            }
+            if ($request->has('mobile_number')) {
+                $userDetailData['mobile_number'] = $request->mobile_number;
+            }
+            if ($request->has('shipping_address')) {
+                $userDetailData['shipping_address'] = $request->shipping_address;
+            }
+            if ($request->filled('profile_image_url')) {
+                $userDetailData['profile_image_url'] = $request->profile_image_url;
+            }
+
+            if (!empty($userDetailData)) {
+                $user->userDetail->update($userDetailData);
+            }
+
+            // Update UserCredential - only update username if provided
+            if ($request->filled('username')) {
+                $user->userCredential->update([
+                    'username' => $request->username,
+                ]);
+            }
+
+            DB::commit();
+
+            // Reload user with updated relationships
+            $user->refresh();
+            $user->load(['userDetail', 'userCredential']);
+
+            return response()->json([
+                'message' => 'Profile updated successfully.',
+                'user' => $user
+            ], 200);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json([
+                'message' => 'Failed to update profile.',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Update the authenticated mobile user's password.
+     */
+    public function updatePasswordMobile(Request $request)
+    {
+        $user = auth()->user();
+        $user->load('userCredential');
+
+        $request->validate([
+            'current_password' => 'required|string',
+            'new_password' => 'required|string|min:8|confirmed',
+        ]);
+        // Verify current password
+        if (!Hash::check($request->current_password, $user->userCredential->password_hash)) {
+            return response()->json([
+                'message' => 'Current password is incorrect.',
+            ], 422);
+        }
+
+        try {
+            // Update password
+            $user->userCredential->update([
+                'password_hash' => Hash::make($request->new_password),
+            ]);
+
+            return response()->json([
+                'message' => 'Password updated successfully.',
+            ], 200);
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Failed to update password.',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
      * Remove (deactivate) the specified user.
      */
     public function deactivate($id)
