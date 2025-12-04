@@ -61,5 +61,30 @@ class Item extends Model
     {
         return $this->belongsTo(Shop::class);
     }
+
+    /**
+     * Get the rating reviews for the item.
+     */
+    public function ratingReviews()
+    {
+        return $this->hasMany(RatingReview::class);
+    }
+
+    /**
+     * The accessors to append to the model's array form.
+     *
+     * @var array<int, string>
+     */
+    protected $appends = ['shop_name'];
+
+    /**
+     * Get the shop name from the related shop.
+     *
+     * @return string|null
+     */
+    public function getShopNameAttribute()
+    {
+        return $this->shop ? $this->shop->shop_name : null;
+    }
 }
 

@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Order;
 use App\Models\OrderDetail;
+use App\Models\OrderItem;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
@@ -143,7 +144,9 @@ class OrderController extends Controller
      */
     public function store(Request $request)
     {
-        $validator = Validator::make($request->all(), [
+        $data = $request->all();
+
+        $validator = Validator::make($data, [
             // Order fields
             'user_id' => 'required|exists:users,id',
             'order_status' => 'nullable|string|max:50',
@@ -160,6 +163,13 @@ class OrderController extends Controller
             'order_instruction' => 'nullable|string',
             'payment_method' => 'required|string|max:50',
             'payment_status' => 'nullable|string|max:50',
+            
+            // Order items
+            'items' => 'required|array|min:1',
+            'items.*.item_id' => 'required|exists:items,id',
+            'items.*.shop_id' => 'required|exists:shops,id',
+            'items.*.quantity' => 'required|integer|min:1',
+            'items.*.price_at_purchase' => 'required|numeric|min:0',
         ]);
 
         if ($validator->fails()) {
@@ -172,29 +182,43 @@ class OrderController extends Controller
 
         // Create order detail first
         $orderDetailData = [
-            'order_code' => '#ORD-' . $request->order_code ?? '#ORD-' . strtoupper(Str::random(10)),
-            'subtotal' => $request->subtotal,
-            'shipping_fee' => $request->shipping_fee ?? 0.00,
-            'total_amount' => $request->total_amount,
-            'shipping_address' => $request->shipping_address,
-            'drop_location_lat' => $request->drop_location_lat,
-            'drop_location_long' => $request->drop_location_long,
-            'order_instruction' => $request->order_instruction,
-            'payment_method' => $request->payment_method,
-            'payment_status' => $request->payment_status ?? 'pending',
+            'order_code' => $data['order_code'] ?? '#ORD-' . strtoupper(Str::random(10)),
+            'subtotal' => $data['subtotal'],
+            'shipping_fee' => $data['shipping_fee'] ?? 0.00,
+            'total_amount' => $data['total_amount'],
+            'shipping_address' => $data['shipping_address'],
+            'drop_location_lat' => $data['drop_location_lat'] ?? null,
+            'drop_location_long' => $data['drop_location_long'] ?? null,
+            'order_instruction' => $data['order_instruction'] ?? null,
+            'payment_method' => $data['payment_method'],
+            'payment_status' => $data['payment_status'] ?? 'pending',
         ];
 
         $orderDetail = OrderDetail::create($orderDetailData);
 
         // Create order
         $orderData = [
-            'user_id' => $request->user_id,
+            'user_id' => $data['user_id'],
             'order_detail_id' => $orderDetail->id,
-            'order_status' => $request->order_status ?? 'pending',
-            'ordered_at' => $request->ordered_at ?? now(),
+            'order_status' => $data['order_status'] ?? 'pending',
+            'ordered_at' => $data['ordered_at'] ?? now(),
         ];
 
         $order = Order::create($orderData);
+
+        // Create order items
+        if (isset($data['items']) && is_array($data['items'])) {
+            foreach ($data['items'] as $item) {
+                OrderItem::create([
+                    'order_id' => $order->id,
+                    'item_id' => (int) $item['item_id'],
+                    'shop_id' => (int) $item['shop_id'],
+                    'quantity' => (int) $item['quantity'],
+                    'price_at_purchase' => (float) $item['price_at_purchase'],
+                    'item_status' => 'ordered',
+                ]);
+            }
+        }
 
         // Load relationships
         $order->load(['user', 'orderDetail', 'orderItems']);
