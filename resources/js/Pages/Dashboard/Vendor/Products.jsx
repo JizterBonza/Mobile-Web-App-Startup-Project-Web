@@ -98,29 +98,46 @@ export default function Products({ auth, products = [], store, flash }) {
       editForm.reset()
       setEditImagePreviews([])
       setEditExistingImages([])
+      // Clean up any object URLs
+      editImagePreviews.forEach(preview => {
+        if (preview && preview.startsWith('blob:')) {
+          URL.revokeObjectURL(preview)
+        }
+      })
     }, 300)
   }
 
   const handleEditImageChange = (e) => {
     const files = Array.from(e.target.files)
     if (files.length > 0) {
-      editForm.setData('item_images', files)
+      // Append to existing new images if any
+      const currentFiles = editForm.data.item_images || []
+      const allFiles = [...currentFiles, ...files]
+      editForm.setData('item_images', allFiles)
       
-      // Create previews
-      const previews = files.map(file => URL.createObjectURL(file))
-      setEditImagePreviews(previews)
+      // Create previews for new files
+      const newPreviews = files.map(file => URL.createObjectURL(file))
+      setEditImagePreviews(prev => [...prev, ...newPreviews])
     }
+    // Reset input to allow selecting same file again
+    e.target.value = ''
   }
 
   const removeEditImage = (index) => {
-    const newFiles = Array.from(editForm.data.item_images)
-    newFiles.splice(index, 1)
-    editForm.setData('item_images', newFiles)
+    const currentFiles = Array.from(editForm.data.item_images || [])
+    const currentPreviews = [...editImagePreviews]
     
-    const newPreviews = [...editImagePreviews]
-    URL.revokeObjectURL(newPreviews[index])
-    newPreviews.splice(index, 1)
-    setEditImagePreviews(newPreviews)
+    // Revoke object URL before removing
+    if (currentPreviews[index] && currentPreviews[index].startsWith('blob:')) {
+      URL.revokeObjectURL(currentPreviews[index])
+    }
+    
+    // Remove from both arrays
+    currentFiles.splice(index, 1)
+    currentPreviews.splice(index, 1)
+    
+    editForm.setData('item_images', currentFiles)
+    setEditImagePreviews(currentPreviews)
   }
 
   const removeEditExistingImage = (index) => {
@@ -161,18 +178,53 @@ export default function Products({ auth, products = [], store, flash }) {
 
   const handleEditProduct = (product) => {
     setSelectedProduct(product)
-    const existingImages = product.item_images || []
+    
+    // Get existing images - ensure they're in array format
+    let existingImages = []
+    if (product.item_images) {
+      if (Array.isArray(product.item_images)) {
+        existingImages = product.item_images
+      } else if (typeof product.item_images === 'string') {
+        try {
+          existingImages = JSON.parse(product.item_images)
+        } catch (e) {
+          existingImages = [product.item_images]
+        }
+      }
+    }
+    
+    // Ensure images are properly formatted URLs
+    existingImages = existingImages.map(img => {
+      if (!img) return null
+      // If it's already a full URL, return as is
+      if (img.startsWith('http://') || img.startsWith('https://')) {
+        return img
+      }
+      // If it starts with /storage/, return as is
+      if (img.startsWith('/storage/')) {
+        return img
+      }
+      // Otherwise, prepend /storage/
+      return `/storage/${img.replace(/^storage\//, '')}`
+    }).filter(img => img !== null)
+    
+    // Initialize form with product data - ensure all values are strings for inputs
     editForm.setData({
-      item_name: product.item_name,
-      item_description: product.item_description || '',
-      item_price: product.item_price,
-      item_quantity: product.item_quantity,
-      category: product.category || '',
+      item_name: String(product.item_name || ''),
+      item_description: String(product.item_description || ''),
+      item_price: product.item_price != null ? String(product.item_price) : '',
+      item_quantity: product.item_quantity != null ? String(product.item_quantity) : '',
+      category: String(product.category || ''),
       item_images: [],
-      item_status: product.item_status,
+      item_status: String(product.item_status || 'active'),
+      existing_images: existingImages,
     })
+    
+    // Set state for existing images and clear new image previews
     setEditExistingImages(existingImages)
     setEditImagePreviews([])
+    
+    // Open modal
     setShowEditModal(true)
     setShowEditModalAnimation(false)
   }
@@ -183,42 +235,60 @@ export default function Products({ auth, products = [], store, flash }) {
       return
     }
     
-    const hasNewImages = editForm.data.item_images && editForm.data.item_images.length > 0
+    // Get current form values directly from the form state
+    const currentData = editForm.data
+    const hasNewImages = currentData.item_images && currentData.item_images.length > 0
+    const hasExistingImages = editExistingImages && editExistingImages.length > 0
     
-    // Explicitly set all form data to ensure everything is included when using FormData
-    // Use current form values, ensuring they're not undefined
-    const currentData = { ...editForm.data }
-    
-    // Ensure all required fields have values
-    // When using FormData, all values should be strings or proper types
-    const formData = {
-      item_name: String(currentData.item_name || ''),
-      item_description: String(currentData.item_description || ''),
-      item_price: currentData.item_price !== '' && currentData.item_price !== null && currentData.item_price !== undefined
-        ? String(currentData.item_price)
-        : '0',
-      item_quantity: currentData.item_quantity !== '' && currentData.item_quantity !== null && currentData.item_quantity !== undefined
-        ? String(currentData.item_quantity)
-        : '0',
-      category: String(currentData.category || ''),
-      item_status: String(currentData.item_status || 'active'),
-      existing_images: editExistingImages, // Array - FormData will handle this
+    // Validate that at least one image exists (existing or new)
+    if (!hasExistingImages && !hasNewImages) {
+      editForm.setError('item_images', 'At least one product image is required.')
+      return
     }
     
-    // Include item_images only if there are new images
-    if (hasNewImages) {
-      formData.item_images = currentData.item_images
+    // Ensure all required fields have values - validate before submission
+    if (!currentData.item_name || String(currentData.item_name).trim() === '') {
+      editForm.setError('item_name', 'The item name field is required.')
+      return
+    }
+    if (!currentData.item_price || currentData.item_price === '' || currentData.item_price == null) {
+      editForm.setError('item_price', 'The item price field is required.')
+      return
+    }
+    if (!currentData.item_quantity || currentData.item_quantity === '' || currentData.item_quantity == null) {
+      editForm.setError('item_quantity', 'The item quantity field is required.')
+      return
     }
     
-    // Set all data at once
-    editForm.setData(formData)
+    // Ensure existing_images is set in form data (it should already be set, but ensure it's current)
+    // Only update if it's different to avoid unnecessary state updates
+    if (JSON.stringify(currentData.existing_images || []) !== JSON.stringify(editExistingImages || [])) {
+      editForm.setData('existing_images', editExistingImages || [])
+    }
     
-    // Use FormData only when there are new images, otherwise use JSON
+    // If there are no new images, ensure item_images is an empty array
+    // This is important for the backend to know we're not uploading new files
+    if (!hasNewImages && currentData.item_images && currentData.item_images.length > 0) {
+      editForm.setData('item_images', [])
+    }
+    
+    // Submit the form
+    // forceFormData is needed when we have file uploads
     editForm.put(`/dashboard/vendor/products/${selectedProduct.id}`, {
       preserveScroll: true,
       forceFormData: hasNewImages,
       onSuccess: () => {
+        // Clean up object URLs
+        editImagePreviews.forEach(preview => {
+          if (preview && preview.startsWith('blob:')) {
+            URL.revokeObjectURL(preview)
+          }
+        })
         closeEditModal()
+      },
+      onError: (errors) => {
+        // Errors will be displayed automatically by Inertia
+        console.error('Update product errors:', errors)
       },
     })
   }
@@ -525,12 +595,13 @@ export default function Products({ auth, products = [], store, flash }) {
                     <span>&times;</span>
                   </button>
                 </div>
-                <form onSubmit={handleUpdateProduct}>
+                <form onSubmit={handleUpdateProduct} noValidate>
                   <div className="modal-body">
                     <div className="form-group">
                       <label>Product Name <span className="text-danger">*</span></label>
                       <input
                         type="text"
+                        name="item_name"
                         className={`form-control ${editForm.errors.item_name ? 'is-invalid' : ''}`}
                         value={editForm.data.item_name}
                         onChange={(e) => editForm.setData('item_name', e.target.value)}
@@ -543,6 +614,7 @@ export default function Products({ auth, products = [], store, flash }) {
                     <div className="form-group">
                       <label>Description</label>
                       <textarea
+                        name="item_description"
                         className={`form-control ${editForm.errors.item_description ? 'is-invalid' : ''}`}
                         value={editForm.data.item_description}
                         onChange={(e) => editForm.setData('item_description', e.target.value)}
@@ -558,6 +630,7 @@ export default function Products({ auth, products = [], store, flash }) {
                           <label>Price <span className="text-danger">*</span></label>
                           <input
                             type="number"
+                            name="item_price"
                             step="0.01"
                             min="0"
                             className={`form-control ${editForm.errors.item_price ? 'is-invalid' : ''}`}
@@ -575,6 +648,7 @@ export default function Products({ auth, products = [], store, flash }) {
                           <label>Quantity <span className="text-danger">*</span></label>
                           <input
                             type="number"
+                            name="item_quantity"
                             min="0"
                             className={`form-control ${editForm.errors.item_quantity ? 'is-invalid' : ''}`}
                             value={editForm.data.item_quantity}
@@ -591,6 +665,7 @@ export default function Products({ auth, products = [], store, flash }) {
                       <label>Category</label>
                       <input
                         type="text"
+                        name="category"
                         className={`form-control ${editForm.errors.category ? 'is-invalid' : ''}`}
                         value={editForm.data.category}
                         onChange={(e) => editForm.setData('category', e.target.value)}
@@ -601,33 +676,75 @@ export default function Products({ auth, products = [], store, flash }) {
                     </div>
                     <div className="form-group">
                       <label>Product Images</label>
-                      {editExistingImages.length > 0 && (
+                      {(editExistingImages.length > 0 || editImagePreviews.length > 0) && (
                         <div className="mb-3">
-                          <label className="d-block">Current Images:</label>
-                          <div className="row">
-                            {editExistingImages.map((image, index) => (
-                              <div key={index} className="col-md-3 mb-2 position-relative">
-                                <img
-                                  src={image}
-                                  alt={`Existing ${index + 1}`}
-                                  className="img-thumbnail"
-                                  style={{ width: '100%', height: '150px', objectFit: 'cover' }}
-                                />
-                                <button
-                                  type="button"
-                                  className="btn btn-sm btn-danger position-absolute"
-                                  style={{ top: '5px', right: '5px' }}
-                                  onClick={() => removeEditExistingImage(index)}
-                                >
-                                  <i className="fas fa-times"></i>
-                                </button>
+                          {editExistingImages.length > 0 && (
+                            <>
+                              <label className="d-block font-weight-bold mb-2">Current Images:</label>
+                              <div className="row">
+                                {editExistingImages.map((image, index) => {
+                                  // Ensure image URL is properly formatted
+                                  const imageUrl = image.startsWith('http') || image.startsWith('/') 
+                                    ? image 
+                                    : `/storage/${image.replace(/^storage\//, '')}`
+                                  return (
+                                    <div key={`existing-${index}`} className="col-md-3 mb-2 position-relative">
+                                      <img
+                                        src={imageUrl}
+                                        alt={`Existing ${index + 1}`}
+                                        className="img-thumbnail"
+                                        style={{ width: '100%', height: '150px', objectFit: 'cover' }}
+                                        onError={(e) => {
+                                          // Fallback if image fails to load
+                                          e.target.src = '/images/placeholder.png'
+                                        }}
+                                      />
+                                      <button
+                                        type="button"
+                                        className="btn btn-sm btn-danger position-absolute"
+                                        style={{ top: '5px', right: '5px', zIndex: 10 }}
+                                        onClick={() => removeEditExistingImage(index)}
+                                        title="Remove this image"
+                                      >
+                                        <i className="fas fa-times"></i>
+                                      </button>
+                                    </div>
+                                  )
+                                })}
                               </div>
-                            ))}
-                          </div>
+                            </>
+                          )}
+                          {editImagePreviews.length > 0 && (
+                            <>
+                              <label className="d-block font-weight-bold mb-2 mt-3">New Images (to be added):</label>
+                              <div className="row">
+                                {editImagePreviews.map((preview, index) => (
+                                  <div key={`new-${index}`} className="col-md-3 mb-2 position-relative">
+                                    <img
+                                      src={preview}
+                                      alt={`New Preview ${index + 1}`}
+                                      className="img-thumbnail"
+                                      style={{ width: '100%', height: '150px', objectFit: 'cover' }}
+                                    />
+                                    <button
+                                      type="button"
+                                      className="btn btn-sm btn-danger position-absolute"
+                                      style={{ top: '5px', right: '5px', zIndex: 10 }}
+                                      onClick={() => removeEditImage(index)}
+                                      title="Remove this image"
+                                    >
+                                      <i className="fas fa-times"></i>
+                                    </button>
+                                  </div>
+                                ))}
+                              </div>
+                            </>
+                          )}
                         </div>
                       )}
                       <input
                         type="file"
+                        name="item_images[]"
                         className={`form-control ${editForm.errors.item_images ? 'is-invalid' : ''}`}
                         onChange={handleEditImageChange}
                         accept="image/*"
@@ -640,37 +757,16 @@ export default function Products({ auth, products = [], store, flash }) {
                         <div className="invalid-feedback">{editForm.errors['item_images.0']}</div>
                       )}
                       <small className="form-text text-muted">
-                        Upload new images to replace existing ones (JPEG, PNG, JPG, GIF - Max 5MB per image)
+                        {editExistingImages.length > 0 
+                          ? 'Add more images or remove existing ones. At least one image is required.'
+                          : 'Upload at least one product image (JPEG, PNG, JPG, GIF - Max 5MB per image)'
+                        }
                       </small>
-                      {editImagePreviews.length > 0 && (
-                        <div className="mt-3">
-                          <label className="d-block">New Image Previews:</label>
-                          <div className="row">
-                            {editImagePreviews.map((preview, index) => (
-                              <div key={index} className="col-md-3 mb-2 position-relative">
-                                <img
-                                  src={preview}
-                                  alt={`Preview ${index + 1}`}
-                                  className="img-thumbnail"
-                                  style={{ width: '100%', height: '150px', objectFit: 'cover' }}
-                                />
-                                <button
-                                  type="button"
-                                  className="btn btn-sm btn-danger position-absolute"
-                                  style={{ top: '5px', right: '5px' }}
-                                  onClick={() => removeEditImage(index)}
-                                >
-                                  <i className="fas fa-times"></i>
-                                </button>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
                     </div>
                     <div className="form-group">
                       <label>Status <span className="text-danger">*</span></label>
                       <select
+                        name="item_status"
                         className={`form-control ${editForm.errors.item_status ? 'is-invalid' : ''}`}
                         value={editForm.data.item_status}
                         onChange={(e) => editForm.setData('item_status', e.target.value)}
