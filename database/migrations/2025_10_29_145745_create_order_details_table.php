@@ -25,8 +25,6 @@ return new class extends Migration
 
             // Shipping & delivery
             $table->text('shipping_address');
-            $table->decimal('drop_location_lat', 10, 7)->nullable();
-            $table->decimal('drop_location_long', 10, 7)->nullable();
             $table->text('order_instruction')->nullable();
 
             // Payment

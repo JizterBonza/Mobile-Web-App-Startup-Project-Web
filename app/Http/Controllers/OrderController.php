@@ -11,6 +11,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use App\Models\Address;
 
 class OrderController extends Controller
 {
@@ -161,8 +162,7 @@ class OrderController extends Controller
             'shipping_fee' => 'nullable|numeric|min:0',
             'total_amount' => 'required|numeric|min:0',
             'shipping_address' => 'required|string',
-            'drop_location_lat' => 'nullable|numeric|between:-90,90',
-            'drop_location_long' => 'nullable|numeric|between:-180,180',
+            'shipping_address_id' => 'required|exists:addresses,id',
             'order_instruction' => 'nullable|string',
             'payment_method' => 'required|string|max:50',
             'payment_status' => 'nullable|string|max:50',
@@ -228,9 +228,8 @@ class OrderController extends Controller
                 'subtotal' => $data['subtotal'],
                 'shipping_fee' => $data['shipping_fee'] ?? 0.00,
                 'total_amount' => $data['total_amount'],
-                'shipping_address' => $data['shipping_address'],
-                'drop_location_lat' => $data['drop_location_lat'] ?? null,
-                'drop_location_long' => $data['drop_location_long'] ?? null,
+                'address_id' => $data['shipping_address_id'],
+                'shipping_address' => Address::find($data['shipping_address_id'])->full_address,//get the shipping address from the addresses table
                 'order_instruction' => $data['order_instruction'] ?? null,
                 'payment_method' => $data['payment_method'],
                 'payment_status' => $data['payment_status'] ?? 'pending',
@@ -325,8 +324,6 @@ class OrderController extends Controller
             'shipping_fee' => 'nullable|numeric|min:0',
             'total_amount' => 'sometimes|numeric|min:0',
             'shipping_address' => 'sometimes|string',
-            'drop_location_lat' => 'nullable|numeric|between:-90,90',
-            'drop_location_long' => 'nullable|numeric|between:-180,180',
             'order_instruction' => 'nullable|string',
             'payment_method' => 'sometimes|string|max:50',
             'payment_status' => 'nullable|string|max:50',
@@ -343,8 +340,7 @@ class OrderController extends Controller
         // Update order detail if any order detail fields are provided
         $orderDetailFields = [
             'order_code', 'subtotal', 'shipping_fee', 'total_amount',
-            'shipping_address', 'drop_location_lat', 'drop_location_long',
-            'order_instruction', 'payment_method', 'payment_status'
+            'shipping_address', 'order_instruction', 'payment_method', 'payment_status'
         ];
 
         $orderDetailData = [];
