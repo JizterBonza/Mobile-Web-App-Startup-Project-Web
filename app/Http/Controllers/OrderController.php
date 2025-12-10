@@ -5,9 +5,13 @@ namespace App\Http\Controllers;
 use App\Models\Order;
 use App\Models\OrderDetail;
 use App\Models\OrderItem;
+use App\Models\Item;
+use App\Models\Cart;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use App\Models\Address;
 
 class OrderController extends Controller
 {
@@ -158,14 +162,14 @@ class OrderController extends Controller
             'shipping_fee' => 'nullable|numeric|min:0',
             'total_amount' => 'required|numeric|min:0',
             'shipping_address' => 'required|string',
-            'drop_location_lat' => 'nullable|numeric|between:-90,90',
-            'drop_location_long' => 'nullable|numeric|between:-180,180',
+            'shipping_address_id' => 'required|exists:addresses,id',
             'order_instruction' => 'nullable|string',
             'payment_method' => 'required|string|max:50',
             'payment_status' => 'nullable|string|max:50',
             
             // Order items
             'items' => 'required|array|min:1',
+            'items.*.cart_id' => 'required|exists:carts,id',
             'items.*.item_id' => 'required|exists:items,id',
             'items.*.shop_id' => 'required|exists:shops,id',
             'items.*.quantity' => 'required|integer|min:1',
@@ -180,54 +184,114 @@ class OrderController extends Controller
             ], 422);
         }
 
-        // Create order detail first
-        $orderDetailData = [
-            'order_code' => $data['order_code'] ?? '#ORD-' . strtoupper(Str::random(10)),
-            'subtotal' => $data['subtotal'],
-            'shipping_fee' => $data['shipping_fee'] ?? 0.00,
-            'total_amount' => $data['total_amount'],
-            'shipping_address' => $data['shipping_address'],
-            'drop_location_lat' => $data['drop_location_lat'] ?? null,
-            'drop_location_long' => $data['drop_location_long'] ?? null,
-            'order_instruction' => $data['order_instruction'] ?? null,
-            'payment_method' => $data['payment_method'],
-            'payment_status' => $data['payment_status'] ?? 'pending',
-        ];
-
-        $orderDetail = OrderDetail::create($orderDetailData);
-
-        // Create order
-        $orderData = [
-            'user_id' => $data['user_id'],
-            'order_detail_id' => $orderDetail->id,
-            'order_status' => $data['order_status'] ?? 'pending',
-            'ordered_at' => $data['ordered_at'] ?? now(),
-        ];
-
-        $order = Order::create($orderData);
-
-        // Create order items
-        if (isset($data['items']) && is_array($data['items'])) {
+        // Use database transaction to ensure atomicity and prevent race conditions
+        return DB::transaction(function () use ($data) {
+            // Check inventory availability inside transaction to prevent race conditions
+            $lockedItems = [];
             foreach ($data['items'] as $item) {
-                OrderItem::create([
-                    'order_id' => $order->id,
-                    'item_id' => (int) $item['item_id'],
-                    'shop_id' => (int) $item['shop_id'],
-                    'quantity' => (int) $item['quantity'],
-                    'price_at_purchase' => (float) $item['price_at_purchase'],
-                    'item_status' => 'ordered',
-                ]);
+                // Lock the item row for update to prevent concurrent modifications
+                $itemModel = Item::lockForUpdate()->find($item['item_id']);
+                
+                if (!$itemModel) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Item not found',
+                        'item_id' => $item['item_id']
+                    ], 404);
+                }
+
+                $orderedQuantity = (int) $item['quantity'];
+                $availableQuantity = $itemModel->item_quantity;
+                $result = $availableQuantity - $orderedQuantity;
+
+                if ($result < 0) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => "Sorry, we don't have enough stock for \"{$itemModel->item_name}\". Only {$availableQuantity} item(s) available, but you requested {$orderedQuantity}.",
+                        'item_id' => $item['item_id'],
+                        'item_name' => $itemModel->item_name,
+                        'available_quantity' => $availableQuantity,
+                        'ordered_quantity' => $orderedQuantity,
+                        'shortage' => abs($result)
+                    ], 400);
+                }
+
+                // Store locked item for later update
+                $lockedItems[$item['item_id']] = [
+                    'model' => $itemModel,
+                    'ordered_quantity' => $orderedQuantity
+                ];
             }
-        }
+            // Create order detail first
+            $orderDetailData = [
+                'order_code' => $data['order_code'] ?? '#ORD-' . strtoupper(Str::random(10)),
+                'subtotal' => $data['subtotal'],
+                'shipping_fee' => $data['shipping_fee'] ?? 0.00,
+                'total_amount' => $data['total_amount'],
+                'address_id' => $data['shipping_address_id'],
+                'shipping_address' => Address::find($data['shipping_address_id'])->full_address,//get the shipping address from the addresses table
+                'order_instruction' => $data['order_instruction'] ?? null,
+                'payment_method' => $data['payment_method'],
+                'payment_status' => $data['payment_status'] ?? 'pending',
+            ];
 
-        // Load relationships
-        $order->load(['user', 'orderDetail', 'orderItems']);
+            $orderDetail = OrderDetail::create($orderDetailData);
 
-        return response()->json([
-            'success' => true,
-            'message' => 'Order created successfully',
-            'data' => $order
-        ], 201);
+            // Create order
+            $orderData = [
+                'user_id' => $data['user_id'],
+                'order_detail_id' => $orderDetail->id,
+                'order_status' => $data['order_status'] ?? 'pending',
+                'ordered_at' => $data['ordered_at'] ?? now(),
+            ];
+
+            $order = Order::create($orderData);
+
+            // Create order items and update item inventory
+            if (isset($data['items']) && is_array($data['items'])) {
+                foreach ($data['items'] as $item) {
+                    OrderItem::create([
+                        'order_id' => $order->id,
+                        'item_id' => (int) $item['item_id'],
+                        'shop_id' => (int) $item['shop_id'],
+                        'quantity' => (int) $item['quantity'],
+                        'price_at_purchase' => (float) $item['price_at_purchase'],
+                        'item_status' => 'ordered',
+                    ]);
+
+                    // Update item quantity and sold_count using locked item
+                    if (isset($lockedItems[$item['item_id']])) {
+                        $itemModel = $lockedItems[$item['item_id']]['model'];
+                        $orderedQuantity = $lockedItems[$item['item_id']]['ordered_quantity'];
+                        $itemModel->item_quantity -= $orderedQuantity;
+                        $itemModel->sold_count += $orderedQuantity;
+                        $itemModel->save();
+                    }
+                }
+            }
+
+            // Update cart items status to 'co' (checked out) for ordered items
+            // Only update items that are not already 'co'
+            // Extract cart_ids and item_ids from items array
+            $cartIds = array_column($data['items'], 'cart_id');
+            $orderedItemIds = array_column($data['items'], 'item_id');
+            
+            // Update carts that match user_id, cart_id, and item_id
+            Cart::where('user_id', $data['user_id'])
+                ->whereIn('id', $cartIds)
+                ->whereIn('item_id', $orderedItemIds)
+                ->where('status', '!=', 'co')
+                ->update(['status' => 'co']);
+
+            // Load relationships
+            $order->load(['user', 'orderDetail', 'orderItems']);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Order created successfully',
+                'data' => $order
+            ], 201);
+        });
     }
 
     /**
@@ -260,8 +324,6 @@ class OrderController extends Controller
             'shipping_fee' => 'nullable|numeric|min:0',
             'total_amount' => 'sometimes|numeric|min:0',
             'shipping_address' => 'sometimes|string',
-            'drop_location_lat' => 'nullable|numeric|between:-90,90',
-            'drop_location_long' => 'nullable|numeric|between:-180,180',
             'order_instruction' => 'nullable|string',
             'payment_method' => 'sometimes|string|max:50',
             'payment_status' => 'nullable|string|max:50',
@@ -278,8 +340,7 @@ class OrderController extends Controller
         // Update order detail if any order detail fields are provided
         $orderDetailFields = [
             'order_code', 'subtotal', 'shipping_fee', 'total_amount',
-            'shipping_address', 'drop_location_lat', 'drop_location_long',
-            'order_instruction', 'payment_method', 'payment_status'
+            'shipping_address', 'order_instruction', 'payment_method', 'payment_status'
         ];
 
         $orderDetailData = [];

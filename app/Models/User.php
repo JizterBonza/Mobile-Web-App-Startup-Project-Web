@@ -96,4 +96,28 @@ class User extends Authenticatable
             ->withPivot('status')
             ->withTimestamps();
     }
+
+    /**
+     * Get all addresses for the user.
+     */
+    public function addresses()
+    {
+        return $this->hasMany(Address::class);
+    }
+
+    /**
+     * Get the user's default address.
+     */
+    public function defaultAddress()
+    {
+        return $this->hasOne(Address::class)->where('is_default', true);
+    }
+
+    /**
+     * Get the user's active addresses.
+     */
+    public function activeAddresses()
+    {
+        return $this->hasMany(Address::class)->where('is_active', true);
+    }
 }

@@ -8,6 +8,7 @@ use App\Http\Controllers\ItemController;
 use App\Http\Controllers\OrderController;
 use App\Http\Controllers\CartController;
 use App\Http\Controllers\FavoriteController;
+use App\Http\Controllers\AddressController;
 use Illuminate\Http\Request;
 
 Route::post('register', [MobileAuthController::class, 'register']);
@@ -68,4 +69,16 @@ Route::delete('favorites/delete/{id}', [FavoriteController::class, 'destroy']);
 Route::post('favorites/remove', [FavoriteController::class, 'removeByUserAndItem']);
 Route::post('favorites/toggle', [FavoriteController::class, 'toggle']);
 Route::post('favorites/check', [FavoriteController::class, 'check']);
+
+// Address routes
+Route::get('addresses', [AddressController::class, 'index']);
+Route::get('addresses/user/{userId}', [AddressController::class, 'getByUser']);
+Route::get('addresses/user/{userId}/default', [AddressController::class, 'getDefault']);
+Route::get('addresses/types', [AddressController::class, 'getAddressTypes']);
+Route::get('addresses/{id}', [AddressController::class, 'show']);
+Route::post('addresses', [AddressController::class, 'store']);
+Route::put('addresses/{id}', [AddressController::class, 'update']);
+Route::put('addresses/{id}/set-default', [AddressController::class, 'setDefault']);
+Route::delete('addresses/{id}', [AddressController::class, 'destroy']);
+Route::post('addresses/{id}/restore', [AddressController::class, 'restore']);
 

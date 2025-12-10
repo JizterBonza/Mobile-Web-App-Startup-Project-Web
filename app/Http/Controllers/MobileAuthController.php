@@ -137,7 +137,10 @@ class MobileAuthController extends Controller
         ]);
 
         // Load all relationships for response
-        $user->load(['userDetail', 'userCredential']);
+        $user->load(['userDetail', 'userCredential', 'defaultAddress']);
+
+        // Get the default address (null if none exists)
+        $defaultAddress = $user->defaultAddress;
 
         // Optionally remove other tokens:
         //$user->tokens()->delete();
@@ -146,7 +149,8 @@ class MobileAuthController extends Controller
 
         return response()->json([
             'user' => $user,
-            'token' => $token
+            'token' => $token,
+            'default_address' => $defaultAddress
         ]);
     }
 
