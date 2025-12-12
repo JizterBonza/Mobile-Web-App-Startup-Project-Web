@@ -79,7 +79,7 @@ class OrderController extends Controller
      */
     public function getByUser($userId, Request $request)
     {
-        $query = Order::with(['user', 'orderDetail', 'orderItems'])
+        $query = Order::with(['user', 'orderDetail', 'orderItems.item'])
             ->where('user_id', $userId);
 
         // Filter by order_status if provided
@@ -394,16 +394,16 @@ class OrderController extends Controller
             ], 404);
         }
 
-        // Delete order detail if it exists
-        if ($order->orderDetail) {
-            $order->orderDetail->delete();
-        }
+        // Update order status to Cancelled instead of deleting
+        $order->update(['order_status' => 'Cancelled']);
 
-        $order->delete();
+        // Load relationships
+        $order->load(['user', 'orderDetail', 'orderItems']);
 
         return response()->json([
             'success' => true,
-            'message' => 'Order deleted successfully'
+            'message' => 'Order cancelled successfully',
+            'data' => $order
         ]);
     }
 }
