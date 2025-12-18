@@ -8,6 +8,7 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
 use App\Models\Agrivet;
+use App\Models\Notification;
 
 class User extends Authenticatable
 {
@@ -119,5 +120,21 @@ class User extends Authenticatable
     public function activeAddresses()
     {
         return $this->hasMany(Address::class)->where('is_active', true);
+    }
+
+    /**
+     * Get all notifications for the user.
+     */
+    public function notifications()
+    {
+        return $this->hasMany(Notification::class);
+    }
+
+    /**
+     * Get unread notifications for the user.
+     */
+    public function unreadNotifications()
+    {
+        return $this->hasMany(Notification::class)->where('read', false);
     }
 }
