@@ -9,6 +9,7 @@ use App\Http\Controllers\OrderController;
 use App\Http\Controllers\CartController;
 use App\Http\Controllers\FavoriteController;
 use App\Http\Controllers\AddressController;
+use App\Http\Controllers\NotificationController;
 use Illuminate\Http\Request;
 
 Route::post('register', [MobileAuthController::class, 'register']);
@@ -82,3 +83,11 @@ Route::put('addresses/{id}/set-default', [AddressController::class, 'setDefault'
 Route::delete('addresses/{id}', [AddressController::class, 'destroy']);
 Route::post('addresses/{id}/restore', [AddressController::class, 'restore']);
 
+// Notification routes
+Route::get('/notifications', [NotificationController::class, 'index']);
+Route::get('/notifications/by-category', [NotificationController::class, 'byCategory']);
+Route::get('/notifications/unread-count', [NotificationController::class, 'unreadCount']);
+Route::post('/notifications/{id}/read', [NotificationController::class, 'markAsRead']);
+Route::post('/notifications/read-all', [NotificationController::class, 'markAllAsRead']);
+Route::delete('/notifications/{id}', [NotificationController::class, 'destroy']);
+Route::delete('/notifications/clear-read', [NotificationController::class, 'clearRead']);
