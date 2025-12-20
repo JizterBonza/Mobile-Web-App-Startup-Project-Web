@@ -1,9 +1,22 @@
 import { Head, Link, useForm } from '@inertiajs/react'
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 
 export default function AdminLayout({ children, auth, title = 'Dashboard' }) {
   const { post } = useForm();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
+  const profileDropdownRef = useRef(null);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (profileDropdownRef.current && !profileDropdownRef.current.contains(event.target)) {
+        setProfileDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const handleLogout = (e) => {
     e.preventDefault();
@@ -17,7 +30,7 @@ export default function AdminLayout({ children, auth, title = 'Dashboard' }) {
   return (
     <>
       <Head title={title} />
-      <div className="wrapper">
+      <div className={`wrapper ${sidebarCollapsed ? 'sidebar-collapse' : ''}`}>
         {/* Navbar */}
         <nav className="main-header navbar navbar-expand navbar-white navbar-light">
           {/* Left navbar links */}
@@ -59,7 +72,7 @@ export default function AdminLayout({ children, auth, title = 'Dashboard' }) {
         </nav>
 
         {/* Main Sidebar */}
-        <aside className={`main-sidebar sidebar-dark-primary elevation-4 ${sidebarCollapsed ? 'sidebar-collapse' : ''}`}>
+        <aside className="main-sidebar sidebar-dark-primary elevation-4">
           {/* Brand Logo */}
           <Link href="/dashboard" className="brand-link">
             <img src="/vendor/adminlte/dist/img/AdminLTELogo.png" alt="AdminLTE Logo" className="brand-image img-circle elevation-3" style={{opacity: '.8'}} />
@@ -68,14 +81,58 @@ export default function AdminLayout({ children, auth, title = 'Dashboard' }) {
 
           {/* Sidebar */}
           <div className="sidebar">
-            {/* Sidebar user panel (optional) */}
-            <div className="user-panel mt-3 pb-3 mb-3 d-flex">
-              <div className="image">
-                <img src="/vendor/adminlte/dist/img/user2-160x160.jpg" className="img-circle elevation-2" alt="User Image" />
+            {/* Sidebar user panel with dropdown */}
+            <div className="user-panel mt-3 pb-3 mb-3" ref={profileDropdownRef} style={{ position: 'relative' }}>
+              <div 
+                className="d-flex align-items-center" 
+                style={{ cursor: 'pointer' }}
+                onClick={() => setProfileDropdownOpen(!profileDropdownOpen)}
+              >
+                <div className="image">
+                  <img src="/vendor/adminlte/dist/img/user2-160x160.jpg" className="img-circle elevation-2" alt="User Image" />
+                </div>
+                <div className="info user-panel-info">
+                  <span className="d-block text-white">{auth.user.name}</span>
+                </div>
+                <i className={`fas fa-chevron-${profileDropdownOpen ? 'up' : 'down'} ml-auto text-white user-panel-chevron`} style={{ fontSize: '12px' }}></i>
               </div>
-              <div className="info">
-                <a href="#" className="d-block">{auth.user.name}</a>
-              </div>
+              {/* Profile Dropdown Menu */}
+              {profileDropdownOpen && (
+                <div className="profile-dropdown-menu" style={{
+                  position: 'absolute',
+                  top: '100%',
+                  left: sidebarCollapsed ? '50%' : '10px',
+                  transform: sidebarCollapsed ? 'translateX(-50%)' : 'none',
+                  minWidth: sidebarCollapsed ? '200px' : 'calc(100% - 20px)',
+                  backgroundColor: '#fff',
+                  borderRadius: '4px',
+                  boxShadow: '0 2px 10px rgba(0,0,0,0.2)',
+                  zIndex: 1100,
+                  marginTop: '5px',
+                  overflow: 'hidden'
+                }}>
+                  <div style={{ padding: '10px 15px', borderBottom: '1px solid #e9ecef', backgroundColor: '#f8f9fa' }}>
+                    <strong style={{ color: '#343a40', fontSize: '14px' }}>{auth.user.name}</strong>
+                    <small style={{ display: 'block', color: '#6c757d', fontSize: '12px' }}>{auth.user.email}</small>
+                  </div>
+                  <a href="#" style={{ display: 'block', padding: '10px 15px', color: '#343a40', textDecoration: 'none', fontSize: '14px' }} 
+                     onMouseEnter={(e) => e.target.style.backgroundColor = '#f8f9fa'}
+                     onMouseLeave={(e) => e.target.style.backgroundColor = 'transparent'}>
+                    <i className="fas fa-user mr-2" style={{ width: '20px' }}></i> Profile
+                  </a>
+                  <a href="#" style={{ display: 'block', padding: '10px 15px', color: '#343a40', textDecoration: 'none', fontSize: '14px' }}
+                     onMouseEnter={(e) => e.target.style.backgroundColor = '#f8f9fa'}
+                     onMouseLeave={(e) => e.target.style.backgroundColor = 'transparent'}>
+                    <i className="fas fa-cog mr-2" style={{ width: '20px' }}></i> Settings
+                  </a>
+                  <div style={{ borderTop: '1px solid #e9ecef' }}></div>
+                  <a href="#" onClick={handleLogout} style={{ display: 'block', padding: '10px 15px', color: '#dc3545', textDecoration: 'none', fontSize: '14px' }}
+                     onMouseEnter={(e) => e.target.style.backgroundColor = '#f8f9fa'}
+                     onMouseLeave={(e) => e.target.style.backgroundColor = 'transparent'}>
+                    <i className="fas fa-sign-out-alt mr-2" style={{ width: '20px' }}></i> Logout
+                  </a>
+                </div>
+              )}
             </div>
 
             {/* Sidebar Menu */}

@@ -68,11 +68,109 @@
     header {
         @apply bg-slate-800 shadow-md;
     }
-    nav {
+    header nav {
         @apply p-5 max-w-screen-lg mx-auto flex items-center justify-between;
     }
     main {
         @apply max-w-screen-lg mx-auto;
+    }
+    
+    /* Fix AdminLTE navbar to use full width */
+    .main-header.navbar {
+        @apply max-w-full w-full flex justify-between;
+        z-index: 1040 !important;
+        margin-left: 250px;
+        width: calc(100% - 250px) !important;
+        transition: margin-left 0.3s ease, width 0.3s ease;
+    }
+    /* Navbar adjustment when sidebar is collapsed */
+    .wrapper.sidebar-collapse .main-header.navbar {
+        margin-left: 4.6rem;
+        width: calc(100% - 4.6rem) !important;
+    }
+    .main-header.navbar .navbar-nav.ml-auto {
+        @apply ml-auto mr-3;
+    }
+    .main-header.navbar .navbar-nav .dropdown-menu {
+        z-index: 1050 !important;
+    }
+    /* Ensure sidebar doesn't overlap navbar */
+    .main-sidebar {
+        z-index: 1030 !important;
+        transition: width 0.3s ease, transform 0.3s ease;
+    }
+    /* Sidebar collapse styles */
+    .wrapper.sidebar-collapse .main-sidebar {
+        width: 4.6rem !important;
+    }
+    .wrapper.sidebar-collapse .main-sidebar .brand-text,
+    .wrapper.sidebar-collapse .main-sidebar .nav-sidebar .nav-link p {
+        opacity: 0;
+        width: 0;
+        visibility: hidden;
+        transition: opacity 0.3s ease, visibility 0.3s ease;
+    }
+    .wrapper.sidebar-collapse .main-sidebar:hover {
+        width: 250px !important;
+    }
+    .wrapper.sidebar-collapse .main-sidebar:hover .brand-text,
+    .wrapper.sidebar-collapse .main-sidebar:hover .nav-sidebar .nav-link p {
+        opacity: 1;
+        width: auto;
+        visibility: visible;
+    }
+    
+    /* Profile dropdown in sidebar - ensure it's always visible */
+    .main-sidebar .user-panel {
+        overflow: visible !important;
+    }
+    .main-sidebar .user-panel .user-panel-info {
+        transition: opacity 0.3s ease, width 0.3s ease, visibility 0.3s ease;
+    }
+    .main-sidebar .user-panel .user-panel-chevron {
+        transition: opacity 0.3s ease, visibility 0.3s ease;
+    }
+    /* When sidebar is collapsed, hide text but keep dropdown functional */
+    .wrapper.sidebar-collapse .main-sidebar .user-panel .user-panel-info,
+    .wrapper.sidebar-collapse .main-sidebar .user-panel .user-panel-chevron {
+        opacity: 0;
+        width: 0;
+        overflow: hidden;
+        visibility: hidden;
+    }
+    /* When hovering collapsed sidebar, show text again */
+    .wrapper.sidebar-collapse .main-sidebar:hover .user-panel .user-panel-info,
+    .wrapper.sidebar-collapse .main-sidebar:hover .user-panel .user-panel-chevron {
+        opacity: 1;
+        width: auto;
+        visibility: visible;
+    }
+    /* Ensure dropdown menu is always on top and visible */
+    .profile-dropdown-menu {
+        z-index: 1100 !important;
+    }
+    /* Center user panel image in collapsed state */
+    .wrapper.sidebar-collapse .main-sidebar .user-panel .image {
+        margin: 0 auto;
+    }
+    .wrapper.sidebar-collapse .main-sidebar:hover .user-panel .image {
+        margin: 0;
+    }
+    /* Content wrapper adjustment */
+    .wrapper .content-wrapper {
+        margin-left: 250px;
+        transition: margin-left 0.3s ease;
+    }
+    .wrapper.sidebar-collapse .content-wrapper {
+        margin-left: 4.6rem;
+    }
+    /* Footer adjustment */
+    .wrapper .main-footer {
+        margin-left: 250px;
+        transition: margin-left 0.3s ease;
+    }
+    .wrapper.sidebar-collapse .main-footer {
+        margin-left: 4.6rem;
     }
     .primary-btn {
         @apply flex w-full justify-center rounded-md bg-blue-500 px-3 py-1.5 text-sm font-semibold leading-6 text-white shadow-sm hover:bg-blue-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 disabled:bg-slate-400 disabled:cursor-wait;
@@ -80,8 +178,18 @@
     .text-link {
         @apply font-semibold text-blue-500 hover:text-blue-600;
     }
-    .nav-link {
+    /* Only apply light nav-link styles to dark header navs (public pages) */
+    header .nav-link {
         @apply text-slate-200 hover:bg-slate-700 hover:text-white rounded-md px-3 py-2 text-sm font-medium;
+    }
+    /* Ensure AdminLTE navbar links are visible on white background */
+    .main-header.navbar .nav-link {
+        color: #4a5568 !important;
+        padding: 0.5rem 1rem !important;
+    }
+    .main-header.navbar .nav-link:hover {
+        color: #1a202c !important;
+        background-color: transparent !important;
     }
     .title {
         @apply my-6 text-center text-3xl font-bold leading-9 text-slate-900;
