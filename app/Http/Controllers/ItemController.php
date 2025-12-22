@@ -262,5 +262,82 @@ class ItemController extends Controller
             'message' => 'Item deleted successfully'
         ]);
     }
+
+    /**
+     * Search items with optimized query
+     * 
+     * @param Request $request
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function search(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'q' => 'required|string|min:2|max:100',
+            'shop_id' => 'nullable|exists:shops,id',
+            'category' => 'nullable|string|max:100',
+            'min_price' => 'nullable|numeric|min:0',
+            'max_price' => 'nullable|numeric|min:0',
+            'limit' => 'nullable|integer|min:1|max:50',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation error',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        $query = Item::query();
+
+        // Only search active items by default
+        $query->where('item_status', 'active');
+
+        // Search by item name and description
+        $searchTerm = $request->input('q');
+        $query->where(function($q) use ($searchTerm) {
+            $q->where('item_name', 'like', '%' . $searchTerm . '%')
+            ->orWhere('item_description', 'like', '%' . $searchTerm . '%');
+        });
+
+        // Filter by shop_id if provided
+        if ($request->filled('shop_id')) {
+            $query->where('shop_id', $request->shop_id);
+        }
+
+        // Filter by category if provided
+        if ($request->filled('category')) {
+            $query->where('category', $request->category);
+        }
+
+        // Filter by price range
+        if ($request->filled('min_price')) {
+            $query->where('item_price', '>=', $request->min_price);
+        }
+
+        if ($request->filled('max_price')) {
+            $query->where('item_price', '<=', $request->max_price);
+        }
+
+        // Order by relevance (exact match first, then by rating, then by sold count)
+        $query->orderByRaw("CASE 
+            WHEN item_name LIKE ? THEN 1 
+            WHEN item_name LIKE ? THEN 2 
+            ELSE 3 
+        END", [$searchTerm, $searchTerm . '%'])
+        ->orderBy('average_rating', 'desc')
+        ->orderBy('sold_count', 'desc');
+
+        // Limit results (default 20, max 50)
+        $limit = $request->input('limit', 20);
+        $items = $query->limit($limit)->get();
+
+        return response()->json([
+            'success' => true,
+            'data' => $items,
+            'count' => $items->count(),
+            'query' => $searchTerm
+        ]);
+    }
 }
 
