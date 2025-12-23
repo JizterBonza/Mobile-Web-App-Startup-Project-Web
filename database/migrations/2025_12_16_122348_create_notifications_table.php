@@ -27,7 +27,7 @@ return new class extends Migration
             
             $table->index(['user_id', 'read', 'created_at']);
             $table->index(['user_id', 'category']);
-            $table->index(['reference_type', 'reference_id']);
+            // Note: nullableMorphs() already creates an index on reference_type and reference_id
         });
     }
 
