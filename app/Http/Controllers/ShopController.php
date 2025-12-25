@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Shop;
+use App\Models\RatingReview;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 
@@ -226,6 +227,57 @@ class ShopController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'Shop deleted successfully'
+        ]);
+    }
+
+    /**
+     * Fetch a shop with its reviews
+     *
+     * @param int $id
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function getShopWithReviews($id)
+    {
+        $shop = Shop::with(['ratingReviews' => function ($query) {
+            $query->orderBy('created_at', 'desc')
+                  ->with(['user.userCredential' => function ($query) {
+                      $query->select('id', 'username');
+                  }]);
+        }])->find($id);
+
+        if (!$shop) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Shop not found'
+            ], 404);
+        }
+
+        // Get shop data without the rating_reviews relationship
+        $shopData = $shop->only([
+            'id', 'user_id', 'shop_name', 'shop_description', 'shop_address',
+            'shop_lat', 'shop_long', 'contact_number', 'logo_url',
+            'average_rating', 'total_reviews', 'shop_status', 'created_at', 'updated_at'
+        ]);
+
+        // Add reviews
+        $shopData['reviews'] = $shop->ratingReviews->map(function ($review) {
+            return [
+                'id' => $review->id,
+                'user_id' => $review->user_id,
+                'username' => $review->user->userCredential->username ?? null,
+                'item_id' => $review->item_id,
+                'rating' => $review->rating,
+                'comment' => $review->review_text,
+                'review_images' => $review->review_images,
+                'order_id' => $review->order_id,
+                'created_at' => $review->created_at,
+                'updated_at' => $review->updated_at,
+            ];
+        });
+
+        return response()->json([
+            'success' => true,
+            'data' => $shopData
         ]);
     }
 

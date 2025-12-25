@@ -6,6 +6,7 @@ use Illuminate\Http\Request;
 use App\Models\User;
 use App\Models\UserDetail;
 use App\Models\UserCredential;
+use App\Models\Notification;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rules\Password;
@@ -59,6 +60,20 @@ class MobileAuthController extends Controller
             $user->load(['userDetail', 'userCredential']);
 
             DB::commit();
+
+            // Create welcome notification for the new user
+            Notification::createForUser(
+                $user->id,
+                'account_created',
+                'Welcome to Agrify!',
+                "Hello {$userDetail->first_name}! Your account has been created successfully. Start exploring our products and services.",
+                Notification::CATEGORY_SYSTEM,
+                $user,
+                [
+                    'user_id' => $user->id,
+                    'email' => $userDetail->email,
+                ]
+            );
 
             $token = $user->createToken('mobile-token')->plainTextToken;
 
@@ -160,5 +175,41 @@ class MobileAuthController extends Controller
         $request->user()->currentAccessToken()->delete();
 
         return response()->json(['message' => 'Logged out.']);
+    }
+
+    public function checkAvailability(Request $request)
+    {
+        $data = $request->validate([
+            'username' => 'nullable|string|max:100',
+            'email' => 'nullable|email',
+        ]);
+
+        $response = [];
+
+        if (isset($data['username'])) {
+            $usernameExists = UserCredential::where('username', $data['username'])->exists();
+            $response['username'] = [
+                'value' => $data['username'],
+                'available' => !$usernameExists,
+                'message' => $usernameExists ? 'Username is already taken.' : 'Username is available.',
+            ];
+        }
+
+        if (isset($data['email'])) {
+            $emailExists = UserDetail::where('email', $data['email'])->exists();
+            $response['email'] = [
+                'value' => $data['email'],
+                'available' => !$emailExists,
+                'message' => $emailExists ? 'Email is already registered.' : 'Email is available.',
+            ];
+        }
+
+        if (empty($response)) {
+            return response()->json([
+                'error' => 'Please provide at least a username or email to check.',
+            ], 422);
+        }
+
+        return response()->json($response);
     }
 }
