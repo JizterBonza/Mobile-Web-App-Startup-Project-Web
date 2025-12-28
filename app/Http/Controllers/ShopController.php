@@ -282,6 +282,69 @@ class ShopController extends Controller
     }
 
     /**
+     * Store a new review for a shop
+     *
+     * @param Request $request
+     * @param int $id
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function storeReview(Request $request, $id)
+    {
+        $shop = Shop::find($id);
+
+        if (!$shop) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Shop not found'
+            ], 404);
+        }
+
+        $validator = Validator::make($request->all(), [
+            'user_id' => 'required|exists:users,id',
+            'item_id' => 'nullable|exists:items,id',
+            'order_id' => 'nullable|exists:orders,id',
+            'rating' => 'required|integer|min:1|max:5',
+            'review_text' => 'nullable|string|max:1000',
+            'review_images' => 'nullable|array',
+            'review_images.*' => 'string|max:255',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation error',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        // Create the review
+        $review = RatingReview::create([
+            'user_id' => $request->user_id,
+            'shop_id' => $id,
+            'item_id' => $request->item_id,
+            'order_id' => $request->order_id,
+            'rating' => $request->rating,
+            'review_text' => $request->review_text,
+            'review_images' => $request->review_images,
+        ]);
+
+        // Update shop's average rating and total reviews
+        $totalReviews = RatingReview::where('shop_id', $id)->count();
+        $averageRating = RatingReview::where('shop_id', $id)->avg('rating');
+
+        $shop->update([
+            'total_reviews' => $totalReviews,
+            'average_rating' => round($averageRating, 2),
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Review created successfully',
+            'data' => $review
+        ], 201);
+    }
+
+    /**
      * Search shops with optimized query
      * 
      * @param Request $request

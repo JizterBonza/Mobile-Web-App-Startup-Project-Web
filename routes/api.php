@@ -100,6 +100,7 @@ Route::get('shops', [ShopController::class, 'index']);
 Route::get('shops/user/{userId}', [ShopController::class, 'getByUserId']);
 Route::get('shops/{id}/items', [ShopController::class, 'getShopWithItems']);
 Route::get('shops/{id}/reviews', [ShopController::class, 'getShopWithReviews']);
+Route::post('shops/{id}/reviews', [ShopController::class, 'storeReview']);
 Route::get('shops/{id}', [ShopController::class, 'show']);
 Route::post('shops', [ShopController::class, 'store']);
 Route::put('shops/{id}', [ShopController::class, 'update']);
