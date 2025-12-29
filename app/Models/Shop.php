@@ -67,5 +67,13 @@ class Shop extends Model
     {
         return $this->hasMany(Item::class);
     }
+
+    /**
+     * Get the reviews for the shop.
+     */
+    public function ratingReviews()
+    {
+        return $this->hasMany(RatingReview::class);
+    }
 }
 

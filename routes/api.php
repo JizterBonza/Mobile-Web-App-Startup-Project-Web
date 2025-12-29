@@ -10,6 +10,7 @@ use App\Http\Controllers\CartController;
 use App\Http\Controllers\FavoriteController;
 use App\Http\Controllers\AddressController;
 use App\Http\Controllers\NotificationController;
+use App\Http\Controllers\ShopController;
 use Illuminate\Http\Request;
 
 Route::post('register', [MobileAuthController::class, 'register']);
@@ -92,3 +93,15 @@ Route::post('/notifications/{id}/read', [NotificationController::class, 'markAsR
 Route::post('/notifications/read-all', [NotificationController::class, 'markAllAsRead']);
 Route::delete('/notifications/{id}', [NotificationController::class, 'destroy']);
 Route::delete('/notifications/clear-read', [NotificationController::class, 'clearRead']);
+
+// Shop routes
+Route::get('shops/search', [ShopController::class, 'search']);
+Route::get('shops', [ShopController::class, 'index']);
+Route::get('shops/user/{userId}', [ShopController::class, 'getByUserId']);
+Route::get('shops/{id}/items', [ShopController::class, 'getShopWithItems']);
+Route::get('shops/{id}/reviews', [ShopController::class, 'getShopWithReviews']);
+Route::post('shops/{id}/reviews', [ShopController::class, 'storeReview']);
+Route::get('shops/{id}', [ShopController::class, 'show']);
+Route::post('shops', [ShopController::class, 'store']);
+Route::put('shops/{id}', [ShopController::class, 'update']);
+Route::delete('shops/{id}', [ShopController::class, 'destroy']);

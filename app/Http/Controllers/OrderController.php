@@ -7,6 +7,7 @@ use App\Models\OrderDetail;
 use App\Models\OrderItem;
 use App\Models\Item;
 use App\Models\Cart;
+use App\Models\Notification;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\DB;
@@ -286,6 +287,23 @@ class OrderController extends Controller
             // Load relationships
             $order->load(['user', 'orderDetail', 'orderItems']);
 
+            // Create notification for the user
+            Notification::createForUser(
+                $data['user_id'],
+                'order_placed',
+                'Order Placed Successfully',
+                "Your order {$orderDetail->order_code} has been placed successfully. Total amount: ₱" . number_format($orderDetail->total_amount, 2),
+                Notification::CATEGORY_ORDER,
+                $order,
+                [
+                    'order_id' => $order->id,
+                    'order_code' => $orderDetail->order_code,
+                    'total_amount' => $orderDetail->total_amount,
+                    'items_count' => count($data['items']),
+                ],
+                "/orders/{$order->id}"
+            );
+
             return response()->json([
                 'success' => true,
                 'message' => 'Order created successfully',
@@ -399,6 +417,22 @@ class OrderController extends Controller
 
         // Load relationships
         $order->load(['user', 'orderDetail', 'orderItems']);
+
+        // Create notification for order cancellation
+        Notification::createForUser(
+            $order->user_id,
+            'order_cancelled',
+            'Order Cancelled',
+            "Your order {$order->orderDetail->order_code} has been cancelled.",
+            Notification::CATEGORY_ORDER,
+            $order,
+            [
+                'order_id' => $order->id,
+                'order_code' => $order->orderDetail->order_code,
+                'total_amount' => $order->orderDetail->total_amount,
+            ],
+            "/orders/{$order->id}"
+        );
 
         return response()->json([
             'success' => true,
