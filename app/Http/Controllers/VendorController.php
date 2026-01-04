@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 use App\Models\User;
 use App\Models\Agrivet;
+use App\Models\Promotion;
 
 class VendorController extends Controller
 {
@@ -856,5 +857,264 @@ class VendorController extends Controller
             'totalOrders' => $totalOrders,
             'store' => ['id' => $agrivet->id],
         ]);
+    }
+
+    /**
+     * Display promotions listing.
+     */
+    public function promotionsIndex()
+    {
+        $agrivet = $this->getVendorAgrivet();
+
+        if (!$agrivet) {
+            return redirect()->route('dashboard.vendor')
+                ->with('error', 'You are not associated with any Agrivet.');
+        }
+
+        // Get promotions for this agrivet
+        $promotions = DB::table('promotions')
+            ->where('agrivet_id', $agrivet->id)
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        // Get products for the dropdown (for applicable items and bundles)
+        $hasAgrivetId = DB::getSchemaBuilder()->hasColumn('items', 'agrivet_id');
+        
+        if ($hasAgrivetId) {
+            $products = DB::table('items')
+                ->where('agrivet_id', $agrivet->id)
+                ->where('item_status', 'active')
+                ->select('id', 'item_name', 'item_price')
+                ->orderBy('item_name', 'asc')
+                ->get();
+        } else {
+            $hasShopAgrivetId = DB::getSchemaBuilder()->hasColumn('shops', 'agrivet_id');
+            
+            if ($hasShopAgrivetId) {
+                $shop = DB::table('shops')
+                    ->where('agrivet_id', $agrivet->id)
+                    ->first();
+            } else {
+                $vendor = auth()->user();
+                $shop = DB::table('shops')
+                    ->where('user_id', $vendor->id)
+                    ->first();
+            }
+            
+            if (!$shop) {
+                $products = collect([]);
+            } else {
+                $products = DB::table('items')
+                    ->where('shop_id', $shop->id)
+                    ->where('item_status', 'active')
+                    ->select('id', 'item_name', 'item_price')
+                    ->orderBy('item_name', 'asc')
+                    ->get();
+            }
+        }
+
+        $promotions = $promotions->map(function ($promo) {
+            return [
+                'id' => $promo->id,
+                'name' => $promo->name,
+                'description' => $promo->description,
+                'type' => $promo->type,
+                'discount_value' => $promo->discount_value,
+                'buy_quantity' => $promo->buy_quantity,
+                'get_quantity' => $promo->get_quantity,
+                'minimum_order_amount' => $promo->minimum_order_amount,
+                'maximum_discount' => $promo->maximum_discount,
+                'applicable_items' => $promo->applicable_items ? json_decode($promo->applicable_items, true) : [],
+                'bundle_items' => $promo->bundle_items ? json_decode($promo->bundle_items, true) : [],
+                'bundle_price' => $promo->bundle_price,
+                'start_date' => $promo->start_date,
+                'end_date' => $promo->end_date,
+                'usage_limit' => $promo->usage_limit,
+                'usage_count' => $promo->usage_count,
+                'per_customer_limit' => $promo->per_customer_limit,
+                'promo_code' => $promo->promo_code,
+                'status' => $promo->status,
+                'created_at' => $promo->created_at,
+                'updated_at' => $promo->updated_at,
+            ];
+        });
+
+        return Inertia::render('Dashboard/Vendor/Promotions', [
+            'promotions' => $promotions,
+            'products' => $products,
+            'promotionTypes' => Promotion::getTypes(),
+            'store' => ['id' => $agrivet->id],
+        ]);
+    }
+
+    /**
+     * Store a new promotion.
+     */
+    public function promotionsStore(Request $request)
+    {
+        $agrivet = $this->getVendorAgrivet();
+
+        if (!$agrivet) {
+            return redirect()->back()
+                ->withErrors(['error' => 'You are not associated with any Agrivet.']);
+        }
+
+        $request->validate([
+            'name' => 'required|string|max:150',
+            'description' => 'nullable|string',
+            'type' => 'required|string|in:percentage_off,fixed_amount_off,buy_x_get_y,bundle,free_shipping',
+            'discount_value' => 'nullable|numeric|min:0',
+            'buy_quantity' => 'nullable|integer|min:1',
+            'get_quantity' => 'nullable|integer|min:1',
+            'minimum_order_amount' => 'nullable|numeric|min:0',
+            'maximum_discount' => 'nullable|numeric|min:0',
+            'applicable_items' => 'nullable|array',
+            'bundle_items' => 'nullable|array',
+            'bundle_price' => 'nullable|numeric|min:0',
+            'start_date' => 'required|date',
+            'end_date' => 'required|date|after:start_date',
+            'usage_limit' => 'nullable|integer|min:1',
+            'per_customer_limit' => 'nullable|integer|min:1',
+            'promo_code' => 'nullable|string|max:50|unique:promotions,promo_code',
+            'status' => 'nullable|string|in:active,inactive,scheduled',
+        ]);
+
+        // Determine status based on dates if not provided
+        $status = $request->status;
+        if (!$status) {
+            $now = now();
+            $startDate = \Carbon\Carbon::parse($request->start_date);
+            if ($startDate->isFuture()) {
+                $status = 'scheduled';
+            } else {
+                $status = 'active';
+            }
+        }
+
+        DB::table('promotions')->insert([
+            'agrivet_id' => $agrivet->id,
+            'name' => $request->name,
+            'description' => $request->description,
+            'type' => $request->type,
+            'discount_value' => $request->discount_value,
+            'buy_quantity' => $request->buy_quantity,
+            'get_quantity' => $request->get_quantity,
+            'minimum_order_amount' => $request->minimum_order_amount,
+            'maximum_discount' => $request->maximum_discount,
+            'applicable_items' => $request->applicable_items ? json_encode($request->applicable_items) : null,
+            'bundle_items' => $request->bundle_items ? json_encode($request->bundle_items) : null,
+            'bundle_price' => $request->bundle_price,
+            'start_date' => $request->start_date,
+            'end_date' => $request->end_date,
+            'usage_limit' => $request->usage_limit,
+            'usage_count' => 0,
+            'per_customer_limit' => $request->per_customer_limit,
+            'promo_code' => $request->promo_code,
+            'status' => $status,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        return redirect()->route('dashboard.vendor.promotions.index')
+            ->with('success', 'Promotion created successfully.');
+    }
+
+    /**
+     * Update a promotion.
+     */
+    public function promotionsUpdate(Request $request, $id)
+    {
+        $agrivet = $this->getVendorAgrivet();
+
+        if (!$agrivet) {
+            return redirect()->back()
+                ->withErrors(['error' => 'You are not associated with any Agrivet.']);
+        }
+
+        $promotion = DB::table('promotions')
+            ->where('id', $id)
+            ->where('agrivet_id', $agrivet->id)
+            ->first();
+
+        if (!$promotion) {
+            return redirect()->back()
+                ->withErrors(['error' => 'Promotion not found.']);
+        }
+
+        $request->validate([
+            'name' => 'required|string|max:150',
+            'description' => 'nullable|string',
+            'type' => 'required|string|in:percentage_off,fixed_amount_off,buy_x_get_y,bundle,free_shipping',
+            'discount_value' => 'nullable|numeric|min:0',
+            'buy_quantity' => 'nullable|integer|min:1',
+            'get_quantity' => 'nullable|integer|min:1',
+            'minimum_order_amount' => 'nullable|numeric|min:0',
+            'maximum_discount' => 'nullable|numeric|min:0',
+            'applicable_items' => 'nullable|array',
+            'bundle_items' => 'nullable|array',
+            'bundle_price' => 'nullable|numeric|min:0',
+            'start_date' => 'required|date',
+            'end_date' => 'required|date|after:start_date',
+            'usage_limit' => 'nullable|integer|min:1',
+            'per_customer_limit' => 'nullable|integer|min:1',
+            'promo_code' => 'nullable|string|max:50|unique:promotions,promo_code,' . $id,
+            'status' => 'nullable|string|in:active,inactive,scheduled,expired',
+        ]);
+
+        DB::table('promotions')
+            ->where('id', $id)
+            ->update([
+                'name' => $request->name,
+                'description' => $request->description,
+                'type' => $request->type,
+                'discount_value' => $request->discount_value,
+                'buy_quantity' => $request->buy_quantity,
+                'get_quantity' => $request->get_quantity,
+                'minimum_order_amount' => $request->minimum_order_amount,
+                'maximum_discount' => $request->maximum_discount,
+                'applicable_items' => $request->applicable_items ? json_encode($request->applicable_items) : null,
+                'bundle_items' => $request->bundle_items ? json_encode($request->bundle_items) : null,
+                'bundle_price' => $request->bundle_price,
+                'start_date' => $request->start_date,
+                'end_date' => $request->end_date,
+                'usage_limit' => $request->usage_limit,
+                'per_customer_limit' => $request->per_customer_limit,
+                'promo_code' => $request->promo_code,
+                'status' => $request->status ?? $promotion->status,
+                'updated_at' => now(),
+            ]);
+
+        return redirect()->route('dashboard.vendor.promotions.index')
+            ->with('success', 'Promotion updated successfully.');
+    }
+
+    /**
+     * Delete a promotion.
+     */
+    public function promotionsDestroy($id)
+    {
+        $agrivet = $this->getVendorAgrivet();
+
+        if (!$agrivet) {
+            return redirect()->back()
+                ->withErrors(['error' => 'You are not associated with any Agrivet.']);
+        }
+
+        $promotion = DB::table('promotions')
+            ->where('id', $id)
+            ->where('agrivet_id', $agrivet->id)
+            ->first();
+
+        if (!$promotion) {
+            return redirect()->back()
+                ->withErrors(['error' => 'Promotion not found.']);
+        }
+
+        DB::table('promotions')
+            ->where('id', $id)
+            ->delete();
+
+        return redirect()->route('dashboard.vendor.promotions.index')
+            ->with('success', 'Promotion deleted successfully.');
     }
 }

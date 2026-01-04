@@ -497,12 +497,16 @@ export default function Products({ auth, products = [], store, flash }) {
                     </div>
                     <div className="form-group">
                       <label>Category</label>
-                      <input
-                        type="text"
+                      <select
                         className={`form-control ${addForm.errors.category ? 'is-invalid' : ''}`}
                         value={addForm.data.category}
                         onChange={(e) => addForm.setData('category', e.target.value)}
-                      />
+                      >
+                        <option value="">Select Category</option>
+                        <option value="Animal Feed">Animal Feed</option>
+                        <option value="Feed Supplements">Feed Supplements</option>
+                        <option value="Animal Vitamins & Nutritional Supplements">Animal Vitamins & Nutritional Supplements</option>
+                      </select>
                       {addForm.errors.category && (
                         <div className="invalid-feedback">{addForm.errors.category}</div>
                       )}
@@ -663,13 +667,17 @@ export default function Products({ auth, products = [], store, flash }) {
                     </div>
                     <div className="form-group">
                       <label>Category</label>
-                      <input
-                        type="text"
+                      <select
                         name="category"
                         className={`form-control ${editForm.errors.category ? 'is-invalid' : ''}`}
                         value={editForm.data.category}
                         onChange={(e) => editForm.setData('category', e.target.value)}
-                      />
+                      >
+                        <option value="">Select Category</option>
+                        <option value="Animal Feed">Animal Feed</option>
+                        <option value="Feed Supplements">Feed Supplements</option>
+                        <option value="Animal Vitamins & Nutritional Supplements">Animal Vitamins & Nutritional Supplements</option>
+                      </select>
                       {editForm.errors.category && (
                         <div className="invalid-feedback">{editForm.errors.category}</div>
                       )}

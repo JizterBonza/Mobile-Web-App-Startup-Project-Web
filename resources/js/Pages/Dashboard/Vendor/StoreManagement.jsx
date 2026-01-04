@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useForm, router } from '@inertiajs/react'
 import AdminLayout from '../../../Layouts/AdminLayout'
+import AddressAutocomplete from '../../../Components/AddressAutocomplete'
 
 export default function StoreManagement({ auth, store, flash }) {
   const [showModal, setShowModal] = useState(false)
@@ -174,26 +175,32 @@ export default function StoreManagement({ auth, store, flash }) {
                     </div>
                     <div className="form-group">
                       <label>Address</label>
-                      <input
-                        type="text"
-                        className={`form-control ${form.errors.shop_address ? 'is-invalid' : ''}`}
+                      <AddressAutocomplete
                         value={form.data.shop_address}
-                        onChange={(e) => form.setData('shop_address', e.target.value)}
+                        onChange={(address) => form.setData('shop_address', address)}
+                        onPlaceSelect={(place) => {
+                          form.setData({
+                            ...form.data,
+                            shop_address: place.address,
+                            shop_lat: place.lat || '',
+                            shop_long: place.lng || '',
+                          })
+                        }}
+                        placeholder="Enter store address"
+                        error={form.errors.shop_address}
                       />
-                      {form.errors.shop_address && (
-                        <div className="invalid-feedback">{form.errors.shop_address}</div>
-                      )}
                     </div>
                     <div className="row">
                       <div className="col-md-6">
                         <div className="form-group">
-                          <label>Latitude</label>
+                          <label>Latitude <small className="text-muted">(auto-filled from address)</small></label>
                           <input
                             type="number"
                             step="any"
                             className={`form-control ${form.errors.shop_lat ? 'is-invalid' : ''}`}
                             value={form.data.shop_lat}
                             onChange={(e) => form.setData('shop_lat', e.target.value)}
+                            placeholder="Auto-filled when address is selected"
                           />
                           {form.errors.shop_lat && (
                             <div className="invalid-feedback">{form.errors.shop_lat}</div>
@@ -202,13 +209,14 @@ export default function StoreManagement({ auth, store, flash }) {
                       </div>
                       <div className="col-md-6">
                         <div className="form-group">
-                          <label>Longitude</label>
+                          <label>Longitude <small className="text-muted">(auto-filled from address)</small></label>
                           <input
                             type="number"
                             step="any"
                             className={`form-control ${form.errors.shop_long ? 'is-invalid' : ''}`}
                             value={form.data.shop_long}
                             onChange={(e) => form.setData('shop_long', e.target.value)}
+                            placeholder="Auto-filled when address is selected"
                           />
                           {form.errors.shop_long && (
                             <div className="invalid-feedback">{form.errors.shop_long}</div>

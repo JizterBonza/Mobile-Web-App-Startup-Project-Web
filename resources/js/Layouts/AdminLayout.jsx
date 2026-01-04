@@ -56,12 +56,12 @@ export default function AdminLayout({ children, auth, title = 'Dashboard' }) {
               <div className="dropdown-menu dropdown-menu-lg dropdown-menu-right">
                 <span className="dropdown-item dropdown-header">{auth.user.email}</span>
                 <div className="dropdown-divider"></div>
-                <a href="#" className="dropdown-item">
+                <Link href="/profile" className="dropdown-item">
                   <i className="fas fa-user mr-2"></i> Profile
-                </a>
-                <a href="#" className="dropdown-item">
+                </Link>
+                <Link href="/settings" className="dropdown-item">
                   <i className="fas fa-cog mr-2"></i> Settings
-                </a>
+                </Link>
                 <div className="dropdown-divider"></div>
                 <a href="#" className="dropdown-item" onClick={handleLogout}>
                   <i className="fas fa-sign-out-alt mr-2"></i> Logout
@@ -115,16 +115,16 @@ export default function AdminLayout({ children, auth, title = 'Dashboard' }) {
                     <strong style={{ color: '#343a40', fontSize: '14px' }}>{auth.user.name}</strong>
                     <small style={{ display: 'block', color: '#6c757d', fontSize: '12px' }}>{auth.user.email}</small>
                   </div>
-                  <a href="#" style={{ display: 'block', padding: '10px 15px', color: '#343a40', textDecoration: 'none', fontSize: '14px' }} 
+                  <Link href="/profile" style={{ display: 'block', padding: '10px 15px', color: '#343a40', textDecoration: 'none', fontSize: '14px' }} 
                      onMouseEnter={(e) => e.target.style.backgroundColor = '#f8f9fa'}
                      onMouseLeave={(e) => e.target.style.backgroundColor = 'transparent'}>
                     <i className="fas fa-user mr-2" style={{ width: '20px' }}></i> Profile
-                  </a>
-                  <a href="#" style={{ display: 'block', padding: '10px 15px', color: '#343a40', textDecoration: 'none', fontSize: '14px' }}
+                  </Link>
+                  <Link href="/settings" style={{ display: 'block', padding: '10px 15px', color: '#343a40', textDecoration: 'none', fontSize: '14px' }}
                      onMouseEnter={(e) => e.target.style.backgroundColor = '#f8f9fa'}
                      onMouseLeave={(e) => e.target.style.backgroundColor = 'transparent'}>
                     <i className="fas fa-cog mr-2" style={{ width: '20px' }}></i> Settings
-                  </a>
+                  </Link>
                   <div style={{ borderTop: '1px solid #e9ecef' }}></div>
                   <a href="#" onClick={handleLogout} style={{ display: 'block', padding: '10px 15px', color: '#dc3545', textDecoration: 'none', fontSize: '14px' }}
                      onMouseEnter={(e) => e.target.style.backgroundColor = '#f8f9fa'}
@@ -216,6 +216,12 @@ export default function AdminLayout({ children, auth, title = 'Dashboard' }) {
                       <Link href="/dashboard/vendor/payouts" className="nav-link">
                         <i className="nav-icon fas fa-money-bill-wave"></i>
                         <p>Payouts</p>
+                      </Link>
+                    </li>
+                    <li className="nav-item">
+                      <Link href="/dashboard/vendor/promotions" className="nav-link">
+                        <i className="nav-icon fas fa-tags"></i>
+                        <p>Promotions</p>
                       </Link>
                     </li>
                   </>

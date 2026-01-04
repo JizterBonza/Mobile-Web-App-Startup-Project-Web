@@ -316,6 +316,133 @@ class UserController extends Controller
     }
 
     /**
+     * Show the authenticated user's profile page.
+     */
+    public function showProfile()
+    {
+        $user = auth()->user();
+        $user->load(['userDetail', 'userCredential']);
+
+        return Inertia::render('Dashboard/Profile', [
+            'profileData' => [
+                'id' => $user->id,
+                'first_name' => $user->userDetail->first_name ?? '',
+                'middle_name' => $user->userDetail->middle_name ?? '',
+                'last_name' => $user->userDetail->last_name ?? '',
+                'email' => $user->userDetail->email ?? '',
+                'mobile_number' => $user->userDetail->mobile_number ?? '',
+                'shipping_address' => $user->userDetail->shipping_address ?? '',
+                'profile_image_url' => $user->userDetail->profile_image_url ?? '',
+                'username' => $user->userCredential->username ?? '',
+                'user_type' => $user->user_type,
+                'status' => $user->status,
+                'created_at' => $user->created_at->format('Y-m-d H:i:s'),
+            ],
+        ]);
+    }
+
+    /**
+     * Update the authenticated user's profile.
+     */
+    public function updateProfile(Request $request)
+    {
+        $user = auth()->user();
+        $user->load(['userDetail', 'userCredential']);
+
+        $request->validate([
+            'first_name' => 'required|string|max:100',
+            'middle_name' => 'nullable|string|max:100',
+            'last_name' => 'required|string|max:100',
+            'email' => 'required|string|email|max:255|unique:user_details,email,' . $user->user_detail_id,
+            'mobile_number' => 'nullable|string|max:20',
+            'shipping_address' => 'nullable|string|max:500',
+            'username' => 'nullable|string|max:100|unique:user_credentials,username,' . $user->user_credential_id,
+        ]);
+
+        try {
+            DB::beginTransaction();
+
+            // Update UserDetail
+            $user->userDetail->update([
+                'first_name' => $request->first_name,
+                'middle_name' => $request->middle_name ?? null,
+                'last_name' => $request->last_name,
+                'email' => $request->email,
+                'mobile_number' => $request->mobile_number ?? null,
+                'shipping_address' => $request->shipping_address ?? null,
+            ]);
+
+            // Update UserCredential username if provided
+            if ($request->filled('username')) {
+                $user->userCredential->update([
+                    'username' => $request->username,
+                ]);
+            }
+
+            DB::commit();
+
+            return redirect()->route('profile.show')
+                ->with('success', 'Profile updated successfully.');
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return redirect()->back()
+                ->withErrors(['error' => 'Failed to update profile. Please try again.'])
+                ->withInput();
+        }
+    }
+
+    /**
+     * Show the settings page.
+     */
+    public function showSettings()
+    {
+        $user = auth()->user();
+        $user->load(['userDetail', 'userCredential']);
+
+        return Inertia::render('Dashboard/Settings', [
+            'userData' => [
+                'id' => $user->id,
+                'email' => $user->userDetail->email ?? '',
+                'username' => $user->userCredential->username ?? '',
+                'user_type' => $user->user_type,
+                'last_login' => $user->userCredential->last_login ? $user->userCredential->last_login->format('Y-m-d H:i:s') : null,
+            ],
+        ]);
+    }
+
+    /**
+     * Update the authenticated user's password.
+     */
+    public function updatePassword(Request $request)
+    {
+        $user = auth()->user();
+        $user->load('userCredential');
+
+        $request->validate([
+            'current_password' => 'required|string',
+            'password' => 'required|string|min:6|confirmed',
+        ]);
+
+        // Verify current password
+        if (!Hash::check($request->current_password, $user->userCredential->password_hash)) {
+            return redirect()->back()
+                ->withErrors(['current_password' => 'Current password is incorrect.']);
+        }
+
+        try {
+            $user->userCredential->update([
+                'password_hash' => Hash::make($request->password),
+            ]);
+
+            return redirect()->route('settings.show')
+                ->with('success', 'Password updated successfully.');
+        } catch (\Exception $e) {
+            return redirect()->back()
+                ->withErrors(['error' => 'Failed to update password. Please try again.']);
+        }
+    }
+
+    /**
      * Remove (deactivate) the specified user.
      */
     public function deactivate($id)

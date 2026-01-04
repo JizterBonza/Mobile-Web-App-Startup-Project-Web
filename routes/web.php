@@ -19,6 +19,14 @@ Route::post('/register', [AuthController::class, 'register']);
 Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
 Route::get('/session/check', [AuthController::class, 'checkSession'])->middleware('auth');
 
+// Profile and Settings Routes (available to all authenticated users)
+Route::middleware(['auth', 'session.valid'])->group(function () {
+    Route::get('/profile', [UserController::class, 'showProfile'])->name('profile.show');
+    Route::put('/profile', [UserController::class, 'updateProfile'])->name('profile.update');
+    Route::get('/settings', [UserController::class, 'showSettings'])->name('settings.show');
+    Route::put('/settings/password', [UserController::class, 'updatePassword'])->name('settings.password');
+});
+
 // Protected Routes - User Type Specific Dashboards
 Route::get('/dashboard/super-admin', function () {
     return Inertia::render('Dashboard/SuperAdminDashboard');
@@ -102,6 +110,12 @@ Route::middleware(['auth', 'session.valid', 'user.type:vendor'])->prefix('dashbo
     
     // Payouts
     Route::get('/payouts', [VendorController::class, 'payoutsIndex'])->name('payouts.index');
+    
+    // Promotions
+    Route::get('/promotions', [VendorController::class, 'promotionsIndex'])->name('promotions.index');
+    Route::post('/promotions', [VendorController::class, 'promotionsStore'])->name('promotions.store');
+    Route::put('/promotions/{id}', [VendorController::class, 'promotionsUpdate'])->name('promotions.update');
+    Route::delete('/promotions/{id}', [VendorController::class, 'promotionsDestroy'])->name('promotions.destroy');
 });
 
 Route::get('/dashboard/veterinarian', function () {

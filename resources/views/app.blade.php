@@ -24,6 +24,11 @@
         @viteReactRefresh
         @vite(['resources/css/app.css', 'resources/js/app.jsx'])
         @inertiaHead
+        
+        <!-- Google Maps API Key Configuration -->
+        <script>
+            window.GOOGLE_MAPS_API_KEY = "{{ config('services.google.maps_api_key', '') }}";
+        </script>
     </head>
     <body class="font-sans antialiased">
         @inertia

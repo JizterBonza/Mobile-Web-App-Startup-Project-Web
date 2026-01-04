@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useForm, router, Link } from '@inertiajs/react'
 import AdminLayout from '../../Layouts/AdminLayout'
+import AddressAutocomplete from '../../Components/AddressAutocomplete'
 
 export default function AgrivetManagement({ auth, agrivets = [], flash }) {
   const [showAddModal, setShowAddModal] = useState(false)
@@ -346,28 +347,34 @@ export default function AgrivetManagement({ auth, agrivets = [], flash }) {
                       <div className="col-md-12">
                         <div className="form-group">
                           <label>Address</label>
-                          <input
-                            type="text"
-                            className={`form-control ${addForm.errors.address ? 'is-invalid' : ''}`}
+                          <AddressAutocomplete
                             value={addForm.data.address}
-                            onChange={(e) => addForm.setData('address', e.target.value)}
+                            onChange={(address) => addForm.setData('address', address)}
+                            onPlaceSelect={(place) => {
+                              addForm.setData({
+                                ...addForm.data,
+                                address: place.address,
+                                latitude: place.lat || '',
+                                longitude: place.lng || '',
+                              })
+                            }}
+                            placeholder="Enter address"
+                            error={addForm.errors.address}
                           />
-                          {addForm.errors.address && (
-                            <div className="invalid-feedback">{addForm.errors.address}</div>
-                          )}
                         </div>
                       </div>
                     </div>
                     <div className="row">
                       <div className="col-md-6">
                         <div className="form-group">
-                          <label>Latitude</label>
+                          <label>Latitude <small className="text-muted">(auto-filled from address)</small></label>
                           <input
                             type="number"
                             step="any"
                             className={`form-control ${addForm.errors.latitude ? 'is-invalid' : ''}`}
                             value={addForm.data.latitude}
                             onChange={(e) => addForm.setData('latitude', e.target.value)}
+                            placeholder="Auto-filled when address is selected"
                           />
                           {addForm.errors.latitude && (
                             <div className="invalid-feedback">{addForm.errors.latitude}</div>
@@ -376,13 +383,14 @@ export default function AgrivetManagement({ auth, agrivets = [], flash }) {
                       </div>
                       <div className="col-md-6">
                         <div className="form-group">
-                          <label>Longitude</label>
+                          <label>Longitude <small className="text-muted">(auto-filled from address)</small></label>
                           <input
                             type="number"
                             step="any"
                             className={`form-control ${addForm.errors.longitude ? 'is-invalid' : ''}`}
                             value={addForm.data.longitude}
                             onChange={(e) => addForm.setData('longitude', e.target.value)}
+                            placeholder="Auto-filled when address is selected"
                           />
                           {addForm.errors.longitude && (
                             <div className="invalid-feedback">{addForm.errors.longitude}</div>
@@ -530,28 +538,34 @@ export default function AgrivetManagement({ auth, agrivets = [], flash }) {
                       <div className="col-md-12">
                         <div className="form-group">
                           <label>Address</label>
-                          <input
-                            type="text"
-                            className={`form-control ${editForm.errors.address ? 'is-invalid' : ''}`}
+                          <AddressAutocomplete
                             value={editForm.data.address}
-                            onChange={(e) => editForm.setData('address', e.target.value)}
+                            onChange={(address) => editForm.setData('address', address)}
+                            onPlaceSelect={(place) => {
+                              editForm.setData({
+                                ...editForm.data,
+                                address: place.address,
+                                latitude: place.lat || '',
+                                longitude: place.lng || '',
+                              })
+                            }}
+                            placeholder="Enter address"
+                            error={editForm.errors.address}
                           />
-                          {editForm.errors.address && (
-                            <div className="invalid-feedback">{editForm.errors.address}</div>
-                          )}
                         </div>
                       </div>
                     </div>
                     <div className="row">
                       <div className="col-md-6">
                         <div className="form-group">
-                          <label>Latitude</label>
+                          <label>Latitude <small className="text-muted">(auto-filled from address)</small></label>
                           <input
                             type="number"
                             step="any"
                             className={`form-control ${editForm.errors.latitude ? 'is-invalid' : ''}`}
                             value={editForm.data.latitude}
                             onChange={(e) => editForm.setData('latitude', e.target.value)}
+                            placeholder="Auto-filled when address is selected"
                           />
                           {editForm.errors.latitude && (
                             <div className="invalid-feedback">{editForm.errors.latitude}</div>
@@ -560,13 +574,14 @@ export default function AgrivetManagement({ auth, agrivets = [], flash }) {
                       </div>
                       <div className="col-md-6">
                         <div className="form-group">
-                          <label>Longitude</label>
+                          <label>Longitude <small className="text-muted">(auto-filled from address)</small></label>
                           <input
                             type="number"
                             step="any"
                             className={`form-control ${editForm.errors.longitude ? 'is-invalid' : ''}`}
                             value={editForm.data.longitude}
                             onChange={(e) => editForm.setData('longitude', e.target.value)}
+                            placeholder="Auto-filled when address is selected"
                           />
                           {editForm.errors.longitude && (
                             <div className="invalid-feedback">{editForm.errors.longitude}</div>
