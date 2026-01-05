@@ -12,7 +12,9 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('order_details', function (Blueprint $table) {
-            $table->string('handover_type', 50)->default('dropoff');
+            $table->unsignedBigInteger('delivery_method_id')
+                ->default(1)
+                ->after('order_instruction');
         });
     }
 
@@ -22,7 +24,7 @@ return new class extends Migration
     public function down(): void
     {
         Schema::table('order_details', function (Blueprint $table) {
-            $table->dropColumn('handover_type');
+            $table->dropColumn('delivery_method_id');
         });
     }
 };
