@@ -11,6 +11,7 @@ use App\Http\Controllers\FavoriteController;
 use App\Http\Controllers\AddressController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\ShopController;
+use App\Http\Controllers\MobileController;
 use Illuminate\Http\Request;
 
 Route::post('register', [MobileAuthController::class, 'register']);
@@ -105,3 +106,6 @@ Route::get('shops/{id}', [ShopController::class, 'show']);
 Route::post('shops', [ShopController::class, 'store']);
 Route::put('shops/{id}', [ShopController::class, 'update']);
 Route::delete('shops/{id}', [ShopController::class, 'destroy']);
+
+// Delivery method routes
+Route::get('delivery-methods', [MobileController::class, 'getDeliveryMethods']);

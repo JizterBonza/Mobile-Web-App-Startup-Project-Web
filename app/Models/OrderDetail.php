@@ -29,6 +29,7 @@ class OrderDetail extends Model
         'address_id',
         'shipping_address',
         'order_instruction',
+        'delivery_method_id',
         'payment_method',
         'payment_status',
     ];
@@ -55,6 +56,14 @@ class OrderDetail extends Model
     public function orders()
     {
         return $this->hasMany(Order::class, 'order_detail_id');
+    }
+
+    /**
+     * Get the delivery method for the order detail.
+     */
+    public function deliveryMethod()
+    {
+        return $this->belongsTo(DeliveryMethod::class, 'delivery_method_id');
     }
 }
 
