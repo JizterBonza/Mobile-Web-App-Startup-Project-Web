@@ -49,6 +49,7 @@ Route::delete('items/{id}', [ItemController::class, 'destroy']);
 // Order routes
 Route::get('orders', [OrderController::class, 'index']);
 Route::get('orders/user/{userId}', [OrderController::class, 'getByUser']);
+Route::get('orders/rider/{riderId}', [OrderController::class, 'getByRider']);
 Route::get('orders/details/user/{userId}', [OrderController::class, 'getOrderDetailsByUser']);
 Route::get('orders/{id}', [OrderController::class, 'show']);
 Route::post('orders/create', [OrderController::class, 'store']);
