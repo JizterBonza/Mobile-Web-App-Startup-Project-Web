@@ -101,6 +101,35 @@ class OrderController extends Controller
     }
 
     /**
+     * Fetch all orders by rider ID
+     *
+     * @param int $riderId
+     * @param Request $request
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function getByRider($riderId, Request $request)
+    {
+        $query = Order::with(['user', 'orderDetail.address:id,recipient_name,contact_number,latitude,longitude', 'orderItems.item'])
+            ->where('rider_id', $riderId);
+
+        // Filter by order_status if provided
+        if ($request->has('order_status')) {
+            $query->where('order_status', $request->order_status);
+        }
+
+        // Order by ordered_at descending (newest first)
+        $query->orderBy('ordered_at', 'desc');
+
+        $orders = $query->get();
+
+        return response()->json([
+            'success' => true,
+            'data' => $orders,
+            'count' => $orders->count()
+        ]);
+    }
+
+    /**
      * Get order details joined with orders by user ID
      *
      * @param int $userId
