@@ -201,6 +201,12 @@ export default function AdminLayout({ children, auth, title = 'Dashboard' }) {
                       </Link>
                     </li>
                     <li className="nav-item">
+                      <Link href="/dashboard/vendor/product-images" className="nav-link">
+                        <i className="nav-icon fas fa-images"></i>
+                        <p>Product Images</p>
+                      </Link>
+                    </li>
+                    <li className="nav-item">
                       <Link href="/dashboard/vendor/inventory" className="nav-link">
                         <i className="nav-icon fas fa-warehouse"></i>
                         <p>Inventory</p>

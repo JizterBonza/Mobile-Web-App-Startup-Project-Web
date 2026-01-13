@@ -4,6 +4,7 @@ use App\Http\Controllers\Auth\AuthController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\AgrivetController;
 use App\Http\Controllers\VendorController;
+use App\Http\Controllers\ProductImageController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
@@ -116,6 +117,13 @@ Route::middleware(['auth', 'session.valid', 'user.type:vendor'])->prefix('dashbo
     Route::post('/promotions', [VendorController::class, 'promotionsStore'])->name('promotions.store');
     Route::put('/promotions/{id}', [VendorController::class, 'promotionsUpdate'])->name('promotions.update');
     Route::delete('/promotions/{id}', [VendorController::class, 'promotionsDestroy'])->name('promotions.destroy');
+    
+    // Product Images (Stock)
+    Route::get('/product-images', [ProductImageController::class, 'index'])->name('product-images.index');
+    Route::post('/product-images', [ProductImageController::class, 'store'])->name('product-images.store');
+    Route::put('/product-images/{id}', [ProductImageController::class, 'update'])->name('product-images.update');
+    Route::delete('/product-images/{id}', [ProductImageController::class, 'destroy'])->name('product-images.destroy');
+    Route::get('/product-images/active', [ProductImageController::class, 'getActiveImages'])->name('product-images.active');
 });
 
 Route::get('/dashboard/veterinarian', function () {

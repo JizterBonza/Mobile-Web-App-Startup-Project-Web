@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useForm, router } from '@inertiajs/react'
 import AdminLayout from '../../../Layouts/AdminLayout'
 
-export default function Products({ auth, products = [], store, flash }) {
+export default function Products({ auth, products = [], store, flash, stockImages = [] }) {
   const [showAddModal, setShowAddModal] = useState(false)
   const [showAddModalAnimation, setShowAddModalAnimation] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
@@ -14,6 +14,10 @@ export default function Products({ auth, products = [], store, flash }) {
   const [imagePreviews, setImagePreviews] = useState([])
   const [editImagePreviews, setEditImagePreviews] = useState([])
   const [editExistingImages, setEditExistingImages] = useState([])
+  const [imageSourceTab, setImageSourceTab] = useState('upload') // 'upload' or 'stock'
+  const [editImageSourceTab, setEditImageSourceTab] = useState('upload')
+  const [selectedStockImages, setSelectedStockImages] = useState([])
+  const [editSelectedStockImages, setEditSelectedStockImages] = useState([])
 
   const addForm = useForm({
     item_name: '',
@@ -22,6 +26,7 @@ export default function Products({ auth, products = [], store, flash }) {
     item_quantity: '',
     category: '',
     item_images: [],
+    stock_image_urls: [],
     item_status: 'active',
   })
 
@@ -32,6 +37,7 @@ export default function Products({ auth, products = [], store, flash }) {
     item_quantity: '',
     category: '',
     item_images: [],
+    stock_image_urls: [],
     item_status: 'active',
   })
 
@@ -65,6 +71,8 @@ export default function Products({ auth, products = [], store, flash }) {
       setShowAddModal(false)
       addForm.reset()
       setImagePreviews([])
+      setSelectedStockImages([])
+      setImageSourceTab('upload')
     }, 300)
   }
 
@@ -98,6 +106,8 @@ export default function Products({ auth, products = [], store, flash }) {
       editForm.reset()
       setEditImagePreviews([])
       setEditExistingImages([])
+      setEditSelectedStockImages([])
+      setEditImageSourceTab('upload')
       // Clean up any object URLs
       editImagePreviews.forEach(preview => {
         if (preview && preview.startsWith('blob:')) {
@@ -146,6 +156,33 @@ export default function Products({ auth, products = [], store, flash }) {
     setEditExistingImages(newExisting)
   }
 
+  // Stock image selection handlers
+  const toggleStockImage = (imageUrl) => {
+    setSelectedStockImages(prev => {
+      if (prev.includes(imageUrl)) {
+        return prev.filter(url => url !== imageUrl)
+      }
+      return [...prev, imageUrl]
+    })
+  }
+
+  const toggleEditStockImage = (imageUrl) => {
+    setEditSelectedStockImages(prev => {
+      if (prev.includes(imageUrl)) {
+        return prev.filter(url => url !== imageUrl)
+      }
+      return [...prev, imageUrl]
+    })
+  }
+
+  const removeSelectedStockImage = (imageUrl) => {
+    setSelectedStockImages(prev => prev.filter(url => url !== imageUrl))
+  }
+
+  const removeEditSelectedStockImage = (imageUrl) => {
+    setEditSelectedStockImages(prev => prev.filter(url => url !== imageUrl))
+  }
+
   const closeRemoveModal = () => {
     setShowRemoveModalAnimation(false)
     setTimeout(() => {
@@ -166,12 +203,28 @@ export default function Products({ auth, products = [], store, flash }) {
 
   const handleAddProduct = (e) => {
     e.preventDefault()
+    
+    // Validate that at least one image is selected (either uploaded or from stock)
+    const hasUploadedImages = addForm.data.item_images && addForm.data.item_images.length > 0
+    const hasStockImages = selectedStockImages && selectedStockImages.length > 0
+    
+    if (!hasUploadedImages && !hasStockImages) {
+      addForm.setError('item_images', 'At least one product image is required.')
+      return
+    }
+    
+    // Submit the form with stock images included via transform
+    addForm.transform(data => ({
+      ...data,
+      stock_image_urls: selectedStockImages,
+    }))
     addForm.post('/dashboard/vendor/products', {
       preserveScroll: true,
       forceFormData: true,
       onSuccess: () => {
         addForm.reset()
         setImagePreviews([])
+        setSelectedStockImages([])
       },
     })
   }
@@ -239,9 +292,10 @@ export default function Products({ auth, products = [], store, flash }) {
     const currentData = editForm.data
     const hasNewImages = currentData.item_images && currentData.item_images.length > 0
     const hasExistingImages = editExistingImages && editExistingImages.length > 0
+    const hasNewStockImages = editSelectedStockImages && editSelectedStockImages.length > 0
     
-    // Validate that at least one image exists (existing or new)
-    if (!hasExistingImages && !hasNewImages) {
+    // Validate that at least one image exists (existing, new upload, or stock)
+    if (!hasExistingImages && !hasNewImages && !hasNewStockImages) {
       editForm.setError('item_images', 'At least one product image is required.')
       return
     }
@@ -272,8 +326,13 @@ export default function Products({ auth, products = [], store, flash }) {
       editForm.setData('item_images', [])
     }
     
-    // Submit the form
+    // Submit the form with stock images included
     // forceFormData is needed when we have file uploads
+    editForm.transform(data => ({
+      ...data,
+      existing_images: editExistingImages || [],
+      stock_image_urls: editSelectedStockImages || [],
+    }))
     editForm.put(`/dashboard/vendor/products/${selectedProduct.id}`, {
       preserveScroll: true,
       forceFormData: hasNewImages,
@@ -513,45 +572,165 @@ export default function Products({ auth, products = [], store, flash }) {
                     </div>
                     <div className="form-group">
                       <label>Product Images <span className="text-danger">*</span></label>
-                      <input
-                        type="file"
-                        className={`form-control ${addForm.errors.item_images ? 'is-invalid' : ''}`}
-                        onChange={handleImageChange}
-                        accept="image/*"
-                        multiple
-                        required
-                      />
-                      {addForm.errors.item_images && (
-                        <div className="invalid-feedback">{addForm.errors.item_images}</div>
+                      
+                      {/* Image Source Tabs */}
+                      <ul className="nav nav-tabs mb-3">
+                        <li className="nav-item">
+                          <a 
+                            className={`nav-link ${imageSourceTab === 'upload' ? 'active' : ''}`}
+                            href="#"
+                            onClick={(e) => { e.preventDefault(); setImageSourceTab('upload') }}
+                          >
+                            <i className="fas fa-upload mr-1"></i> Upload New
+                          </a>
+                        </li>
+                        <li className="nav-item">
+                          <a 
+                            className={`nav-link ${imageSourceTab === 'stock' ? 'active' : ''}`}
+                            href="#"
+                            onClick={(e) => { e.preventDefault(); setImageSourceTab('stock') }}
+                          >
+                            <i className="fas fa-images mr-1"></i> From Stock ({stockImages.length})
+                          </a>
+                        </li>
+                      </ul>
+
+                      {/* Upload Tab Content */}
+                      {imageSourceTab === 'upload' && (
+                        <>
+                          <input
+                            type="file"
+                            className={`form-control ${addForm.errors.item_images ? 'is-invalid' : ''}`}
+                            onChange={handleImageChange}
+                            accept="image/*"
+                            multiple
+                          />
+                          {addForm.errors.item_images && (
+                            <div className="invalid-feedback d-block">{addForm.errors.item_images}</div>
+                          )}
+                          {addForm.errors['item_images.0'] && (
+                            <div className="invalid-feedback d-block">{addForm.errors['item_images.0']}</div>
+                          )}
+                          <small className="form-text text-muted">
+                            Upload product images (JPEG, PNG, JPG, GIF - Max 5MB per image)
+                          </small>
+                          {imagePreviews.length > 0 && (
+                            <div className="mt-3">
+                              <label className="d-block font-weight-bold mb-2">Uploaded Images:</label>
+                              <div className="row">
+                                {imagePreviews.map((preview, index) => (
+                                  <div key={index} className="col-md-3 mb-2 position-relative">
+                                    <img
+                                      src={preview}
+                                      alt={`Preview ${index + 1}`}
+                                      className="img-thumbnail"
+                                      style={{ width: '100%', height: '100px', objectFit: 'cover' }}
+                                    />
+                                    <button
+                                      type="button"
+                                      className="btn btn-sm btn-danger position-absolute"
+                                      style={{ top: '5px', right: '20px' }}
+                                      onClick={() => removeImage(index)}
+                                    >
+                                      <i className="fas fa-times"></i>
+                                    </button>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </>
                       )}
-                      {addForm.errors['item_images.0'] && (
-                        <div className="invalid-feedback">{addForm.errors['item_images.0']}</div>
+
+                      {/* Stock Images Tab Content */}
+                      {imageSourceTab === 'stock' && (
+                        <>
+                          {stockImages.length === 0 ? (
+                            <div className="alert alert-info">
+                              <i className="fas fa-info-circle mr-2"></i>
+                              No stock images available. 
+                              <a href="/dashboard/vendor/product-images" className="alert-link ml-1">
+                                Add some to your library first.
+                              </a>
+                            </div>
+                          ) : (
+                            <>
+                              <small className="form-text text-muted mb-2">
+                                Click images to select/deselect. Selected images will be added to your product.
+                              </small>
+                              <div className="row" style={{ maxHeight: '250px', overflowY: 'auto' }}>
+                                {stockImages.map((img) => (
+                                  <div key={img.id} className="col-md-3 mb-2">
+                                    <div 
+                                      className={`card h-100 ${selectedStockImages.includes(img.image_url) ? 'border-primary border-2' : ''}`}
+                                      style={{ cursor: 'pointer', transition: 'all 0.2s' }}
+                                      onClick={() => toggleStockImage(img.image_url)}
+                                    >
+                                      <div className="position-relative">
+                                        <img
+                                          src={img.image_url}
+                                          alt={img.name}
+                                          className="card-img-top"
+                                          style={{ height: '80px', objectFit: 'cover' }}
+                                          onError={(e) => { e.target.src = '/images/placeholder.png' }}
+                                        />
+                                        {selectedStockImages.includes(img.image_url) && (
+                                          <div className="position-absolute" style={{ top: '5px', right: '5px' }}>
+                                            <span className="badge badge-primary">
+                                              <i className="fas fa-check"></i>
+                                            </span>
+                                          </div>
+                                        )}
+                                      </div>
+                                      <div className="card-body p-1">
+                                        <small className="text-truncate d-block" title={img.name}>{img.name}</small>
+                                      </div>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </>
+                          )}
+                        </>
                       )}
-                      <small className="form-text text-muted">
-                        Upload at least one product image (JPEG, PNG, JPG, GIF - Max 5MB per image)
-                      </small>
-                      {imagePreviews.length > 0 && (
+
+                      {/* Selected Stock Images Summary */}
+                      {selectedStockImages.length > 0 && (
                         <div className="mt-3">
+                          <label className="d-block font-weight-bold mb-2">
+                            Selected Stock Images ({selectedStockImages.length}):
+                          </label>
                           <div className="row">
-                            {imagePreviews.map((preview, index) => (
+                            {selectedStockImages.map((url, index) => (
                               <div key={index} className="col-md-3 mb-2 position-relative">
                                 <img
-                                  src={preview}
-                                  alt={`Preview ${index + 1}`}
+                                  src={url}
+                                  alt={`Stock ${index + 1}`}
                                   className="img-thumbnail"
-                                  style={{ width: '100%', height: '150px', objectFit: 'cover' }}
+                                  style={{ width: '100%', height: '100px', objectFit: 'cover' }}
+                                  onError={(e) => { e.target.src = '/images/placeholder.png' }}
                                 />
                                 <button
                                   type="button"
                                   className="btn btn-sm btn-danger position-absolute"
-                                  style={{ top: '5px', right: '5px' }}
-                                  onClick={() => removeImage(index)}
+                                  style={{ top: '5px', right: '20px' }}
+                                  onClick={() => removeSelectedStockImage(url)}
                                 >
                                   <i className="fas fa-times"></i>
                                 </button>
                               </div>
                             ))}
                           </div>
+                        </div>
+                      )}
+
+                      {/* Total Images Summary */}
+                      {(imagePreviews.length > 0 || selectedStockImages.length > 0) && (
+                        <div className="mt-2">
+                          <small className="text-success">
+                            <i className="fas fa-check-circle mr-1"></i>
+                            Total images: {imagePreviews.length + selectedStockImages.length}
+                          </small>
                         </div>
                       )}
                     </div>
@@ -684,47 +863,87 @@ export default function Products({ auth, products = [], store, flash }) {
                     </div>
                     <div className="form-group">
                       <label>Product Images</label>
-                      {(editExistingImages.length > 0 || editImagePreviews.length > 0) && (
+                      
+                      {/* Current/Existing Images */}
+                      {editExistingImages.length > 0 && (
                         <div className="mb-3">
-                          {editExistingImages.length > 0 && (
-                            <>
-                              <label className="d-block font-weight-bold mb-2">Current Images:</label>
-                              <div className="row">
-                                {editExistingImages.map((image, index) => {
-                                  // Ensure image URL is properly formatted
-                                  const imageUrl = image.startsWith('http') || image.startsWith('/') 
-                                    ? image 
-                                    : `/storage/${image.replace(/^storage\//, '')}`
-                                  return (
-                                    <div key={`existing-${index}`} className="col-md-3 mb-2 position-relative">
-                                      <img
-                                        src={imageUrl}
-                                        alt={`Existing ${index + 1}`}
-                                        className="img-thumbnail"
-                                        style={{ width: '100%', height: '150px', objectFit: 'cover' }}
-                                        onError={(e) => {
-                                          // Fallback if image fails to load
-                                          e.target.src = '/images/placeholder.png'
-                                        }}
-                                      />
-                                      <button
-                                        type="button"
-                                        className="btn btn-sm btn-danger position-absolute"
-                                        style={{ top: '5px', right: '5px', zIndex: 10 }}
-                                        onClick={() => removeEditExistingImage(index)}
-                                        title="Remove this image"
-                                      >
-                                        <i className="fas fa-times"></i>
-                                      </button>
-                                    </div>
-                                  )
-                                })}
-                              </div>
-                            </>
+                          <label className="d-block font-weight-bold mb-2">Current Images:</label>
+                          <div className="row">
+                            {editExistingImages.map((image, index) => {
+                              const imageUrl = image.startsWith('http') || image.startsWith('/') 
+                                ? image 
+                                : `/storage/${image.replace(/^storage\//, '')}`
+                              return (
+                                <div key={`existing-${index}`} className="col-md-3 mb-2 position-relative">
+                                  <img
+                                    src={imageUrl}
+                                    alt={`Existing ${index + 1}`}
+                                    className="img-thumbnail"
+                                    style={{ width: '100%', height: '100px', objectFit: 'cover' }}
+                                    onError={(e) => { e.target.src = '/images/placeholder.png' }}
+                                  />
+                                  <button
+                                    type="button"
+                                    className="btn btn-sm btn-danger position-absolute"
+                                    style={{ top: '5px', right: '20px', zIndex: 10 }}
+                                    onClick={() => removeEditExistingImage(index)}
+                                    title="Remove this image"
+                                  >
+                                    <i className="fas fa-times"></i>
+                                  </button>
+                                </div>
+                              )
+                            })}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Add More Images Tabs */}
+                      <label className="d-block font-weight-bold mb-2">Add More Images:</label>
+                      <ul className="nav nav-tabs mb-3">
+                        <li className="nav-item">
+                          <a 
+                            className={`nav-link ${editImageSourceTab === 'upload' ? 'active' : ''}`}
+                            href="#"
+                            onClick={(e) => { e.preventDefault(); setEditImageSourceTab('upload') }}
+                          >
+                            <i className="fas fa-upload mr-1"></i> Upload New
+                          </a>
+                        </li>
+                        <li className="nav-item">
+                          <a 
+                            className={`nav-link ${editImageSourceTab === 'stock' ? 'active' : ''}`}
+                            href="#"
+                            onClick={(e) => { e.preventDefault(); setEditImageSourceTab('stock') }}
+                          >
+                            <i className="fas fa-images mr-1"></i> From Stock ({stockImages.length})
+                          </a>
+                        </li>
+                      </ul>
+
+                      {/* Upload Tab Content */}
+                      {editImageSourceTab === 'upload' && (
+                        <>
+                          <input
+                            type="file"
+                            name="item_images[]"
+                            className={`form-control ${editForm.errors.item_images ? 'is-invalid' : ''}`}
+                            onChange={handleEditImageChange}
+                            accept="image/*"
+                            multiple
+                          />
+                          {editForm.errors.item_images && (
+                            <div className="invalid-feedback d-block">{editForm.errors.item_images}</div>
                           )}
+                          {editForm.errors['item_images.0'] && (
+                            <div className="invalid-feedback d-block">{editForm.errors['item_images.0']}</div>
+                          )}
+                          <small className="form-text text-muted">
+                            Upload additional product images (JPEG, PNG, JPG, GIF - Max 5MB per image)
+                          </small>
                           {editImagePreviews.length > 0 && (
-                            <>
-                              <label className="d-block font-weight-bold mb-2 mt-3">New Images (to be added):</label>
+                            <div className="mt-3">
+                              <label className="d-block font-weight-bold mb-2">New Uploaded Images:</label>
                               <div className="row">
                                 {editImagePreviews.map((preview, index) => (
                                   <div key={`new-${index}`} className="col-md-3 mb-2 position-relative">
@@ -732,12 +951,12 @@ export default function Products({ auth, products = [], store, flash }) {
                                       src={preview}
                                       alt={`New Preview ${index + 1}`}
                                       className="img-thumbnail"
-                                      style={{ width: '100%', height: '150px', objectFit: 'cover' }}
+                                      style={{ width: '100%', height: '100px', objectFit: 'cover' }}
                                     />
                                     <button
                                       type="button"
                                       className="btn btn-sm btn-danger position-absolute"
-                                      style={{ top: '5px', right: '5px', zIndex: 10 }}
+                                      style={{ top: '5px', right: '20px', zIndex: 10 }}
                                       onClick={() => removeEditImage(index)}
                                       title="Remove this image"
                                     >
@@ -746,30 +965,101 @@ export default function Products({ auth, products = [], store, flash }) {
                                   </div>
                                 ))}
                               </div>
+                            </div>
+                          )}
+                        </>
+                      )}
+
+                      {/* Stock Images Tab Content */}
+                      {editImageSourceTab === 'stock' && (
+                        <>
+                          {stockImages.length === 0 ? (
+                            <div className="alert alert-info">
+                              <i className="fas fa-info-circle mr-2"></i>
+                              No stock images available. 
+                              <a href="/dashboard/vendor/product-images" className="alert-link ml-1">
+                                Add some to your library first.
+                              </a>
+                            </div>
+                          ) : (
+                            <>
+                              <small className="form-text text-muted mb-2">
+                                Click images to select/deselect.
+                              </small>
+                              <div className="row" style={{ maxHeight: '200px', overflowY: 'auto' }}>
+                                {stockImages.map((img) => (
+                                  <div key={img.id} className="col-md-3 mb-2">
+                                    <div 
+                                      className={`card h-100 ${editSelectedStockImages.includes(img.image_url) ? 'border-primary border-2' : ''}`}
+                                      style={{ cursor: 'pointer', transition: 'all 0.2s' }}
+                                      onClick={() => toggleEditStockImage(img.image_url)}
+                                    >
+                                      <div className="position-relative">
+                                        <img
+                                          src={img.image_url}
+                                          alt={img.name}
+                                          className="card-img-top"
+                                          style={{ height: '70px', objectFit: 'cover' }}
+                                          onError={(e) => { e.target.src = '/images/placeholder.png' }}
+                                        />
+                                        {editSelectedStockImages.includes(img.image_url) && (
+                                          <div className="position-absolute" style={{ top: '5px', right: '5px' }}>
+                                            <span className="badge badge-primary">
+                                              <i className="fas fa-check"></i>
+                                            </span>
+                                          </div>
+                                        )}
+                                      </div>
+                                      <div className="card-body p-1">
+                                        <small className="text-truncate d-block" title={img.name}>{img.name}</small>
+                                      </div>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
                             </>
                           )}
+                        </>
+                      )}
+
+                      {/* Selected Stock Images Summary */}
+                      {editSelectedStockImages.length > 0 && (
+                        <div className="mt-3">
+                          <label className="d-block font-weight-bold mb-2">
+                            New Stock Images ({editSelectedStockImages.length}):
+                          </label>
+                          <div className="row">
+                            {editSelectedStockImages.map((url, index) => (
+                              <div key={index} className="col-md-3 mb-2 position-relative">
+                                <img
+                                  src={url}
+                                  alt={`Stock ${index + 1}`}
+                                  className="img-thumbnail"
+                                  style={{ width: '100%', height: '100px', objectFit: 'cover' }}
+                                  onError={(e) => { e.target.src = '/images/placeholder.png' }}
+                                />
+                                <button
+                                  type="button"
+                                  className="btn btn-sm btn-danger position-absolute"
+                                  style={{ top: '5px', right: '20px' }}
+                                  onClick={() => removeEditSelectedStockImage(url)}
+                                >
+                                  <i className="fas fa-times"></i>
+                                </button>
+                              </div>
+                            ))}
+                          </div>
                         </div>
                       )}
-                      <input
-                        type="file"
-                        name="item_images[]"
-                        className={`form-control ${editForm.errors.item_images ? 'is-invalid' : ''}`}
-                        onChange={handleEditImageChange}
-                        accept="image/*"
-                        multiple
-                      />
-                      {editForm.errors.item_images && (
-                        <div className="invalid-feedback">{editForm.errors.item_images}</div>
-                      )}
-                      {editForm.errors['item_images.0'] && (
-                        <div className="invalid-feedback">{editForm.errors['item_images.0']}</div>
-                      )}
-                      <small className="form-text text-muted">
-                        {editExistingImages.length > 0 
-                          ? 'Add more images or remove existing ones. At least one image is required.'
-                          : 'Upload at least one product image (JPEG, PNG, JPG, GIF - Max 5MB per image)'
-                        }
-                      </small>
+
+                      {/* Total Images Summary */}
+                      <div className="mt-2">
+                        <small className={editExistingImages.length + editImagePreviews.length + editSelectedStockImages.length > 0 ? 'text-success' : 'text-warning'}>
+                          <i className={`fas ${editExistingImages.length + editImagePreviews.length + editSelectedStockImages.length > 0 ? 'fa-check-circle' : 'fa-exclamation-circle'} mr-1`}></i>
+                          Total images: {editExistingImages.length + editImagePreviews.length + editSelectedStockImages.length}
+                          {editExistingImages.length + editImagePreviews.length + editSelectedStockImages.length === 0 && ' (At least 1 required)'}
+                        </small>
+                      </div>
                     </div>
                     <div className="form-group">
                       <label>Status <span className="text-danger">*</span></label>

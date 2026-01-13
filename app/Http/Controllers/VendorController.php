@@ -9,6 +9,7 @@ use Inertia\Inertia;
 use App\Models\User;
 use App\Models\Agrivet;
 use App\Models\Promotion;
+use App\Models\ProductImage;
 
 class VendorController extends Controller
 {
@@ -206,9 +207,25 @@ class VendorController extends Controller
             ];
         });
 
+        // Get stock images for this agrivet
+        $stockImages = ProductImage::where('agrivet_id', $agrivet->id)
+            ->where('status', 'active')
+            ->orderBy('category')
+            ->orderBy('name')
+            ->get()
+            ->map(function ($image) {
+                return [
+                    'id' => $image->id,
+                    'name' => $image->name,
+                    'image_url' => $image->image_url,
+                    'category' => $image->category,
+                ];
+            });
+
         return Inertia::render('Dashboard/Vendor/Products', [
             'products' => $products,
             'store' => ['id' => $agrivet->id],
+            'stockImages' => $stockImages,
         ]);
     }
 
@@ -230,18 +247,41 @@ class VendorController extends Controller
             'item_price' => 'required|numeric|min:0',
             'item_quantity' => 'required|integer|min:0',
             'category' => 'nullable|string|max:100',
-            'item_images' => 'required|array|min:1',
-            'item_images.*' => 'required|image|mimes:jpeg,png,jpg,gif|max:5120',
+            'item_images' => 'nullable|array',
+            'item_images.*' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:5120',
+            'stock_image_urls' => 'nullable|array',
+            'stock_image_urls.*' => 'nullable|string',
             'item_status' => 'nullable|string|in:active,inactive',
         ]);
 
-        // Handle file uploads
+        // Validate that at least one image source is provided
+        $hasUploadedImages = $request->hasFile('item_images') && count($request->file('item_images')) > 0;
+        $hasStockImages = $request->has('stock_image_urls') && is_array($request->stock_image_urls) && count($request->stock_image_urls) > 0;
+        
+        if (!$hasUploadedImages && !$hasStockImages) {
+            return redirect()->back()
+                ->withErrors(['item_images' => 'At least one product image is required.'])
+                ->withInput();
+        }
+
+        // Handle file uploads and stock images
         $imagePaths = [];
+        
+        // Add uploaded images
         if ($request->hasFile('item_images')) {
             foreach ($request->file('item_images') as $image) {
                 $path = $image->store('products', 'public');
                 // Generate URL: /storage/products/filename.jpg
                 $imagePaths[] = '/storage/' . $path;
+            }
+        }
+        
+        // Add stock image URLs
+        if ($request->has('stock_image_urls') && is_array($request->stock_image_urls)) {
+            foreach ($request->stock_image_urls as $stockImageUrl) {
+                if (!empty($stockImageUrl)) {
+                    $imagePaths[] = $stockImageUrl;
+                }
             }
         }
 
@@ -366,6 +406,8 @@ class VendorController extends Controller
             'item_images.*' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:5120',
             'existing_images' => 'nullable|array',
             'existing_images.*' => 'nullable|string',
+            'stock_image_urls' => 'nullable|array',
+            'stock_image_urls.*' => 'nullable|string',
             'item_status' => 'nullable|string|in:active,inactive',
         ]);
 
@@ -404,6 +446,15 @@ class VendorController extends Controller
                 $path = $image->store('products', 'public');
                 // Generate URL: /storage/products/filename.jpg
                 $finalImages[] = '/storage/' . $path;
+            }
+        }
+        
+        // Handle stock image URLs
+        if ($request->has('stock_image_urls') && is_array($request->stock_image_urls)) {
+            foreach ($request->stock_image_urls as $stockImageUrl) {
+                if (!empty($stockImageUrl) && !in_array($stockImageUrl, $finalImages)) {
+                    $finalImages[] = $stockImageUrl;
+                }
             }
         }
         
