@@ -65,6 +65,14 @@ class OrderDetail extends Model
     {
         return $this->belongsTo(DeliveryMethod::class, 'delivery_method_id');
     }
+
+    /**
+     * Get the address for the order detail.
+     */
+    public function address()
+    {
+        return $this->belongsTo(Address::class, 'address_id');
+    }
 }
 
 
