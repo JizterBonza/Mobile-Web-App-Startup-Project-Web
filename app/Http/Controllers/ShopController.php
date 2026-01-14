@@ -19,9 +19,9 @@ class ShopController extends Controller
     {
         $query = Shop::query();
 
-        // Filter by user_id if provided
-        if ($request->has('user_id')) {
-            $query->where('user_id', $request->user_id);
+        // Filter by agrivet_id if provided
+        if ($request->has('agrivet_id')) {
+            $query->where('agrivet_id', $request->agrivet_id);
         }
 
         // Filter by status if provided
@@ -99,25 +99,26 @@ class ShopController extends Controller
     }
 
     /**
-     * Fetch a shop by user ID
+     * Fetch shops by agrivet ID
      *
-     * @param int $userId
+     * @param int $agrivetId
      * @return \Illuminate\Http\JsonResponse
      */
-    public function getByUserId($userId)
+    public function getByAgrivetId($agrivetId)
     {
-        $shop = Shop::where('user_id', $userId)->first();
+        $shops = Shop::where('agrivet_id', $agrivetId)->get();
 
-        if (!$shop) {
+        if ($shops->isEmpty()) {
             return response()->json([
                 'success' => false,
-                'message' => 'Shop not found for this user'
+                'message' => 'No shops found for this agrivet'
             ], 404);
         }
 
         return response()->json([
             'success' => true,
-            'data' => $shop
+            'data' => $shops,
+            'count' => $shops->count()
         ]);
     }
 
@@ -130,14 +131,13 @@ class ShopController extends Controller
     public function store(Request $request)
     {
         $validator = Validator::make($request->all(), [
-            'user_id' => 'required|exists:users,id',
+            'agrivet_id' => 'required|exists:agrivets,id',
             'shop_name' => 'required|string|max:150',
             'shop_description' => 'nullable|string',
             'shop_address' => 'nullable|string|max:255',
             'shop_lat' => 'nullable|numeric',
             'shop_long' => 'nullable|numeric',
             'contact_number' => 'nullable|string|max:20',
-            'logo_url' => 'nullable|string|max:255',
             'shop_status' => 'nullable|string|max:50',
         ]);
 
@@ -149,7 +149,16 @@ class ShopController extends Controller
             ], 422);
         }
 
-        $shop = Shop::create($request->all());
+        $shop = Shop::create([
+            'agrivet_id' => $request->agrivet_id,
+            'shop_name' => $request->shop_name,
+            'shop_description' => $request->shop_description,
+            'shop_address' => $request->shop_address,
+            'shop_lat' => $request->shop_lat,
+            'shop_long' => $request->shop_long,
+            'contact_number' => $request->contact_number,
+            'shop_status' => $request->shop_status ?? 'active',
+        ]);
 
         return response()->json([
             'success' => true,
@@ -177,14 +186,13 @@ class ShopController extends Controller
         }
 
         $validator = Validator::make($request->all(), [
-            'user_id' => 'sometimes|exists:users,id',
+            'agrivet_id' => 'sometimes|exists:agrivets,id',
             'shop_name' => 'sometimes|string|max:150',
             'shop_description' => 'nullable|string',
             'shop_address' => 'nullable|string|max:255',
             'shop_lat' => 'nullable|numeric',
             'shop_long' => 'nullable|numeric',
             'contact_number' => 'nullable|string|max:20',
-            'logo_url' => 'nullable|string|max:255',
             'shop_status' => 'nullable|string|max:50',
         ]);
 
@@ -196,7 +204,16 @@ class ShopController extends Controller
             ], 422);
         }
 
-        $shop->update($request->all());
+        $shop->update($request->only([
+            'agrivet_id',
+            'shop_name',
+            'shop_description',
+            'shop_address',
+            'shop_lat',
+            'shop_long',
+            'contact_number',
+            'shop_status',
+        ]));
 
         return response()->json([
             'success' => true,
@@ -254,8 +271,8 @@ class ShopController extends Controller
 
         // Get shop data without the rating_reviews relationship
         $shopData = $shop->only([
-            'id', 'user_id', 'shop_name', 'shop_description', 'shop_address',
-            'shop_lat', 'shop_long', 'contact_number', 'logo_url',
+            'id', 'agrivet_id', 'shop_name', 'shop_description', 'shop_address',
+            'shop_lat', 'shop_long', 'contact_number',
             'average_rating', 'total_reviews', 'shop_status', 'created_at', 'updated_at'
         ]);
 

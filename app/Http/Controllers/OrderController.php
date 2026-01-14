@@ -447,7 +447,8 @@ class OrderController extends Controller
         // Update order status to Cancelled instead of deleting
         $order->update(['order_status' => 'Cancelled']);
 
-        // Load relationships
+        // Refresh the model to get updated values and load relationships
+        $order->refresh();
         $order->load(['user', 'orderDetail', 'orderItems']);
 
         // Create notification for order cancellation

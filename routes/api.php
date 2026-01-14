@@ -99,7 +99,7 @@ Route::delete('/notifications/clear-read', [NotificationController::class, 'clea
 // Shop routes
 Route::get('shops/search', [ShopController::class, 'search']);
 Route::get('shops', [ShopController::class, 'index']);
-Route::get('shops/user/{userId}', [ShopController::class, 'getByUserId']);
+Route::get('shops/agrivet/{agrivetId}', [ShopController::class, 'getByAgrivetId']);
 Route::get('shops/{id}/items', [ShopController::class, 'getShopWithItems']);
 Route::get('shops/{id}/reviews', [ShopController::class, 'getShopWithReviews']);
 Route::post('shops/{id}/reviews', [ShopController::class, 'storeReview']);

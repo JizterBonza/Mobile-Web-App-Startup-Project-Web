@@ -45,7 +45,8 @@ class Order extends Model
     protected $fillable = [
         'user_id',
         'order_detail_id',
-        'order_status_id',
+        'order_status',
+        'rider_id',
         'ordered_at',
     ];
 
@@ -86,12 +87,5 @@ class Order extends Model
         return $this->hasMany(OrderItem::class);
     }
 
-    /**
-     * Get the status of the order.
-     */
-    public function orderStatus()
-    {
-        return $this->belongsTo(OrderStatus::class, 'order_status_id');
-    }
 }
 
