@@ -3,20 +3,18 @@ import { useForm, router } from '@inertiajs/react'
 import AdminLayout from '../../../Layouts/AdminLayout'
 import AddressAutocomplete from '../../../Components/AddressAutocomplete'
 
-export default function StoreManagement({ auth, store, flash }) {
+export default function StoreManagement({ auth, shop, agrivet, flash }) {
   const [showModal, setShowModal] = useState(false)
   const [showModalAnimation, setShowModalAnimation] = useState(false)
 
   const form = useForm({
-    shop_name: store?.shop_name || '',
-    shop_description: store?.shop_description || '',
-    shop_address: store?.shop_address || '',
-    shop_lat: store?.shop_lat || '',
-    shop_long: store?.shop_long || '',
-    contact_number: store?.contact_number || '',
-    logo_url: store?.logo_url || '',
-    shop_status: store?.shop_status || 'active',
-    email: store?.email || '',
+    shop_name: shop?.shop_name || '',
+    shop_description: shop?.shop_description || '',
+    shop_address: shop?.shop_address || '',
+    shop_lat: shop?.shop_lat || '',
+    shop_long: shop?.shop_long || '',
+    contact_number: shop?.contact_number || '',
+    shop_status: shop?.shop_status || 'active',
   })
 
   useEffect(() => {
@@ -45,7 +43,7 @@ export default function StoreManagement({ auth, store, flash }) {
     form.post('/dashboard/vendor/store', {
       preserveScroll: true,
       onSuccess: () => {
-        form.reset()
+        // Form will be updated with new data from server
       },
     })
   }
@@ -83,13 +81,17 @@ export default function StoreManagement({ auth, store, flash }) {
         </div>
       )}
 
+      {/* Shop Information Card */}
       <div className="row">
         <div className="col-12">
-          <div className="card">
+          <div className="card card-primary card-outline">
             <div className="card-header">
-              <h3 className="card-title">Store Information</h3>
+              <h3 className="card-title">
+                <i className="fas fa-store mr-2"></i>
+                Shop Information
+              </h3>
               <div className="card-tools">
-                {store && (
+                {shop && (
                   <button
                     type="button"
                     className="btn btn-primary btn-sm"
@@ -98,34 +100,56 @@ export default function StoreManagement({ auth, store, flash }) {
                       setShowModalAnimation(false)
                     }}
                   >
-                    <i className="fas fa-edit"></i> Edit Agrivet Information
+                    <i className="fas fa-edit"></i> Edit Shop Information
                   </button>
                 )}
               </div>
             </div>
             <div className="card-body">
-              {store ? (
+              {shop ? (
                 <div className="row">
                   <div className="col-md-6">
-                    <p><strong>Store Name:</strong> {store.shop_name}</p>
-                    <p><strong>Description:</strong> {store.shop_description || 'N/A'}</p>
-                    <p><strong>Address:</strong> {store.shop_address || 'N/A'}</p>
-                    <p><strong>Contact Number:</strong> {store.contact_number || 'N/A'}</p>
-                    {store.email && <p><strong>Email:</strong> {store.email}</p>}
+                    <dl className="row">
+                      <dt className="col-sm-4">Shop Name:</dt>
+                      <dd className="col-sm-8">{shop.shop_name}</dd>
+                      
+                      <dt className="col-sm-4">Description:</dt>
+                      <dd className="col-sm-8">{shop.shop_description || <span className="text-muted">N/A</span>}</dd>
+                      
+                      <dt className="col-sm-4">Address:</dt>
+                      <dd className="col-sm-8">{shop.shop_address || <span className="text-muted">N/A</span>}</dd>
+                      
+                      <dt className="col-sm-4">Contact Number:</dt>
+                      <dd className="col-sm-8">{shop.contact_number || <span className="text-muted">N/A</span>}</dd>
+                    </dl>
                   </div>
                   <div className="col-md-6">
-                    <p><strong>Status:</strong> 
-                      <span className={`badge badge-${store.shop_status === 'active' ? 'success' : 'danger'} ml-2`}>
-                        {store.shop_status}
-                      </span>
-                    </p>
-                    <p><strong>Created:</strong> {new Date(store.created_at).toLocaleDateString()}</p>
-                    <p><strong>Last Updated:</strong> {new Date(store.updated_at).toLocaleDateString()}</p>
+                    <dl className="row">
+                      <dt className="col-sm-4">Status:</dt>
+                      <dd className="col-sm-8">
+                        <span className={`badge badge-${shop.shop_status === 'active' ? 'success' : 'danger'}`}>
+                          {shop.shop_status}
+                        </span>
+                      </dd>
+                      
+                      <dt className="col-sm-4">Rating:</dt>
+                      <dd className="col-sm-8">
+                        <i className="fas fa-star text-warning mr-1"></i>
+                        {parseFloat(shop.average_rating || 0).toFixed(1)} ({shop.total_reviews || 0} reviews)
+                      </dd>
+                      
+                      <dt className="col-sm-4">Created:</dt>
+                      <dd className="col-sm-8">{new Date(shop.created_at).toLocaleDateString()}</dd>
+                      
+                      <dt className="col-sm-4">Last Updated:</dt>
+                      <dd className="col-sm-8">{new Date(shop.updated_at).toLocaleDateString()}</dd>
+                    </dl>
                   </div>
                 </div>
               ) : (
                 <div className="text-center py-5">
-                  <p className="text-muted">No store information found. Please contact an administrator.</p>
+                  <i className="fas fa-store fa-3x text-muted mb-3"></i>
+                  <p className="text-muted">No shop information found. Please contact an administrator.</p>
                 </div>
               )}
             </div>
@@ -133,23 +157,93 @@ export default function StoreManagement({ auth, store, flash }) {
         </div>
       </div>
 
-      {/* Store Modal */}
+      {/* Agrivet Information Card (Read-Only) */}
+      {agrivet && (
+        <div className="row">
+          <div className="col-12">
+            <div className="card card-secondary card-outline">
+              <div className="card-header">
+                <h3 className="card-title">
+                  <i className="fas fa-building mr-2"></i>
+                  Agrivet Information
+                </h3>
+                <div className="card-tools">
+                  <span className="badge badge-secondary">
+                    <i className="fas fa-lock mr-1"></i> Read Only
+                  </span>
+                </div>
+              </div>
+              <div className="card-body">
+                <p className="text-muted mb-3">
+                  <small>
+                    <i className="fas fa-info-circle mr-1"></i>
+                    Your shop belongs to this Agrivet. Contact the administrator to update Agrivet information.
+                  </small>
+                </p>
+                <div className="row">
+                  <div className="col-md-6">
+                    <dl className="row">
+                      <dt className="col-sm-4">Agrivet Name:</dt>
+                      <dd className="col-sm-8">{agrivet.name}</dd>
+                      
+                      <dt className="col-sm-4">Description:</dt>
+                      <dd className="col-sm-8">{agrivet.description || <span className="text-muted">N/A</span>}</dd>
+                    </dl>
+                  </div>
+                  <div className="col-md-6">
+                    <dl className="row">
+                      <dt className="col-sm-4">Contact:</dt>
+                      <dd className="col-sm-8">{agrivet.contact_number || <span className="text-muted">N/A</span>}</dd>
+                      
+                      <dt className="col-sm-4">Email:</dt>
+                      <dd className="col-sm-8">{agrivet.email || <span className="text-muted">N/A</span>}</dd>
+                      
+                      <dt className="col-sm-4">Status:</dt>
+                      <dd className="col-sm-8">
+                        <span className={`badge badge-${agrivet.status === 'active' ? 'success' : 'danger'}`}>
+                          {agrivet.status}
+                        </span>
+                      </dd>
+                    </dl>
+                  </div>
+                </div>
+                {agrivet.logo_url && (
+                  <div className="text-center mt-3">
+                    <img 
+                      src={agrivet.logo_url} 
+                      alt={`${agrivet.name} Logo`} 
+                      className="img-thumbnail"
+                      style={{ maxHeight: '100px' }}
+                      onError={(e) => { e.target.style.display = 'none' }}
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Shop Modal */}
       {showModal && (
         <>
           <div className={`modal-backdrop fade ${showModalAnimation ? 'show' : ''}`} onClick={closeModal}></div>
           <div className={`modal fade ${showModalAnimation ? 'show' : ''} d-block`} tabIndex="-1" style={{ zIndex: 1050 }}>
             <div className="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
               <div className="modal-content">
-                <div className="modal-header">
-                  <h4 className="modal-title">Edit Agrivet Information</h4>
-                  <button type="button" className="close" onClick={closeModal}>
+                <div className="modal-header bg-primary text-white">
+                  <h4 className="modal-title">
+                    <i className="fas fa-edit mr-2"></i>
+                    Edit Shop Information
+                  </h4>
+                  <button type="button" className="close text-white" onClick={closeModal}>
                     <span>&times;</span>
                   </button>
                 </div>
                 <form onSubmit={handleSubmit}>
                   <div className="modal-body">
                     <div className="form-group">
-                      <label>Store Name <span className="text-danger">*</span></label>
+                      <label>Shop Name <span className="text-danger">*</span></label>
                       <input
                         type="text"
                         className={`form-control ${form.errors.shop_name ? 'is-invalid' : ''}`}
@@ -186,7 +280,7 @@ export default function StoreManagement({ auth, store, flash }) {
                             shop_long: place.lng || '',
                           })
                         }}
-                        placeholder="Enter store address"
+                        placeholder="Enter shop address"
                         error={form.errors.shop_address}
                       />
                     </div>
@@ -237,31 +331,6 @@ export default function StoreManagement({ auth, store, flash }) {
                       )}
                     </div>
                     <div className="form-group">
-                      <label>Email</label>
-                      <input
-                        type="email"
-                        className={`form-control ${form.errors.email ? 'is-invalid' : ''}`}
-                        value={form.data.email || ''}
-                        onChange={(e) => form.setData('email', e.target.value)}
-                      />
-                      {form.errors.email && (
-                        <div className="invalid-feedback">{form.errors.email}</div>
-                      )}
-                    </div>
-                    <div className="form-group">
-                      <label>Logo URL</label>
-                      <input
-                        type="text"
-                        className={`form-control ${form.errors.logo_url ? 'is-invalid' : ''}`}
-                        value={form.data.logo_url}
-                        onChange={(e) => form.setData('logo_url', e.target.value)}
-                        placeholder="https://example.com/logo.png"
-                      />
-                      {form.errors.logo_url && (
-                        <div className="invalid-feedback">{form.errors.logo_url}</div>
-                      )}
-                    </div>
-                    <div className="form-group">
                       <label>Status <span className="text-danger">*</span></label>
                       <select
                         className={`form-control ${form.errors.shop_status ? 'is-invalid' : ''}`}
@@ -282,7 +351,7 @@ export default function StoreManagement({ auth, store, flash }) {
                       Cancel
                     </button>
                     <button type="submit" className="btn btn-primary" disabled={form.processing}>
-                      {form.processing ? 'Saving...' : 'Save Store'}
+                      {form.processing ? 'Saving...' : 'Save Shop'}
                     </button>
                   </div>
                 </form>
@@ -294,4 +363,3 @@ export default function StoreManagement({ auth, store, flash }) {
     </AdminLayout>
   )
 }
-

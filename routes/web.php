@@ -97,9 +97,9 @@ Route::middleware(['auth', 'session.valid', 'user.type:admin'])->prefix('dashboa
     Route::delete('/{id}', [AgrivetController::class, 'destroy'])->name('destroy');
 });
 
-Route::get('/dashboard/vendor', function () {
-    return Inertia::render('Dashboard/VendorDashboard');
-})->middleware(['auth', 'session.valid', 'user.type:vendor'])->name('dashboard.vendor');
+Route::get('/dashboard/vendor', [VendorController::class, 'index'])
+    ->middleware(['auth', 'session.valid', 'user.type:vendor'])
+    ->name('dashboard.vendor');
 
 // Vendor Management Routes
 Route::middleware(['auth', 'session.valid', 'user.type:vendor'])->prefix('dashboard/vendor')->name('dashboard.vendor.')->group(function () {

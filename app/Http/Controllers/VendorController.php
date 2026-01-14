@@ -8,25 +8,117 @@ use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 use App\Models\User;
 use App\Models\Agrivet;
+use App\Models\Shop;
 use App\Models\Promotion;
 use App\Models\ProductImage;
 
 class VendorController extends Controller
 {
     /**
-     * Get the vendor's Agrivet.
+     * Get the vendor's Shop.
      */
-    private function getVendorAgrivet()
+    private function getVendorShop()
     {
         $vendor = auth()->user();
-        $vendor->load('agrivets');
+        $vendor->load('shops');
         
-        if ($vendor->agrivets->isEmpty()) {
+        if ($vendor->shops->isEmpty()) {
             return null;
         }
         
-        // Get the first active agrivet (vendors typically have one)
-        return $vendor->agrivets->first();
+        // Get the first active shop (vendors typically have one)
+        return $vendor->shops->first();
+    }
+
+    /**
+     * Get the vendor's Agrivet (via Shop relationship).
+     */
+    private function getVendorAgrivet()
+    {
+        $shop = $this->getVendorShop();
+        
+        if (!$shop) {
+            return null;
+        }
+        
+        return $shop->agrivet;
+    }
+
+    /**
+     * Get the vendor's Shop with its Agrivet loaded.
+     */
+    private function getVendorShopWithAgrivet()
+    {
+        $vendor = auth()->user();
+        $vendor->load(['shops.agrivet']);
+        
+        if ($vendor->shops->isEmpty()) {
+            return null;
+        }
+        
+        return $vendor->shops->first();
+    }
+
+    /**
+     * Display the vendor dashboard.
+     */
+    public function index()
+    {
+        $shop = $this->getVendorShopWithAgrivet();
+
+        if (!$shop) {
+            return Inertia::render('Dashboard/VendorDashboard', [
+                'shop' => null,
+                'agrivet' => null,
+                'stats' => [
+                    'new_orders' => 0,
+                    'products' => 0,
+                    'pending_reviews' => 0,
+                    'total_revenue' => 0,
+                ],
+            ]);
+        }
+
+        $agrivet = $shop->agrivet;
+
+        // Get dashboard stats
+        $productsCount = DB::table('items')
+            ->where('shop_id', $shop->id)
+            ->count();
+
+        $newOrdersCount = DB::table('order_items')
+            ->join('items', 'order_items.item_id', '=', 'items.id')
+            ->where('items.shop_id', $shop->id)
+            ->where('order_items.item_status', 'ordered')
+            ->count();
+
+        $totalRevenue = DB::table('order_items')
+            ->join('items', 'order_items.item_id', '=', 'items.id')
+            ->where('items.shop_id', $shop->id)
+            ->where('order_items.item_status', 'delivered')
+            ->sum(DB::raw('order_items.quantity * order_items.price_at_purchase'));
+
+        return Inertia::render('Dashboard/VendorDashboard', [
+            'shop' => [
+                'id' => $shop->id,
+                'shop_name' => $shop->shop_name,
+                'shop_description' => $shop->shop_description,
+                'shop_address' => $shop->shop_address,
+                'average_rating' => $shop->average_rating,
+                'total_reviews' => $shop->total_reviews,
+                'shop_status' => $shop->shop_status,
+            ],
+            'agrivet' => $agrivet ? [
+                'id' => $agrivet->id,
+                'name' => $agrivet->name,
+            ] : null,
+            'stats' => [
+                'new_orders' => $newOrdersCount,
+                'products' => $productsCount,
+                'pending_reviews' => 0, // Can be implemented later
+                'total_revenue' => $totalRevenue ?? 0,
+            ],
+        ]);
     }
 
     /**
@@ -34,28 +126,39 @@ class VendorController extends Controller
      */
     public function storeIndex()
     {
-        $agrivet = $this->getVendorAgrivet();
+        $shop = $this->getVendorShopWithAgrivet();
 
-        if (!$agrivet) {
+        if (!$shop) {
             return redirect()->route('dashboard.vendor')
-                ->with('error', 'You are not associated with any Agrivet. Please contact an administrator.');
+                ->with('error', 'You are not associated with any Shop. Please contact an administrator.');
         }
 
+        $agrivet = $shop->agrivet;
+
         return Inertia::render('Dashboard/Vendor/StoreManagement', [
-            'store' => [
-                'id' => $agrivet->id,
-                'shop_name' => $agrivet->name,
-                'shop_description' => $agrivet->description,
-                'shop_address' => $agrivet->address,
-                'shop_lat' => $agrivet->latitude,
-                'shop_long' => $agrivet->longitude,
-                'contact_number' => $agrivet->contact_number,
-                'logo_url' => $agrivet->logo_url,
-                'shop_status' => $agrivet->status,
-                'email' => $agrivet->email,
-                'created_at' => $agrivet->created_at,
-                'updated_at' => $agrivet->updated_at,
+            'shop' => [
+                'id' => $shop->id,
+                'shop_name' => $shop->shop_name,
+                'shop_description' => $shop->shop_description,
+                'shop_address' => $shop->shop_address,
+                'shop_lat' => $shop->shop_lat,
+                'shop_long' => $shop->shop_long,
+                'contact_number' => $shop->contact_number,
+                'average_rating' => $shop->average_rating,
+                'total_reviews' => $shop->total_reviews,
+                'shop_status' => $shop->shop_status,
+                'created_at' => $shop->created_at,
+                'updated_at' => $shop->updated_at,
             ],
+            'agrivet' => $agrivet ? [
+                'id' => $agrivet->id,
+                'name' => $agrivet->name,
+                'description' => $agrivet->description,
+                'contact_number' => $agrivet->contact_number,
+                'email' => $agrivet->email,
+                'logo_url' => $agrivet->logo_url,
+                'status' => $agrivet->status,
+            ] : null,
         ]);
     }
 
@@ -64,11 +167,11 @@ class VendorController extends Controller
      */
     public function storeUpdate(Request $request)
     {
-        $agrivet = $this->getVendorAgrivet();
+        $shop = $this->getVendorShop();
 
-        if (!$agrivet) {
+        if (!$shop) {
             return redirect()->back()
-                ->withErrors(['error' => 'You are not associated with any Agrivet.']);
+                ->withErrors(['error' => 'You are not associated with any Shop.']);
         }
 
         $request->validate([
@@ -78,25 +181,21 @@ class VendorController extends Controller
             'shop_lat' => 'nullable|numeric',
             'shop_long' => 'nullable|numeric',
             'contact_number' => 'nullable|string|max:20',
-            'logo_url' => 'nullable|string|max:255',
             'shop_status' => 'nullable|string|in:active,inactive',
-            'email' => 'nullable|string|email|max:255',
         ]);
 
-        $agrivet->update([
-            'name' => $request->shop_name,
-            'description' => $request->shop_description,
-            'address' => $request->shop_address,
-            'latitude' => $request->shop_lat,
-            'longitude' => $request->shop_long,
+        $shop->update([
+            'shop_name' => $request->shop_name,
+            'shop_description' => $request->shop_description,
+            'shop_address' => $request->shop_address,
+            'shop_lat' => $request->shop_lat,
+            'shop_long' => $request->shop_long,
             'contact_number' => $request->contact_number,
-            'logo_url' => $request->logo_url,
-            'status' => $request->shop_status ?? 'active',
-            'email' => $request->email ?? $agrivet->email,
+            'shop_status' => $request->shop_status ?? $shop->shop_status,
         ]);
 
         return redirect()->route('dashboard.vendor.store.index')
-            ->with('success', 'Store updated successfully.');
+            ->with('success', 'Shop information updated successfully.');
     }
 
     /**
@@ -104,86 +203,34 @@ class VendorController extends Controller
      */
     public function productsIndex()
     {
-        $agrivet = $this->getVendorAgrivet();
+        $shop = $this->getVendorShopWithAgrivet();
 
-        if (!$agrivet) {
+        if (!$shop) {
             return redirect()->route('dashboard.vendor')
-                ->with('error', 'You are not associated with any Agrivet.');
+                ->with('error', 'You are not associated with any Shop.');
         }
 
-        // Get products for this agrivet
-        // Note: If items table uses shop_id, we need to get shop_id from agrivet
-        // For now, assuming items will have agrivet_id or we'll use a mapping
-        // Check if items table has agrivet_id column
-        $hasAgrivetId = DB::getSchemaBuilder()->hasColumn('items', 'agrivet_id');
-        
-        if ($hasAgrivetId) {
-            $products = DB::table('items')
-                ->where('agrivet_id', $agrivet->id)
-                ->orderBy('created_at', 'desc')
-                ->get();
-        } else {
-            // Fallback: use shop_id if agrivet_id doesn't exist
-            // Get shop for this agrivet (check if shops table has agrivet_id)
-            $hasShopAgrivetId = DB::getSchemaBuilder()->hasColumn('shops', 'agrivet_id');
-            
-            if ($hasShopAgrivetId) {
-                $shop = DB::table('shops')
-                    ->where('agrivet_id', $agrivet->id)
-                    ->first();
-            } else {
-                // If shops doesn't have agrivet_id, find shop by vendor's user_id
-                $vendor = auth()->user();
-                $shop = DB::table('shops')
-                    ->where('user_id', $vendor->id)
-                    ->first();
-            }
-            
-            if (!$shop) {
-                // Create a shop record for this agrivet/vendor
-                $vendor = auth()->user();
-                $shopData = [
-                    'user_id' => $vendor->id,
-                    'shop_name' => $agrivet->name,
-                    'shop_status' => 'active',
-                    'created_at' => now(),
-                    'updated_at' => now(),
-                ];
-                
-                if ($hasShopAgrivetId) {
-                    $shopData['agrivet_id'] = $agrivet->id;
-                }
-                
-                $shopId = DB::table('shops')->insertGetId($shopData);
-                $shop = (object)['id' => $shopId];
-            }
-            
-            $products = DB::table('items')
-                ->where('shop_id', $shop->id)
-                ->orderBy('created_at', 'desc')
-                ->get();
-        }
+        // Get products for this shop
+        $products = DB::table('items')
+            ->where('shop_id', $shop->id)
+            ->orderBy('created_at', 'desc')
+            ->get();
 
         $products = $products->map(function ($item) {
             // Normalize image URLs to ensure they're properly formatted
             $images = $item->item_images ? json_decode($item->item_images, true) : [];
             if (!empty($images)) {
                 $images = array_map(function ($image) {
-                    // If URL doesn't start with /storage/, ensure it does
                     if (is_string($image)) {
-                        // Check if it's already a full URL (http/https)
                         if (preg_match('/^https?:\/\//', $image)) {
                             return $image;
                         }
-                        // Check if it starts with /storage/
                         if (strpos($image, '/storage/') === 0) {
                             return $image;
                         }
-                        // If it contains products/, prepend /storage/
                         if (strpos($image, 'products/') !== false) {
                             return '/storage/' . $image;
                         }
-                        // Otherwise, assume it's a filename and prepend full path
                         return '/storage/products/' . basename($image);
                     }
                     return $image;
@@ -207,8 +254,9 @@ class VendorController extends Controller
             ];
         });
 
-        // Get stock images for this agrivet
-        $stockImages = ProductImage::where('agrivet_id', $agrivet->id)
+        // Get stock images for this shop's agrivet (shared across shops in same agrivet)
+        $agrivet = $shop->agrivet;
+        $stockImages = $agrivet ? ProductImage::where('agrivet_id', $agrivet->id)
             ->where('status', 'active')
             ->orderBy('category')
             ->orderBy('name')
@@ -220,11 +268,14 @@ class VendorController extends Controller
                     'image_url' => $image->image_url,
                     'category' => $image->category,
                 ];
-            });
+            }) : collect([]);
 
         return Inertia::render('Dashboard/Vendor/Products', [
             'products' => $products,
-            'store' => ['id' => $agrivet->id],
+            'shop' => [
+                'id' => $shop->id,
+                'shop_name' => $shop->shop_name,
+            ],
             'stockImages' => $stockImages,
         ]);
     }
@@ -234,11 +285,11 @@ class VendorController extends Controller
      */
     public function productsStore(Request $request)
     {
-        $agrivet = $this->getVendorAgrivet();
+        $shop = $this->getVendorShop();
 
-        if (!$agrivet) {
+        if (!$shop) {
             return redirect()->back()
-                ->withErrors(['error' => 'You are not associated with any Agrivet.']);
+                ->withErrors(['error' => 'You are not associated with any Shop.']);
         }
 
         $request->validate([
@@ -271,7 +322,6 @@ class VendorController extends Controller
         if ($request->hasFile('item_images')) {
             foreach ($request->file('item_images') as $image) {
                 $path = $image->store('products', 'public');
-                // Generate URL: /storage/products/filename.jpg
                 $imagePaths[] = '/storage/' . $path;
             }
         }
@@ -285,9 +335,8 @@ class VendorController extends Controller
             }
         }
 
-        $hasAgrivetId = DB::getSchemaBuilder()->hasColumn('items', 'agrivet_id');
-        
         $insertData = [
+            'shop_id' => $shop->id,
             'item_name' => $request->item_name,
             'item_description' => $request->item_description,
             'item_price' => $request->item_price,
@@ -302,45 +351,6 @@ class VendorController extends Controller
             'updated_at' => now(),
         ];
 
-        if ($hasAgrivetId) {
-            $insertData['agrivet_id'] = $agrivet->id;
-        } else {
-            // Get or create shop for this agrivet
-            $hasShopAgrivetId = DB::getSchemaBuilder()->hasColumn('shops', 'agrivet_id');
-            
-            if ($hasShopAgrivetId) {
-                $shop = DB::table('shops')
-                    ->where('agrivet_id', $agrivet->id)
-                    ->first();
-            } else {
-                $vendor = auth()->user();
-                $shop = DB::table('shops')
-                    ->where('user_id', $vendor->id)
-                    ->first();
-            }
-            
-            if (!$shop) {
-                $vendor = auth()->user();
-                $shopData = [
-                    'user_id' => $vendor->id,
-                    'shop_name' => $agrivet->name,
-                    'shop_status' => 'active',
-                    'created_at' => now(),
-                    'updated_at' => now(),
-                ];
-                
-                if ($hasShopAgrivetId) {
-                    $shopData['agrivet_id'] = $agrivet->id;
-                }
-                
-                $shopId = DB::table('shops')->insertGetId($shopData);
-            } else {
-                $shopId = $shop->id;
-            }
-            
-            $insertData['shop_id'] = $shopId;
-        }
-
         DB::table('items')->insert($insertData);
 
         return redirect()->route('dashboard.vendor.products.index')
@@ -352,44 +362,17 @@ class VendorController extends Controller
      */
     public function productsUpdate(Request $request, $id)
     {
-        $agrivet = $this->getVendorAgrivet();
+        $shop = $this->getVendorShop();
 
-        if (!$agrivet) {
+        if (!$shop) {
             return redirect()->back()
-                ->withErrors(['error' => 'You are not associated with any Agrivet.']);
+                ->withErrors(['error' => 'You are not associated with any Shop.']);
         }
 
-        $hasAgrivetId = DB::getSchemaBuilder()->hasColumn('items', 'agrivet_id');
-        
-        if ($hasAgrivetId) {
-            $product = DB::table('items')
-                ->where('id', $id)
-                ->where('agrivet_id', $agrivet->id)
-                ->first();
-        } else {
-            $hasShopAgrivetId = DB::getSchemaBuilder()->hasColumn('shops', 'agrivet_id');
-            
-            if ($hasShopAgrivetId) {
-                $shop = DB::table('shops')
-                    ->where('agrivet_id', $agrivet->id)
-                    ->first();
-            } else {
-                $vendor = auth()->user();
-                $shop = DB::table('shops')
-                    ->where('user_id', $vendor->id)
-                    ->first();
-            }
-            
-            if (!$shop) {
-                return redirect()->back()
-                    ->withErrors(['error' => 'Store not found.']);
-            }
-            
-            $product = DB::table('items')
-                ->where('id', $id)
-                ->where('shop_id', $shop->id)
-                ->first();
-        }
+        $product = DB::table('items')
+            ->where('id', $id)
+            ->where('shop_id', $shop->id)
+            ->first();
 
         if (!$product) {
             return redirect()->back()
@@ -441,10 +424,8 @@ class VendorController extends Controller
         
         // Handle new file uploads
         if ($request->hasFile('item_images')) {
-            // Upload new images
             foreach ($request->file('item_images') as $image) {
                 $path = $image->store('products', 'public');
-                // Generate URL: /storage/products/filename.jpg
                 $finalImages[] = '/storage/' . $path;
             }
         }
@@ -484,44 +465,17 @@ class VendorController extends Controller
      */
     public function productsDestroy($id)
     {
-        $agrivet = $this->getVendorAgrivet();
+        $shop = $this->getVendorShop();
 
-        if (!$agrivet) {
+        if (!$shop) {
             return redirect()->back()
-                ->withErrors(['error' => 'You are not associated with any Agrivet.']);
+                ->withErrors(['error' => 'You are not associated with any Shop.']);
         }
 
-        $hasAgrivetId = DB::getSchemaBuilder()->hasColumn('items', 'agrivet_id');
-        
-        if ($hasAgrivetId) {
-            $product = DB::table('items')
-                ->where('id', $id)
-                ->where('agrivet_id', $agrivet->id)
-                ->first();
-        } else {
-            $hasShopAgrivetId = DB::getSchemaBuilder()->hasColumn('shops', 'agrivet_id');
-            
-            if ($hasShopAgrivetId) {
-                $shop = DB::table('shops')
-                    ->where('agrivet_id', $agrivet->id)
-                    ->first();
-            } else {
-                $vendor = auth()->user();
-                $shop = DB::table('shops')
-                    ->where('user_id', $vendor->id)
-                    ->first();
-            }
-            
-            if (!$shop) {
-                return redirect()->back()
-                    ->withErrors(['error' => 'Store not found.']);
-            }
-            
-            $product = DB::table('items')
-                ->where('id', $id)
-                ->where('shop_id', $shop->id)
-                ->first();
-        }
+        $product = DB::table('items')
+            ->where('id', $id)
+            ->where('shop_id', $shop->id)
+            ->first();
 
         if (!$product) {
             return redirect()->back()
@@ -541,49 +495,25 @@ class VendorController extends Controller
      */
     public function inventoryIndex()
     {
-        $agrivet = $this->getVendorAgrivet();
+        $shop = $this->getVendorShop();
 
-        if (!$agrivet) {
+        if (!$shop) {
             return redirect()->route('dashboard.vendor')
-                ->with('error', 'You are not associated with any Agrivet.');
+                ->with('error', 'You are not associated with any Shop.');
         }
 
-        $hasAgrivetId = DB::getSchemaBuilder()->hasColumn('items', 'agrivet_id');
-        
-        if ($hasAgrivetId) {
-            $inventory = DB::table('items')
-                ->where('agrivet_id', $agrivet->id)
-                ->select('id', 'item_name', 'item_quantity', 'item_price', 'category', 'item_status', 'sold_count')
-                ->orderBy('item_name', 'asc')
-                ->get();
-        } else {
-            $hasShopAgrivetId = DB::getSchemaBuilder()->hasColumn('shops', 'agrivet_id');
-            
-            if ($hasShopAgrivetId) {
-                $shop = DB::table('shops')
-                    ->where('agrivet_id', $agrivet->id)
-                    ->first();
-            } else {
-                $vendor = auth()->user();
-                $shop = DB::table('shops')
-                    ->where('user_id', $vendor->id)
-                    ->first();
-            }
-            
-            if (!$shop) {
-                $inventory = collect([]);
-            } else {
-                $inventory = DB::table('items')
-                    ->where('shop_id', $shop->id)
-                    ->select('id', 'item_name', 'item_quantity', 'item_price', 'category', 'item_status', 'sold_count')
-                    ->orderBy('item_name', 'asc')
-                    ->get();
-            }
-        }
+        $inventory = DB::table('items')
+            ->where('shop_id', $shop->id)
+            ->select('id', 'item_name', 'item_quantity', 'item_price', 'category', 'item_status', 'sold_count')
+            ->orderBy('item_name', 'asc')
+            ->get();
 
         return Inertia::render('Dashboard/Vendor/Inventory', [
             'inventory' => $inventory,
-            'store' => ['id' => $agrivet->id],
+            'shop' => [
+                'id' => $shop->id,
+                'shop_name' => $shop->shop_name,
+            ],
         ]);
     }
 
@@ -592,44 +522,17 @@ class VendorController extends Controller
      */
     public function inventoryUpdate(Request $request, $id)
     {
-        $agrivet = $this->getVendorAgrivet();
+        $shop = $this->getVendorShop();
 
-        if (!$agrivet) {
+        if (!$shop) {
             return redirect()->back()
-                ->withErrors(['error' => 'You are not associated with any Agrivet.']);
+                ->withErrors(['error' => 'You are not associated with any Shop.']);
         }
 
-        $hasAgrivetId = DB::getSchemaBuilder()->hasColumn('items', 'agrivet_id');
-        
-        if ($hasAgrivetId) {
-            $product = DB::table('items')
-                ->where('id', $id)
-                ->where('agrivet_id', $agrivet->id)
-                ->first();
-        } else {
-            $hasShopAgrivetId = DB::getSchemaBuilder()->hasColumn('shops', 'agrivet_id');
-            
-            if ($hasShopAgrivetId) {
-                $shop = DB::table('shops')
-                    ->where('agrivet_id', $agrivet->id)
-                    ->first();
-            } else {
-                $vendor = auth()->user();
-                $shop = DB::table('shops')
-                    ->where('user_id', $vendor->id)
-                    ->first();
-            }
-            
-            if (!$shop) {
-                return redirect()->back()
-                    ->withErrors(['error' => 'Store not found.']);
-            }
-            
-            $product = DB::table('items')
-                ->where('id', $id)
-                ->where('shop_id', $shop->id)
-                ->first();
-        }
+        $product = DB::table('items')
+            ->where('id', $id)
+            ->where('shop_id', $shop->id)
+            ->first();
 
         if (!$product) {
             return redirect()->back()
@@ -656,82 +559,37 @@ class VendorController extends Controller
      */
     public function ordersIndex()
     {
-        $agrivet = $this->getVendorAgrivet();
+        $shop = $this->getVendorShop();
 
-        if (!$agrivet) {
+        if (!$shop) {
             return redirect()->route('dashboard.vendor')
-                ->with('error', 'You are not associated with any Agrivet.');
+                ->with('error', 'You are not associated with any Shop.');
         }
 
-        $hasAgrivetId = DB::getSchemaBuilder()->hasColumn('items', 'agrivet_id');
-        
-        if ($hasAgrivetId) {
-            // Join through items to get agrivet_id
-            $orders = DB::table('order_items')
-                ->join('orders', 'order_items.order_id', '=', 'orders.id')
-                ->join('items', 'order_items.item_id', '=', 'items.id')
-                ->join('users', 'orders.user_id', '=', 'users.id')
-                ->join('user_details', 'users.user_detail_id', '=', 'user_details.id')
-                ->where('items.agrivet_id', $agrivet->id)
-                ->select(
-                    'order_items.id',
-                    'order_items.order_id',
-                    'order_items.item_id',
-                    'order_items.quantity',
-                    'order_items.price_at_purchase',
-                    'order_items.item_status',
-                    'order_items.created_at',
-                    'orders.order_status',
-                    'orders.ordered_at',
-                    'items.item_name',
-                    'user_details.first_name',
-                    'user_details.last_name',
-                    'user_details.email'
-                )
-                ->orderBy('order_items.created_at', 'desc')
-                ->get();
-        } else {
-            $hasShopAgrivetId = DB::getSchemaBuilder()->hasColumn('shops', 'agrivet_id');
-            
-            if ($hasShopAgrivetId) {
-                $shop = DB::table('shops')
-                    ->where('agrivet_id', $agrivet->id)
-                    ->first();
-            } else {
-                $vendor = auth()->user();
-                $shop = DB::table('shops')
-                    ->where('user_id', $vendor->id)
-                    ->first();
-            }
-            
-            if (!$shop) {
-                $orders = collect([]);
-            } else {
-                $orders = DB::table('order_items')
-                    ->join('orders', 'order_items.order_id', '=', 'orders.id')
-                    ->join('items', 'order_items.item_id', '=', 'items.id')
-                    ->join('users', 'orders.user_id', '=', 'users.id')
-                    ->join('user_details', 'users.user_detail_id', '=', 'user_details.id')
-                    ->where('order_items.shop_id', $shop->id)
-                    ->select(
-                        'order_items.id',
-                        'order_items.order_id',
-                        'order_items.item_id',
-                        'order_items.quantity',
-                        'order_items.price_at_purchase',
-                        'order_items.item_status',
-                        'order_items.created_at',
-                        'orders.order_status',
-                        'orders.ordered_at',
-                        'items.item_name',
-                        'user_details.first_name',
-                        'user_details.last_name',
-                        'user_details.email'
-                    )
-                    ->orderBy('order_items.created_at', 'desc')
-                    ->get();
-            }
-        }
+        // Get orders through items that belong to this shop
+        $orders = DB::table('order_items')
+            ->join('orders', 'order_items.order_id', '=', 'orders.id')
+            ->join('items', 'order_items.item_id', '=', 'items.id')
+            ->join('users', 'orders.user_id', '=', 'users.id')
+            ->join('user_details', 'users.user_detail_id', '=', 'user_details.id')
+            ->where('items.shop_id', $shop->id)
+            ->select(
+                'order_items.id',
+                'order_items.order_id',
+                'order_items.item_id',
+                'order_items.quantity',
+                'order_items.price_at_purchase',
+                'order_items.item_status',
+                'order_items.created_at',
+                'orders.order_status',
+                'orders.ordered_at',
+                'items.item_name',
+                'user_details.first_name',
+                'user_details.last_name',
+                'user_details.email'
+            )
+            ->orderBy('order_items.created_at', 'desc')
+            ->get();
 
         $orders = $orders->map(function ($order) {
             return [
@@ -753,7 +611,10 @@ class VendorController extends Controller
 
         return Inertia::render('Dashboard/Vendor/Orders', [
             'orders' => $orders,
-            'store' => ['id' => $agrivet->id],
+            'shop' => [
+                'id' => $shop->id,
+                'shop_name' => $shop->shop_name,
+            ],
         ]);
     }
 
@@ -762,45 +623,20 @@ class VendorController extends Controller
      */
     public function ordersUpdate(Request $request, $id)
     {
-        $agrivet = $this->getVendorAgrivet();
+        $shop = $this->getVendorShop();
 
-        if (!$agrivet) {
+        if (!$shop) {
             return redirect()->back()
-                ->withErrors(['error' => 'You are not associated with any Agrivet.']);
+                ->withErrors(['error' => 'You are not associated with any Shop.']);
         }
 
-        $hasAgrivetId = DB::getSchemaBuilder()->hasColumn('items', 'agrivet_id');
-        
-        if ($hasAgrivetId) {
-            $orderItem = DB::table('order_items')
-                ->join('items', 'order_items.item_id', '=', 'items.id')
-                ->where('order_items.id', $id)
-                ->where('items.agrivet_id', $agrivet->id)
-                ->first();
-        } else {
-            $hasShopAgrivetId = DB::getSchemaBuilder()->hasColumn('shops', 'agrivet_id');
-            
-            if ($hasShopAgrivetId) {
-                $shop = DB::table('shops')
-                    ->where('agrivet_id', $agrivet->id)
-                    ->first();
-            } else {
-                $vendor = auth()->user();
-                $shop = DB::table('shops')
-                    ->where('user_id', $vendor->id)
-                    ->first();
-            }
-            
-            if (!$shop) {
-                return redirect()->back()
-                    ->withErrors(['error' => 'Store not found.']);
-            }
-            
-            $orderItem = DB::table('order_items')
-                ->where('id', $id)
-                ->where('shop_id', $shop->id)
-                ->first();
-        }
+        // Verify the order item belongs to this shop's products
+        $orderItem = DB::table('order_items')
+            ->join('items', 'order_items.item_id', '=', 'items.id')
+            ->where('order_items.id', $id)
+            ->where('items.shop_id', $shop->id)
+            ->select('order_items.*')
+            ->first();
 
         if (!$orderItem) {
             return redirect()->back()
@@ -827,64 +663,29 @@ class VendorController extends Controller
      */
     public function payoutsIndex()
     {
-        $agrivet = $this->getVendorAgrivet();
+        $shop = $this->getVendorShop();
 
-        if (!$agrivet) {
+        if (!$shop) {
             return redirect()->route('dashboard.vendor')
-                ->with('error', 'You are not associated with any Agrivet.');
+                ->with('error', 'You are not associated with any Shop.');
         }
 
-        $hasAgrivetId = DB::getSchemaBuilder()->hasColumn('items', 'agrivet_id');
-        
-        if ($hasAgrivetId) {
-            $completedOrders = DB::table('order_items')
-                ->join('items', 'order_items.item_id', '=', 'items.id')
-                ->where('items.agrivet_id', $agrivet->id)
-                ->where('order_items.item_status', 'delivered')
-                ->join('orders', 'order_items.order_id', '=', 'orders.id')
-                ->select(
-                    'order_items.id',
-                    'order_items.order_id',
-                    'order_items.quantity',
-                    'order_items.price_at_purchase',
-                    'order_items.created_at',
-                    'orders.ordered_at'
-                )
-                ->orderBy('order_items.created_at', 'desc')
-                ->get();
-        } else {
-            $hasShopAgrivetId = DB::getSchemaBuilder()->hasColumn('shops', 'agrivet_id');
-            
-            if ($hasShopAgrivetId) {
-                $shop = DB::table('shops')
-                    ->where('agrivet_id', $agrivet->id)
-                    ->first();
-            } else {
-                $vendor = auth()->user();
-                $shop = DB::table('shops')
-                    ->where('user_id', $vendor->id)
-                    ->first();
-            }
-            
-            if (!$shop) {
-                $completedOrders = collect([]);
-            } else {
-                $completedOrders = DB::table('order_items')
-                    ->where('order_items.shop_id', $shop->id)
-                    ->where('order_items.item_status', 'delivered')
-                    ->join('orders', 'order_items.order_id', '=', 'orders.id')
-                    ->select(
-                        'order_items.id',
-                        'order_items.order_id',
-                        'order_items.quantity',
-                        'order_items.price_at_purchase',
-                        'order_items.created_at',
-                        'orders.ordered_at'
-                    )
-                    ->orderBy('order_items.created_at', 'desc')
-                    ->get();
-            }
-        }
+        // Get completed orders through items that belong to this shop
+        $completedOrders = DB::table('order_items')
+            ->join('items', 'order_items.item_id', '=', 'items.id')
+            ->where('items.shop_id', $shop->id)
+            ->where('order_items.item_status', 'delivered')
+            ->join('orders', 'order_items.order_id', '=', 'orders.id')
+            ->select(
+                'order_items.id',
+                'order_items.order_id',
+                'order_items.quantity',
+                'order_items.price_at_purchase',
+                'order_items.created_at',
+                'orders.ordered_at'
+            )
+            ->orderBy('order_items.created_at', 'desc')
+            ->get();
 
         $completedOrders = $completedOrders->map(function ($order) {
             return [
@@ -906,7 +707,10 @@ class VendorController extends Controller
             'payouts' => $completedOrders,
             'totalRevenue' => $totalRevenue,
             'totalOrders' => $totalOrders,
-            'store' => ['id' => $agrivet->id],
+            'shop' => [
+                'id' => $shop->id,
+                'shop_name' => $shop->shop_name,
+            ],
         ]);
     }
 
@@ -915,54 +719,28 @@ class VendorController extends Controller
      */
     public function promotionsIndex()
     {
-        $agrivet = $this->getVendorAgrivet();
+        $shop = $this->getVendorShopWithAgrivet();
 
-        if (!$agrivet) {
+        if (!$shop) {
             return redirect()->route('dashboard.vendor')
-                ->with('error', 'You are not associated with any Agrivet.');
+                ->with('error', 'You are not associated with any Shop.');
         }
 
-        // Get promotions for this agrivet
-        $promotions = DB::table('promotions')
+        $agrivet = $shop->agrivet;
+
+        // Get promotions for this shop's agrivet (promotions are shared at agrivet level)
+        $promotions = $agrivet ? DB::table('promotions')
             ->where('agrivet_id', $agrivet->id)
             ->orderBy('created_at', 'desc')
-            ->get();
+            ->get() : collect([]);
 
-        // Get products for the dropdown (for applicable items and bundles)
-        $hasAgrivetId = DB::getSchemaBuilder()->hasColumn('items', 'agrivet_id');
-        
-        if ($hasAgrivetId) {
-            $products = DB::table('items')
-                ->where('agrivet_id', $agrivet->id)
-                ->where('item_status', 'active')
-                ->select('id', 'item_name', 'item_price')
-                ->orderBy('item_name', 'asc')
-                ->get();
-        } else {
-            $hasShopAgrivetId = DB::getSchemaBuilder()->hasColumn('shops', 'agrivet_id');
-            
-            if ($hasShopAgrivetId) {
-                $shop = DB::table('shops')
-                    ->where('agrivet_id', $agrivet->id)
-                    ->first();
-            } else {
-                $vendor = auth()->user();
-                $shop = DB::table('shops')
-                    ->where('user_id', $vendor->id)
-                    ->first();
-            }
-            
-            if (!$shop) {
-                $products = collect([]);
-            } else {
-                $products = DB::table('items')
-                    ->where('shop_id', $shop->id)
-                    ->where('item_status', 'active')
-                    ->select('id', 'item_name', 'item_price')
-                    ->orderBy('item_name', 'asc')
-                    ->get();
-            }
-        }
+        // Get products for this shop (for applicable items and bundles)
+        $products = DB::table('items')
+            ->where('shop_id', $shop->id)
+            ->where('item_status', 'active')
+            ->select('id', 'item_name', 'item_price')
+            ->orderBy('item_name', 'asc')
+            ->get();
 
         $promotions = $promotions->map(function ($promo) {
             return [
@@ -994,7 +772,14 @@ class VendorController extends Controller
             'promotions' => $promotions,
             'products' => $products,
             'promotionTypes' => Promotion::getTypes(),
-            'store' => ['id' => $agrivet->id],
+            'shop' => [
+                'id' => $shop->id,
+                'shop_name' => $shop->shop_name,
+            ],
+            'agrivet' => $agrivet ? [
+                'id' => $agrivet->id,
+                'name' => $agrivet->name,
+            ] : null,
         ]);
     }
 
@@ -1003,11 +788,18 @@ class VendorController extends Controller
      */
     public function promotionsStore(Request $request)
     {
-        $agrivet = $this->getVendorAgrivet();
+        $shop = $this->getVendorShopWithAgrivet();
+
+        if (!$shop) {
+            return redirect()->back()
+                ->withErrors(['error' => 'You are not associated with any Shop.']);
+        }
+
+        $agrivet = $shop->agrivet;
 
         if (!$agrivet) {
             return redirect()->back()
-                ->withErrors(['error' => 'You are not associated with any Agrivet.']);
+                ->withErrors(['error' => 'Your shop is not associated with any Agrivet.']);
         }
 
         $request->validate([
@@ -1075,11 +867,18 @@ class VendorController extends Controller
      */
     public function promotionsUpdate(Request $request, $id)
     {
-        $agrivet = $this->getVendorAgrivet();
+        $shop = $this->getVendorShopWithAgrivet();
+
+        if (!$shop) {
+            return redirect()->back()
+                ->withErrors(['error' => 'You are not associated with any Shop.']);
+        }
+
+        $agrivet = $shop->agrivet;
 
         if (!$agrivet) {
             return redirect()->back()
-                ->withErrors(['error' => 'You are not associated with any Agrivet.']);
+                ->withErrors(['error' => 'Your shop is not associated with any Agrivet.']);
         }
 
         $promotion = DB::table('promotions')
@@ -1144,11 +943,18 @@ class VendorController extends Controller
      */
     public function promotionsDestroy($id)
     {
-        $agrivet = $this->getVendorAgrivet();
+        $shop = $this->getVendorShopWithAgrivet();
+
+        if (!$shop) {
+            return redirect()->back()
+                ->withErrors(['error' => 'You are not associated with any Shop.']);
+        }
+
+        $agrivet = $shop->agrivet;
 
         if (!$agrivet) {
             return redirect()->back()
-                ->withErrors(['error' => 'You are not associated with any Agrivet.']);
+                ->withErrors(['error' => 'Your shop is not associated with any Agrivet.']);
         }
 
         $promotion = DB::table('promotions')

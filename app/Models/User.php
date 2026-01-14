@@ -8,6 +8,7 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
 use App\Models\Agrivet;
+use App\Models\Shop;
 use App\Models\Notification;
 
 class User extends Authenticatable
@@ -94,7 +95,17 @@ class User extends Authenticatable
     public function agrivets()
     {
         return $this->belongsToMany(Agrivet::class, 'agrivet_vendor', 'vendor_id', 'agrivet_id')
-            ->withPivot('status')
+            ->withPivot('status', 'shop_id')
+            ->withTimestamps();
+    }
+
+    /**
+     * Get the shops associated with this vendor through the agrivet_vendor pivot.
+     */
+    public function shops()
+    {
+        return $this->belongsToMany(Shop::class, 'agrivet_vendor', 'vendor_id', 'shop_id')
+            ->withPivot('agrivet_id', 'status')
             ->withTimestamps();
     }
 

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useForm, router } from '@inertiajs/react'
 import AdminLayout from '../../../Layouts/AdminLayout'
 
-export default function Orders({ auth, orders = [], store, flash }) {
+export default function Orders({ auth, orders = [], shop, flash }) {
   const [showStatusModal, setShowStatusModal] = useState(false)
   const [showStatusModalAnimation, setShowStatusModalAnimation] = useState(false)
   const [selectedOrder, setSelectedOrder] = useState(null)

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useForm, router } from '@inertiajs/react'
 import AdminLayout from '../../../Layouts/AdminLayout'
 
-export default function Inventory({ auth, inventory = [], store, flash }) {
+export default function Inventory({ auth, inventory = [], shop, flash }) {
   const [showEditModal, setShowEditModal] = useState(false)
   const [showEditModalAnimation, setShowEditModalAnimation] = useState(false)
   const [selectedItem, setSelectedItem] = useState(null)

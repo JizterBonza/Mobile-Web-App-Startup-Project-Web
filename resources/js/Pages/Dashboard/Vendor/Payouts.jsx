@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { router } from '@inertiajs/react'
 import AdminLayout from '../../../Layouts/AdminLayout'
 
-export default function Payouts({ auth, payouts = [], totalRevenue = 0, totalOrders = 0, store, flash }) {
+export default function Payouts({ auth, payouts = [], totalRevenue = 0, totalOrders = 0, shop, flash }) {
   return (
     <AdminLayout auth={auth} title="Payouts">
       {/* Flash Messages */}

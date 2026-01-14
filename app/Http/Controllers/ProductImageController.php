@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\ProductImage;
+use App\Models\Shop;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -11,18 +12,18 @@ use Inertia\Inertia;
 class ProductImageController extends Controller
 {
     /**
-     * Get the vendor's Agrivet.
+     * Get the vendor's Shop with Agrivet loaded.
      */
-    private function getVendorAgrivet()
+    private function getVendorShopWithAgrivet()
     {
         $vendor = auth()->user();
-        $vendor->load('agrivets');
+        $vendor->load(['shops.agrivet']);
         
-        if ($vendor->agrivets->isEmpty()) {
+        if ($vendor->shops->isEmpty()) {
             return null;
         }
         
-        return $vendor->agrivets->first();
+        return $vendor->shops->first();
     }
 
     /**
@@ -30,14 +31,17 @@ class ProductImageController extends Controller
      */
     public function index()
     {
-        $agrivet = $this->getVendorAgrivet();
+        $shop = $this->getVendorShopWithAgrivet();
 
-        if (!$agrivet) {
+        if (!$shop) {
             return redirect()->route('dashboard.vendor')
-                ->with('error', 'You are not associated with any Agrivet.');
+                ->with('error', 'You are not associated with any Shop.');
         }
 
-        $productImages = ProductImage::where('agrivet_id', $agrivet->id)
+        $agrivet = $shop->agrivet;
+
+        // Product images are shared at the Agrivet level
+        $productImages = $agrivet ? ProductImage::where('agrivet_id', $agrivet->id)
             ->orderBy('created_at', 'desc')
             ->get()
             ->map(function ($image) {
@@ -50,11 +54,18 @@ class ProductImageController extends Controller
                     'created_at' => $image->created_at->format('Y-m-d H:i:s'),
                     'updated_at' => $image->updated_at->format('Y-m-d H:i:s'),
                 ];
-            });
+            }) : collect([]);
 
         return Inertia::render('Dashboard/Vendor/ProductImages', [
             'productImages' => $productImages,
-            'store' => ['id' => $agrivet->id],
+            'shop' => [
+                'id' => $shop->id,
+                'shop_name' => $shop->shop_name,
+            ],
+            'agrivet' => $agrivet ? [
+                'id' => $agrivet->id,
+                'name' => $agrivet->name,
+            ] : null,
         ]);
     }
 
@@ -63,11 +74,18 @@ class ProductImageController extends Controller
      */
     public function store(Request $request)
     {
-        $agrivet = $this->getVendorAgrivet();
+        $shop = $this->getVendorShopWithAgrivet();
+
+        if (!$shop) {
+            return redirect()->back()
+                ->withErrors(['error' => 'You are not associated with any Shop.']);
+        }
+
+        $agrivet = $shop->agrivet;
 
         if (!$agrivet) {
             return redirect()->back()
-                ->withErrors(['error' => 'You are not associated with any Agrivet.']);
+                ->withErrors(['error' => 'Your shop is not associated with any Agrivet.']);
         }
 
         $request->validate([
@@ -101,11 +119,18 @@ class ProductImageController extends Controller
      */
     public function update(Request $request, $id)
     {
-        $agrivet = $this->getVendorAgrivet();
+        $shop = $this->getVendorShopWithAgrivet();
+
+        if (!$shop) {
+            return redirect()->back()
+                ->withErrors(['error' => 'You are not associated with any Shop.']);
+        }
+
+        $agrivet = $shop->agrivet;
 
         if (!$agrivet) {
             return redirect()->back()
-                ->withErrors(['error' => 'You are not associated with any Agrivet.']);
+                ->withErrors(['error' => 'Your shop is not associated with any Agrivet.']);
         }
 
         $productImage = ProductImage::where('id', $id)
@@ -156,11 +181,18 @@ class ProductImageController extends Controller
      */
     public function destroy($id)
     {
-        $agrivet = $this->getVendorAgrivet();
+        $shop = $this->getVendorShopWithAgrivet();
+
+        if (!$shop) {
+            return redirect()->back()
+                ->withErrors(['error' => 'You are not associated with any Shop.']);
+        }
+
+        $agrivet = $shop->agrivet;
 
         if (!$agrivet) {
             return redirect()->back()
-                ->withErrors(['error' => 'You are not associated with any Agrivet.']);
+                ->withErrors(['error' => 'Your shop is not associated with any Agrivet.']);
         }
 
         $productImage = ProductImage::where('id', $id)
@@ -191,12 +223,22 @@ class ProductImageController extends Controller
      */
     public function getActiveImages()
     {
-        $agrivet = $this->getVendorAgrivet();
+        $shop = $this->getVendorShopWithAgrivet();
+
+        if (!$shop) {
+            return response()->json([
+                'success' => false,
+                'message' => 'You are not associated with any Shop.',
+                'images' => [],
+            ]);
+        }
+
+        $agrivet = $shop->agrivet;
 
         if (!$agrivet) {
             return response()->json([
                 'success' => false,
-                'message' => 'You are not associated with any Agrivet.',
+                'message' => 'Your shop is not associated with any Agrivet.',
                 'images' => [],
             ]);
         }
