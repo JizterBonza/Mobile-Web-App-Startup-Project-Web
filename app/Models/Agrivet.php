@@ -4,24 +4,17 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use App\Models\User;
+use App\Models\Shop;
 
 class Agrivet extends Model
 {
     protected $fillable = [
         'name',
         'description',
-        'address',
-        'latitude',
-        'longitude',
         'contact_number',
         'email',
         'logo_url',
         'status',
-    ];
-
-    protected $casts = [
-        'latitude' => 'decimal:7',
-        'longitude' => 'decimal:7',
     ];
 
     /**
@@ -32,5 +25,21 @@ class Agrivet extends Model
         return $this->belongsToMany(User::class, 'agrivet_vendor', 'agrivet_id', 'vendor_id')
             ->withPivot('status')
             ->withTimestamps();
+    }
+
+    /**
+     * Get the shops associated with this agrivet.
+     */
+    public function shops()
+    {
+        return $this->hasMany(Shop::class);
+    }
+
+    /**
+     * Get the primary shop associated with this agrivet.
+     */
+    public function shop()
+    {
+        return $this->hasOne(Shop::class);
     }
 }

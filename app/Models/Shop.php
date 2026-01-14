@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use App\Models\User;
 
 class Shop extends Model
 {
@@ -22,14 +23,13 @@ class Shop extends Model
      * @var array<int, string>
      */
     protected $fillable = [
-        'user_id',
+        'agrivet_id',
         'shop_name',
         'shop_description',
         'shop_address',
         'shop_lat',
         'shop_long',
         'contact_number',
-        'logo_url',
         'average_rating',
         'total_reviews',
         'shop_status',
@@ -53,11 +53,11 @@ class Shop extends Model
     }
 
     /**
-     * Get the user that owns the shop.
+     * Get the agrivet that owns the shop.
      */
-    public function user()
+    public function agrivet()
     {
-        return $this->belongsTo(User::class);
+        return $this->belongsTo(Agrivet::class);
     }
 
     /**
@@ -74,6 +74,16 @@ class Shop extends Model
     public function ratingReviews()
     {
         return $this->hasMany(RatingReview::class);
+    }
+
+    /**
+     * Get the vendors (users) associated with this shop.
+     */
+    public function vendors()
+    {
+        return $this->belongsToMany(User::class, 'agrivet_vendor', 'shop_id', 'vendor_id')
+            ->withPivot('agrivet_id', 'status')
+            ->withTimestamps();
     }
 }
 

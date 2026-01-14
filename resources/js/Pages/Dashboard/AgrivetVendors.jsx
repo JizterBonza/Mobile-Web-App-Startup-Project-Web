@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useForm, router, Link } from '@inertiajs/react'
 import AdminLayout from '../../Layouts/AdminLayout'
 
-export default function AgrivetVendors({ auth, agrivet, vendors = [], availableVendors = [], flash }) {
+export default function AgrivetVendors({ auth, agrivet, shop, vendors = [], availableVendors = [], flash }) {
   const [showAddModal, setShowAddModal] = useState(false)
   const [showAddModalAnimation, setShowAddModalAnimation] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
@@ -135,7 +135,7 @@ export default function AgrivetVendors({ auth, agrivet, vendors = [], availableV
 
   const handleAddVendor = (e) => {
     e.preventDefault()
-    addForm.post(`${getBaseRoute()}/${agrivet.id}/vendors`, {
+    addForm.post(`${getBaseRoute()}/${agrivet.id}/shops/${shop.id}/vendors`, {
       preserveScroll: true,
       onSuccess: () => {
         addForm.reset()
@@ -162,7 +162,7 @@ export default function AgrivetVendors({ auth, agrivet, vendors = [], availableV
 
   const handleUpdateVendor = (e) => {
     e.preventDefault()
-    editForm.put(`${getBaseRoute()}/${agrivet.id}/vendors/${selectedVendor.id}`, {
+    editForm.put(`${getBaseRoute()}/${agrivet.id}/shops/${shop.id}/vendors/${selectedVendor.id}`, {
       preserveScroll: true,
       onSuccess: () => {
         closeEditModal()
@@ -179,7 +179,7 @@ export default function AgrivetVendors({ auth, agrivet, vendors = [], availableV
 
   const confirmRemoveVendor = () => {
     if (vendorToRemove) {
-      router.delete(`${getBaseRoute()}/${agrivet.id}/vendors/${vendorToRemove.id}`, {
+      router.delete(`${getBaseRoute()}/${agrivet.id}/shops/${shop.id}/vendors/${vendorToRemove.id}`, {
         preserveScroll: true,
         onSuccess: () => {
           closeRemoveModal()
@@ -190,7 +190,7 @@ export default function AgrivetVendors({ auth, agrivet, vendors = [], availableV
 
   const handleAddExistingVendor = (e) => {
     e.preventDefault()
-    addExistingForm.post(`${getBaseRoute()}/${agrivet.id}/vendors/add-existing`, {
+    addExistingForm.post(`${getBaseRoute()}/${agrivet.id}/shops/${shop.id}/vendors/add-existing`, {
       preserveScroll: true,
       onSuccess: () => {
         addExistingForm.reset()
@@ -206,7 +206,7 @@ export default function AgrivetVendors({ auth, agrivet, vendors = [], availableV
   }
 
   return (
-    <AdminLayout auth={auth} title={`Vendors - ${agrivet.name}`}>
+    <AdminLayout auth={auth} title={`Vendors - ${shop.shop_name} (${agrivet.name})`}>
       {/* Flash Messages */}
       {flash?.success && (
         <div className="alert alert-success alert-dismissible fade show" role="alert">
@@ -228,8 +228,8 @@ export default function AgrivetVendors({ auth, agrivet, vendors = [], availableV
 
       <div className="row mb-3">
         <div className="col-12">
-          <Link href={getBaseRoute()} className="btn btn-secondary btn-sm">
-            <i className="fas fa-arrow-left"></i> Back to Agrivets
+          <Link href={`${getBaseRoute()}/${agrivet.id}/shops`} className="btn btn-secondary btn-sm">
+            <i className="fas fa-arrow-left"></i> Back to Shops
           </Link>
         </div>
       </div>
@@ -238,7 +238,7 @@ export default function AgrivetVendors({ auth, agrivet, vendors = [], availableV
         <div className="col-12">
           <div className="card">
             <div className="card-header">
-              <h3 className="card-title">Vendors for {agrivet.name}</h3>
+              <h3 className="card-title">Vendors for {shop.shop_name}</h3>
               <div className="card-tools">
                 <button
                   type="button"
@@ -668,10 +668,10 @@ export default function AgrivetVendors({ auth, agrivet, vendors = [], availableV
                 <div className="modal-body">
                   <p>
                     Are you sure you want to remove{' '}
-                    <strong>{vendorToRemove.first_name} {vendorToRemove.middle_name ? vendorToRemove.middle_name + ' ' : ''}{vendorToRemove.last_name}</strong> from this Agrivet?
+                    <strong>{vendorToRemove.first_name} {vendorToRemove.middle_name ? vendorToRemove.middle_name + ' ' : ''}{vendorToRemove.last_name}</strong> from this Shop?
                   </p>
                   <p className="text-muted mb-0">
-                    This will set the vendor's status to "Inactive" for this Agrivet. The vendor will still exist in the system.
+                    This will set the vendor's status to "Inactive" for this Shop. The vendor will still exist in the system.
                   </p>
                 </div>
                 <div className="modal-footer">

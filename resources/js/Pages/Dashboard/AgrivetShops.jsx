@@ -1,33 +1,36 @@
 import { useState, useEffect } from 'react'
 import { useForm, router, Link } from '@inertiajs/react'
 import AdminLayout from '../../Layouts/AdminLayout'
+import AddressAutocomplete from '../../Components/AddressAutocomplete'
 
-export default function AgrivetManagement({ auth, agrivets = [], flash }) {
+export default function AgrivetShops({ auth, agrivet, shops = [], flash }) {
   const [showAddModal, setShowAddModal] = useState(false)
   const [showAddModalAnimation, setShowAddModalAnimation] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
   const [showEditModalAnimation, setShowEditModalAnimation] = useState(false)
   const [showRemoveModal, setShowRemoveModal] = useState(false)
   const [showRemoveModalAnimation, setShowRemoveModalAnimation] = useState(false)
-  const [selectedAgrivet, setSelectedAgrivet] = useState(null)
-  const [agrivetToRemove, setAgrivetToRemove] = useState(null)
+  const [selectedShop, setSelectedShop] = useState(null)
+  const [shopToRemove, setShopToRemove] = useState(null)
 
   const addForm = useForm({
-    name: '',
-    description: '',
+    shop_name: '',
+    shop_description: '',
+    shop_address: '',
+    shop_lat: '',
+    shop_long: '',
     contact_number: '',
-    email: '',
-    logo_url: '',
-    status: 'active',
+    shop_status: 'active',
   })
 
   const editForm = useForm({
-    name: '',
-    description: '',
+    shop_name: '',
+    shop_description: '',
+    shop_address: '',
+    shop_lat: '',
+    shop_long: '',
     contact_number: '',
-    email: '',
-    logo_url: '',
-    status: 'active',
+    shop_status: 'active',
   })
 
   // Handle add modal animation
@@ -70,7 +73,7 @@ export default function AgrivetManagement({ auth, agrivets = [], flash }) {
     setShowEditModalAnimation(false)
     setTimeout(() => {
       setShowEditModal(false)
-      setSelectedAgrivet(null)
+      setSelectedShop(null)
       editForm.reset()
     }, 300)
   }
@@ -79,7 +82,7 @@ export default function AgrivetManagement({ auth, agrivets = [], flash }) {
     setShowRemoveModalAnimation(false)
     setTimeout(() => {
       setShowRemoveModal(false)
-      setAgrivetToRemove(null)
+      setShopToRemove(null)
     }, 300)
   }
 
@@ -91,7 +94,7 @@ export default function AgrivetManagement({ auth, agrivets = [], flash }) {
       closeRemoveModal()
       addForm.reset()
       editForm.reset()
-      setAgrivetToRemove(null)
+      setShopToRemove(null)
     }
   }, [flash])
 
@@ -102,9 +105,9 @@ export default function AgrivetManagement({ auth, agrivets = [], flash }) {
       : '/dashboard/super-admin/agrivets'
   }
 
-  const handleAddAgrivet = (e) => {
+  const handleAddShop = (e) => {
     e.preventDefault()
-    addForm.post(getBaseRoute(), {
+    addForm.post(`${getBaseRoute()}/${agrivet.id}/shops`, {
       preserveScroll: true,
       onSuccess: () => {
         addForm.reset()
@@ -112,23 +115,24 @@ export default function AgrivetManagement({ auth, agrivets = [], flash }) {
     })
   }
 
-  const handleEditAgrivet = (agrivet) => {
-    setSelectedAgrivet(agrivet)
+  const handleEditShop = (shop) => {
+    setSelectedShop(shop)
     editForm.setData({
-      name: agrivet.name,
-      description: agrivet.description || '',
-      contact_number: agrivet.contact_number || '',
-      email: agrivet.email || '',
-      logo_url: agrivet.logo_url || '',
-      status: agrivet.status,
+      shop_name: shop.shop_name,
+      shop_description: shop.shop_description || '',
+      shop_address: shop.shop_address || '',
+      shop_lat: shop.shop_lat || '',
+      shop_long: shop.shop_long || '',
+      contact_number: shop.contact_number || '',
+      shop_status: shop.shop_status || 'active',
     })
     setShowEditModal(true)
     setShowEditModalAnimation(false)
   }
 
-  const handleUpdateAgrivet = (e) => {
+  const handleUpdateShop = (e) => {
     e.preventDefault()
-    editForm.put(`${getBaseRoute()}/${selectedAgrivet.id}`, {
+    editForm.put(`${getBaseRoute()}/${agrivet.id}/shops/${selectedShop.id}`, {
       preserveScroll: true,
       onSuccess: () => {
         closeEditModal()
@@ -136,16 +140,16 @@ export default function AgrivetManagement({ auth, agrivets = [], flash }) {
     })
   }
 
-  const handleDeactivateAgrivet = (agrivetId) => {
-    const agrivet = agrivets.find(a => a.id === agrivetId)
-    setAgrivetToRemove(agrivet)
+  const handleRemoveShop = (shopId) => {
+    const shop = shops.find(s => s.id === shopId)
+    setShopToRemove(shop)
     setShowRemoveModal(true)
     setShowRemoveModalAnimation(false)
   }
 
-  const confirmRemoveAgrivet = () => {
-    if (agrivetToRemove) {
-      router.delete(`${getBaseRoute()}/${agrivetToRemove.id}`, {
+  const confirmRemoveShop = () => {
+    if (shopToRemove) {
+      router.delete(`${getBaseRoute()}/${agrivet.id}/shops/${shopToRemove.id}`, {
         preserveScroll: true,
         onSuccess: () => {
           closeRemoveModal()
@@ -162,7 +166,7 @@ export default function AgrivetManagement({ auth, agrivets = [], flash }) {
   }
 
   return (
-    <AdminLayout auth={auth} title="Agrivet Management">
+    <AdminLayout auth={auth} title={`Shops - ${agrivet.name}`}>
       {/* Flash Messages */}
       {flash?.success && (
         <div className="alert alert-success alert-dismissible fade show" role="alert">
@@ -182,11 +186,19 @@ export default function AgrivetManagement({ auth, agrivets = [], flash }) {
         </div>
       )}
 
+      <div className="row mb-3">
+        <div className="col-12">
+          <Link href={getBaseRoute()} className="btn btn-secondary btn-sm">
+            <i className="fas fa-arrow-left"></i> Back to Agrivets
+          </Link>
+        </div>
+      </div>
+
       <div className="row">
         <div className="col-12">
           <div className="card">
             <div className="card-header">
-              <h3 className="card-title">Agrivet List</h3>
+              <h3 className="card-title">Shops for {agrivet.name}</h3>
               <div className="card-tools">
                 <button
                   type="button"
@@ -196,7 +208,7 @@ export default function AgrivetManagement({ auth, agrivets = [], flash }) {
                     setShowAddModalAnimation(false)
                   }}
                 >
-                  <i className="fas fa-plus"></i> Add Agrivet
+                  <i className="fas fa-plus"></i> Add Shop
                 </button>
               </div>
             </div>
@@ -205,52 +217,59 @@ export default function AgrivetManagement({ auth, agrivets = [], flash }) {
                 <thead>
                   <tr>
                     <th>ID</th>
-                    <th>Agrivet Name</th>
-                    <th>Contact Number</th>
-                    <th>Email</th>
-                    <th>Shops</th>
+                    <th>Shop Name</th>
+                    <th>Address</th>
+                    <th>Contact</th>
+                    <th>Vendors</th>
+                    <th>Rating</th>
                     <th>Status</th>
                     <th>Created At</th>
                     <th>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {agrivets.length === 0 ? (
+                  {shops.length === 0 ? (
                     <tr>
-                      <td colSpan="8" className="text-center">No agrivets found</td>
+                      <td colSpan="9" className="text-center">No shops found</td>
                     </tr>
                   ) : (
-                    agrivets.map((agrivet) => (
-                      <tr key={agrivet.id}>
-                        <td>{agrivet.id}</td>
-                        <td>{agrivet.name}</td>
-                        <td>{agrivet.contact_number || '-'}</td>
-                        <td>{agrivet.email || '-'}</td>
+                    shops.map((shop) => (
+                      <tr key={shop.id}>
+                        <td>{shop.id}</td>
+                        <td>{shop.shop_name}</td>
+                        <td>{shop.shop_address || '-'}</td>
+                        <td>{shop.contact_number || '-'}</td>
                         <td>
-                          <span className="badge badge-info">{agrivet.shops_count || 0} shop(s)</span>
+                          <span className="badge badge-info">{shop.vendors_count || 0} vendor(s)</span>
                         </td>
-                        <td>{getStatusBadge(agrivet.status)}</td>
-                        <td>{new Date(agrivet.created_at).toLocaleDateString()}</td>
+                        <td>
+                          <span className="badge badge-warning">
+                            <i className="fas fa-star mr-1"></i>
+                            {shop.average_rating || '0.00'} ({shop.total_reviews || 0})
+                          </span>
+                        </td>
+                        <td>{getStatusBadge(shop.shop_status)}</td>
+                        <td>{new Date(shop.created_at).toLocaleDateString()}</td>
                         <td>
                           <Link
-                            href={`${getBaseRoute()}/${agrivet.id}/shops`}
-                            className="btn btn-sm btn-success mr-1"
-                            title="View Shops"
+                            href={`${getBaseRoute()}/${agrivet.id}/shops/${shop.id}/vendors`}
+                            className="btn btn-sm btn-primary mr-1"
+                            title="View Vendors"
                           >
-                            <i className="fas fa-store"></i>
+                            <i className="fas fa-users"></i>
                           </Link>
                           <button
                             className="btn btn-sm btn-info mr-1"
-                            onClick={() => handleEditAgrivet(agrivet)}
-                            title="Edit Agrivet"
+                            onClick={() => handleEditShop(shop)}
+                            title="Edit Shop"
                           >
                             <i className="fas fa-edit"></i>
                           </button>
-                          {agrivet.status === 'active' && (
+                          {shop.shop_status === 'active' && (
                             <button
                               className="btn btn-sm btn-danger"
-                              onClick={() => handleDeactivateAgrivet(agrivet.id)}
-                              title="Deactivate Agrivet"
+                              onClick={() => handleRemoveShop(shop.id)}
+                              title="Deactivate Shop"
                             >
                               <i className="fas fa-trash"></i>
                             </button>
@@ -266,15 +285,15 @@ export default function AgrivetManagement({ auth, agrivets = [], flash }) {
         </div>
       </div>
 
-      {/* Add Agrivet Modal */}
+      {/* Add Shop Modal */}
       {showAddModal && (
         <>
           <div className={`modal-backdrop fade ${showAddModalAnimation ? 'show' : ''}`} onClick={closeAddModal}></div>
           <div className={`modal fade ${showAddModalAnimation ? 'show' : ''} d-block`} tabIndex="-1" style={{ zIndex: 1050 }}>
-            <div className="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+            <div className="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
               <div className="modal-content">
                 <div className="modal-header">
-                  <h4 className="modal-title">Add New Agrivet</h4>
+                  <h4 className="modal-title">Add New Shop</h4>
                   <button
                     type="button"
                     className="close"
@@ -283,21 +302,21 @@ export default function AgrivetManagement({ auth, agrivets = [], flash }) {
                     <span>&times;</span>
                   </button>
                 </div>
-                <form onSubmit={handleAddAgrivet}>
+                <form onSubmit={handleAddShop}>
                   <div className="modal-body">
                     <div className="row">
                       <div className="col-md-6">
                         <div className="form-group">
-                          <label>Agrivet Name <span className="text-danger">*</span></label>
+                          <label>Shop Name <span className="text-danger">*</span></label>
                           <input
                             type="text"
-                            className={`form-control ${addForm.errors.name ? 'is-invalid' : ''}`}
-                            value={addForm.data.name}
-                            onChange={(e) => addForm.setData('name', e.target.value)}
+                            className={`form-control ${addForm.errors.shop_name ? 'is-invalid' : ''}`}
+                            value={addForm.data.shop_name}
+                            onChange={(e) => addForm.setData('shop_name', e.target.value)}
                             required
                           />
-                          {addForm.errors.name && (
-                            <div className="invalid-feedback">{addForm.errors.name}</div>
+                          {addForm.errors.shop_name && (
+                            <div className="invalid-feedback">{addForm.errors.shop_name}</div>
                           )}
                         </div>
                       </div>
@@ -305,16 +324,16 @@ export default function AgrivetManagement({ auth, agrivets = [], flash }) {
                         <div className="form-group">
                           <label>Status <span className="text-danger">*</span></label>
                           <select
-                            className={`form-control ${addForm.errors.status ? 'is-invalid' : ''}`}
-                            value={addForm.data.status}
-                            onChange={(e) => addForm.setData('status', e.target.value)}
+                            className={`form-control ${addForm.errors.shop_status ? 'is-invalid' : ''}`}
+                            value={addForm.data.shop_status}
+                            onChange={(e) => addForm.setData('shop_status', e.target.value)}
                             required
                           >
                             <option value="active">Active</option>
                             <option value="inactive">Inactive</option>
                           </select>
-                          {addForm.errors.status && (
-                            <div className="invalid-feedback">{addForm.errors.status}</div>
+                          {addForm.errors.shop_status && (
+                            <div className="invalid-feedback">{addForm.errors.shop_status}</div>
                           )}
                         </div>
                       </div>
@@ -324,19 +343,74 @@ export default function AgrivetManagement({ auth, agrivets = [], flash }) {
                         <div className="form-group">
                           <label>Description</label>
                           <textarea
-                            className={`form-control ${addForm.errors.description ? 'is-invalid' : ''}`}
-                            value={addForm.data.description}
-                            onChange={(e) => addForm.setData('description', e.target.value)}
+                            className={`form-control ${addForm.errors.shop_description ? 'is-invalid' : ''}`}
+                            value={addForm.data.shop_description}
+                            onChange={(e) => addForm.setData('shop_description', e.target.value)}
                             rows="2"
                           />
-                          {addForm.errors.description && (
-                            <div className="invalid-feedback">{addForm.errors.description}</div>
+                          {addForm.errors.shop_description && (
+                            <div className="invalid-feedback">{addForm.errors.shop_description}</div>
                           )}
                         </div>
                       </div>
                     </div>
                     <div className="row">
+                      <div className="col-md-12">
+                        <div className="form-group">
+                          <label>Address</label>
+                          <AddressAutocomplete
+                            value={addForm.data.shop_address}
+                            onChange={(address) => addForm.setData('shop_address', address)}
+                            onPlaceSelect={(place) => {
+                              addForm.setData({
+                                ...addForm.data,
+                                shop_address: place.address,
+                                shop_lat: place.lat || '',
+                                shop_long: place.lng || '',
+                              })
+                            }}
+                            placeholder="Enter shop address"
+                            error={addForm.errors.shop_address}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                    <div className="row">
                       <div className="col-md-6">
+                        <div className="form-group">
+                          <label>Latitude <small className="text-muted">(auto-filled from address)</small></label>
+                          <input
+                            type="number"
+                            step="any"
+                            className={`form-control ${addForm.errors.shop_lat ? 'is-invalid' : ''}`}
+                            value={addForm.data.shop_lat}
+                            onChange={(e) => addForm.setData('shop_lat', e.target.value)}
+                            placeholder="Auto-filled when address is selected"
+                          />
+                          {addForm.errors.shop_lat && (
+                            <div className="invalid-feedback">{addForm.errors.shop_lat}</div>
+                          )}
+                        </div>
+                      </div>
+                      <div className="col-md-6">
+                        <div className="form-group">
+                          <label>Longitude <small className="text-muted">(auto-filled from address)</small></label>
+                          <input
+                            type="number"
+                            step="any"
+                            className={`form-control ${addForm.errors.shop_long ? 'is-invalid' : ''}`}
+                            value={addForm.data.shop_long}
+                            onChange={(e) => addForm.setData('shop_long', e.target.value)}
+                            placeholder="Auto-filled when address is selected"
+                          />
+                          {addForm.errors.shop_long && (
+                            <div className="invalid-feedback">{addForm.errors.shop_long}</div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="row">
+                      <div className="col-md-12">
                         <div className="form-group">
                           <label>Contact Number</label>
                           <input
@@ -350,41 +424,6 @@ export default function AgrivetManagement({ auth, agrivets = [], flash }) {
                           )}
                         </div>
                       </div>
-                      <div className="col-md-6">
-                        <div className="form-group">
-                          <label>Email</label>
-                          <input
-                            type="email"
-                            className={`form-control ${addForm.errors.email ? 'is-invalid' : ''}`}
-                            value={addForm.data.email}
-                            onChange={(e) => addForm.setData('email', e.target.value)}
-                          />
-                          {addForm.errors.email && (
-                            <div className="invalid-feedback">{addForm.errors.email}</div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                    <div className="row">
-                      <div className="col-md-12">
-                        <div className="form-group">
-                          <label>Logo URL</label>
-                          <input
-                            type="text"
-                            className={`form-control ${addForm.errors.logo_url ? 'is-invalid' : ''}`}
-                            value={addForm.data.logo_url}
-                            onChange={(e) => addForm.setData('logo_url', e.target.value)}
-                            placeholder="https://example.com/logo.png"
-                          />
-                          {addForm.errors.logo_url && (
-                            <div className="invalid-feedback">{addForm.errors.logo_url}</div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                    <div className="alert alert-info mt-3 mb-0">
-                      <i className="fas fa-info-circle mr-2"></i>
-                      After creating the agrivet, you can add shops from the "View Shops" button.
                     </div>
                   </div>
                   <div className="modal-footer">
@@ -396,7 +435,7 @@ export default function AgrivetManagement({ auth, agrivets = [], flash }) {
                       Cancel
                     </button>
                     <button type="submit" className="btn btn-primary" disabled={addForm.processing}>
-                      {addForm.processing ? 'Creating...' : 'Create Agrivet'}
+                      {addForm.processing ? 'Creating...' : 'Create Shop'}
                     </button>
                   </div>
                 </form>
@@ -406,15 +445,15 @@ export default function AgrivetManagement({ auth, agrivets = [], flash }) {
         </>
       )}
 
-      {/* Edit Agrivet Modal */}
-      {showEditModal && selectedAgrivet && (
+      {/* Edit Shop Modal */}
+      {showEditModal && selectedShop && (
         <>
           <div className={`modal-backdrop fade ${showEditModalAnimation ? 'show' : ''}`} onClick={closeEditModal}></div>
           <div className={`modal fade ${showEditModalAnimation ? 'show' : ''} d-block`} tabIndex="-1" style={{ zIndex: 1050 }}>
-            <div className="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+            <div className="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
               <div className="modal-content">
                 <div className="modal-header">
-                  <h4 className="modal-title">Edit Agrivet</h4>
+                  <h4 className="modal-title">Edit Shop</h4>
                   <button
                     type="button"
                     className="close"
@@ -423,21 +462,21 @@ export default function AgrivetManagement({ auth, agrivets = [], flash }) {
                     <span>&times;</span>
                   </button>
                 </div>
-                <form onSubmit={handleUpdateAgrivet}>
+                <form onSubmit={handleUpdateShop}>
                   <div className="modal-body">
                     <div className="row">
                       <div className="col-md-6">
                         <div className="form-group">
-                          <label>Agrivet Name <span className="text-danger">*</span></label>
+                          <label>Shop Name <span className="text-danger">*</span></label>
                           <input
                             type="text"
-                            className={`form-control ${editForm.errors.name ? 'is-invalid' : ''}`}
-                            value={editForm.data.name}
-                            onChange={(e) => editForm.setData('name', e.target.value)}
+                            className={`form-control ${editForm.errors.shop_name ? 'is-invalid' : ''}`}
+                            value={editForm.data.shop_name}
+                            onChange={(e) => editForm.setData('shop_name', e.target.value)}
                             required
                           />
-                          {editForm.errors.name && (
-                            <div className="invalid-feedback">{editForm.errors.name}</div>
+                          {editForm.errors.shop_name && (
+                            <div className="invalid-feedback">{editForm.errors.shop_name}</div>
                           )}
                         </div>
                       </div>
@@ -445,16 +484,16 @@ export default function AgrivetManagement({ auth, agrivets = [], flash }) {
                         <div className="form-group">
                           <label>Status <span className="text-danger">*</span></label>
                           <select
-                            className={`form-control ${editForm.errors.status ? 'is-invalid' : ''}`}
-                            value={editForm.data.status}
-                            onChange={(e) => editForm.setData('status', e.target.value)}
+                            className={`form-control ${editForm.errors.shop_status ? 'is-invalid' : ''}`}
+                            value={editForm.data.shop_status}
+                            onChange={(e) => editForm.setData('shop_status', e.target.value)}
                             required
                           >
                             <option value="active">Active</option>
                             <option value="inactive">Inactive</option>
                           </select>
-                          {editForm.errors.status && (
-                            <div className="invalid-feedback">{editForm.errors.status}</div>
+                          {editForm.errors.shop_status && (
+                            <div className="invalid-feedback">{editForm.errors.shop_status}</div>
                           )}
                         </div>
                       </div>
@@ -464,19 +503,74 @@ export default function AgrivetManagement({ auth, agrivets = [], flash }) {
                         <div className="form-group">
                           <label>Description</label>
                           <textarea
-                            className={`form-control ${editForm.errors.description ? 'is-invalid' : ''}`}
-                            value={editForm.data.description}
-                            onChange={(e) => editForm.setData('description', e.target.value)}
+                            className={`form-control ${editForm.errors.shop_description ? 'is-invalid' : ''}`}
+                            value={editForm.data.shop_description}
+                            onChange={(e) => editForm.setData('shop_description', e.target.value)}
                             rows="2"
                           />
-                          {editForm.errors.description && (
-                            <div className="invalid-feedback">{editForm.errors.description}</div>
+                          {editForm.errors.shop_description && (
+                            <div className="invalid-feedback">{editForm.errors.shop_description}</div>
                           )}
                         </div>
                       </div>
                     </div>
                     <div className="row">
+                      <div className="col-md-12">
+                        <div className="form-group">
+                          <label>Address</label>
+                          <AddressAutocomplete
+                            value={editForm.data.shop_address}
+                            onChange={(address) => editForm.setData('shop_address', address)}
+                            onPlaceSelect={(place) => {
+                              editForm.setData({
+                                ...editForm.data,
+                                shop_address: place.address,
+                                shop_lat: place.lat || '',
+                                shop_long: place.lng || '',
+                              })
+                            }}
+                            placeholder="Enter shop address"
+                            error={editForm.errors.shop_address}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                    <div className="row">
                       <div className="col-md-6">
+                        <div className="form-group">
+                          <label>Latitude <small className="text-muted">(auto-filled from address)</small></label>
+                          <input
+                            type="number"
+                            step="any"
+                            className={`form-control ${editForm.errors.shop_lat ? 'is-invalid' : ''}`}
+                            value={editForm.data.shop_lat}
+                            onChange={(e) => editForm.setData('shop_lat', e.target.value)}
+                            placeholder="Auto-filled when address is selected"
+                          />
+                          {editForm.errors.shop_lat && (
+                            <div className="invalid-feedback">{editForm.errors.shop_lat}</div>
+                          )}
+                        </div>
+                      </div>
+                      <div className="col-md-6">
+                        <div className="form-group">
+                          <label>Longitude <small className="text-muted">(auto-filled from address)</small></label>
+                          <input
+                            type="number"
+                            step="any"
+                            className={`form-control ${editForm.errors.shop_long ? 'is-invalid' : ''}`}
+                            value={editForm.data.shop_long}
+                            onChange={(e) => editForm.setData('shop_long', e.target.value)}
+                            placeholder="Auto-filled when address is selected"
+                          />
+                          {editForm.errors.shop_long && (
+                            <div className="invalid-feedback">{editForm.errors.shop_long}</div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="row">
+                      <div className="col-md-12">
                         <div className="form-group">
                           <label>Contact Number</label>
                           <input
@@ -490,41 +584,36 @@ export default function AgrivetManagement({ auth, agrivets = [], flash }) {
                           )}
                         </div>
                       </div>
+                    </div>
+
+                    {/* Read-only Shop Stats */}
+                    <hr className="my-4" />
+                    <h5 className="text-info mb-3"><i className="fas fa-chart-bar mr-2"></i>Shop Statistics (Read-only)</h5>
+                    <div className="row">
                       <div className="col-md-6">
                         <div className="form-group">
-                          <label>Email</label>
-                          <input
-                            type="email"
-                            className={`form-control ${editForm.errors.email ? 'is-invalid' : ''}`}
-                            value={editForm.data.email}
-                            onChange={(e) => editForm.setData('email', e.target.value)}
-                          />
-                          {editForm.errors.email && (
-                            <div className="invalid-feedback">{editForm.errors.email}</div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                    <div className="row">
-                      <div className="col-md-12">
-                        <div className="form-group">
-                          <label>Logo URL</label>
+                          <label>Average Rating</label>
                           <input
                             type="text"
-                            className={`form-control ${editForm.errors.logo_url ? 'is-invalid' : ''}`}
-                            value={editForm.data.logo_url}
-                            onChange={(e) => editForm.setData('logo_url', e.target.value)}
-                            placeholder="https://example.com/logo.png"
+                            className="form-control"
+                            value={selectedShop.average_rating || '0.00'}
+                            readOnly
+                            disabled
                           />
-                          {editForm.errors.logo_url && (
-                            <div className="invalid-feedback">{editForm.errors.logo_url}</div>
-                          )}
                         </div>
                       </div>
-                    </div>
-                    <div className="alert alert-info mt-3 mb-0">
-                      <i className="fas fa-info-circle mr-2"></i>
-                      To manage shops for this agrivet, use the "View Shops" button in the agrivet list.
+                      <div className="col-md-6">
+                        <div className="form-group">
+                          <label>Total Reviews</label>
+                          <input
+                            type="text"
+                            className="form-control"
+                            value={selectedShop.total_reviews || '0'}
+                            readOnly
+                            disabled
+                          />
+                        </div>
+                      </div>
                     </div>
                   </div>
                   <div className="modal-footer">
@@ -536,7 +625,7 @@ export default function AgrivetManagement({ auth, agrivets = [], flash }) {
                       Cancel
                     </button>
                     <button type="submit" className="btn btn-primary" disabled={editForm.processing}>
-                      {editForm.processing ? 'Updating...' : 'Update Agrivet'}
+                      {editForm.processing ? 'Updating...' : 'Update Shop'}
                     </button>
                   </div>
                 </form>
@@ -546,8 +635,8 @@ export default function AgrivetManagement({ auth, agrivets = [], flash }) {
         </>
       )}
 
-      {/* Remove Agrivet Confirmation Modal */}
-      {showRemoveModal && agrivetToRemove && (
+      {/* Remove Shop Confirmation Modal */}
+      {showRemoveModal && shopToRemove && (
         <>
           <div className={`modal-backdrop fade ${showRemoveModalAnimation ? 'show' : ''}`} onClick={closeRemoveModal}></div>
           <div className={`modal fade ${showRemoveModalAnimation ? 'show' : ''} d-block`} tabIndex="-1" style={{ zIndex: 1050 }}>
@@ -565,10 +654,10 @@ export default function AgrivetManagement({ auth, agrivets = [], flash }) {
                 </div>
                 <div className="modal-body">
                   <p>
-                    Are you sure you want to deactivate <strong>{agrivetToRemove.name}</strong>?
+                    Are you sure you want to deactivate <strong>{shopToRemove.shop_name}</strong>?
                   </p>
                   <p className="text-muted mb-0">
-                    This will set the status to "Inactive". The agrivet will not be visible to users.
+                    This will set the shop status to "Inactive". The shop will not be visible to users.
                   </p>
                 </div>
                 <div className="modal-footer">
@@ -582,9 +671,9 @@ export default function AgrivetManagement({ auth, agrivets = [], flash }) {
                   <button
                     type="button"
                     className="btn btn-danger"
-                    onClick={confirmRemoveAgrivet}
+                    onClick={confirmRemoveShop}
                   >
-                    Deactivate Agrivet
+                    Deactivate Shop
                   </button>
                 </div>
               </div>
@@ -595,4 +684,3 @@ export default function AgrivetManagement({ auth, agrivets = [], flash }) {
     </AdminLayout>
   )
 }
-

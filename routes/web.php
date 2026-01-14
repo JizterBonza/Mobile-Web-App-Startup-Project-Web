@@ -46,12 +46,18 @@ Route::middleware(['auth', 'session.valid', 'user.type:super_admin'])->prefix('d
     Route::get('/', [AgrivetController::class, 'index'])->name('index');
     Route::post('/', [AgrivetController::class, 'store'])->name('store');
     
-    // Agrivet Vendors Routes (must come before /{id} routes)
-    Route::get('/{id}/vendors', [AgrivetController::class, 'showVendors'])->name('vendors.index');
-    Route::post('/{id}/vendors', [AgrivetController::class, 'storeVendor'])->name('vendors.store');
-    Route::put('/{id}/vendors/{vendorId}', [AgrivetController::class, 'updateVendor'])->name('vendors.update');
-    Route::delete('/{id}/vendors/{vendorId}', [AgrivetController::class, 'removeVendor'])->name('vendors.remove');
-    Route::post('/{id}/vendors/add-existing', [AgrivetController::class, 'addExistingVendor'])->name('vendors.add-existing');
+    // Shop Routes (must come before /{id} routes)
+    Route::get('/{id}/shops', [AgrivetController::class, 'showShops'])->name('shops.index');
+    Route::post('/{id}/shops', [AgrivetController::class, 'storeShop'])->name('shops.store');
+    Route::put('/{id}/shops/{shopId}', [AgrivetController::class, 'updateShop'])->name('shops.update');
+    Route::delete('/{id}/shops/{shopId}', [AgrivetController::class, 'removeShop'])->name('shops.remove');
+    
+    // Shop Vendors Routes
+    Route::get('/{id}/shops/{shopId}/vendors', [AgrivetController::class, 'showVendors'])->name('shops.vendors.index');
+    Route::post('/{id}/shops/{shopId}/vendors', [AgrivetController::class, 'storeVendor'])->name('shops.vendors.store');
+    Route::put('/{id}/shops/{shopId}/vendors/{vendorId}', [AgrivetController::class, 'updateVendor'])->name('shops.vendors.update');
+    Route::delete('/{id}/shops/{shopId}/vendors/{vendorId}', [AgrivetController::class, 'removeVendor'])->name('shops.vendors.remove');
+    Route::post('/{id}/shops/{shopId}/vendors/add-existing', [AgrivetController::class, 'addExistingVendor'])->name('shops.vendors.add-existing');
     
     Route::put('/{id}', [AgrivetController::class, 'update'])->name('update');
     Route::delete('/{id}', [AgrivetController::class, 'destroy'])->name('destroy');
@@ -74,12 +80,18 @@ Route::middleware(['auth', 'session.valid', 'user.type:admin'])->prefix('dashboa
     Route::get('/', [AgrivetController::class, 'index'])->name('index');
     Route::post('/', [AgrivetController::class, 'store'])->name('store');
     
-    // Agrivet Vendors Routes (must come before /{id} routes)
-    Route::get('/{id}/vendors', [AgrivetController::class, 'showVendors'])->name('vendors.index');
-    Route::post('/{id}/vendors', [AgrivetController::class, 'storeVendor'])->name('vendors.store');
-    Route::put('/{id}/vendors/{vendorId}', [AgrivetController::class, 'updateVendor'])->name('vendors.update');
-    Route::delete('/{id}/vendors/{vendorId}', [AgrivetController::class, 'removeVendor'])->name('vendors.remove');
-    Route::post('/{id}/vendors/add-existing', [AgrivetController::class, 'addExistingVendor'])->name('vendors.add-existing');
+    // Shop Routes (must come before /{id} routes)
+    Route::get('/{id}/shops', [AgrivetController::class, 'showShops'])->name('shops.index');
+    Route::post('/{id}/shops', [AgrivetController::class, 'storeShop'])->name('shops.store');
+    Route::put('/{id}/shops/{shopId}', [AgrivetController::class, 'updateShop'])->name('shops.update');
+    Route::delete('/{id}/shops/{shopId}', [AgrivetController::class, 'removeShop'])->name('shops.remove');
+    
+    // Shop Vendors Routes
+    Route::get('/{id}/shops/{shopId}/vendors', [AgrivetController::class, 'showVendors'])->name('shops.vendors.index');
+    Route::post('/{id}/shops/{shopId}/vendors', [AgrivetController::class, 'storeVendor'])->name('shops.vendors.store');
+    Route::put('/{id}/shops/{shopId}/vendors/{vendorId}', [AgrivetController::class, 'updateVendor'])->name('shops.vendors.update');
+    Route::delete('/{id}/shops/{shopId}/vendors/{vendorId}', [AgrivetController::class, 'removeVendor'])->name('shops.vendors.remove');
+    Route::post('/{id}/shops/{shopId}/vendors/add-existing', [AgrivetController::class, 'addExistingVendor'])->name('shops.vendors.add-existing');
     
     Route::put('/{id}', [AgrivetController::class, 'update'])->name('update');
     Route::delete('/{id}', [AgrivetController::class, 'destroy'])->name('destroy');
