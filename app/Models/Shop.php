@@ -4,7 +4,6 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use App\Models\User;
 
 class Shop extends Model
 {
@@ -61,6 +60,16 @@ class Shop extends Model
     }
 
     /**
+     * Get the vendors associated with this shop through agrivet_vendor pivot.
+     */
+    public function vendors()
+    {
+        return $this->belongsToMany(User::class, 'agrivet_vendor', 'shop_id', 'vendor_id')
+            ->withPivot('agrivet_id', 'status')
+            ->withTimestamps();
+    }
+
+    /**
      * Get the items for the shop.
      */
     public function items()
@@ -74,16 +83,6 @@ class Shop extends Model
     public function ratingReviews()
     {
         return $this->hasMany(RatingReview::class);
-    }
-
-    /**
-     * Get the vendors (users) associated with this shop.
-     */
-    public function vendors()
-    {
-        return $this->belongsToMany(User::class, 'agrivet_vendor', 'shop_id', 'vendor_id')
-            ->withPivot('agrivet_id', 'status')
-            ->withTimestamps();
     }
 }
 
