@@ -18,6 +18,8 @@ export default function Products({ auth, products = [], shop, flash, stockImages
   const [editImageSourceTab, setEditImageSourceTab] = useState('upload')
   const [selectedStockImages, setSelectedStockImages] = useState([])
   const [editSelectedStockImages, setEditSelectedStockImages] = useState([])
+  const [showSuccessAlert, setShowSuccessAlert] = useState(true)
+  const [showErrorAlert, setShowErrorAlert] = useState(true)
 
   const addForm = useForm({
     item_name: '',
@@ -221,6 +223,10 @@ export default function Products({ auth, products = [], shop, flash, stockImages
       closeRemoveModal()
       addForm.reset()
       editForm.reset()
+      setShowSuccessAlert(true)
+    }
+    if (flash?.error) {
+      setShowErrorAlert(true)
     }
   }, [flash])
 
@@ -407,24 +413,26 @@ export default function Products({ auth, products = [], shop, flash, stockImages
   return (
     <AdminLayout auth={auth} title="Products">
       {/* Flash Messages */}
-      {flash?.success && (
+      {flash?.success && showSuccessAlert && (
         <div className="alert alert-success alert-dismissible fade show" role="alert">
           <strong>Success!</strong> {flash.success}
           <button type="button" className="close" data-dismiss="alert" aria-label="Close" onClick={(e) => {
             e.preventDefault()
-            router.visit(window.location.pathname, { preserveState: true, preserveScroll: true })
+            e.stopPropagation()
+            setShowSuccessAlert(false)
           }}>
             <span aria-hidden="true">&times;</span>
           </button>
         </div>
       )}
 
-      {flash?.error && (
+      {flash?.error && showErrorAlert && (
         <div className="alert alert-danger alert-dismissible fade show" role="alert">
           <strong>Error!</strong> {flash.error}
           <button type="button" className="close" data-dismiss="alert" aria-label="Close" onClick={(e) => {
             e.preventDefault()
-            router.visit(window.location.pathname, { preserveState: true, preserveScroll: true })
+            e.stopPropagation()
+            setShowErrorAlert(false)
           }}>
             <span aria-hidden="true">&times;</span>
           </button>
