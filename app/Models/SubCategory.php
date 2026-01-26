@@ -5,7 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
-class Category extends Model
+class SubCategory extends Model
 {
     use HasFactory;
 
@@ -14,7 +14,7 @@ class Category extends Model
      *
      * @var string
      */
-    protected $table = 'categories';
+    protected $table = 'sub_categories';
 
     /**
      * The attributes that are mass assignable.
@@ -22,9 +22,9 @@ class Category extends Model
      * @var array<int, string>
      */
     protected $fillable = [
-        'category_name',
-        'category_description',
-        'category_status',
+        'sub_category_name',
+        'sub_category_description',
+        'sub_category_status',
     ];
 
     /**
@@ -40,4 +40,3 @@ class Category extends Model
         ];
     }
 }
-

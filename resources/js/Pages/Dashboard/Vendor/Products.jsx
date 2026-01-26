@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useForm, router } from '@inertiajs/react'
 import AdminLayout from '../../../Layouts/AdminLayout'
 
-export default function Products({ auth, products = [], shop, flash, stockImages = [] }) {
+export default function Products({ auth, products = [], shop, flash, stockImages = [], categories = [], subCategories = [] }) {
   const [showAddModal, setShowAddModal] = useState(false)
   const [showAddModalAnimation, setShowAddModalAnimation] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
@@ -24,7 +24,11 @@ export default function Products({ auth, products = [], shop, flash, stockImages
     item_description: '',
     item_price: '',
     item_quantity: '',
+    weight: '',
+    metric: '',
     category: '',
+    category_id: '',
+    sub_category_id: '',
     item_images: [],
     stock_image_urls: [],
     item_status: 'active',
@@ -35,7 +39,11 @@ export default function Products({ auth, products = [], shop, flash, stockImages
     item_description: '',
     item_price: '',
     item_quantity: '',
+    weight: '',
+    metric: '',
     category: '',
+    category_id: '',
+    sub_category_id: '',
     item_images: [],
     stock_image_urls: [],
     item_status: 'active',
@@ -73,6 +81,21 @@ export default function Products({ auth, products = [], shop, flash, stockImages
       setImagePreviews([])
       setSelectedStockImages([])
       setImageSourceTab('upload')
+      // Reset form to initial state
+      addForm.setData({
+        item_name: '',
+        item_description: '',
+        item_price: '',
+        item_quantity: '',
+        weight: '',
+        metric: '',
+        category: '',
+        category_id: '',
+        sub_category_id: '',
+        item_images: [],
+        stock_image_urls: [],
+        item_status: 'active',
+      })
     }, 300)
   }
 
@@ -267,7 +290,11 @@ export default function Products({ auth, products = [], shop, flash, stockImages
       item_description: String(product.item_description || ''),
       item_price: product.item_price != null ? String(product.item_price) : '',
       item_quantity: product.item_quantity != null ? String(product.item_quantity) : '',
+      weight: product.weight != null ? String(product.weight) : '',
+      metric: String(product.metric || ''),
       category: String(product.category || ''),
+      category_id: product.category_id != null ? String(product.category_id) : '',
+      sub_category_id: product.sub_category_id != null ? String(product.sub_category_id) : '',
       item_images: [],
       item_status: String(product.item_status || 'active'),
       existing_images: existingImages,
@@ -449,7 +476,10 @@ export default function Products({ auth, products = [], shop, flash, stockImages
                         <td>{product.item_name}</td>
                         <td>${parseFloat(product.item_price).toFixed(2)}</td>
                         <td>{product.item_quantity}</td>
-                        <td>{product.category || '-'}</td>
+                        <td>
+                          {product.category_name || product.category || '-'}
+                          {product.sub_category_name && ` / ${product.sub_category_name}`}
+                        </td>
                         <td>{getStatusBadge(product.item_status)}</td>
                         <td>{product.sold_count}</td>
                         <td>{product.average_rating} ({product.total_reviews})</td>
@@ -554,21 +584,93 @@ export default function Products({ auth, products = [], shop, flash, stockImages
                         </div>
                       </div>
                     </div>
-                    <div className="form-group">
-                      <label>Category</label>
-                      <select
-                        className={`form-control ${addForm.errors.category ? 'is-invalid' : ''}`}
-                        value={addForm.data.category}
-                        onChange={(e) => addForm.setData('category', e.target.value)}
-                      >
-                        <option value="">Select Category</option>
-                        <option value="Animal Feed">Animal Feed</option>
-                        <option value="Feed Supplements">Feed Supplements</option>
-                        <option value="Animal Vitamins & Nutritional Supplements">Animal Vitamins & Nutritional Supplements</option>
-                      </select>
-                      {addForm.errors.category && (
-                        <div className="invalid-feedback">{addForm.errors.category}</div>
-                      )}
+                    <div className="row">
+                      <div className="col-md-6">
+                        <div className="form-group">
+                          <label>Weight</label>
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            className={`form-control ${addForm.errors.weight ? 'is-invalid' : ''}`}
+                            value={addForm.data.weight}
+                            onChange={(e) => addForm.setData('weight', e.target.value)}
+                          />
+                          {addForm.errors.weight && (
+                            <div className="invalid-feedback">{addForm.errors.weight}</div>
+                          )}
+                        </div>
+                      </div>
+                      <div className="col-md-6">
+                        <div className="form-group">
+                          <label>Metric</label>
+                          <select
+                            className={`form-control ${addForm.errors.metric ? 'is-invalid' : ''}`}
+                            value={addForm.data.metric}
+                            onChange={(e) => addForm.setData('metric', e.target.value)}
+                          >
+                            <option value="">Select Metric</option>
+                            <option value="kg">kg</option>
+                            <option value="g">g</option>
+                            <option value="lb">lb</option>
+                            <option value="oz">oz</option>
+                            <option value="l">l</option>
+                            <option value="ml">ml</option>
+                            <option value="piece">piece</option>
+                            <option value="pack">pack</option>
+                            <option value="box">box</option>
+                          </select>
+                          {addForm.errors.metric && (
+                            <div className="invalid-feedback">{addForm.errors.metric}</div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="row">
+                      <div className="col-md-6">
+                        <div className="form-group">
+                          <label>Category</label>
+                          <select
+                            className={`form-control ${addForm.errors.category_id ? 'is-invalid' : ''}`}
+                            value={addForm.data.category_id}
+                            onChange={(e) => {
+                              addForm.setData('category_id', e.target.value)
+                              // Reset sub_category_id when category changes
+                              addForm.setData('sub_category_id', '')
+                            }}
+                          >
+                            <option value="">Select Category</option>
+                            {categories.map((category) => (
+                              <option key={category.id} value={category.id}>
+                                {category.name}
+                              </option>
+                            ))}
+                          </select>
+                          {addForm.errors.category_id && (
+                            <div className="invalid-feedback">{addForm.errors.category_id}</div>
+                          )}
+                        </div>
+                      </div>
+                      <div className="col-md-6">
+                        <div className="form-group">
+                          <label>Sub Category</label>
+                          <select
+                            className={`form-control ${addForm.errors.sub_category_id ? 'is-invalid' : ''}`}
+                            value={addForm.data.sub_category_id}
+                            onChange={(e) => addForm.setData('sub_category_id', e.target.value)}
+                          >
+                            <option value="">Select Sub Category</option>
+                            {subCategories.map((subCategory) => (
+                              <option key={subCategory.id} value={subCategory.id}>
+                                {subCategory.name}
+                              </option>
+                            ))}
+                          </select>
+                          {addForm.errors.sub_category_id && (
+                            <div className="invalid-feedback">{addForm.errors.sub_category_id}</div>
+                          )}
+                        </div>
+                      </div>
                     </div>
                     <div className="form-group">
                       <label>Product Images <span className="text-danger">*</span></label>
@@ -844,22 +946,97 @@ export default function Products({ auth, products = [], shop, flash, stockImages
                         </div>
                       </div>
                     </div>
-                    <div className="form-group">
-                      <label>Category</label>
-                      <select
-                        name="category"
-                        className={`form-control ${editForm.errors.category ? 'is-invalid' : ''}`}
-                        value={editForm.data.category}
-                        onChange={(e) => editForm.setData('category', e.target.value)}
-                      >
-                        <option value="">Select Category</option>
-                        <option value="Animal Feed">Animal Feed</option>
-                        <option value="Feed Supplements">Feed Supplements</option>
-                        <option value="Animal Vitamins & Nutritional Supplements">Animal Vitamins & Nutritional Supplements</option>
-                      </select>
-                      {editForm.errors.category && (
-                        <div className="invalid-feedback">{editForm.errors.category}</div>
-                      )}
+                    <div className="row">
+                      <div className="col-md-6">
+                        <div className="form-group">
+                          <label>Weight</label>
+                          <input
+                            type="number"
+                            name="weight"
+                            step="0.01"
+                            min="0"
+                            className={`form-control ${editForm.errors.weight ? 'is-invalid' : ''}`}
+                            value={editForm.data.weight}
+                            onChange={(e) => editForm.setData('weight', e.target.value)}
+                          />
+                          {editForm.errors.weight && (
+                            <div className="invalid-feedback">{editForm.errors.weight}</div>
+                          )}
+                        </div>
+                      </div>
+                      <div className="col-md-6">
+                        <div className="form-group">
+                          <label>Metric</label>
+                          <select
+                            name="metric"
+                            className={`form-control ${editForm.errors.metric ? 'is-invalid' : ''}`}
+                            value={editForm.data.metric}
+                            onChange={(e) => editForm.setData('metric', e.target.value)}
+                          >
+                            <option value="">Select Metric</option>
+                            <option value="kg">kg</option>
+                            <option value="g">g</option>
+                            <option value="lb">lb</option>
+                            <option value="oz">oz</option>
+                            <option value="l">l</option>
+                            <option value="ml">ml</option>
+                            <option value="piece">piece</option>
+                            <option value="pack">pack</option>
+                            <option value="box">box</option>
+                          </select>
+                          {editForm.errors.metric && (
+                            <div className="invalid-feedback">{editForm.errors.metric}</div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="row">
+                      <div className="col-md-6">
+                        <div className="form-group">
+                          <label>Category</label>
+                          <select
+                            name="category_id"
+                            className={`form-control ${editForm.errors.category_id ? 'is-invalid' : ''}`}
+                            value={editForm.data.category_id}
+                            onChange={(e) => {
+                              editForm.setData('category_id', e.target.value)
+                              // Reset sub_category_id when category changes
+                              editForm.setData('sub_category_id', '')
+                            }}
+                          >
+                            <option value="">Select Category</option>
+                            {categories.map((category) => (
+                              <option key={category.id} value={category.id}>
+                                {category.name}
+                              </option>
+                            ))}
+                          </select>
+                          {editForm.errors.category_id && (
+                            <div className="invalid-feedback">{editForm.errors.category_id}</div>
+                          )}
+                        </div>
+                      </div>
+                      <div className="col-md-6">
+                        <div className="form-group">
+                          <label>Sub Category</label>
+                          <select
+                            name="sub_category_id"
+                            className={`form-control ${editForm.errors.sub_category_id ? 'is-invalid' : ''}`}
+                            value={editForm.data.sub_category_id}
+                            onChange={(e) => editForm.setData('sub_category_id', e.target.value)}
+                          >
+                            <option value="">Select Sub Category</option>
+                            {subCategories.map((subCategory) => (
+                              <option key={subCategory.id} value={subCategory.id}>
+                                {subCategory.name}
+                              </option>
+                            ))}
+                          </select>
+                          {editForm.errors.sub_category_id && (
+                            <div className="invalid-feedback">{editForm.errors.sub_category_id}</div>
+                          )}
+                        </div>
+                      </div>
                     </div>
                     <div className="form-group">
                       <label>Product Images</label>

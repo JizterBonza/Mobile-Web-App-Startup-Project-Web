@@ -11,6 +11,8 @@ use App\Models\Agrivet;
 use App\Models\Shop;
 use App\Models\Promotion;
 use App\Models\ProductImage;
+use App\Models\Category;
+use App\Models\SubCategory;
 
 class VendorController extends Controller
 {
@@ -210,10 +212,17 @@ class VendorController extends Controller
                 ->with('error', 'You are not associated with any Shop.');
         }
 
-        // Get products for this shop
+        // Get products for this shop with category and sub_category names
         $products = DB::table('items')
-            ->where('shop_id', $shop->id)
-            ->orderBy('created_at', 'desc')
+            ->leftJoin('categories', 'items.category_id', '=', 'categories.id')
+            ->leftJoin('sub_categories', 'items.sub_category_id', '=', 'sub_categories.id')
+            ->where('items.shop_id', $shop->id)
+            ->select(
+                'items.*',
+                'categories.category_name',
+                'sub_categories.sub_category_name'
+            )
+            ->orderBy('items.created_at', 'desc')
             ->get();
 
         $products = $products->map(function ($item) {
@@ -243,7 +252,13 @@ class VendorController extends Controller
                 'item_description' => $item->item_description,
                 'item_price' => $item->item_price,
                 'item_quantity' => $item->item_quantity,
+                'weight' => $item->weight,
+                'metric' => $item->metric,
                 'category' => $item->category,
+                'category_id' => $item->category_id,
+                'category_name' => $item->category_name,
+                'sub_category_id' => $item->sub_category_id,
+                'sub_category_name' => $item->sub_category_name,
                 'item_images' => $images,
                 'item_status' => $item->item_status,
                 'average_rating' => $item->average_rating,
@@ -270,6 +285,27 @@ class VendorController extends Controller
                 ];
             }) : collect([]);
 
+        // Get categories and sub_categories from database
+        $categories = Category::where('category_status', 'active')
+            ->orderBy('category_name')
+            ->get()
+            ->map(function ($category) {
+                return [
+                    'id' => $category->id,
+                    'name' => $category->category_name,
+                ];
+            });
+
+        $subCategories = SubCategory::where('sub_category_status', 'active')
+            ->orderBy('sub_category_name')
+            ->get()
+            ->map(function ($subCategory) {
+                return [
+                    'id' => $subCategory->id,
+                    'name' => $subCategory->sub_category_name,
+                ];
+            });
+
         return Inertia::render('Dashboard/Vendor/Products', [
             'products' => $products,
             'shop' => [
@@ -277,6 +313,8 @@ class VendorController extends Controller
                 'shop_name' => $shop->shop_name,
             ],
             'stockImages' => $stockImages,
+            'categories' => $categories,
+            'subCategories' => $subCategories,
         ]);
     }
 
@@ -297,7 +335,11 @@ class VendorController extends Controller
             'item_description' => 'nullable|string',
             'item_price' => 'required|numeric|min:0',
             'item_quantity' => 'required|integer|min:0',
+            'weight' => 'nullable|numeric|min:0',
+            'metric' => 'nullable|string|max:50',
             'category' => 'nullable|string|max:100',
+            'category_id' => 'nullable|exists:categories,id',
+            'sub_category_id' => 'nullable|exists:sub_categories,id',
             'item_images' => 'nullable|array',
             'item_images.*' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:5120',
             'stock_image_urls' => 'nullable|array',
@@ -341,7 +383,11 @@ class VendorController extends Controller
             'item_description' => $request->item_description,
             'item_price' => $request->item_price,
             'item_quantity' => $request->item_quantity,
+            'weight' => $request->weight,
+            'metric' => $request->metric,
             'category' => $request->category,
+            'category_id' => $request->category_id,
+            'sub_category_id' => $request->sub_category_id,
             'item_images' => !empty($imagePaths) ? json_encode($imagePaths) : null,
             'item_status' => $request->item_status ?? 'active',
             'average_rating' => 0.00,
@@ -384,7 +430,11 @@ class VendorController extends Controller
             'item_description' => 'nullable|string',
             'item_price' => 'required|numeric|min:0',
             'item_quantity' => 'required|integer|min:0',
+            'weight' => 'nullable|numeric|min:0',
+            'metric' => 'nullable|string|max:50',
             'category' => 'nullable|string|max:100',
+            'category_id' => 'nullable|exists:categories,id',
+            'sub_category_id' => 'nullable|exists:sub_categories,id',
             'item_images' => 'nullable|array',
             'item_images.*' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:5120',
             'existing_images' => 'nullable|array',
@@ -399,7 +449,11 @@ class VendorController extends Controller
             'item_description' => $request->item_description,
             'item_price' => $request->item_price,
             'item_quantity' => $request->item_quantity,
+            'weight' => $request->weight,
+            'metric' => $request->metric,
             'category' => $request->category,
+            'category_id' => $request->category_id,
+            'sub_category_id' => $request->sub_category_id,
             'item_status' => $request->item_status ?? $product->item_status,
             'updated_at' => now(),
         ];
