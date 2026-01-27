@@ -428,6 +428,48 @@ class OrderController extends Controller
     }
 
     /**
+     * Update order status by order ID
+     *
+     * @param Request $request
+     * @param int $id
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function updateStatus(Request $request, $id)
+    {
+        $validator = Validator::make($request->all(), [
+            'status' => 'required|string|max:50',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation error',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        $order = Order::find($id);
+
+        if (!$order) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Order not found'
+            ], 404);
+        }
+
+        $order->update(['order_status' => $request->status]);
+
+        // Load relationships
+        $order->load(['user', 'orderDetail', 'orderItems']);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Order status updated successfully',
+            'data' => $order
+        ]);
+    }
+
+    /**
      * Delete an order
      *
      * @param int $id
