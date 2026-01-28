@@ -63,6 +63,14 @@ class Item extends Model
     }
 
     /**
+     * Get the category that the item belongs to.
+     */
+    public function categoryRelation()
+    {
+        return $this->belongsTo(Category::class, 'category');
+    }
+
+    /**
      * Get the rating reviews for the item.
      */
     public function ratingReviews()

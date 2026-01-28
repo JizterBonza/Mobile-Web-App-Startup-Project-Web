@@ -5,6 +5,8 @@ use App\Http\Controllers\UserController;
 use App\Http\Controllers\AgrivetController;
 use App\Http\Controllers\VendorController;
 use App\Http\Controllers\ProductImageController;
+use App\Http\Controllers\CategoryController;
+use App\Http\Controllers\SubCategoryController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
@@ -63,6 +65,22 @@ Route::middleware(['auth', 'session.valid', 'user.type:super_admin'])->prefix('d
     Route::delete('/{id}', [AgrivetController::class, 'destroy'])->name('destroy');
 });
 
+// Super Admin Category Management Routes
+Route::middleware(['auth', 'session.valid', 'user.type:super_admin'])->prefix('dashboard/super-admin/categories')->name('dashboard.super-admin.categories.')->group(function () {
+    Route::get('/', [CategoryController::class, 'dashboardIndex'])->name('index');
+    Route::post('/', [CategoryController::class, 'store'])->name('store');
+    Route::put('/{id}', [CategoryController::class, 'update'])->name('update');
+    Route::delete('/{id}', [CategoryController::class, 'destroy'])->name('destroy');
+});
+
+// Super Admin Sub-Category Management Routes
+Route::middleware(['auth', 'session.valid', 'user.type:super_admin'])->prefix('dashboard/super-admin/sub-categories')->name('dashboard.super-admin.sub-categories.')->group(function () {
+    Route::get('/', [SubCategoryController::class, 'dashboardIndex'])->name('index');
+    Route::post('/', [SubCategoryController::class, 'store'])->name('store');
+    Route::put('/{id}', [SubCategoryController::class, 'update'])->name('update');
+    Route::delete('/{id}', [SubCategoryController::class, 'destroy'])->name('destroy');
+});
+
 Route::get('/dashboard/admin', function () {
     return Inertia::render('Dashboard/AdminDashboard');
 })->middleware(['auth', 'session.valid', 'user.type:admin'])->name('dashboard.admin');
@@ -95,6 +113,22 @@ Route::middleware(['auth', 'session.valid', 'user.type:admin'])->prefix('dashboa
     
     Route::put('/{id}', [AgrivetController::class, 'update'])->name('update');
     Route::delete('/{id}', [AgrivetController::class, 'destroy'])->name('destroy');
+});
+
+// Admin Category Management Routes
+Route::middleware(['auth', 'session.valid', 'user.type:admin'])->prefix('dashboard/admin/categories')->name('dashboard.admin.categories.')->group(function () {
+    Route::get('/', [CategoryController::class, 'dashboardIndex'])->name('index');
+    Route::post('/', [CategoryController::class, 'store'])->name('store');
+    Route::put('/{id}', [CategoryController::class, 'update'])->name('update');
+    Route::delete('/{id}', [CategoryController::class, 'destroy'])->name('destroy');
+});
+
+// Admin Sub-Category Management Routes
+Route::middleware(['auth', 'session.valid', 'user.type:admin'])->prefix('dashboard/admin/sub-categories')->name('dashboard.admin.sub-categories.')->group(function () {
+    Route::get('/', [SubCategoryController::class, 'dashboardIndex'])->name('index');
+    Route::post('/', [SubCategoryController::class, 'store'])->name('store');
+    Route::put('/{id}', [SubCategoryController::class, 'update'])->name('update');
+    Route::delete('/{id}', [SubCategoryController::class, 'destroy'])->name('destroy');
 });
 
 Route::get('/dashboard/vendor', [VendorController::class, 'index'])

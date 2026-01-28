@@ -39,4 +39,12 @@ class SubCategory extends Model
             'updated_at' => 'datetime',
         ];
     }
+
+    /**
+     * Get the items that belong to this sub-category.
+     */
+    public function items()
+    {
+        return $this->hasMany(Item::class, 'sub_category_id');
+    }
 }

@@ -29,7 +29,6 @@ export default function Products({ auth, products = [], shop, flash, stockImages
     weight: '',
     metric: '',
     category: '',
-    category_id: '',
     sub_category_id: '',
     item_images: [],
     stock_image_urls: [],
@@ -44,7 +43,6 @@ export default function Products({ auth, products = [], shop, flash, stockImages
     weight: '',
     metric: '',
     category: '',
-    category_id: '',
     sub_category_id: '',
     item_images: [],
     stock_image_urls: [],
@@ -92,7 +90,6 @@ export default function Products({ auth, products = [], shop, flash, stockImages
         weight: '',
         metric: '',
         category: '',
-        category_id: '',
         sub_category_id: '',
         item_images: [],
         stock_image_urls: [],
@@ -299,7 +296,6 @@ export default function Products({ auth, products = [], shop, flash, stockImages
       weight: product.weight != null ? String(product.weight) : '',
       metric: String(product.metric || ''),
       category: String(product.category || ''),
-      category_id: product.category_id != null ? String(product.category_id) : '',
       sub_category_id: product.sub_category_id != null ? String(product.sub_category_id) : '',
       item_images: [],
       item_status: String(product.item_status || 'active'),
@@ -634,51 +630,41 @@ export default function Products({ auth, products = [], shop, flash, stockImages
                         </div>
                       </div>
                     </div>
-                    <div className="row">
-                      <div className="col-md-6">
-                        <div className="form-group">
-                          <label>Category</label>
-                          <select
-                            className={`form-control ${addForm.errors.category_id ? 'is-invalid' : ''}`}
-                            value={addForm.data.category_id}
-                            onChange={(e) => {
-                              addForm.setData('category_id', e.target.value)
-                              // Reset sub_category_id when category changes
-                              addForm.setData('sub_category_id', '')
-                            }}
-                          >
-                            <option value="">Select Category</option>
-                            {categories.map((category) => (
-                              <option key={category.id} value={category.id}>
-                                {category.name}
-                              </option>
-                            ))}
-                          </select>
-                          {addForm.errors.category_id && (
-                            <div className="invalid-feedback">{addForm.errors.category_id}</div>
-                          )}
-                        </div>
-                      </div>
-                      <div className="col-md-6">
-                        <div className="form-group">
-                          <label>Sub Category</label>
-                          <select
-                            className={`form-control ${addForm.errors.sub_category_id ? 'is-invalid' : ''}`}
-                            value={addForm.data.sub_category_id}
-                            onChange={(e) => addForm.setData('sub_category_id', e.target.value)}
-                          >
-                            <option value="">Select Sub Category</option>
-                            {subCategories.map((subCategory) => (
-                              <option key={subCategory.id} value={subCategory.id}>
-                                {subCategory.name}
-                              </option>
-                            ))}
-                          </select>
-                          {addForm.errors.sub_category_id && (
-                            <div className="invalid-feedback">{addForm.errors.sub_category_id}</div>
-                          )}
-                        </div>
-                      </div>
+                    <div className="form-group">
+                      <label>Category</label>
+                      <select
+                        className={`form-control ${addForm.errors.category ? 'is-invalid' : ''}`}
+                        value={addForm.data.category}
+                        onChange={(e) => addForm.setData('category', e.target.value)}
+                      >
+                        <option value="">Select Category</option>
+                        {categories.map((category) => (
+                          <option key={category.id} value={category.id}>
+                            {category.name}
+                          </option>
+                        ))}
+                      </select>
+                      {addForm.errors.category && (
+                        <div className="invalid-feedback">{addForm.errors.category}</div>
+                      )}
+                    </div>
+                    <div className="form-group">
+                      <label>Sub Category</label>
+                      <select
+                        className={`form-control ${addForm.errors.sub_category_id ? 'is-invalid' : ''}`}
+                        value={addForm.data.sub_category_id}
+                        onChange={(e) => addForm.setData('sub_category_id', e.target.value)}
+                      >
+                        <option value="">Select Sub Category</option>
+                        {subCategories.map((subCategory) => (
+                          <option key={subCategory.id} value={subCategory.id}>
+                            {subCategory.name}
+                          </option>
+                        ))}
+                      </select>
+                      {addForm.errors.sub_category_id && (
+                        <div className="invalid-feedback">{addForm.errors.sub_category_id}</div>
+                      )}
                     </div>
                     <div className="form-group">
                       <label>Product Images <span className="text-danger">*</span></label>
@@ -998,53 +984,43 @@ export default function Products({ auth, products = [], shop, flash, stockImages
                         </div>
                       </div>
                     </div>
-                    <div className="row">
-                      <div className="col-md-6">
-                        <div className="form-group">
-                          <label>Category</label>
-                          <select
-                            name="category_id"
-                            className={`form-control ${editForm.errors.category_id ? 'is-invalid' : ''}`}
-                            value={editForm.data.category_id}
-                            onChange={(e) => {
-                              editForm.setData('category_id', e.target.value)
-                              // Reset sub_category_id when category changes
-                              editForm.setData('sub_category_id', '')
-                            }}
-                          >
-                            <option value="">Select Category</option>
-                            {categories.map((category) => (
-                              <option key={category.id} value={category.id}>
-                                {category.name}
-                              </option>
-                            ))}
-                          </select>
-                          {editForm.errors.category_id && (
-                            <div className="invalid-feedback">{editForm.errors.category_id}</div>
-                          )}
-                        </div>
-                      </div>
-                      <div className="col-md-6">
-                        <div className="form-group">
-                          <label>Sub Category</label>
-                          <select
-                            name="sub_category_id"
-                            className={`form-control ${editForm.errors.sub_category_id ? 'is-invalid' : ''}`}
-                            value={editForm.data.sub_category_id}
-                            onChange={(e) => editForm.setData('sub_category_id', e.target.value)}
-                          >
-                            <option value="">Select Sub Category</option>
-                            {subCategories.map((subCategory) => (
-                              <option key={subCategory.id} value={subCategory.id}>
-                                {subCategory.name}
-                              </option>
-                            ))}
-                          </select>
-                          {editForm.errors.sub_category_id && (
-                            <div className="invalid-feedback">{editForm.errors.sub_category_id}</div>
-                          )}
-                        </div>
-                      </div>
+                    <div className="form-group">
+                      <label>Category</label>
+                      <select
+                        name="category"
+                        className={`form-control ${editForm.errors.category ? 'is-invalid' : ''}`}
+                        value={editForm.data.category}
+                        onChange={(e) => editForm.setData('category', e.target.value)}
+                      >
+                        <option value="">Select Category</option>
+                        {categories.map((category) => (
+                          <option key={category.id} value={category.id}>
+                            {category.name}
+                          </option>
+                        ))}
+                      </select>
+                      {editForm.errors.category && (
+                        <div className="invalid-feedback">{editForm.errors.category}</div>
+                      )}
+                    </div>
+                    <div className="form-group">
+                      <label>Sub Category</label>
+                      <select
+                        name="sub_category_id"
+                        className={`form-control ${editForm.errors.sub_category_id ? 'is-invalid' : ''}`}
+                        value={editForm.data.sub_category_id}
+                        onChange={(e) => editForm.setData('sub_category_id', e.target.value)}
+                      >
+                        <option value="">Select Sub Category</option>
+                        {subCategories.map((subCategory) => (
+                          <option key={subCategory.id} value={subCategory.id}>
+                            {subCategory.name}
+                          </option>
+                        ))}
+                      </select>
+                      {editForm.errors.sub_category_id && (
+                        <div className="invalid-feedback">{editForm.errors.sub_category_id}</div>
+                      )}
                     </div>
                     <div className="form-group">
                       <label>Product Images</label>

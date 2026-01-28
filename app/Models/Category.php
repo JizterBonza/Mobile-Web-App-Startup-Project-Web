@@ -14,7 +14,7 @@ class Category extends Model
      *
      * @var string
      */
-    protected $table = 'categories';
+    protected $table = 'category';
 
     /**
      * The attributes that are mass assignable.
@@ -24,7 +24,8 @@ class Category extends Model
     protected $fillable = [
         'category_name',
         'category_description',
-        'category_status',
+        'category_image_url',
+        'status',
     ];
 
     /**
@@ -38,6 +39,14 @@ class Category extends Model
             'created_at' => 'datetime',
             'updated_at' => 'datetime',
         ];
+    }
+
+    /**
+     * Get the items that belong to this category.
+     */
+    public function items()
+    {
+        return $this->hasMany(Item::class, 'category');
     }
 }
 

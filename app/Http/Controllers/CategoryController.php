@@ -4,11 +4,109 @@ namespace App\Http\Controllers;
 
 use App\Models\Category;
 use Illuminate\Http\Request;
+use Inertia\Inertia;
 
 class CategoryController extends Controller
 {
     /**
-     * Fetch all categories
+     * Display categories page for dashboard
+     *
+     * @param Request $request
+     * @return \Inertia\Response
+     */
+    public function dashboardIndex(Request $request)
+    {
+        $query = Category::query();
+
+        // Filter by status if provided
+        if ($request->has('status')) {
+            $query->where('status', $request->status);
+        }
+
+        // Order by category name
+        $query->orderBy('category_name', 'asc');
+
+        $categories = $query->get();
+
+        return Inertia::render('Dashboard/Categories', [
+            'categories' => $categories,
+            'flash' => $request->session()->get('flash', []),
+        ]);
+    }
+
+    /**
+     * Store a new category
+     *
+     * @param Request $request
+     * @return \Illuminate\Http\RedirectResponse
+     */
+    public function store(Request $request)
+    {
+        $validated = $request->validate([
+            'category_name' => 'required|string|max:100|unique:category,category_name',
+            'category_description' => 'nullable|string',
+            'category_image_url' => 'nullable|string|max:255',
+            'status' => 'required|string|in:active,inactive',
+        ]);
+
+        Category::create($validated);
+
+        return redirect()->back()->with('flash', [
+            'success' => 'Category created successfully!'
+        ]);
+    }
+
+    /**
+     * Update an existing category
+     *
+     * @param Request $request
+     * @param int $id
+     * @return \Illuminate\Http\RedirectResponse
+     */
+    public function update(Request $request, $id)
+    {
+        $category = Category::findOrFail($id);
+
+        $validated = $request->validate([
+            'category_name' => 'required|string|max:100|unique:category,category_name,' . $id,
+            'category_description' => 'nullable|string',
+            'category_image_url' => 'nullable|string|max:255',
+            'status' => 'required|string|in:active,inactive',
+        ]);
+
+        $category->update($validated);
+
+        return redirect()->back()->with('flash', [
+            'success' => 'Category updated successfully!'
+        ]);
+    }
+
+    /**
+     * Delete a category
+     *
+     * @param int $id
+     * @return \Illuminate\Http\RedirectResponse
+     */
+    public function destroy($id)
+    {
+        $category = Category::findOrFail($id);
+
+        // Check if category has items
+        if ($category->items()->count() > 0) {
+            return redirect()->back()->with('flash', [
+                'error' => 'Cannot delete category. It has associated products.'
+            ]);
+        }
+
+        $category->delete();
+
+        return redirect()->back()->with('flash', [
+            'success' => 'Category deleted successfully!'
+        ]);
+    }
+
+    /**
+     * Fetch all categories (API endpoint)
      *
      * @param Request $request
      * @return \Illuminate\Http\JsonResponse
@@ -38,7 +136,7 @@ class CategoryController extends Controller
     }
 
     /**
-     * Fetch a single category by ID
+     * Fetch a single category by ID (API endpoint)
      *
      * @param int $id
      * @return \Illuminate\Http\JsonResponse

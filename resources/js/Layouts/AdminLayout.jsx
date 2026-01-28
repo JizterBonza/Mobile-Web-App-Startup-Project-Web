@@ -18,6 +18,46 @@ export default function AdminLayout({ children, auth, title = 'Dashboard' }) {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  // Initialize AdminLTE treeview after component mounts
+  useEffect(() => {
+    // Wait for AdminLTE to be available
+    const initTreeview = () => {
+      if (window.$ && window.$.fn.treeview) {
+        // Initialize treeview on all elements with data-widget="treeview"
+        window.$('[data-widget="treeview"]').each(function() {
+          const $treeview = window.$(this);
+          // Destroy existing treeview instance if any
+          if ($treeview.data('lte.treeview')) {
+            $treeview.treeview('destroy');
+          }
+          // Initialize treeview
+          $treeview.treeview();
+        });
+      }
+    };
+
+    // Use a small delay to ensure DOM is fully rendered
+    const timer = setTimeout(() => {
+      // Initialize immediately if jQuery is available
+      if (window.$ && window.$.fn.treeview) {
+        initTreeview();
+      } else {
+        // Wait for jQuery to load
+        const checkJQuery = setInterval(() => {
+          if (window.$ && window.$.fn.treeview) {
+            clearInterval(checkJQuery);
+            initTreeview();
+          }
+        }, 100);
+        
+        // Cleanup interval after 5 seconds
+        setTimeout(() => clearInterval(checkJQuery), 5000);
+      }
+    }, 100);
+
+    return () => clearTimeout(timer);
+  }, [sidebarCollapsed]);
+
   const handleLogout = (e) => {
     e.preventDefault();
     post('/logout');
@@ -25,6 +65,39 @@ export default function AdminLayout({ children, auth, title = 'Dashboard' }) {
 
   const toggleSidebar = () => {
     setSidebarCollapsed(!sidebarCollapsed);
+  };
+
+  const handleMenuToggle = (e) => {
+    e.preventDefault();
+    const link = e.currentTarget;
+    const parent = link.closest('.nav-item');
+    
+    if (parent) {
+      // Find the direct child ul.nav-treeview
+      const children = Array.from(parent.children);
+      const treeview = children.find(child => 
+        child.tagName === 'UL' && child.classList.contains('nav-treeview')
+      );
+      
+      if (treeview) {
+        // Toggle the menu-open class on parent
+        parent.classList.toggle('menu-open');
+        
+        // Toggle visibility of submenu
+        if (treeview.style.display === 'none' || !treeview.style.display) {
+          treeview.style.display = 'block';
+        } else {
+          treeview.style.display = 'none';
+        }
+        
+        // Also toggle the angle icon
+        const angleIcon = link.querySelector('.right.fas');
+        if (angleIcon) {
+          angleIcon.classList.toggle('fa-angle-left');
+          angleIcon.classList.toggle('fa-angle-down');
+        }
+      }
+    }
   };
 
   return (
@@ -158,6 +231,29 @@ export default function AdminLayout({ children, auth, title = 'Dashboard' }) {
                         <p>Agrivet Management</p>
                       </Link>
                     </li>
+                    <li className="nav-item">
+                      <a href="#" className="nav-link" onClick={handleMenuToggle}>
+                        <i className="nav-icon fas fa-box"></i>
+                        <p>
+                          Product Management
+                          <i className="right fas fa-angle-left"></i>
+                        </p>
+                      </a>
+                      <ul className="nav nav-treeview">
+                        <li className="nav-item">
+                          <Link href="/dashboard/super-admin/categories" className="nav-link">
+                            <i className="far fa-circle nav-icon"></i>
+                            <p>Categories</p>
+                          </Link>
+                        </li>
+                        <li className="nav-item">
+                          <Link href="/dashboard/super-admin/sub-categories" className="nav-link">
+                            <i className="far fa-circle nav-icon"></i>
+                            <p>Sub-Categories</p>
+                          </Link>
+                        </li>
+                      </ul>
+                    </li>
                   </>
                 ) : auth.user.user_type === 'admin' ? (
                   <>
@@ -178,6 +274,29 @@ export default function AdminLayout({ children, auth, title = 'Dashboard' }) {
                         <i className="nav-icon fas fa-clinic-medical"></i>
                         <p>Agrivet Management</p>
                       </Link>
+                    </li>
+                    <li className="nav-item">
+                      <a href="#" className="nav-link" onClick={handleMenuToggle}>
+                        <i className="nav-icon fas fa-box"></i>
+                        <p>
+                          Product Management
+                          <i className="right fas fa-angle-left"></i>
+                        </p>
+                      </a>
+                      <ul className="nav nav-treeview">
+                        <li className="nav-item">
+                          <Link href="/dashboard/admin/categories" className="nav-link">
+                            <i className="far fa-circle nav-icon"></i>
+                            <p>Categories</p>
+                          </Link>
+                        </li>
+                        <li className="nav-item">
+                          <Link href="/dashboard/admin/sub-categories" className="nav-link">
+                            <i className="far fa-circle nav-icon"></i>
+                            <p>Sub-Categories</p>
+                          </Link>
+                        </li>
+                      </ul>
                     </li>
                   </>
                 ) : auth.user.user_type === 'vendor' ? (

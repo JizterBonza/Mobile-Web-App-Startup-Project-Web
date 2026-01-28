@@ -214,12 +214,12 @@ class VendorController extends Controller
 
         // Get products for this shop with category and sub_category names
         $products = DB::table('items')
-            ->leftJoin('categories', 'items.category_id', '=', 'categories.id')
+            ->leftJoin('category', 'items.category', '=', 'category.id')
             ->leftJoin('sub_categories', 'items.sub_category_id', '=', 'sub_categories.id')
             ->where('items.shop_id', $shop->id)
             ->select(
                 'items.*',
-                'categories.category_name',
+                'category.category_name',
                 'sub_categories.sub_category_name'
             )
             ->orderBy('items.created_at', 'desc')
@@ -255,7 +255,6 @@ class VendorController extends Controller
                 'weight' => $item->weight,
                 'metric' => $item->metric,
                 'category' => $item->category,
-                'category_id' => $item->category_id,
                 'category_name' => $item->category_name,
                 'sub_category_id' => $item->sub_category_id,
                 'sub_category_name' => $item->sub_category_name,
@@ -286,7 +285,7 @@ class VendorController extends Controller
             }) : collect([]);
 
         // Get categories and sub_categories from database
-        $categories = Category::where('category_status', 'active')
+        $categories = Category::where('status', 'active')
             ->orderBy('category_name')
             ->get()
             ->map(function ($category) {
@@ -337,8 +336,7 @@ class VendorController extends Controller
             'item_quantity' => 'required|integer|min:0',
             'weight' => 'nullable|numeric|min:0',
             'metric' => 'nullable|string|max:50',
-            'category' => 'nullable|string|max:100',
-            'category_id' => 'nullable|exists:categories,id',
+            'category' => 'nullable|exists:category,id',
             'sub_category_id' => 'nullable|exists:sub_categories,id',
             'item_images' => 'nullable|array',
             'item_images.*' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:5120',
@@ -386,7 +384,6 @@ class VendorController extends Controller
             'weight' => $request->weight,
             'metric' => $request->metric,
             'category' => $request->category,
-            'category_id' => $request->category_id,
             'sub_category_id' => $request->sub_category_id,
             'item_images' => !empty($imagePaths) ? json_encode($imagePaths) : null,
             'item_status' => $request->item_status ?? 'active',
@@ -432,8 +429,7 @@ class VendorController extends Controller
             'item_quantity' => 'required|integer|min:0',
             'weight' => 'nullable|numeric|min:0',
             'metric' => 'nullable|string|max:50',
-            'category' => 'nullable|string|max:100',
-            'category_id' => 'nullable|exists:categories,id',
+            'category' => 'nullable|exists:category,id',
             'sub_category_id' => 'nullable|exists:sub_categories,id',
             'item_images' => 'nullable|array',
             'item_images.*' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:5120',
@@ -452,7 +448,6 @@ class VendorController extends Controller
             'weight' => $request->weight,
             'metric' => $request->metric,
             'category' => $request->category,
-            'category_id' => $request->category_id,
             'sub_category_id' => $request->sub_category_id,
             'item_status' => $request->item_status ?? $product->item_status,
             'updated_at' => now(),
