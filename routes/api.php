@@ -54,6 +54,7 @@ Route::get('orders/details/user/{userId}', [OrderController::class, 'getOrderDet
 Route::get('orders/{id}', [OrderController::class, 'show']);
 Route::post('orders/create', [OrderController::class, 'store']);
 Route::put('orders/{id}', [OrderController::class, 'update']);
+Route::put('orders/{id}/status', [OrderController::class, 'updateStatus']);
 Route::delete('orders/{id}', [OrderController::class, 'destroy']);
 
 // Cart routes
