@@ -10,9 +10,13 @@ class Agrivet extends Model
 {
     protected $fillable = [
         'name',
+        'registered_business_name',
+        'owner_name',
         'description',
+        'address',
         'contact_number',
         'email',
+        'permits',
         'logo_url',
         'status',
     ];

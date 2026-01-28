@@ -204,6 +204,98 @@ export default function UserManagement({ auth, users = [], flash }) {
     return type ? type.label : userType
   }
 
+  // Group users by user type
+  const groupUsersByType = () => {
+    const grouped = {}
+    const userTypeOrder = ['super_admin', 'admin', 'vendor', 'veterinarian', 'customer', 'rider']
+    
+    // Initialize all user types
+    userTypeOrder.forEach(type => {
+      grouped[type] = []
+    })
+    
+    // Group users
+    users.forEach(user => {
+      if (grouped[user.user_type]) {
+        grouped[user.user_type].push(user)
+      } else {
+        // Handle any unexpected user types
+        if (!grouped['other']) {
+          grouped['other'] = []
+        }
+        grouped['other'].push(user)
+      }
+    })
+    
+    return grouped
+  }
+
+  const groupedUsers = groupUsersByType()
+
+  // Render user table for a specific user type
+  const renderUserTable = (userType, userList) => {
+    if (userList.length === 0) {
+      return null
+    }
+
+    return (
+      <div className="card mb-3" key={userType}>
+        <div className="card-header">
+          <h3 className="card-title">
+            {getUserTypeLabel(userType)} ({userList.length})
+          </h3>
+        </div>
+        <div className="card-body table-responsive p-0">
+          <table className="table table-hover text-nowrap">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Name</th>
+                <th>Email</th>
+                <th>Mobile</th>
+                <th>Username</th>
+                <th>Status</th>
+                <th>Created At</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {userList.map((user) => (
+                <tr key={user.id}>
+                  <td>{user.id}</td>
+                  <td>{`${user.first_name} ${user.middle_name ? user.middle_name + ' ' : ''}${user.last_name}`}</td>
+                  <td>{user.email}</td>
+                  <td>{user.mobile_number || '-'}</td>
+                  <td>{user.username}</td>
+                  <td>{getStatusBadge(user.status)}</td>
+                  <td>{new Date(user.created_at).toLocaleDateString()}</td>
+                  <td>
+                    <button
+                      className="btn btn-sm btn-info mr-1"
+                      onClick={() => handleEditUser(user)}
+                      title="Edit User"
+                    >
+                      <i className="fas fa-edit"></i>
+                    </button>
+                    {user.status === 'active' && (
+                      <button
+                        className="btn btn-sm btn-danger"
+                        onClick={() => handleDeactivateUser(user.id)}
+                        title="Deactivate User"
+                      >
+                        <i className="fas fa-trash"></i>
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <AdminLayout auth={auth} title="User Management">
       {/* Flash Messages */}
@@ -241,9 +333,9 @@ export default function UserManagement({ auth, users = [], flash }) {
 
       <div className="row">
         <div className="col-12">
-          <div className="card">
+          <div className="card mb-3">
             <div className="card-header">
-              <h3 className="card-title">User List</h3>
+              <h3 className="card-title">User Management</h3>
               <div className="card-tools">
                 <button
                   type="button"
@@ -257,62 +349,26 @@ export default function UserManagement({ auth, users = [], flash }) {
                 </button>
               </div>
             </div>
-            <div className="card-body table-responsive p-0">
-              <table className="table table-hover text-nowrap">
-                <thead>
-                  <tr>
-                    <th>ID</th>
-                    <th>Name</th>
-                    <th>Email</th>
-                    <th>Mobile</th>
-                    <th>Username</th>
-                    <th>User Type</th>
-                    <th>Status</th>
-                    <th>Created At</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {users.length === 0 ? (
-                    <tr>
-                      <td colSpan="9" className="text-center">No users found</td>
-                    </tr>
-                  ) : (
-                    users.map((user) => (
-                      <tr key={user.id}>
-                        <td>{user.id}</td>
-                        <td>{`${user.first_name} ${user.middle_name ? user.middle_name + ' ' : ''}${user.last_name}`}</td>
-                        <td>{user.email}</td>
-                        <td>{user.mobile_number || '-'}</td>
-                        <td>{user.username}</td>
-                        <td>{getUserTypeLabel(user.user_type)}</td>
-                        <td>{getStatusBadge(user.status)}</td>
-                        <td>{new Date(user.created_at).toLocaleDateString()}</td>
-                        <td>
-                          <button
-                            className="btn btn-sm btn-info mr-1"
-                            onClick={() => handleEditUser(user)}
-                            title="Edit User"
-                          >
-                            <i className="fas fa-edit"></i>
-                          </button>
-                          {user.status === 'active' && (
-                            <button
-                              className="btn btn-sm btn-danger"
-                              onClick={() => handleDeactivateUser(user.id)}
-                              title="Deactivate User"
-                            >
-                              <i className="fas fa-trash"></i>
-                            </button>
-                          )}
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
           </div>
+
+          {/* Render user tables grouped by type */}
+          {users.length === 0 ? (
+            <div className="card">
+              <div className="card-body">
+                <p className="text-center mb-0">No users found</p>
+              </div>
+            </div>
+          ) : (
+            <>
+              {renderUserTable('super_admin', groupedUsers.super_admin)}
+              {renderUserTable('admin', groupedUsers.admin)}
+              {renderUserTable('vendor', groupedUsers.vendor)}
+              {renderUserTable('veterinarian', groupedUsers.veterinarian)}
+              {renderUserTable('customer', groupedUsers.customer)}
+              {renderUserTable('rider', groupedUsers.rider)}
+              {groupedUsers.other && renderUserTable('other', groupedUsers.other)}
+            </>
+          )}
         </div>
       </div>
 

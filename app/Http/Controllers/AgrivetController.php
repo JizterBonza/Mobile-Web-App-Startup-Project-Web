@@ -26,9 +26,13 @@ class AgrivetController extends Controller
                 return [
                     'id' => $agrivet->id,
                     'name' => $agrivet->name,
+                    'registered_business_name' => $agrivet->registered_business_name,
+                    'owner_name' => $agrivet->owner_name,
                     'description' => $agrivet->description,
+                    'address' => $agrivet->address,
                     'contact_number' => $agrivet->contact_number,
                     'email' => $agrivet->email,
+                    'permits' => $agrivet->permits,
                     'logo_url' => $agrivet->logo_url,
                     'status' => $agrivet->status,
                     'created_at' => $agrivet->created_at->format('Y-m-d H:i:s'),
@@ -49,9 +53,13 @@ class AgrivetController extends Controller
     {
         $request->validate([
             'name' => 'required|string|max:150',
+            'registered_business_name' => 'nullable|string|max:255',
+            'owner_name' => 'nullable|string|max:255',
             'description' => 'nullable|string',
+            'address' => 'nullable|string',
             'contact_number' => 'nullable|string|max:20',
             'email' => 'nullable|string|email|max:255',
+            'permits' => 'nullable|string',
             'logo_url' => 'nullable|string|max:255',
             'status' => 'nullable|string|in:active,inactive',
         ]);
@@ -59,9 +67,13 @@ class AgrivetController extends Controller
         try {
             $agrivet = Agrivet::create([
                 'name' => $request->name,
+                'registered_business_name' => $request->registered_business_name ?? null,
+                'owner_name' => $request->owner_name ?? null,
                 'description' => $request->description ?? null,
+                'address' => $request->address ?? null,
                 'contact_number' => $request->contact_number ?? null,
                 'email' => $request->email ?? null,
+                'permits' => $request->permits ?? null,
                 'logo_url' => $request->logo_url ?? null,
                 'status' => $request->status ?? 'active',
             ]);
@@ -90,9 +102,13 @@ class AgrivetController extends Controller
 
         $request->validate([
             'name' => 'required|string|max:150',
+            'registered_business_name' => 'nullable|string|max:255',
+            'owner_name' => 'nullable|string|max:255',
             'description' => 'nullable|string',
+            'address' => 'nullable|string',
             'contact_number' => 'nullable|string|max:20',
             'email' => 'nullable|string|email|max:255',
+            'permits' => 'nullable|string',
             'logo_url' => 'nullable|string|max:255',
             'status' => 'nullable|string|in:active,inactive',
         ]);
@@ -100,9 +116,13 @@ class AgrivetController extends Controller
         try {
             $agrivet->update([
                 'name' => $request->name,
+                'registered_business_name' => $request->registered_business_name ?? null,
+                'owner_name' => $request->owner_name ?? null,
                 'description' => $request->description ?? null,
+                'address' => $request->address ?? null,
                 'contact_number' => $request->contact_number ?? null,
                 'email' => $request->email ?? null,
+                'permits' => $request->permits ?? null,
                 'logo_url' => $request->logo_url ?? null,
                 'status' => $request->status ?? $agrivet->status,
             ]);

@@ -14,18 +14,26 @@ export default function AgrivetManagement({ auth, agrivets = [], flash }) {
 
   const addForm = useForm({
     name: '',
+    registered_business_name: '',
+    owner_name: '',
     description: '',
+    address: '',
     contact_number: '',
     email: '',
+    permits: '',
     logo_url: '',
     status: 'active',
   })
 
   const editForm = useForm({
     name: '',
+    registered_business_name: '',
+    owner_name: '',
     description: '',
+    address: '',
     contact_number: '',
     email: '',
+    permits: '',
     logo_url: '',
     status: 'active',
   })
@@ -116,9 +124,13 @@ export default function AgrivetManagement({ auth, agrivets = [], flash }) {
     setSelectedAgrivet(agrivet)
     editForm.setData({
       name: agrivet.name,
+      registered_business_name: agrivet.registered_business_name || '',
+      owner_name: agrivet.owner_name || '',
       description: agrivet.description || '',
+      address: agrivet.address || '',
       contact_number: agrivet.contact_number || '',
       email: agrivet.email || '',
+      permits: agrivet.permits || '',
       logo_url: agrivet.logo_url || '',
       status: agrivet.status,
     })
@@ -288,7 +300,7 @@ export default function AgrivetManagement({ auth, agrivets = [], flash }) {
                     <div className="row">
                       <div className="col-md-6">
                         <div className="form-group">
-                          <label>Agrivet Name <span className="text-danger">*</span></label>
+                          <label>Store Name <span className="text-danger">*</span></label>
                           <input
                             type="text"
                             className={`form-control ${addForm.errors.name ? 'is-invalid' : ''}`}
@@ -298,6 +310,36 @@ export default function AgrivetManagement({ auth, agrivets = [], flash }) {
                           />
                           {addForm.errors.name && (
                             <div className="invalid-feedback">{addForm.errors.name}</div>
+                          )}
+                        </div>
+                      </div>
+                      <div className="col-md-6">
+                        <div className="form-group">
+                          <label>Registered Business Name</label>
+                          <input
+                            type="text"
+                            className={`form-control ${addForm.errors.registered_business_name ? 'is-invalid' : ''}`}
+                            value={addForm.data.registered_business_name}
+                            onChange={(e) => addForm.setData('registered_business_name', e.target.value)}
+                          />
+                          {addForm.errors.registered_business_name && (
+                            <div className="invalid-feedback">{addForm.errors.registered_business_name}</div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="row">
+                      <div className="col-md-6">
+                        <div className="form-group">
+                          <label>Point of Contact Person Name</label>
+                          <input
+                            type="text"
+                            className={`form-control ${addForm.errors.owner_name ? 'is-invalid' : ''}`}
+                            value={addForm.data.owner_name}
+                            onChange={(e) => addForm.setData('owner_name', e.target.value)}
+                          />
+                          {addForm.errors.owner_name && (
+                            <div className="invalid-feedback">{addForm.errors.owner_name}</div>
                           )}
                         </div>
                       </div>
@@ -336,6 +378,23 @@ export default function AgrivetManagement({ auth, agrivets = [], flash }) {
                       </div>
                     </div>
                     <div className="row">
+                      <div className="col-md-12">
+                        <div className="form-group">
+                          <label>Address</label>
+                          <textarea
+                            className={`form-control ${addForm.errors.address ? 'is-invalid' : ''}`}
+                            value={addForm.data.address}
+                            onChange={(e) => addForm.setData('address', e.target.value)}
+                            rows="2"
+                            placeholder="Enter full address details"
+                          />
+                          {addForm.errors.address && (
+                            <div className="invalid-feedback">{addForm.errors.address}</div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="row">
                       <div className="col-md-6">
                         <div className="form-group">
                           <label>Contact Number</label>
@@ -361,6 +420,23 @@ export default function AgrivetManagement({ auth, agrivets = [], flash }) {
                           />
                           {addForm.errors.email && (
                             <div className="invalid-feedback">{addForm.errors.email}</div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="row">
+                      <div className="col-md-12">
+                        <div className="form-group">
+                          <label>Necessary Permits for Operation</label>
+                          <textarea
+                            className={`form-control ${addForm.errors.permits ? 'is-invalid' : ''}`}
+                            value={addForm.data.permits}
+                            onChange={(e) => addForm.setData('permits', e.target.value)}
+                            rows="3"
+                            placeholder="List all necessary permits (e.g., Business Permit, DTI Registration, etc.)"
+                          />
+                          {addForm.errors.permits && (
+                            <div className="invalid-feedback">{addForm.errors.permits}</div>
                           )}
                         </div>
                       </div>
@@ -428,7 +504,7 @@ export default function AgrivetManagement({ auth, agrivets = [], flash }) {
                     <div className="row">
                       <div className="col-md-6">
                         <div className="form-group">
-                          <label>Agrivet Name <span className="text-danger">*</span></label>
+                          <label>Store Name <span className="text-danger">*</span></label>
                           <input
                             type="text"
                             className={`form-control ${editForm.errors.name ? 'is-invalid' : ''}`}
@@ -438,6 +514,36 @@ export default function AgrivetManagement({ auth, agrivets = [], flash }) {
                           />
                           {editForm.errors.name && (
                             <div className="invalid-feedback">{editForm.errors.name}</div>
+                          )}
+                        </div>
+                      </div>
+                      <div className="col-md-6">
+                        <div className="form-group">
+                          <label>Registered Business Name</label>
+                          <input
+                            type="text"
+                            className={`form-control ${editForm.errors.registered_business_name ? 'is-invalid' : ''}`}
+                            value={editForm.data.registered_business_name}
+                            onChange={(e) => editForm.setData('registered_business_name', e.target.value)}
+                          />
+                          {editForm.errors.registered_business_name && (
+                            <div className="invalid-feedback">{editForm.errors.registered_business_name}</div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="row">
+                      <div className="col-md-6">
+                        <div className="form-group">
+                          <label>Owner/Point of Contact Person Name</label>
+                          <input
+                            type="text"
+                            className={`form-control ${editForm.errors.owner_name ? 'is-invalid' : ''}`}
+                            value={editForm.data.owner_name}
+                            onChange={(e) => editForm.setData('owner_name', e.target.value)}
+                          />
+                          {editForm.errors.owner_name && (
+                            <div className="invalid-feedback">{editForm.errors.owner_name}</div>
                           )}
                         </div>
                       </div>
@@ -476,6 +582,23 @@ export default function AgrivetManagement({ auth, agrivets = [], flash }) {
                       </div>
                     </div>
                     <div className="row">
+                      <div className="col-md-12">
+                        <div className="form-group">
+                          <label>Address</label>
+                          <textarea
+                            className={`form-control ${editForm.errors.address ? 'is-invalid' : ''}`}
+                            value={editForm.data.address}
+                            onChange={(e) => editForm.setData('address', e.target.value)}
+                            rows="2"
+                            placeholder="Enter full address details"
+                          />
+                          {editForm.errors.address && (
+                            <div className="invalid-feedback">{editForm.errors.address}</div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="row">
                       <div className="col-md-6">
                         <div className="form-group">
                           <label>Contact Number</label>
@@ -501,6 +624,23 @@ export default function AgrivetManagement({ auth, agrivets = [], flash }) {
                           />
                           {editForm.errors.email && (
                             <div className="invalid-feedback">{editForm.errors.email}</div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="row">
+                      <div className="col-md-12">
+                        <div className="form-group">
+                          <label>Necessary Permits for Operation</label>
+                          <textarea
+                            className={`form-control ${editForm.errors.permits ? 'is-invalid' : ''}`}
+                            value={editForm.data.permits}
+                            onChange={(e) => editForm.setData('permits', e.target.value)}
+                            rows="3"
+                            placeholder="List all necessary permits (e.g., Business Permit, DTI Registration, etc.)"
+                          />
+                          {editForm.errors.permits && (
+                            <div className="invalid-feedback">{editForm.errors.permits}</div>
                           )}
                         </div>
                       </div>
