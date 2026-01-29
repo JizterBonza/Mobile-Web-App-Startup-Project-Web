@@ -14,7 +14,7 @@ class Category extends Model
      *
      * @var string
      */
-    protected $table = 'categories';
+    protected $table = 'category';
 
     /**
      * The attributes that are mass assignable.
@@ -24,7 +24,8 @@ class Category extends Model
     protected $fillable = [
         'category_name',
         'category_description',
-        'category_status',
+        'category_image_url',
+        'status',
     ];
 
     /**
