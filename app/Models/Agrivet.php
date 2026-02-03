@@ -14,11 +14,20 @@ class Agrivet extends Model
         'owner_name',
         'description',
         'address',
+        'city',
+        'postal_code',
+        'latitude',
+        'longitude',
         'contact_number',
         'email',
         'permits',
         'logo_url',
         'status',
+    ];
+
+    protected $casts = [
+        'latitude' => 'decimal:7',
+        'longitude' => 'decimal:7',
     ];
 
     /**

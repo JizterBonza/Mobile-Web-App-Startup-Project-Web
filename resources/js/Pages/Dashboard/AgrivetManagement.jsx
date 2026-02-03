@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useForm, router, Link } from '@inertiajs/react'
 import AdminLayout from '../../Layouts/AdminLayout'
+import PinLocationMap from '../../Components/PinLocationMap'
 
 export default function AgrivetManagement({ auth, agrivets = [], flash }) {
   const [showAddModal, setShowAddModal] = useState(false)
@@ -18,6 +19,10 @@ export default function AgrivetManagement({ auth, agrivets = [], flash }) {
     owner_name: '',
     description: '',
     address: '',
+    city: '',
+    postal_code: '',
+    latitude: '',
+    longitude: '',
     contact_number: '',
     email: '',
     permits: '',
@@ -31,6 +36,10 @@ export default function AgrivetManagement({ auth, agrivets = [], flash }) {
     owner_name: '',
     description: '',
     address: '',
+    city: '',
+    postal_code: '',
+    latitude: '',
+    longitude: '',
     contact_number: '',
     email: '',
     permits: '',
@@ -128,6 +137,10 @@ export default function AgrivetManagement({ auth, agrivets = [], flash }) {
       owner_name: agrivet.owner_name || '',
       description: agrivet.description || '',
       address: agrivet.address || '',
+      city: agrivet.city || '',
+      postal_code: agrivet.postal_code || '',
+      latitude: agrivet.latitude ?? '',
+      longitude: agrivet.longitude ?? '',
       contact_number: agrivet.contact_number || '',
       email: agrivet.email || '',
       permits: agrivet.permits || '',
@@ -380,16 +393,104 @@ export default function AgrivetManagement({ auth, agrivets = [], flash }) {
                     <div className="row">
                       <div className="col-md-12">
                         <div className="form-group">
+                          <label>Pin Location</label>
+                          <PinLocationMap
+                            initialLat={addForm.data.latitude ? parseFloat(addForm.data.latitude) : undefined}
+                            initialLng={addForm.data.longitude ? parseFloat(addForm.data.longitude) : undefined}
+                            initialAddress={addForm.data.address}
+                            initialCity={addForm.data.city}
+                            initialPostalCode={addForm.data.postal_code}
+                            onLocationSelect={(loc) => {
+                              addForm.setData({
+                                address: loc.address,
+                                city: loc.city,
+                                postal_code: loc.postal_code,
+                                latitude: loc.latitude,
+                                longitude: loc.longitude,
+                              })
+                            }}
+                            height={320}
+                            error={addForm.errors.address}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                    <div className="row">
+                      <div className="col-md-6">
+                        <div className="form-group">
                           <label>Address</label>
-                          <textarea
+                          <input
+                            type="text"
                             className={`form-control ${addForm.errors.address ? 'is-invalid' : ''}`}
                             value={addForm.data.address}
                             onChange={(e) => addForm.setData('address', e.target.value)}
-                            rows="2"
-                            placeholder="Enter full address details"
+                            placeholder="Filled by pinned location"
+                            readOnly
                           />
                           {addForm.errors.address && (
                             <div className="invalid-feedback">{addForm.errors.address}</div>
+                          )}
+                        </div>
+                      </div>
+                      <div className="col-md-3">
+                        <div className="form-group">
+                          <label>City</label>
+                          <input
+                            type="text"
+                            className={`form-control ${addForm.errors.city ? 'is-invalid' : ''}`}
+                            value={addForm.data.city}
+                            onChange={(e) => addForm.setData('city', e.target.value)}
+                            placeholder="Auto-filled"
+                          />
+                          {addForm.errors.city && (
+                            <div className="invalid-feedback">{addForm.errors.city}</div>
+                          )}
+                        </div>
+                      </div>
+                      <div className="col-md-3">
+                        <div className="form-group">
+                          <label>Postal Code</label>
+                          <input
+                            type="text"
+                            className={`form-control ${addForm.errors.postal_code ? 'is-invalid' : ''}`}
+                            value={addForm.data.postal_code}
+                            onChange={(e) => addForm.setData('postal_code', e.target.value)}
+                            placeholder="Auto-filled"
+                          />
+                          {addForm.errors.postal_code && (
+                            <div className="invalid-feedback">{addForm.errors.postal_code}</div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="row">
+                      <div className="col-md-6">
+                        <div className="form-group">
+                          <label>Latitude</label>
+                          <input
+                            type="text"
+                            className={`form-control ${addForm.errors.latitude ? 'is-invalid' : ''}`}
+                            value={addForm.data.latitude}
+                            onChange={(e) => addForm.setData('latitude', e.target.value)}
+                            placeholder="Auto-filled"
+                          />
+                          {addForm.errors.latitude && (
+                            <div className="invalid-feedback">{addForm.errors.latitude}</div>
+                          )}
+                        </div>
+                      </div>
+                      <div className="col-md-6">
+                        <div className="form-group">
+                          <label>Longitude</label>
+                          <input
+                            type="text"
+                            className={`form-control ${addForm.errors.longitude ? 'is-invalid' : ''}`}
+                            value={addForm.data.longitude}
+                            onChange={(e) => addForm.setData('longitude', e.target.value)}
+                            placeholder="Auto-filled"
+                          />
+                          {addForm.errors.longitude && (
+                            <div className="invalid-feedback">{addForm.errors.longitude}</div>
                           )}
                         </div>
                       </div>
@@ -584,16 +685,104 @@ export default function AgrivetManagement({ auth, agrivets = [], flash }) {
                     <div className="row">
                       <div className="col-md-12">
                         <div className="form-group">
+                          <label>Pin Location</label>
+                          <PinLocationMap
+                            initialLat={editForm.data.latitude ? parseFloat(editForm.data.latitude) : undefined}
+                            initialLng={editForm.data.longitude ? parseFloat(editForm.data.longitude) : undefined}
+                            initialAddress={editForm.data.address}
+                            initialCity={editForm.data.city}
+                            initialPostalCode={editForm.data.postal_code}
+                            onLocationSelect={(loc) => {
+                              editForm.setData({
+                                address: loc.address,
+                                city: loc.city,
+                                postal_code: loc.postal_code,
+                                latitude: loc.latitude,
+                                longitude: loc.longitude,
+                              })
+                            }}
+                            height={320}
+                            error={editForm.errors.address}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                    <div className="row">
+                      <div className="col-md-6">
+                        <div className="form-group">
                           <label>Address</label>
-                          <textarea
+                          <input
+                            type="text"
                             className={`form-control ${editForm.errors.address ? 'is-invalid' : ''}`}
                             value={editForm.data.address}
                             onChange={(e) => editForm.setData('address', e.target.value)}
-                            rows="2"
-                            placeholder="Enter full address details"
+                            placeholder="Filled by pinned location"
+                            readOnly
                           />
                           {editForm.errors.address && (
                             <div className="invalid-feedback">{editForm.errors.address}</div>
+                          )}
+                        </div>
+                      </div>
+                      <div className="col-md-3">
+                        <div className="form-group">
+                          <label>City</label>
+                          <input
+                            type="text"
+                            className={`form-control ${editForm.errors.city ? 'is-invalid' : ''}`}
+                            value={editForm.data.city}
+                            onChange={(e) => editForm.setData('city', e.target.value)}
+                            placeholder="Auto-filled"
+                          />
+                          {editForm.errors.city && (
+                            <div className="invalid-feedback">{editForm.errors.city}</div>
+                          )}
+                        </div>
+                      </div>
+                      <div className="col-md-3">
+                        <div className="form-group">
+                          <label>Postal Code</label>
+                          <input
+                            type="text"
+                            className={`form-control ${editForm.errors.postal_code ? 'is-invalid' : ''}`}
+                            value={editForm.data.postal_code}
+                            onChange={(e) => editForm.setData('postal_code', e.target.value)}
+                            placeholder="Auto-filled"
+                          />
+                          {editForm.errors.postal_code && (
+                            <div className="invalid-feedback">{editForm.errors.postal_code}</div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="row">
+                      <div className="col-md-6">
+                        <div className="form-group">
+                          <label>Latitude</label>
+                          <input
+                            type="text"
+                            className={`form-control ${editForm.errors.latitude ? 'is-invalid' : ''}`}
+                            value={editForm.data.latitude}
+                            onChange={(e) => editForm.setData('latitude', e.target.value)}
+                            placeholder="Auto-filled"
+                          />
+                          {editForm.errors.latitude && (
+                            <div className="invalid-feedback">{editForm.errors.latitude}</div>
+                          )}
+                        </div>
+                      </div>
+                      <div className="col-md-6">
+                        <div className="form-group">
+                          <label>Longitude</label>
+                          <input
+                            type="text"
+                            className={`form-control ${editForm.errors.longitude ? 'is-invalid' : ''}`}
+                            value={editForm.data.longitude}
+                            onChange={(e) => editForm.setData('longitude', e.target.value)}
+                            placeholder="Auto-filled"
+                          />
+                          {editForm.errors.longitude && (
+                            <div className="invalid-feedback">{editForm.errors.longitude}</div>
                           )}
                         </div>
                       </div>

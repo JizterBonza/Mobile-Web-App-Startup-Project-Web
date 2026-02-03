@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useForm, router, Link } from '@inertiajs/react'
 import AdminLayout from '../../Layouts/AdminLayout'
-import AddressAutocomplete from '../../Components/AddressAutocomplete'
+import PinLocationMap from '../../Components/PinLocationMap'
 
 export default function AgrivetShops({ auth, agrivet, shops = [], flash }) {
   const [showAddModal, setShowAddModal] = useState(false)
@@ -357,19 +357,19 @@ export default function AgrivetShops({ auth, agrivet, shops = [], flash }) {
                     <div className="row">
                       <div className="col-md-12">
                         <div className="form-group">
-                          <label>Address</label>
-                          <AddressAutocomplete
-                            value={addForm.data.shop_address}
-                            onChange={(address) => addForm.setData('shop_address', address)}
-                            onPlaceSelect={(place) => {
+                          <label>Pin Location</label>
+                          <PinLocationMap
+                            initialLat={addForm.data.shop_lat ? parseFloat(addForm.data.shop_lat) : undefined}
+                            initialLng={addForm.data.shop_long ? parseFloat(addForm.data.shop_long) : undefined}
+                            initialAddress={addForm.data.shop_address}
+                            onLocationSelect={(loc) => {
                               addForm.setData({
-                                ...addForm.data,
-                                shop_address: place.address,
-                                shop_lat: place.lat || '',
-                                shop_long: place.lng || '',
+                                shop_address: loc.address,
+                                shop_lat: loc.latitude,
+                                shop_long: loc.longitude,
                               })
                             }}
-                            placeholder="Enter shop address"
+                            height={320}
                             error={addForm.errors.shop_address}
                           />
                         </div>
@@ -378,30 +378,44 @@ export default function AgrivetShops({ auth, agrivet, shops = [], flash }) {
                     <div className="row">
                       <div className="col-md-6">
                         <div className="form-group">
-                          <label>Latitude <small className="text-muted">(auto-filled from address)</small></label>
+                          <label>Address</label>
                           <input
-                            type="number"
-                            step="any"
+                            type="text"
+                            className={`form-control ${addForm.errors.shop_address ? 'is-invalid' : ''}`}
+                            value={addForm.data.shop_address}
+                            onChange={(e) => addForm.setData('shop_address', e.target.value)}
+                            placeholder="Filled by pinned location"
+                            readOnly
+                          />
+                          {addForm.errors.shop_address && (
+                            <div className="invalid-feedback">{addForm.errors.shop_address}</div>
+                          )}
+                        </div>
+                      </div>
+                      <div className="col-md-3">
+                        <div className="form-group">
+                          <label>Latitude</label>
+                          <input
+                            type="text"
                             className={`form-control ${addForm.errors.shop_lat ? 'is-invalid' : ''}`}
                             value={addForm.data.shop_lat}
                             onChange={(e) => addForm.setData('shop_lat', e.target.value)}
-                            placeholder="Auto-filled when address is selected"
+                            placeholder="Auto-filled"
                           />
                           {addForm.errors.shop_lat && (
                             <div className="invalid-feedback">{addForm.errors.shop_lat}</div>
                           )}
                         </div>
                       </div>
-                      <div className="col-md-6">
+                      <div className="col-md-3">
                         <div className="form-group">
-                          <label>Longitude <small className="text-muted">(auto-filled from address)</small></label>
+                          <label>Longitude</label>
                           <input
-                            type="number"
-                            step="any"
+                            type="text"
                             className={`form-control ${addForm.errors.shop_long ? 'is-invalid' : ''}`}
                             value={addForm.data.shop_long}
                             onChange={(e) => addForm.setData('shop_long', e.target.value)}
-                            placeholder="Auto-filled when address is selected"
+                            placeholder="Auto-filled"
                           />
                           {addForm.errors.shop_long && (
                             <div className="invalid-feedback">{addForm.errors.shop_long}</div>
@@ -517,19 +531,19 @@ export default function AgrivetShops({ auth, agrivet, shops = [], flash }) {
                     <div className="row">
                       <div className="col-md-12">
                         <div className="form-group">
-                          <label>Address</label>
-                          <AddressAutocomplete
-                            value={editForm.data.shop_address}
-                            onChange={(address) => editForm.setData('shop_address', address)}
-                            onPlaceSelect={(place) => {
+                          <label>Pin Location</label>
+                          <PinLocationMap
+                            initialLat={editForm.data.shop_lat ? parseFloat(editForm.data.shop_lat) : undefined}
+                            initialLng={editForm.data.shop_long ? parseFloat(editForm.data.shop_long) : undefined}
+                            initialAddress={editForm.data.shop_address}
+                            onLocationSelect={(loc) => {
                               editForm.setData({
-                                ...editForm.data,
-                                shop_address: place.address,
-                                shop_lat: place.lat || '',
-                                shop_long: place.lng || '',
+                                shop_address: loc.address,
+                                shop_lat: loc.latitude,
+                                shop_long: loc.longitude,
                               })
                             }}
-                            placeholder="Enter shop address"
+                            height={320}
                             error={editForm.errors.shop_address}
                           />
                         </div>
@@ -538,30 +552,44 @@ export default function AgrivetShops({ auth, agrivet, shops = [], flash }) {
                     <div className="row">
                       <div className="col-md-6">
                         <div className="form-group">
-                          <label>Latitude <small className="text-muted">(auto-filled from address)</small></label>
+                          <label>Address</label>
                           <input
-                            type="number"
-                            step="any"
+                            type="text"
+                            className={`form-control ${editForm.errors.shop_address ? 'is-invalid' : ''}`}
+                            value={editForm.data.shop_address}
+                            onChange={(e) => editForm.setData('shop_address', e.target.value)}
+                            placeholder="Filled by pinned location"
+                            readOnly
+                          />
+                          {editForm.errors.shop_address && (
+                            <div className="invalid-feedback">{editForm.errors.shop_address}</div>
+                          )}
+                        </div>
+                      </div>
+                      <div className="col-md-3">
+                        <div className="form-group">
+                          <label>Latitude</label>
+                          <input
+                            type="text"
                             className={`form-control ${editForm.errors.shop_lat ? 'is-invalid' : ''}`}
                             value={editForm.data.shop_lat}
                             onChange={(e) => editForm.setData('shop_lat', e.target.value)}
-                            placeholder="Auto-filled when address is selected"
+                            placeholder="Auto-filled"
                           />
                           {editForm.errors.shop_lat && (
                             <div className="invalid-feedback">{editForm.errors.shop_lat}</div>
                           )}
                         </div>
                       </div>
-                      <div className="col-md-6">
+                      <div className="col-md-3">
                         <div className="form-group">
-                          <label>Longitude <small className="text-muted">(auto-filled from address)</small></label>
+                          <label>Longitude</label>
                           <input
-                            type="number"
-                            step="any"
+                            type="text"
                             className={`form-control ${editForm.errors.shop_long ? 'is-invalid' : ''}`}
                             value={editForm.data.shop_long}
                             onChange={(e) => editForm.setData('shop_long', e.target.value)}
-                            placeholder="Auto-filled when address is selected"
+                            placeholder="Auto-filled"
                           />
                           {editForm.errors.shop_long && (
                             <div className="invalid-feedback">{editForm.errors.shop_long}</div>
