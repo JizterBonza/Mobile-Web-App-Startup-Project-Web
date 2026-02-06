@@ -17,6 +17,8 @@ export default function AgrivetShops({ auth, agrivet, shops = [], flash }) {
     shop_name: '',
     shop_description: '',
     shop_address: '',
+    shop_city: '',
+    shop_postal_code: '',
     shop_lat: '',
     shop_long: '',
     contact_number: '',
@@ -27,6 +29,8 @@ export default function AgrivetShops({ auth, agrivet, shops = [], flash }) {
     shop_name: '',
     shop_description: '',
     shop_address: '',
+    shop_city: '',
+    shop_postal_code: '',
     shop_lat: '',
     shop_long: '',
     contact_number: '',
@@ -121,6 +125,8 @@ export default function AgrivetShops({ auth, agrivet, shops = [], flash }) {
       shop_name: shop.shop_name,
       shop_description: shop.shop_description || '',
       shop_address: shop.shop_address || '',
+      shop_city: shop.shop_city || '',
+      shop_postal_code: shop.shop_postal_code || '',
       shop_lat: shop.shop_lat || '',
       shop_long: shop.shop_long || '',
       contact_number: shop.contact_number || '',
@@ -362,9 +368,10 @@ export default function AgrivetShops({ auth, agrivet, shops = [], flash }) {
                             initialLat={addForm.data.shop_lat ? parseFloat(addForm.data.shop_lat) : undefined}
                             initialLng={addForm.data.shop_long ? parseFloat(addForm.data.shop_long) : undefined}
                             initialAddress={addForm.data.shop_address}
+                            initialCity={addForm.data.shop_city}
+                            initialPostalCode={addForm.data.shop_postal_code}
                             onLocationSelect={(loc) => {
                               addForm.setData({
-                                shop_address: loc.address,
                                 shop_lat: loc.latitude,
                                 shop_long: loc.longitude,
                               })
@@ -384,8 +391,7 @@ export default function AgrivetShops({ auth, agrivet, shops = [], flash }) {
                             className={`form-control ${addForm.errors.shop_address ? 'is-invalid' : ''}`}
                             value={addForm.data.shop_address}
                             onChange={(e) => addForm.setData('shop_address', e.target.value)}
-                            placeholder="Filled by pinned location"
-                            readOnly
+                            placeholder="Enter address"
                           />
                           {addForm.errors.shop_address && (
                             <div className="invalid-feedback">{addForm.errors.shop_address}</div>
@@ -393,6 +399,38 @@ export default function AgrivetShops({ auth, agrivet, shops = [], flash }) {
                         </div>
                       </div>
                       <div className="col-md-3">
+                        <div className="form-group">
+                          <label>City</label>
+                          <input
+                            type="text"
+                            className={`form-control ${addForm.errors.shop_city ? 'is-invalid' : ''}`}
+                            value={addForm.data.shop_city}
+                            onChange={(e) => addForm.setData('shop_city', e.target.value)}
+                            placeholder="Enter city"
+                          />
+                          {addForm.errors.shop_city && (
+                            <div className="invalid-feedback">{addForm.errors.shop_city}</div>
+                          )}
+                        </div>
+                      </div>
+                      <div className="col-md-3">
+                        <div className="form-group">
+                          <label>Postal Code</label>
+                          <input
+                            type="text"
+                            className={`form-control ${addForm.errors.shop_postal_code ? 'is-invalid' : ''}`}
+                            value={addForm.data.shop_postal_code}
+                            onChange={(e) => addForm.setData('shop_postal_code', e.target.value)}
+                            placeholder="Enter postal code"
+                          />
+                          {addForm.errors.shop_postal_code && (
+                            <div className="invalid-feedback">{addForm.errors.shop_postal_code}</div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="row">
+                      <div className="col-md-6">
                         <div className="form-group">
                           <label>Latitude</label>
                           <input
@@ -536,9 +574,13 @@ export default function AgrivetShops({ auth, agrivet, shops = [], flash }) {
                             initialLat={editForm.data.shop_lat ? parseFloat(editForm.data.shop_lat) : undefined}
                             initialLng={editForm.data.shop_long ? parseFloat(editForm.data.shop_long) : undefined}
                             initialAddress={editForm.data.shop_address}
+                            initialCity={editForm.data.shop_city}
+                            initialPostalCode={editForm.data.shop_postal_code}
                             onLocationSelect={(loc) => {
                               editForm.setData({
                                 shop_address: loc.address,
+                                shop_city: loc.city ?? '',
+                                shop_postal_code: loc.postal_code ?? '',
                                 shop_lat: loc.latitude,
                                 shop_long: loc.longitude,
                               })
@@ -568,6 +610,38 @@ export default function AgrivetShops({ auth, agrivet, shops = [], flash }) {
                       </div>
                       <div className="col-md-3">
                         <div className="form-group">
+                          <label>City</label>
+                          <input
+                            type="text"
+                            className={`form-control ${editForm.errors.shop_city ? 'is-invalid' : ''}`}
+                            value={editForm.data.shop_city}
+                            onChange={(e) => editForm.setData('shop_city', e.target.value)}
+                            placeholder="Auto-filled or enter city"
+                          />
+                          {editForm.errors.shop_city && (
+                            <div className="invalid-feedback">{editForm.errors.shop_city}</div>
+                          )}
+                        </div>
+                      </div>
+                      <div className="col-md-3">
+                        <div className="form-group">
+                          <label>Postal Code</label>
+                          <input
+                            type="text"
+                            className={`form-control ${editForm.errors.shop_postal_code ? 'is-invalid' : ''}`}
+                            value={editForm.data.shop_postal_code}
+                            onChange={(e) => editForm.setData('shop_postal_code', e.target.value)}
+                            placeholder="Auto-filled or enter postal code"
+                          />
+                          {editForm.errors.shop_postal_code && (
+                            <div className="invalid-feedback">{editForm.errors.shop_postal_code}</div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="row">
+                      <div className="col-md-6">
+                        <div className="form-group">
                           <label>Latitude</label>
                           <input
                             type="text"
@@ -581,7 +655,7 @@ export default function AgrivetShops({ auth, agrivet, shops = [], flash }) {
                           )}
                         </div>
                       </div>
-                      <div className="col-md-3">
+                      <div className="col-md-6">
                         <div className="form-group">
                           <label>Longitude</label>
                           <input

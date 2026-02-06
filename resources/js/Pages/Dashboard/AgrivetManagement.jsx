@@ -402,9 +402,6 @@ export default function AgrivetManagement({ auth, agrivets = [], flash }) {
                             initialPostalCode={addForm.data.postal_code}
                             onLocationSelect={(loc) => {
                               addForm.setData({
-                                address: loc.address,
-                                city: loc.city,
-                                postal_code: loc.postal_code,
                                 latitude: loc.latitude,
                                 longitude: loc.longitude,
                               })
@@ -424,8 +421,7 @@ export default function AgrivetManagement({ auth, agrivets = [], flash }) {
                             className={`form-control ${addForm.errors.address ? 'is-invalid' : ''}`}
                             value={addForm.data.address}
                             onChange={(e) => addForm.setData('address', e.target.value)}
-                            placeholder="Filled by pinned location"
-                            readOnly
+                            placeholder="Enter address"
                           />
                           {addForm.errors.address && (
                             <div className="invalid-feedback">{addForm.errors.address}</div>
@@ -440,7 +436,7 @@ export default function AgrivetManagement({ auth, agrivets = [], flash }) {
                             className={`form-control ${addForm.errors.city ? 'is-invalid' : ''}`}
                             value={addForm.data.city}
                             onChange={(e) => addForm.setData('city', e.target.value)}
-                            placeholder="Auto-filled"
+                            placeholder="Enter city"
                           />
                           {addForm.errors.city && (
                             <div className="invalid-feedback">{addForm.errors.city}</div>
@@ -455,7 +451,7 @@ export default function AgrivetManagement({ auth, agrivets = [], flash }) {
                             className={`form-control ${addForm.errors.postal_code ? 'is-invalid' : ''}`}
                             value={addForm.data.postal_code}
                             onChange={(e) => addForm.setData('postal_code', e.target.value)}
-                            placeholder="Auto-filled"
+                            placeholder="Enter postal code"
                           />
                           {addForm.errors.postal_code && (
                             <div className="invalid-feedback">{addForm.errors.postal_code}</div>
