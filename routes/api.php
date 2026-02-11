@@ -12,6 +12,7 @@ use App\Http\Controllers\AddressController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\ShopController;
 use App\Http\Controllers\MobileController;
+use App\Http\Controllers\ActivityLogController;
 use Illuminate\Http\Request;
 
 Route::post('register', [MobileAuthController::class, 'register']);
@@ -111,3 +112,7 @@ Route::delete('shops/{id}', [ShopController::class, 'destroy']);
 
 // Delivery method routes
 Route::get('delivery-methods', [MobileController::class, 'getDeliveryMethods']);
+
+// Activity log routes (audit trail)
+Route::get('activity-logs', [ActivityLogController::class, 'index']);
+Route::get('activity-logs/{id}', [ActivityLogController::class, 'show']);

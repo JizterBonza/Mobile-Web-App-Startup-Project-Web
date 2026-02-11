@@ -6,9 +6,11 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
+use App\Models\ActivityLog;
 use App\Models\User;
 use App\Models\Agrivet;
 use App\Models\Shop;
+use App\Models\Item;
 use App\Models\Promotion;
 use App\Models\ProductImage;
 use App\Models\Category;
@@ -394,7 +396,10 @@ class VendorController extends Controller
             'updated_at' => now(),
         ];
 
-        DB::table('items')->insert($insertData);
+        $itemId = DB::table('items')->insertGetId($insertData);
+        $item = Item::find($itemId);
+
+        ActivityLog::log('created', "Product created: {$request->item_name}", $item, null, $item->toArray());
 
         return redirect()->route('dashboard.vendor.products.index')
             ->with('success', 'Product created successfully.');
@@ -421,6 +426,8 @@ class VendorController extends Controller
             return redirect()->back()
                 ->withErrors(['error' => 'Product not found.']);
         }
+
+        $oldProductValues = (array) $product;
 
         $request->validate([
             'item_name' => 'required|string|max:150',
@@ -505,6 +512,9 @@ class VendorController extends Controller
             ->where('id', $id)
             ->update($updateData);
 
+        $item = Item::find($id);
+        ActivityLog::log('updated', "Product updated: {$item->item_name}", $item, $oldProductValues, $item->toArray());
+
         return redirect()->route('dashboard.vendor.products.index')
             ->with('success', 'Product updated successfully.');
     }
@@ -530,6 +540,8 @@ class VendorController extends Controller
             return redirect()->back()
                 ->withErrors(['error' => 'Product not found.']);
         }
+
+        ActivityLog::log('deleted', "Product deleted: {$product->item_name} (ID: {$id})", null, (array) $product, null);
 
         DB::table('items')
             ->where('id', $id)

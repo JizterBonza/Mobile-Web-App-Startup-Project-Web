@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\ActivityLog;
 use App\Models\Category;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -49,7 +50,9 @@ class CategoryController extends Controller
             'status' => 'required|string|in:active,inactive',
         ]);
 
-        Category::create($validated);
+        $category = Category::create($validated);
+
+        ActivityLog::log('created', "Category created: {$category->category_name}", $category, null, $category->toArray());
 
         return redirect()->back()->with('flash', [
             'success' => 'Category created successfully!'
@@ -66,6 +69,7 @@ class CategoryController extends Controller
     public function update(Request $request, $id)
     {
         $category = Category::findOrFail($id);
+        $oldValues = $category->toArray();
 
         $validated = $request->validate([
             'category_name' => 'required|string|max:100|unique:category,category_name,' . $id,
@@ -75,6 +79,8 @@ class CategoryController extends Controller
         ]);
 
         $category->update($validated);
+
+        ActivityLog::log('updated', "Category updated: {$category->category_name}", $category, $oldValues, $category->fresh()->toArray());
 
         return redirect()->back()->with('flash', [
             'success' => 'Category updated successfully!'
@@ -97,6 +103,8 @@ class CategoryController extends Controller
                 'error' => 'Cannot delete category. It has associated products.'
             ]);
         }
+
+        ActivityLog::log('deleted', "Category deleted: {$category->category_name}", null, $category->toArray(), null);
 
         $category->delete();
 

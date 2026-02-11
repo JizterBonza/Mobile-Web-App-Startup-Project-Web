@@ -7,6 +7,7 @@ use App\Http\Controllers\VendorController;
 use App\Http\Controllers\ProductImageController;
 use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\SubCategoryController;
+use App\Http\Controllers\ActivityLogController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
@@ -81,6 +82,12 @@ Route::middleware(['auth', 'session.valid', 'user.type:super_admin'])->prefix('d
     Route::delete('/{id}', [SubCategoryController::class, 'destroy'])->name('destroy');
 });
 
+// Super Admin Activity Logs (audit trail)
+Route::middleware(['auth', 'session.valid', 'user.type:super_admin'])->prefix('dashboard/super-admin/activity-logs')->name('dashboard.super-admin.activity-logs.')->group(function () {
+    Route::get('/', [ActivityLogController::class, 'index'])->name('index');
+    Route::get('/{id}', [ActivityLogController::class, 'show'])->name('show');
+});
+
 Route::get('/dashboard/admin', function () {
     return Inertia::render('Dashboard/AdminDashboard');
 })->middleware(['auth', 'session.valid', 'user.type:admin'])->name('dashboard.admin');
@@ -129,6 +136,12 @@ Route::middleware(['auth', 'session.valid', 'user.type:admin'])->prefix('dashboa
     Route::post('/', [SubCategoryController::class, 'store'])->name('store');
     Route::put('/{id}', [SubCategoryController::class, 'update'])->name('update');
     Route::delete('/{id}', [SubCategoryController::class, 'destroy'])->name('destroy');
+});
+
+// Admin Activity Logs (audit trail)
+Route::middleware(['auth', 'session.valid', 'user.type:admin'])->prefix('dashboard/admin/activity-logs')->name('dashboard.admin.activity-logs.')->group(function () {
+    Route::get('/', [ActivityLogController::class, 'index'])->name('index');
+    Route::get('/{id}', [ActivityLogController::class, 'show'])->name('show');
 });
 
 Route::get('/dashboard/vendor', [VendorController::class, 'index'])

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\ActivityLog;
 use App\Models\SubCategory;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -48,7 +49,9 @@ class SubCategoryController extends Controller
             'sub_category_status' => 'required|string|in:active,inactive',
         ]);
 
-        SubCategory::create($validated);
+        $subCategory = SubCategory::create($validated);
+
+        ActivityLog::log('created', "Sub-category created: {$subCategory->sub_category_name}", $subCategory, null, $subCategory->toArray());
 
         return redirect()->back()->with('flash', [
             'success' => 'Sub-Category created successfully!'
@@ -65,6 +68,7 @@ class SubCategoryController extends Controller
     public function update(Request $request, $id)
     {
         $subCategory = SubCategory::findOrFail($id);
+        $oldValues = $subCategory->toArray();
 
         $validated = $request->validate([
             'sub_category_name' => 'required|string|max:150|unique:sub_categories,sub_category_name,' . $id,
@@ -73,6 +77,8 @@ class SubCategoryController extends Controller
         ]);
 
         $subCategory->update($validated);
+
+        ActivityLog::log('updated', "Sub-category updated: {$subCategory->sub_category_name}", $subCategory, $oldValues, $subCategory->fresh()->toArray());
 
         return redirect()->back()->with('flash', [
             'success' => 'Sub-Category updated successfully!'
@@ -95,6 +101,8 @@ class SubCategoryController extends Controller
                 'error' => 'Cannot delete sub-category. It has associated products.'
             ]);
         }
+
+        ActivityLog::log('deleted', "Sub-category deleted: {$subCategory->sub_category_name}", null, $subCategory->toArray(), null);
 
         $subCategory->delete();
 

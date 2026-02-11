@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\ActivityLog;
 use App\Models\Agrivet;
 use App\Models\Shop;
 use App\Models\User;
@@ -90,6 +91,8 @@ class AgrivetController extends Controller
                 'status' => $request->status ?? 'active',
             ]);
 
+            ActivityLog::log('created', "Agrivet created: {$agrivet->name}", $agrivet, null, $agrivet->toArray());
+
             // Redirect based on current user's role
             $currentUser = auth()->user();
             $redirectRoute = $currentUser->user_type === 'admin' 
@@ -111,6 +114,7 @@ class AgrivetController extends Controller
     public function update(Request $request, $id)
     {
         $agrivet = Agrivet::findOrFail($id);
+        $oldAgrivetValues = $agrivet->toArray();
 
         $request->validate([
             'name' => 'required|string|max:150',
@@ -147,6 +151,8 @@ class AgrivetController extends Controller
                 'status' => $request->status ?? $agrivet->status,
             ]);
 
+            ActivityLog::log('updated', "Agrivet updated: {$agrivet->name}", $agrivet, $oldAgrivetValues, $agrivet->fresh()->toArray());
+
             // Redirect based on current user's role
             $currentUser = auth()->user();
             $redirectRoute = $currentUser->user_type === 'admin' 
@@ -173,6 +179,8 @@ class AgrivetController extends Controller
             $agrivet->update([
                 'status' => 'inactive',
             ]);
+
+            ActivityLog::log('deactivated', "Agrivet deactivated: {$agrivet->name}", $agrivet, $agrivet->toArray(), null);
 
             // Redirect based on current user's role
             $currentUser = auth()->user();
@@ -243,7 +251,7 @@ class AgrivetController extends Controller
         ]);
 
         try {
-            Shop::create([
+            $shop = Shop::create([
                 'agrivet_id' => $agrivet->id,
                 'shop_name' => $request->shop_name,
                 'shop_description' => $request->shop_description ?? null,
@@ -257,6 +265,8 @@ class AgrivetController extends Controller
                 'total_reviews' => 0,
                 'shop_status' => $request->shop_status ?? 'active',
             ]);
+
+            ActivityLog::log('created', "Shop created: {$shop->shop_name} (Agrivet: {$agrivet->name})", $shop, null, $shop->toArray());
 
             $currentUser = auth()->user();
             $redirectRoute = $currentUser->user_type === 'admin' 
@@ -279,6 +289,7 @@ class AgrivetController extends Controller
     {
         $agrivet = Agrivet::findOrFail($id);
         $shop = Shop::where('agrivet_id', $agrivet->id)->findOrFail($shopId);
+        $oldShopValues = $shop->toArray();
 
         $request->validate([
             'shop_name' => 'required|string|max:150',
@@ -304,6 +315,8 @@ class AgrivetController extends Controller
                 'contact_number' => $request->contact_number ?? null,
                 'shop_status' => $request->shop_status ?? $shop->shop_status,
             ]);
+
+            ActivityLog::log('updated', "Shop updated: {$shop->shop_name}", $shop, $oldShopValues, $shop->fresh()->toArray());
 
             $currentUser = auth()->user();
             $redirectRoute = $currentUser->user_type === 'admin' 
@@ -331,6 +344,8 @@ class AgrivetController extends Controller
             $shop->update([
                 'shop_status' => 'inactive',
             ]);
+
+            ActivityLog::log('deactivated', "Shop deactivated: {$shop->shop_name}", $shop, $shop->toArray(), null);
 
             $currentUser = auth()->user();
             $redirectRoute = $currentUser->user_type === 'admin' 
@@ -461,6 +476,12 @@ class AgrivetController extends Controller
 
             DB::commit();
 
+            $newVendorValues = $vendor->load(['userDetail', 'userCredential'])->toArray();
+            if (isset($newVendorValues['user_credential'])) {
+                $newVendorValues['user_credential'] = array_diff_key($newVendorValues['user_credential'], ['password_hash' => 1]);
+            }
+            ActivityLog::log('created', "Vendor created and added to shop: {$vendor->userDetail->email} → {$shop->shop_name}", $vendor, null, $newVendorValues);
+
             // Redirect based on current user's role
             $currentUser = auth()->user();
             $redirectRoute = $currentUser->user_type === 'admin' 
@@ -485,6 +506,9 @@ class AgrivetController extends Controller
         $agrivet = Agrivet::findOrFail($id);
         $shop = Shop::where('agrivet_id', $agrivet->id)->findOrFail($shopId);
         $vendor = User::with(['userDetail', 'userCredential'])->findOrFail($vendorId);
+        $oldVendorValues = $vendor->toArray();
+        $oldVendorValues['user_detail'] = $vendor->userDetail->toArray();
+        $oldVendorValues['user_credential'] = array_diff_key($vendor->userCredential->toArray(), ['password_hash' => 1]);
 
         // Verify vendor is associated with this shop
         if (!$shop->vendors()->where('users.id', $vendorId)->exists()) {
@@ -541,6 +565,14 @@ class AgrivetController extends Controller
 
             DB::commit();
 
+            $vendor->refresh();
+            $vendor->load(['userDetail', 'userCredential']);
+            $newVendorValues = $vendor->toArray();
+            $newVendorValues['user_detail'] = $vendor->userDetail->toArray();
+            $newVendorValues['user_credential'] = array_diff_key($vendor->userCredential->toArray(), ['password_hash' => 1]);
+
+            ActivityLog::log('updated', "Vendor updated: {$vendor->userDetail->email} (shop: {$shop->shop_name})", $vendor, $oldVendorValues, $newVendorValues);
+
             // Redirect based on current user's role
             $currentUser = auth()->user();
             $redirectRoute = $currentUser->user_type === 'admin' 
@@ -564,7 +596,7 @@ class AgrivetController extends Controller
     {
         $agrivet = Agrivet::findOrFail($id);
         $shop = Shop::where('agrivet_id', $agrivet->id)->findOrFail($shopId);
-        $vendor = User::findOrFail($vendorId);
+        $vendor = User::with('userDetail')->findOrFail($vendorId);
 
         // Verify vendor is associated with this shop
         if (!$shop->vendors()->where('users.id', $vendorId)->exists()) {
@@ -577,6 +609,8 @@ class AgrivetController extends Controller
             $shop->vendors()->updateExistingPivot($vendorId, [
                 'status' => 'inactive',
             ]);
+
+            ActivityLog::log('removed', "Vendor removed from shop: " . ($vendor->userDetail->email ?? "ID {$vendorId}") . " → {$shop->shop_name}", $vendor, $vendor->load('userDetail')->toArray(), null);
 
             // Redirect based on current user's role
             $currentUser = auth()->user();
@@ -604,7 +638,7 @@ class AgrivetController extends Controller
             'vendor_id' => 'required|exists:users,id',
         ]);
 
-        $vendor = User::findOrFail($request->vendor_id);
+        $vendor = User::with('userDetail')->findOrFail($request->vendor_id);
 
         // Verify vendor is actually a vendor type
         if ($vendor->user_type !== 'vendor') {
@@ -624,6 +658,8 @@ class AgrivetController extends Controller
                 'agrivet_id' => $agrivet->id,
                 'status' => 'active',
             ]);
+
+            ActivityLog::log('added_to_shop', "Existing vendor added to shop: " . ($vendor->userDetail->email ?? "ID {$vendor->id}") . " → {$shop->shop_name}", $vendor, null, $vendor->load('userDetail')->toArray());
 
             // Redirect based on current user's role
             $currentUser = auth()->user();

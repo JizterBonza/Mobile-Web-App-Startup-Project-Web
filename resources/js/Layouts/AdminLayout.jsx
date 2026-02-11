@@ -254,6 +254,12 @@ export default function AdminLayout({ children, auth, title = 'Dashboard' }) {
                         </li>
                       </ul>
                     </li>
+                    <li className="nav-item">
+                      <Link href="/dashboard/super-admin/activity-logs" className="nav-link">
+                        <i className="nav-icon fas fa-history"></i>
+                        <p>Activity Logs</p>
+                      </Link>
+                    </li>
                   </>
                 ) : auth.user.user_type === 'admin' ? (
                   <>
@@ -297,6 +303,12 @@ export default function AdminLayout({ children, auth, title = 'Dashboard' }) {
                           </Link>
                         </li>
                       </ul>
+                    </li>
+                    <li className="nav-item">
+                      <Link href="/dashboard/admin/activity-logs" className="nav-link">
+                        <i className="nav-icon fas fa-history"></i>
+                        <p>Activity Logs</p>
+                      </Link>
                     </li>
                   </>
                 ) : auth.user.user_type === 'vendor' ? (

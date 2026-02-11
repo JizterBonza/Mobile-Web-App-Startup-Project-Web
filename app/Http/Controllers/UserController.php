@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\ActivityLog;
 use App\Models\User;
 use App\Models\UserDetail;
 use App\Models\UserCredential;
@@ -106,6 +107,14 @@ class UserController extends Controller
 
             DB::commit();
 
+            ActivityLog::log(
+                'created',
+                "User created: {$user->userDetail->email} (type: {$user->user_type})",
+                $user,
+                null,
+                $user->toArray()
+            );
+
             // Redirect based on current user's role
             $redirectRoute = $currentUser->user_type === 'admin' 
                 ? 'dashboard.admin.users.index' 
@@ -159,6 +168,12 @@ class UserController extends Controller
         try {
             DB::beginTransaction();
 
+            $user->load(['userDetail', 'userCredential']);
+            $oldValues = $user->toArray();
+            if (isset($oldValues['user_credential'])) {
+                $oldValues['user_credential'] = array_diff_key($oldValues['user_credential'], ['password_hash' => 1]);
+            }
+
             // Update UserDetail
             $user->userDetail->update([
                 'first_name' => $request->first_name,
@@ -187,6 +202,21 @@ class UserController extends Controller
             ]);
 
             DB::commit();
+
+            $user->refresh();
+            $user->load(['userDetail', 'userCredential']);
+            $newValues = $user->toArray();
+            if (isset($newValues['user_credential'])) {
+                $newValues['user_credential'] = array_diff_key($newValues['user_credential'], ['password_hash' => 1]);
+            }
+
+            ActivityLog::log(
+                'updated',
+                "User updated: {$user->userDetail->email} (type: {$user->user_type})",
+                $user,
+                $oldValues,
+                $newValues
+            );
 
             // Redirect based on current user's role
             $redirectRoute = $currentUser->user_type === 'admin' 
@@ -448,7 +478,7 @@ class UserController extends Controller
     public function deactivate($id)
     {
         $currentUser = auth()->user();
-        $user = User::findOrFail($id);
+        $user = User::with('userDetail')->findOrFail($id);
 
         // If current user is Admin, ensure they can't deactivate Admin or Super Admin users
         if ($currentUser->user_type === 'admin') {
@@ -462,6 +492,14 @@ class UserController extends Controller
             $user->update([
                 'status' => 'inactive',
             ]);
+
+            ActivityLog::log(
+                'deactivated',
+                'User deactivated: ' . ($user->userDetail->email ?? "ID {$user->id}"),
+                $user,
+                $user->load('userDetail')->toArray(),
+                null
+            );
 
             // Redirect based on current user's role
             $redirectRoute = $currentUser->user_type === 'admin' 
