@@ -16,7 +16,7 @@ return new class extends Migration
             $table->foreignId('order_id')->constrained('order_details')->onDelete('cascade'); // Foreign key
             $table->decimal('latitude', 10, 7);
             $table->decimal('longitude', 10, 7);
-            $table->json('images')->nullable();
+            $table->string('image_path', 2048)->nullable();
             $table->text('remarks')->nullable();
             $table->string('status')->default('pending');
             $table->timestamps();
