@@ -5,7 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
-class OrderStatus extends Model
+class ProofOfDelivery extends Model
 {
     use HasFactory;
 
@@ -14,7 +14,7 @@ class OrderStatus extends Model
      *
      * @var string
      */
-    protected $table = 'order_status';
+    protected $table = 'proof_of_delivery';
 
     /**
      * The attributes that are mass assignable.
@@ -22,8 +22,12 @@ class OrderStatus extends Model
      * @var array<int, string>
      */
     protected $fillable = [
-        'stat_description',
-        'is_active',
+        'order_id',
+        'latitude',
+        'longitude',
+        'image_path',
+        'remarks',
+        'status',
     ];
 
     /**
@@ -34,25 +38,19 @@ class OrderStatus extends Model
     protected function casts(): array
     {
         return [
-            'is_active' => 'boolean',
+            'latitude' => 'decimal:7',
+            'longitude' => 'decimal:7',
+            'created_at' => 'datetime',
+            'updated_at' => 'datetime',
         ];
     }
 
     /**
-     * Get the orders with this status.
+     * Get the order detail for the proof of delivery.
      */
-    public function orders()
+    public function orderDetail()
     {
-        return $this->hasMany(Order::class, 'order_status_id');
+        return $this->belongsTo(OrderDetail::class, 'order_id');
     }
 }
-
-
-
-
-
-
-
-
-
 
