@@ -166,6 +166,7 @@ Route::middleware(['auth', 'session.valid', 'user.type:vendor'])->prefix('dashbo
     
     // Orders
     Route::get('/orders', [VendorController::class, 'ordersIndex'])->name('orders.index');
+    Route::get('/orders/{orderId}/items', [VendorController::class, 'orderItemsIndex'])->name('orders.items.index');
     Route::put('/orders/{id}', [VendorController::class, 'ordersUpdate'])->name('orders.update');
     
     // Payouts

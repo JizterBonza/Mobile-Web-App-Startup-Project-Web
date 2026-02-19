@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
@@ -616,7 +617,7 @@ class VendorController extends Controller
     }
 
     /**
-     * Display orders listing.
+     * Display orders listing (orders table only; one row per order).
      */
     public function ordersIndex()
     {
@@ -627,46 +628,35 @@ class VendorController extends Controller
                 ->with('error', 'You are not associated with any Shop.');
         }
 
-        // Get orders through items that belong to this shop
-        $orders = DB::table('order_items')
-            ->join('orders', 'order_items.order_id', '=', 'orders.id')
+        // Get distinct orders that have at least one order_item from this shop (one row per order)
+        $orders = DB::table('orders')
+            ->join('order_items', 'orders.id', '=', 'order_items.order_id')
             ->join('items', 'order_items.item_id', '=', 'items.id')
             ->join('users', 'orders.user_id', '=', 'users.id')
             ->join('user_details', 'users.user_detail_id', '=', 'user_details.id')
+            ->leftJoin('order_status', 'orders.order_status', '=', 'order_status.id')
             ->where('items.shop_id', $shop->id)
             ->select(
-                'order_items.id',
-                'order_items.order_id',
-                'order_items.item_id',
-                'order_items.quantity',
-                'order_items.price_at_purchase',
-                'order_items.item_status',
-                'order_items.created_at',
+                'orders.id',
                 'orders.order_status',
+                'order_status.stat_description as order_status_description',
                 'orders.ordered_at',
-                'items.item_name',
                 'user_details.first_name',
                 'user_details.last_name',
                 'user_details.email'
             )
-            ->orderBy('order_items.created_at', 'desc')
+            ->groupBy('orders.id', 'orders.order_status', 'order_status.stat_description', 'orders.ordered_at', 'user_details.first_name', 'user_details.last_name', 'user_details.email')
+            ->orderBy('orders.ordered_at', 'desc')
             ->get();
 
         $orders = $orders->map(function ($order) {
             return [
                 'id' => $order->id,
-                'order_id' => $order->order_id,
-                'item_id' => $order->item_id,
-                'item_name' => $order->item_name,
-                'quantity' => $order->quantity,
-                'price_at_purchase' => $order->price_at_purchase,
-                'total' => $order->quantity * $order->price_at_purchase,
-                'item_status' => $order->item_status,
                 'order_status' => $order->order_status,
-                'customer_name' => $order->first_name . ' ' . $order->last_name,
+                'order_status_description' => $order->order_status_description ?? '—',
+                'customer_name' => trim($order->first_name . ' ' . $order->last_name),
                 'customer_email' => $order->email,
                 'ordered_at' => $order->ordered_at,
-                'created_at' => $order->created_at,
             ];
         });
 
@@ -676,6 +666,90 @@ class VendorController extends Controller
                 'id' => $shop->id,
                 'shop_name' => $shop->shop_name,
             ],
+        ]);
+    }
+
+    /**
+     * Display order items for a specific order.
+     */
+    public function orderItemsIndex($orderId)
+    {
+        $shop = $this->getVendorShop();
+
+        if (!$shop) {
+            return redirect()->route('dashboard.vendor')
+                ->with('error', 'You are not associated with any Shop.');
+        }
+
+        // Verify the order has at least one item from this shop
+        $order = DB::table('orders')
+            ->join('users', 'orders.user_id', '=', 'users.id')
+            ->join('user_details', 'users.user_detail_id', '=', 'user_details.id')
+            ->where('orders.id', $orderId)
+            ->select(
+                'orders.id',
+                'orders.order_status',
+                'orders.ordered_at',
+                'user_details.first_name',
+                'user_details.last_name',
+                'user_details.email'
+            )
+            ->first();
+
+        if (!$order) {
+            return redirect()->route('dashboard.vendor.orders.index')
+                ->with('error', 'Order not found.');
+        }
+
+        $orderItems = DB::table('order_items')
+            ->join('items', 'order_items.item_id', '=', 'items.id')
+            ->where('order_items.order_id', $orderId)
+            ->where('items.shop_id', $shop->id)
+            ->select(
+                'order_items.id',
+                'order_items.order_id',
+                'order_items.item_id',
+                'order_items.quantity',
+                'order_items.price_at_purchase',
+                'order_items.item_status',
+                'order_items.created_at',
+                'items.item_name'
+            )
+            ->orderBy('order_items.created_at', 'asc')
+            ->get();
+
+        $orderItems = $orderItems->map(function ($item) {
+            return [
+                'id' => $item->id,
+                'order_id' => $item->order_id,
+                'item_id' => $item->item_id,
+                'item_name' => $item->item_name,
+                'quantity' => $item->quantity,
+                'price_at_purchase' => $item->price_at_purchase,
+                'total' => $item->quantity * $item->price_at_purchase,
+                'item_status' => $item->item_status,
+                'created_at' => $item->created_at,
+            ];
+        });
+
+        $orderItemStatuses = DB::table('order_item_status')
+            ->where('is_active', true)
+            ->orderBy('id')
+            ->get(['id', 'stat_description'])
+            ->map(fn ($row) => ['id' => (int) $row->id, 'stat_description' => $row->stat_description])
+            ->values()
+            ->all();
+
+        return Inertia::render('Dashboard/Vendor/OrderItems', [
+            'order' => [
+                'id' => $order->id,
+                'order_status' => $order->order_status,
+                'ordered_at' => $order->ordered_at,
+                'customer_name' => trim($order->first_name . ' ' . $order->last_name),
+                'customer_email' => $order->email,
+            ],
+            'orderItems' => $orderItems,
+            'orderItemStatuses' => $orderItemStatuses,
         ]);
     }
 
@@ -704,16 +778,48 @@ class VendorController extends Controller
                 ->withErrors(['error' => 'Order not found.']);
         }
 
+        $validStatusIds = DB::table('order_item_status')->where('is_active', true)->pluck('id')->map(fn ($id) => (int) $id)->all();
         $request->validate([
-            'item_status' => 'required|string|in:ordered,shipped,delivered,cancelled',
+            'item_status' => ['required', 'integer', Rule::in($validStatusIds)],
         ]);
 
+        $newItemStatus = (int) $request->item_status;
         DB::table('order_items')
             ->where('id', $id)
             ->update([
-                'item_status' => $request->item_status,
+                'item_status' => $newItemStatus,
                 'updated_at' => now(),
             ]);
+
+        // If we just moved this item from Pending to something else, check if it was the last Pending item for this order
+        $pendingOrderItemStatusId = DB::table('order_item_status')
+            ->where('stat_description', 'Pending')
+            ->value('id');
+        if ($pendingOrderItemStatusId !== null && (int) $orderItem->item_status === (int) $pendingOrderItemStatusId) {
+            $remainingPendingCount = DB::table('order_items')
+                ->where('order_id', $orderItem->order_id)
+                ->where('item_status', (int) $pendingOrderItemStatusId)
+                ->count();
+            if ($remainingPendingCount === 0) {
+                $preparingOrderStatusId = DB::table('order_status')
+                    ->where('stat_description', 'Preparing')
+                    ->value('id');
+                if ($preparingOrderStatusId !== null) {
+                    DB::table('orders')
+                        ->where('id', $orderItem->order_id)
+                        ->update([
+                            'order_status' => (int) $preparingOrderStatusId,
+                            'updated_at' => now(),
+                        ]);
+                }
+            }
+        }
+
+        $returnOrderId = $request->input('return_to_order_id');
+        if ($returnOrderId && (int) $returnOrderId === (int) $orderItem->order_id) {
+            return redirect()->route('dashboard.vendor.orders.items.index', ['orderId' => $orderItem->order_id])
+                ->with('success', 'Order item status updated successfully.');
+        }
 
         return redirect()->route('dashboard.vendor.orders.index')
             ->with('success', 'Order status updated successfully.');
