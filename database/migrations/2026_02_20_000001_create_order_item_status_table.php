@@ -12,15 +12,15 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('order_status', function (Blueprint $table) {
+        Schema::create('order_item_status', function (Blueprint $table) {
             $table->id();
             $table->string('stat_description');
             $table->boolean('is_active')->default(true);
             $table->timestamps();
         });
 
-        // Insert default order statuses
-        DB::table('order_status')->insert([
+        // Insert default order item statuses (same as order_status)
+        DB::table('order_item_status')->insert([
             [
                 'stat_description' => 'Pending',
                 'is_active' => true,
@@ -71,16 +71,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::dropIfExists('order_status');
+        Schema::dropIfExists('order_item_status');
     }
 };
-
-
-
-
-
-
-
-
-
-
