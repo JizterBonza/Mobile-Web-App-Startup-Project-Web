@@ -60,11 +60,12 @@ Route::put('orders/{id}/status', [OrderController::class, 'updateStatus']);
 Route::delete('orders/{id}', [OrderController::class, 'destroy']);
 
 // Proof of Delivery (POD) routes
-Route::post('pod', [PODController::class, 'store']);
+Route::post('pod/upload', [PODController::class, 'store']);
 Route::get('pod/order/{orderId}', [PODController::class, 'getByOrder']);
-Route::get('pod/{id}', [PODController::class, 'show']);
-Route::put('pod/{id}', [PODController::class, 'update']);
-Route::delete('pod/{id}', [PODController::class, 'destroy']);
+Route::get('pod/rider/{riderId}', [PODController::class, 'getByRider']);
+Route::get('pod/show/{id}', [PODController::class, 'show']);
+Route::put('pod/update/{id}', [PODController::class, 'update']);
+Route::delete('pod/delete/{id}', [PODController::class, 'destroy']);
 
 // Cart routes
 Route::get('carts', [CartController::class, 'index']);

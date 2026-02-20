@@ -23,6 +23,7 @@ class ProofOfDelivery extends Model
      */
     protected $fillable = [
         'order_id',
+        'rider_id',
         'latitude',
         'longitude',
         'image_path',
@@ -53,4 +54,6 @@ class ProofOfDelivery extends Model
         return $this->belongsTo(OrderDetail::class, 'order_id');
     }
 }
+
+
 

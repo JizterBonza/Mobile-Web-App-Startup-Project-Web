@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\ProofOfDelivery;
 use App\Models\OrderDetail;
+use App\Models\Order;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Storage;
@@ -22,6 +23,7 @@ class PODController extends Controller
         // Validate the request
         $validator = Validator::make($request->all(), [
             'orderId' => 'required|string|exists:order_details,id',
+            'riderId' => 'nullable|exists:users,id',
             'image' => 'required|image|mimes:jpeg,png,jpg,gif,webp|max:5120', // 5MB max
             'latitude' => 'required|numeric|between:-90,90',
             'longitude' => 'required|numeric|between:-180,180',
@@ -46,6 +48,16 @@ class PODController extends Controller
             ], 404);
         }
 
+        // Get rider_id from request or from the order
+        $riderId = $request->riderId;
+        if (!$riderId) {
+            // Try to get rider_id from the order
+            $order = Order::where('order_detail_id', $request->orderId)->first();
+            if ($order && $order->rider_id) {
+                $riderId = $order->rider_id;
+            }
+        }
+
         try {
             // Handle image upload
             $imagePath = null;
@@ -63,6 +75,7 @@ class PODController extends Controller
             // Create the proof of delivery record
             $proofOfDelivery = ProofOfDelivery::create([
                 'order_id' => $request->orderId,
+                'rider_id' => $riderId,
                 'latitude' => $request->latitude,
                 'longitude' => $request->longitude,
                 'image_path' => $imagePath,
@@ -79,10 +92,11 @@ class PODController extends Controller
                 'data' => [
                     'id' => $proofOfDelivery->id,
                     'orderId' => $proofOfDelivery->order_id,
+                    'riderId' => $proofOfDelivery->rider_id,
                     'imagePath' => $proofOfDelivery->image_path,
                     'timestamp' => $proofOfDelivery->created_at->toISOString(),
-                    'latitude' => (float) $proofOfDelivery->latitude,
-                    'longitude' => (float) $proofOfDelivery->longitude,
+                    'latitude' => $proofOfDelivery->latitude ? (float) $proofOfDelivery->latitude : null,
+                    'longitude' => $proofOfDelivery->longitude ? (float) $proofOfDelivery->longitude : null,
                     'remarks' => $proofOfDelivery->remarks,
                     'status' => $proofOfDelivery->status,
                     'orderDetail' => $proofOfDelivery->orderDetail,
@@ -125,10 +139,44 @@ class PODController extends Controller
                 return [
                     'id' => $pod->id,
                     'orderId' => $pod->order_id,
+                    'riderId' => $pod->rider_id,
                     'imagePath' => $pod->image_path,
                     'timestamp' => $pod->created_at->toISOString(),
-                    'latitude' => (float) $pod->latitude,
-                    'longitude' => (float) $pod->longitude,
+                    'latitude' => $pod->latitude ? (float) $pod->latitude : null,
+                    'longitude' => $pod->longitude ? (float) $pod->longitude : null,
+                    'remarks' => $pod->remarks,
+                    'status' => $pod->status,
+                    'orderDetail' => $pod->orderDetail,
+                ];
+            }),
+            'count' => $proofOfDeliveries->count()
+        ]);
+    }
+
+    /**
+     * Get proof of delivery by rider ID.
+     *
+     * @param int $riderId
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function getByRider($riderId)
+    {
+        $proofOfDeliveries = ProofOfDelivery::where('rider_id', $riderId)
+            ->with('orderDetail')
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        return response()->json([
+            'success' => true,
+            'data' => $proofOfDeliveries->map(function ($pod) {
+                return [
+                    'id' => $pod->id,
+                    'orderId' => $pod->order_id,
+                    'riderId' => $pod->rider_id,
+                    'imagePath' => $pod->image_path,
+                    'timestamp' => $pod->created_at->toISOString(),
+                    'latitude' => $pod->latitude ? (float) $pod->latitude : null,
+                    'longitude' => $pod->longitude ? (float) $pod->longitude : null,
                     'remarks' => $pod->remarks,
                     'status' => $pod->status,
                     'orderDetail' => $pod->orderDetail,
@@ -160,10 +208,11 @@ class PODController extends Controller
             'data' => [
                 'id' => $proofOfDelivery->id,
                 'orderId' => $proofOfDelivery->order_id,
+                'riderId' => $proofOfDelivery->rider_id,
                 'imagePath' => $proofOfDelivery->image_path,
                 'timestamp' => $proofOfDelivery->created_at->toISOString(),
-                'latitude' => (float) $proofOfDelivery->latitude,
-                'longitude' => (float) $proofOfDelivery->longitude,
+                'latitude' => $proofOfDelivery->latitude ? (float) $proofOfDelivery->latitude : null,
+                'longitude' => $proofOfDelivery->longitude ? (float) $proofOfDelivery->longitude : null,
                 'remarks' => $proofOfDelivery->remarks,
                 'status' => $proofOfDelivery->status,
                 'orderDetail' => $proofOfDelivery->orderDetail,
@@ -208,6 +257,9 @@ class PODController extends Controller
         try {
             $updateData = [];
 
+            // Only allow updating: image_path, latitude, longitude, remarks, and status
+            // Timestamp (updated_at) is automatically updated by Laravel
+
             // Handle image update
             if ($request->hasFile('image')) {
                 // Delete old image if exists
@@ -224,21 +276,30 @@ class PODController extends Controller
                 $updateData['image_path'] = '/storage/' . $path;
             }
 
-            // Update other fields
+            // Update latitude
             if ($request->has('latitude')) {
                 $updateData['latitude'] = $request->latitude;
             }
+
+            // Update longitude
             if ($request->has('longitude')) {
                 $updateData['longitude'] = $request->longitude;
             }
+
+            // Update remarks
             if ($request->has('remarks')) {
                 $updateData['remarks'] = $request->remarks;
             }
+
+            // Update status
             if ($request->has('status')) {
                 $updateData['status'] = $request->status;
             }
 
-            $proofOfDelivery->update($updateData);
+            // Only update if there's data to update
+            if (!empty($updateData)) {
+                $proofOfDelivery->update($updateData);
+            }
             $proofOfDelivery->load('orderDetail');
 
             return response()->json([
@@ -247,10 +308,11 @@ class PODController extends Controller
                 'data' => [
                     'id' => $proofOfDelivery->id,
                     'orderId' => $proofOfDelivery->order_id,
+                    'riderId' => $proofOfDelivery->rider_id,
                     'imagePath' => $proofOfDelivery->image_path,
                     'timestamp' => $proofOfDelivery->updated_at->toISOString(),
-                    'latitude' => (float) $proofOfDelivery->latitude,
-                    'longitude' => (float) $proofOfDelivery->longitude,
+                    'latitude' => $proofOfDelivery->latitude ? (float) $proofOfDelivery->latitude : null,
+                    'longitude' => $proofOfDelivery->longitude ? (float) $proofOfDelivery->longitude : null,
                     'remarks' => $proofOfDelivery->remarks,
                     'status' => $proofOfDelivery->status,
                     'orderDetail' => $proofOfDelivery->orderDetail,
