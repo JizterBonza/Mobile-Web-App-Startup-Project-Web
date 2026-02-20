@@ -122,6 +122,9 @@ Route::delete('shops/{id}', [ShopController::class, 'destroy']);
 // Delivery method routes
 Route::get('delivery-methods', [MobileController::class, 'getDeliveryMethods']);
 
+// Order status routes
+Route::get('order-statuses', [MobileController::class, 'getOrderStatuses']);
+
 // Activity log routes (audit trail)
 Route::get('activity-logs', [ActivityLogController::class, 'index']);
 Route::get('activity-logs/{id}', [ActivityLogController::class, 'show']);
