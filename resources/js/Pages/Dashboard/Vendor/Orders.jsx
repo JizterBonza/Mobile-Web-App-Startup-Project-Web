@@ -1,7 +1,16 @@
-import { Link, router } from '@inertiajs/react'
+import { useState, useEffect } from 'react'
+import { Link } from '@inertiajs/react'
 import AdminLayout from '../../../Layouts/AdminLayout'
 
 export default function Orders({ auth, orders = [], shop, flash }) {
+  const [showSuccessAlert, setShowSuccessAlert] = useState(true)
+  const [showErrorAlert, setShowErrorAlert] = useState(true)
+
+  useEffect(() => {
+    if (flash?.success) setShowSuccessAlert(true)
+    if (flash?.error) setShowErrorAlert(true)
+  }, [flash])
+
   const getOrderStatusBadge = (description) => {
     if (description == null || description === '' || description === '—') return <span className="badge badge-secondary">—</span>
     const str = String(description).toLowerCase()
@@ -21,24 +30,24 @@ export default function Orders({ auth, orders = [], shop, flash }) {
 
   return (
     <AdminLayout auth={auth} title="Orders">
-      {flash?.success && (
+      {flash?.success && showSuccessAlert && (
         <div className="alert alert-success alert-dismissible fade show" role="alert">
           <strong>Success!</strong> {flash.success}
           <button type="button" className="close" data-dismiss="alert" aria-label="Close" onClick={(e) => {
             e.preventDefault()
-            router.visit(window.location.pathname, { preserveState: true, preserveScroll: true })
+            setShowSuccessAlert(false)
           }}>
             <span aria-hidden="true">&times;</span>
           </button>
         </div>
       )}
 
-      {flash?.error && (
+      {flash?.error && showErrorAlert && (
         <div className="alert alert-danger alert-dismissible fade show" role="alert">
           <strong>Error!</strong> {flash.error}
           <button type="button" className="close" data-dismiss="alert" aria-label="Close" onClick={(e) => {
             e.preventDefault()
-            router.visit(window.location.pathname, { preserveState: true, preserveScroll: true })
+            setShowErrorAlert(false)
           }}>
             <span aria-hidden="true">&times;</span>
           </button>

@@ -1,29 +1,36 @@
-import { useState } from 'react'
-import { router } from '@inertiajs/react'
+import { useState, useEffect } from 'react'
 import AdminLayout from '../../../Layouts/AdminLayout'
 
 export default function Payouts({ auth, payouts = [], totalRevenue = 0, totalOrders = 0, shop, flash }) {
+  const [showSuccessAlert, setShowSuccessAlert] = useState(true)
+  const [showErrorAlert, setShowErrorAlert] = useState(true)
+
+  useEffect(() => {
+    if (flash?.success) setShowSuccessAlert(true)
+    if (flash?.error) setShowErrorAlert(true)
+  }, [flash])
+
   return (
     <AdminLayout auth={auth} title="Payouts">
       {/* Flash Messages */}
-      {flash?.success && (
+      {flash?.success && showSuccessAlert && (
         <div className="alert alert-success alert-dismissible fade show" role="alert">
           <strong>Success!</strong> {flash.success}
           <button type="button" className="close" data-dismiss="alert" aria-label="Close" onClick={(e) => {
             e.preventDefault()
-            router.visit(window.location.pathname, { preserveState: true, preserveScroll: true })
+            setShowSuccessAlert(false)
           }}>
             <span aria-hidden="true">&times;</span>
           </button>
         </div>
       )}
 
-      {flash?.error && (
+      {flash?.error && showErrorAlert && (
         <div className="alert alert-danger alert-dismissible fade show" role="alert">
           <strong>Error!</strong> {flash.error}
           <button type="button" className="close" data-dismiss="alert" aria-label="Close" onClick={(e) => {
             e.preventDefault()
-            router.visit(window.location.pathname, { preserveState: true, preserveScroll: true })
+            setShowErrorAlert(false)
           }}>
             <span aria-hidden="true">&times;</span>
           </button>

@@ -11,6 +11,8 @@ export default function Promotions({ auth, promotions = [], products = [], promo
   const [showDeleteModalAnimation, setShowDeleteModalAnimation] = useState(false)
   const [selectedPromotion, setSelectedPromotion] = useState(null)
   const [promotionToDelete, setPromotionToDelete] = useState(null)
+  const [showSuccessAlert, setShowSuccessAlert] = useState(true)
+  const [showErrorAlert, setShowErrorAlert] = useState(true)
 
   const addForm = useForm({
     name: '',
@@ -108,6 +110,10 @@ export default function Promotions({ auth, promotions = [], products = [], promo
       closeDeleteModal()
       addForm.reset()
       editForm.reset()
+      setShowSuccessAlert(true)
+    }
+    if (flash?.error) {
+      setShowErrorAlert(true)
     }
   }, [flash])
 
@@ -415,24 +421,24 @@ export default function Promotions({ auth, promotions = [], products = [], promo
   return (
     <AdminLayout auth={auth} title="Promotions">
       {/* Flash Messages */}
-      {flash?.success && (
+      {flash?.success && showSuccessAlert && (
         <div className="alert alert-success alert-dismissible fade show" role="alert">
           <strong>Success!</strong> {flash.success}
           <button type="button" className="close" data-dismiss="alert" aria-label="Close" onClick={(e) => {
             e.preventDefault()
-            router.visit(window.location.pathname, { preserveState: true, preserveScroll: true })
+            setShowSuccessAlert(false)
           }}>
             <span aria-hidden="true">&times;</span>
           </button>
         </div>
       )}
 
-      {flash?.error && (
+      {flash?.error && showErrorAlert && (
         <div className="alert alert-danger alert-dismissible fade show" role="alert">
           <strong>Error!</strong> {flash.error}
           <button type="button" className="close" data-dismiss="alert" aria-label="Close" onClick={(e) => {
             e.preventDefault()
-            router.visit(window.location.pathname, { preserveState: true, preserveScroll: true })
+            setShowErrorAlert(false)
           }}>
             <span aria-hidden="true">&times;</span>
           </button>

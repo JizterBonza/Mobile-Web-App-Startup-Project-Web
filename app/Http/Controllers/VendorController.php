@@ -685,14 +685,17 @@ class VendorController extends Controller
         $order = DB::table('orders')
             ->join('users', 'orders.user_id', '=', 'users.id')
             ->join('user_details', 'users.user_detail_id', '=', 'user_details.id')
+            ->leftJoin('order_details', 'orders.order_detail_id', '=', 'order_details.id')
             ->where('orders.id', $orderId)
             ->select(
                 'orders.id',
                 'orders.order_status',
                 'orders.ordered_at',
+                'orders.order_detail_id',
                 'user_details.first_name',
                 'user_details.last_name',
-                'user_details.email'
+                'user_details.email',
+                'order_details.delivery_method_id'
             )
             ->first();
 
@@ -744,6 +747,8 @@ class VendorController extends Controller
             'order' => [
                 'id' => $order->id,
                 'order_status' => $order->order_status,
+                'order_detail_id' => $order->order_detail_id ?? null,
+                'delivery_method_id' => $order->delivery_method_id !== null ? (int) $order->delivery_method_id : null,
                 'ordered_at' => $order->ordered_at,
                 'customer_name' => trim($order->first_name . ' ' . $order->last_name),
                 'customer_email' => $order->email,
@@ -784,12 +789,58 @@ class VendorController extends Controller
         ]);
 
         $newItemStatus = (int) $request->item_status;
+        $preparingOrderItemStatusId = DB::table('order_item_status')
+            ->where('stat_description', 'Preparing')
+            ->value('id');
+
         DB::table('order_items')
             ->where('id', $id)
             ->update([
                 'item_status' => $newItemStatus,
                 'updated_at' => now(),
             ]);
+
+        // If we just moved this item from Preparing to a "Ready" status, check if it was the last Preparing item for this order
+        $readyStatusIds = [
+            (int) DB::table('order_item_status')->where('stat_description', 'Ready for Pickup')->value('id'),
+            (int) DB::table('order_item_status')->where('stat_description', 'Ready for Delivery')->value('id'),
+            (int) DB::table('order_item_status')->where('stat_description', 'Ready for Drop off')->value('id'),
+        ];
+        $readyStatusIds = array_filter($readyStatusIds);
+
+        if ($preparingOrderItemStatusId !== null
+            && (int) $orderItem->item_status === (int) $preparingOrderItemStatusId
+            && in_array($newItemStatus, $readyStatusIds, true)
+        ) {
+            $remainingPreparingCount = DB::table('order_items')
+                ->where('order_id', $orderItem->order_id)
+                ->where('item_status', (int) $preparingOrderItemStatusId)
+                ->count();
+            if ($remainingPreparingCount === 0) {
+                $deliveryMethodId = DB::table('orders')
+                    ->join('order_details', 'orders.order_detail_id', '=', 'order_details.id')
+                    ->where('orders.id', $orderItem->order_id)
+                    ->value('order_details.delivery_method_id');
+                $deliveryMethodId = $deliveryMethodId !== null ? (int) $deliveryMethodId : null;
+                // Map delivery_method_id to order_status: 1=Standard->Ready for Delivery(4), 2=No Contact->Ready for Drop off(8), 3=Pickup from Store->Ready for Pickup(3)
+                $orderStatusByDeliveryMethod = [
+                    1 => DB::table('order_status')->where('stat_description', 'Ready for Delivery')->value('id'),
+                    2 => DB::table('order_status')->where('stat_description', 'Ready for Drop off')->value('id'),
+                    3 => DB::table('order_status')->where('stat_description', 'Ready for Pickup')->value('id'),
+                ];
+                $newOrderStatus = $deliveryMethodId !== null && isset($orderStatusByDeliveryMethod[$deliveryMethodId])
+                    ? (int) $orderStatusByDeliveryMethod[$deliveryMethodId]
+                    : null;
+                if ($newOrderStatus !== null) {
+                    DB::table('orders')
+                        ->where('id', $orderItem->order_id)
+                        ->update([
+                            'order_status' => $newOrderStatus,
+                            'updated_at' => now(),
+                        ]);
+                }
+            }
+        }
 
         // If we just moved this item from Pending to something else, check if it was the last Pending item for this order
         $pendingOrderItemStatusId = DB::table('order_item_status')
