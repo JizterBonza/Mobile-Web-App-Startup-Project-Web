@@ -6,6 +6,7 @@ use App\Http\Controllers\UserController;
 use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\ItemController;
 use App\Http\Controllers\OrderController;
+use App\Http\Controllers\PODController;
 use App\Http\Controllers\CartController;
 use App\Http\Controllers\FavoriteController;
 use App\Http\Controllers\AddressController;
@@ -57,6 +58,14 @@ Route::post('orders/create', [OrderController::class, 'store']);
 Route::put('orders/{id}', [OrderController::class, 'update']);
 Route::put('orders/{id}/status', [OrderController::class, 'updateStatus']);
 Route::delete('orders/{id}', [OrderController::class, 'destroy']);
+
+// Proof of Delivery (POD) routes
+Route::post('pod/upload', [PODController::class, 'store']);
+Route::get('pod/order/{orderId}', [PODController::class, 'getByOrder']);
+Route::get('pod/rider/{riderId}', [PODController::class, 'getByRider']);
+Route::get('pod/show/{id}', [PODController::class, 'show']);
+Route::put('pod/update/{id}', [PODController::class, 'update']);
+Route::delete('pod/delete/{id}', [PODController::class, 'destroy']);
 
 // Cart routes
 Route::get('carts', [CartController::class, 'index']);
@@ -112,6 +121,9 @@ Route::delete('shops/{id}', [ShopController::class, 'destroy']);
 
 // Delivery method routes
 Route::get('delivery-methods', [MobileController::class, 'getDeliveryMethods']);
+
+// Order status routes
+Route::get('order-statuses', [MobileController::class, 'getOrderStatuses']);
 
 // Activity log routes (audit trail)
 Route::get('activity-logs', [ActivityLogController::class, 'index']);

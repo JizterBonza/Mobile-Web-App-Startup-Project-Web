@@ -8,6 +8,7 @@ use App\Models\OrderItem;
 use App\Models\Item;
 use App\Models\Cart;
 use App\Models\Notification;
+use App\Models\ProofOfDelivery;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\DB;
@@ -413,8 +414,17 @@ class OrderController extends Controller
             }
         }
 
+        // Check if order_status is being changed to in-transit
+        $oldStatus = $order->order_status;
+        $newStatus = $request->has('order_status') ? $request->order_status : null;
+
         if (!empty($orderUpdateData)) {
             $order->update($orderUpdateData);
+        }
+
+        // Create POD entry if status changed to in-transit
+        if ($newStatus && strtolower($newStatus) === 'in-transit' && $oldStatus !== $newStatus) {
+            $this->createProofOfDeliveryEntry($order);
         }
 
         // Load relationships
@@ -457,7 +467,16 @@ class OrderController extends Controller
             ], 404);
         }
 
-        $order->update(['order_status' => $request->status]);
+        // Store old status before update
+        $oldStatus = $order->order_status;
+        $newStatus = $request->status;
+
+        $order->update(['order_status' => $newStatus]);
+
+        // Create POD entry if status changed to in-transit
+        if (strtolower($newStatus) === 'in-transit' && $oldStatus !== $newStatus) {
+            $this->createProofOfDeliveryEntry($order);
+        }
 
         // Load relationships
         $order->load(['user', 'orderDetail', 'orderItems']);
@@ -467,6 +486,38 @@ class OrderController extends Controller
             'message' => 'Order status updated successfully',
             'data' => $order
         ]);
+    }
+
+    /**
+     * Create proof of delivery entry when order status changes to in-transit
+     *
+     * @param Order $order
+     * @return void
+     */
+    private function createProofOfDeliveryEntry(Order $order)
+    {
+        // Check if order has order_detail_id
+        if (!$order->order_detail_id) {
+            return;
+        }
+
+        // Check if POD entry already exists for this order
+        $existingPOD = ProofOfDelivery::where('order_id', $order->order_detail_id)
+            ->where('status', 'pending')
+            ->first();
+
+        // Only create if no pending POD entry exists
+        if (!$existingPOD) {
+            ProofOfDelivery::create([
+                'order_id' => $order->order_detail_id,
+                'rider_id' => $order->rider_id,
+                'latitude' => null,
+                'longitude' => null,
+                'image_path' => null,
+                'remarks' => null,
+                'status' => 'pending',
+            ]);
+        }
     }
 
     /**
