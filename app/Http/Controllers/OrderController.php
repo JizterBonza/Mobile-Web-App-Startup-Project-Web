@@ -184,7 +184,7 @@ class OrderController extends Controller
         $validator = Validator::make($data, [
             // Order fields
             'user_id' => 'required|exists:users,id',
-            'order_status' => 'nullable|string|max:50',
+            'order_status' => 'nullable|integer|exists:order_status,id',
             'ordered_at' => 'nullable|date',
             
             // Order detail fields
@@ -365,7 +365,7 @@ class OrderController extends Controller
         $validator = Validator::make($request->all(), [
             // Order fields
             'user_id' => 'sometimes|exists:users,id',
-            'order_status' => 'nullable|string|max:50',
+            'order_status' => 'nullable|integer|exists:order_status,id',
             'ordered_at' => 'nullable|date',
             
             // Order detail fields
@@ -422,8 +422,8 @@ class OrderController extends Controller
             $order->update($orderUpdateData);
         }
 
-        // Create POD entry if status changed to in-transit
-        if ($newStatus && strtolower($newStatus) === 'in-transit' && $oldStatus !== $newStatus) {
+        // Create POD entry if status changed to in-transit (status ID: 5)
+        if ($newStatus && (int)$newStatus === 5 && $oldStatus !== $newStatus) {
             $this->createProofOfDeliveryEntry($order);
         }
 
@@ -447,7 +447,7 @@ class OrderController extends Controller
     public function updateStatus(Request $request, $id)
     {
         $validator = Validator::make($request->all(), [
-            'status' => 'required|string|max:50',
+            'status' => 'required|integer|exists:order_status,id',
         ]);
 
         if ($validator->fails()) {
@@ -473,8 +473,8 @@ class OrderController extends Controller
 
         $order->update(['order_status' => $newStatus]);
 
-        // Create POD entry if status changed to in-transit
-        if (strtolower($newStatus) === 'in-transit' && $oldStatus !== $newStatus) {
+        // Create POD entry if status changed to in-transit (status ID: 5)
+        if ((int)$newStatus === 5 && $oldStatus !== $newStatus) {
             $this->createProofOfDeliveryEntry($order);
         }
 
@@ -489,7 +489,7 @@ class OrderController extends Controller
     }
 
     /**
-     * Create proof of delivery entry when order status changes to in-transit
+     * Create proof of delivery entry when order status changes to in-transit (status ID: 5)
      *
      * @param Order $order
      * @return void
