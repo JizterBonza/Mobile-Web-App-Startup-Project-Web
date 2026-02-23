@@ -8,6 +8,8 @@ use App\Http\Controllers\ProductImageController;
 use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\SubCategoryController;
 use App\Http\Controllers\ActivityLogController;
+use App\Http\Controllers\PaymentMethodController;
+use App\Http\Controllers\DeliveryMethodController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
@@ -88,6 +90,22 @@ Route::middleware(['auth', 'session.valid', 'user.type:super_admin'])->prefix('d
     Route::get('/{id}', [ActivityLogController::class, 'show'])->name('show');
 });
 
+// Super Admin Payment Methods
+Route::middleware(['auth', 'session.valid', 'user.type:super_admin'])->prefix('dashboard/super-admin/payment-methods')->name('dashboard.super-admin.payment-methods.')->group(function () {
+    Route::get('/', [PaymentMethodController::class, 'index'])->name('index');
+    Route::post('/', [PaymentMethodController::class, 'store'])->name('store');
+    Route::put('/{id}', [PaymentMethodController::class, 'update'])->name('update');
+    Route::delete('/{id}', [PaymentMethodController::class, 'destroy'])->name('destroy');
+});
+
+// Super Admin Delivery Methods
+Route::middleware(['auth', 'session.valid', 'user.type:super_admin'])->prefix('dashboard/super-admin/delivery-methods')->name('dashboard.super-admin.delivery-methods.')->group(function () {
+    Route::get('/', [DeliveryMethodController::class, 'index'])->name('index');
+    Route::post('/', [DeliveryMethodController::class, 'store'])->name('store');
+    Route::put('/{id}', [DeliveryMethodController::class, 'update'])->name('update');
+    Route::delete('/{id}', [DeliveryMethodController::class, 'destroy'])->name('destroy');
+});
+
 Route::get('/dashboard/admin', function () {
     return Inertia::render('Dashboard/AdminDashboard');
 })->middleware(['auth', 'session.valid', 'user.type:admin'])->name('dashboard.admin');
@@ -142,6 +160,22 @@ Route::middleware(['auth', 'session.valid', 'user.type:admin'])->prefix('dashboa
 Route::middleware(['auth', 'session.valid', 'user.type:admin'])->prefix('dashboard/admin/activity-logs')->name('dashboard.admin.activity-logs.')->group(function () {
     Route::get('/', [ActivityLogController::class, 'index'])->name('index');
     Route::get('/{id}', [ActivityLogController::class, 'show'])->name('show');
+});
+
+// Admin Payment Methods
+Route::middleware(['auth', 'session.valid', 'user.type:admin'])->prefix('dashboard/admin/payment-methods')->name('dashboard.admin.payment-methods.')->group(function () {
+    Route::get('/', [PaymentMethodController::class, 'index'])->name('index');
+    Route::post('/', [PaymentMethodController::class, 'store'])->name('store');
+    Route::put('/{id}', [PaymentMethodController::class, 'update'])->name('update');
+    Route::delete('/{id}', [PaymentMethodController::class, 'destroy'])->name('destroy');
+});
+
+// Admin Delivery Methods
+Route::middleware(['auth', 'session.valid', 'user.type:admin'])->prefix('dashboard/admin/delivery-methods')->name('dashboard.admin.delivery-methods.')->group(function () {
+    Route::get('/', [DeliveryMethodController::class, 'index'])->name('index');
+    Route::post('/', [DeliveryMethodController::class, 'store'])->name('store');
+    Route::put('/{id}', [DeliveryMethodController::class, 'update'])->name('update');
+    Route::delete('/{id}', [DeliveryMethodController::class, 'destroy'])->name('destroy');
 });
 
 Route::get('/dashboard/vendor', [VendorController::class, 'index'])

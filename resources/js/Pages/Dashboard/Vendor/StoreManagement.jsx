@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react'
-import { useForm, router } from '@inertiajs/react'
+import { useForm } from '@inertiajs/react'
 import AdminLayout from '../../../Layouts/AdminLayout'
 import AddressAutocomplete from '../../../Components/AddressAutocomplete'
 
 export default function StoreManagement({ auth, shop, agrivet, flash }) {
   const [showModal, setShowModal] = useState(false)
   const [showModalAnimation, setShowModalAnimation] = useState(false)
+  const [showSuccessAlert, setShowSuccessAlert] = useState(true)
+  const [showErrorAlert, setShowErrorAlert] = useState(true)
 
   const form = useForm({
     shop_name: shop?.shop_name || '',
@@ -35,6 +37,10 @@ export default function StoreManagement({ auth, shop, agrivet, flash }) {
   useEffect(() => {
     if (flash?.success) {
       closeModal()
+      setShowSuccessAlert(true)
+    }
+    if (flash?.error) {
+      setShowErrorAlert(true)
     }
   }, [flash])
 
@@ -51,30 +57,24 @@ export default function StoreManagement({ auth, shop, agrivet, flash }) {
   return (
     <AdminLayout auth={auth} title="Store Management">
       {/* Flash Messages */}
-      {flash?.success && (
+      {flash?.success && showSuccessAlert && (
         <div className="alert alert-success alert-dismissible fade show" role="alert">
           <strong>Success!</strong> {flash.success}
           <button type="button" className="close" data-dismiss="alert" aria-label="Close" onClick={(e) => {
             e.preventDefault()
-            router.visit(window.location.pathname, { 
-              preserveState: true,
-              preserveScroll: true
-            })
+            setShowSuccessAlert(false)
           }}>
             <span aria-hidden="true">&times;</span>
           </button>
         </div>
       )}
 
-      {flash?.error && (
+      {flash?.error && showErrorAlert && (
         <div className="alert alert-danger alert-dismissible fade show" role="alert">
           <strong>Error!</strong> {flash.error}
           <button type="button" className="close" data-dismiss="alert" aria-label="Close" onClick={(e) => {
             e.preventDefault()
-            router.visit(window.location.pathname, { 
-              preserveState: true,
-              preserveScroll: true
-            })
+            setShowErrorAlert(false)
           }}>
             <span aria-hidden="true">&times;</span>
           </button>

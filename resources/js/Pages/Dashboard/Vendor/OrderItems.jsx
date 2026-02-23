@@ -6,6 +6,8 @@ export default function OrderItems({ auth, order, orderItems = [], orderItemStat
   const [showStatusModal, setShowStatusModal] = useState(false)
   const [showStatusModalAnimation, setShowStatusModalAnimation] = useState(false)
   const [selectedItem, setSelectedItem] = useState(null)
+  const [showSuccessAlert, setShowSuccessAlert] = useState(true)
+  const [showErrorAlert, setShowErrorAlert] = useState(true)
 
   const statusForm = useForm({
     item_status: '',
@@ -32,6 +34,10 @@ export default function OrderItems({ auth, order, orderItems = [], orderItemStat
     if (flash?.success) {
       closeStatusModal()
       statusForm.reset()
+      setShowSuccessAlert(true)
+    }
+    if (flash?.error) {
+      setShowErrorAlert(true)
     }
   }, [flash])
 
@@ -64,11 +70,29 @@ export default function OrderItems({ auth, order, orderItems = [], orderItemStat
 
   const pendingStatusId = orderItemStatuses.find((s) => String(s.stat_description).toLowerCase() === 'pending')?.id
   const preparingStatusId = orderItemStatuses.find((s) => String(s.stat_description).toLowerCase() === 'preparing')?.id
+  const readyForDeliveryStatusId = orderItemStatuses.find((s) => String(s.stat_description).toLowerCase() === 'ready for delivery')?.id
+  const readyForDropOffStatusId = orderItemStatuses.find((s) => String(s.stat_description).toLowerCase() === 'ready for drop off')?.id
+  const readyForPickupStatusId = orderItemStatuses.find((s) => String(s.stat_description).toLowerCase() === 'ready for pickup')?.id
 
   const isPending = (item) => {
     const statusId = item.item_status != null ? Number(item.item_status) : null
     return statusId === pendingStatusId
   }
+
+  const isPreparing = (item) => {
+    const statusId = item.item_status != null ? Number(item.item_status) : null
+    return statusId === preparingStatusId
+  }
+
+  // delivery_method_id: 1 = Standard -> "Ready for Delivery", 2 = No Contact -> "Ready for Drop off", 3 = Pickup from Store -> "Ready for Pickup"
+  const getReadyButtonConfig = () => {
+    const dm = order?.delivery_method_id != null ? Number(order.delivery_method_id) : null
+    if (dm === 1 && readyForDeliveryStatusId != null) return { label: 'Ready for Delivery', statusId: readyForDeliveryStatusId }
+    if (dm === 2 && readyForDropOffStatusId != null) return { label: 'Ready for Drop off', statusId: readyForDropOffStatusId }
+    if (dm === 3 && readyForPickupStatusId != null) return { label: 'Ready for Pickup', statusId: readyForPickupStatusId }
+    return null
+  }
+  const readyButtonConfig = getReadyButtonConfig()
 
   const [confirmingId, setConfirmingId] = useState(null)
   const handleConfirm = (item) => {
@@ -83,10 +107,26 @@ export default function OrderItems({ auth, order, orderItems = [], orderItemStat
     })
   }
 
+  const [readyingId, setReadyingId] = useState(null)
+  const handleReady = (item) => {
+    if (!readyButtonConfig) return
+    setReadyingId(item.id)
+    router.put(`/dashboard/vendor/orders/${item.id}`, {
+      item_status: readyButtonConfig.statusId,
+      return_to_order_id: order?.id,
+    }, {
+      preserveScroll: true,
+      onFinish: () => setReadyingId(null),
+    })
+  }
+
   const statusColorMap = {
     'pending': 'warning',
+    'preparing': 'info',
     'processing': 'info',
     'ready for pickup': 'info',
+    'ready for delivery': 'info',
+    'ready for drop off': 'info',
     'in-transit': 'info',
     'delivered': 'success',
     'cancelled': 'danger',
@@ -109,24 +149,24 @@ export default function OrderItems({ auth, order, orderItems = [], orderItemStat
 
   return (
     <AdminLayout auth={auth} title={`Order #${order?.id} – Items`}>
-      {flash?.success && (
+      {flash?.success && showSuccessAlert && (
         <div className="alert alert-success alert-dismissible fade show" role="alert">
           <strong>Success!</strong> {flash.success}
           <button type="button" className="close" data-dismiss="alert" aria-label="Close" onClick={(e) => {
             e.preventDefault()
-            router.visit(window.location.pathname, { preserveState: true, preserveScroll: true })
+            setShowSuccessAlert(false)
           }}>
             <span aria-hidden="true">&times;</span>
           </button>
         </div>
       )}
 
-      {flash?.error && (
+      {flash?.error && showErrorAlert && (
         <div className="alert alert-danger alert-dismissible fade show" role="alert">
           <strong>Error!</strong> {flash.error}
           <button type="button" className="close" data-dismiss="alert" aria-label="Close" onClick={(e) => {
             e.preventDefault()
-            router.visit(window.location.pathname, { preserveState: true, preserveScroll: true })
+            setShowErrorAlert(false)
           }}>
             <span aria-hidden="true">&times;</span>
           </button>
@@ -191,6 +231,20 @@ export default function OrderItems({ auth, order, orderItems = [], orderItemStat
                             <>Confirming...</>
                           ) : (
                             <><i className="fas fa-check"></i> Confirm</>
+                          )}
+                        </button>
+                      )}
+                      {isPreparing(item) && readyButtonConfig && (
+                        <button
+                          className="btn btn-sm btn-primary mr-1"
+                          onClick={() => handleReady(item)}
+                          disabled={readyingId === item.id}
+                          title={readyButtonConfig.label}
+                        >
+                          {readyingId === item.id ? (
+                            <>Updating...</>
+                          ) : (
+                            <><i className="fas fa-box-open"></i> {readyButtonConfig.label}</>
                           )}
                         </button>
                       )}
