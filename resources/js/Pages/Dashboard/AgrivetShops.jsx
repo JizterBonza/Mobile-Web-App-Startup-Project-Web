@@ -3,7 +3,7 @@ import { useForm, router, Link } from '@inertiajs/react'
 import AdminLayout from '../../Layouts/AdminLayout'
 import PinLocationMap from '../../Components/PinLocationMap'
 
-export default function AgrivetShops({ auth, agrivet, shops = [], flash }) {
+export default function AgrivetShops({ auth, agrivet, zones = [], shops = [], flash }) {
   const [showAddModal, setShowAddModal] = useState(false)
   const [showAddModalAnimation, setShowAddModalAnimation] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
@@ -23,6 +23,7 @@ export default function AgrivetShops({ auth, agrivet, shops = [], flash }) {
     shop_long: '',
     contact_number: '',
     shop_status: 'active',
+    zone_id: '',
   })
 
   const editForm = useForm({
@@ -35,6 +36,7 @@ export default function AgrivetShops({ auth, agrivet, shops = [], flash }) {
     shop_long: '',
     contact_number: '',
     shop_status: 'active',
+    zone_id: '',
   })
 
   // Handle add modal animation
@@ -131,6 +133,7 @@ export default function AgrivetShops({ auth, agrivet, shops = [], flash }) {
       shop_long: shop.shop_long || '',
       contact_number: shop.contact_number || '',
       shop_status: shop.shop_status || 'active',
+      zone_id: shop.zone_id ? String(shop.zone_id) : '',
     })
     setShowEditModal(true)
     setShowEditModalAnimation(false)
@@ -224,6 +227,7 @@ export default function AgrivetShops({ auth, agrivet, shops = [], flash }) {
                   <tr>
                     <th>ID</th>
                     <th>Shop Name</th>
+                    <th>Zone</th>
                     <th>Address</th>
                     <th>Contact</th>
                     <th>Vendors</th>
@@ -236,13 +240,14 @@ export default function AgrivetShops({ auth, agrivet, shops = [], flash }) {
                 <tbody>
                   {shops.length === 0 ? (
                     <tr>
-                      <td colSpan="9" className="text-center">No shops found</td>
+                      <td colSpan="10" className="text-center">No shops found</td>
                     </tr>
                   ) : (
                     shops.map((shop) => (
                       <tr key={shop.id}>
                         <td>{shop.id}</td>
                         <td>{shop.shop_name}</td>
+                        <td>{shop.zone_name ? <span className="badge badge-secondary">{shop.zone_name}</span> : '-'}</td>
                         <td>{shop.shop_address || '-'}</td>
                         <td>{shop.contact_number || '-'}</td>
                         <td>
@@ -341,6 +346,27 @@ export default function AgrivetShops({ auth, agrivet, shops = [], flash }) {
                           {addForm.errors.shop_status && (
                             <div className="invalid-feedback">{addForm.errors.shop_status}</div>
                           )}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="row">
+                      <div className="col-md-12">
+                        <div className="form-group">
+                          <label>Zone</label>
+                          <select
+                            className={`form-control ${addForm.errors.zone_id ? 'is-invalid' : ''}`}
+                            value={addForm.data.zone_id}
+                            onChange={(e) => addForm.setData('zone_id', e.target.value)}
+                          >
+                            <option value="">No zone</option>
+                            {(zones || []).map((z) => (
+                              <option key={z.id} value={z.id}>{z.name}</option>
+                            ))}
+                          </select>
+                          {addForm.errors.zone_id && (
+                            <div className="invalid-feedback">{addForm.errors.zone_id}</div>
+                          )}
+                          <small className="form-text text-muted">Optional. Assign this shop to a zone (manage zones in Zones menu).</small>
                         </div>
                       </div>
                     </div>
@@ -546,6 +572,26 @@ export default function AgrivetShops({ auth, agrivet, shops = [], flash }) {
                           </select>
                           {editForm.errors.shop_status && (
                             <div className="invalid-feedback">{editForm.errors.shop_status}</div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="row">
+                      <div className="col-md-12">
+                        <div className="form-group">
+                          <label>Zone</label>
+                          <select
+                            className={`form-control ${editForm.errors.zone_id ? 'is-invalid' : ''}`}
+                            value={editForm.data.zone_id}
+                            onChange={(e) => editForm.setData('zone_id', e.target.value)}
+                          >
+                            <option value="">No zone</option>
+                            {(zones || []).map((z) => (
+                              <option key={z.id} value={z.id}>{z.name}</option>
+                            ))}
+                          </select>
+                          {editForm.errors.zone_id && (
+                            <div className="invalid-feedback">{editForm.errors.zone_id}</div>
                           )}
                         </div>
                       </div>

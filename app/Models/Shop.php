@@ -23,6 +23,7 @@ class Shop extends Model
      */
     protected $fillable = [
         'agrivet_id',
+        'zone_id',
         'shop_name',
         'shop_description',
         'shop_address',
@@ -59,6 +60,14 @@ class Shop extends Model
     public function agrivet()
     {
         return $this->belongsTo(Agrivet::class);
+    }
+
+    /**
+     * Get the zone where this shop is located.
+     */
+    public function zone()
+    {
+        return $this->belongsTo(Zone::class);
     }
 
     /**

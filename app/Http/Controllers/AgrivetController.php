@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\ActivityLog;
 use App\Models\Agrivet;
 use App\Models\Shop;
+use App\Models\Zone;
 use App\Models\User;
 use App\Models\UserDetail;
 use App\Models\UserCredential;
@@ -201,11 +202,14 @@ class AgrivetController extends Controller
      */
     public function showShops($id)
     {
-        $agrivet = Agrivet::with('shops')->findOrFail($id);
+        $agrivet = Agrivet::with(['shops', 'shops.zone'])->findOrFail($id);
+        $zones = Zone::where('status', true)->orderBy('name')->get(['id', 'name']);
 
         $shops = $agrivet->shops->map(function ($shop) {
             return [
                 'id' => $shop->id,
+                'zone_id' => $shop->zone_id,
+                'zone_name' => $shop->zone?->name,
                 'shop_name' => $shop->shop_name,
                 'shop_description' => $shop->shop_description,
                 'shop_address' => $shop->shop_address,
@@ -227,6 +231,7 @@ class AgrivetController extends Controller
                 'id' => $agrivet->id,
                 'name' => $agrivet->name,
             ],
+            'zones' => $zones->map(fn ($z) => ['id' => $z->id, 'name' => $z->name]),
             'shops' => $shops,
         ]);
     }
@@ -248,11 +253,13 @@ class AgrivetController extends Controller
             'shop_long' => 'nullable|numeric',
             'contact_number' => 'nullable|string|max:20',
             'shop_status' => 'nullable|string|in:active,inactive',
+            'zone_id' => 'nullable|exists:zones,id',
         ]);
 
         try {
             $shop = Shop::create([
                 'agrivet_id' => $agrivet->id,
+                'zone_id' => $request->zone_id,
                 'shop_name' => $request->shop_name,
                 'shop_description' => $request->shop_description ?? null,
                 'shop_address' => $request->shop_address ?? null,
@@ -301,6 +308,7 @@ class AgrivetController extends Controller
             'shop_long' => 'nullable|numeric',
             'contact_number' => 'nullable|string|max:20',
             'shop_status' => 'nullable|string|in:active,inactive',
+            'zone_id' => 'nullable|exists:zones,id',
         ]);
 
         try {
@@ -314,6 +322,7 @@ class AgrivetController extends Controller
                 'shop_long' => $request->shop_long ?? null,
                 'contact_number' => $request->contact_number ?? null,
                 'shop_status' => $request->shop_status ?? $shop->shop_status,
+                'zone_id' => $request->zone_id,
             ]);
 
             ActivityLog::log('updated', "Shop updated: {$shop->shop_name}", $shop, $oldShopValues, $shop->fresh()->toArray());

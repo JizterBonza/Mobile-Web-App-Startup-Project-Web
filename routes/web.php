@@ -10,6 +10,7 @@ use App\Http\Controllers\SubCategoryController;
 use App\Http\Controllers\ActivityLogController;
 use App\Http\Controllers\PaymentMethodController;
 use App\Http\Controllers\DeliveryMethodController;
+use App\Http\Controllers\ZoneController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
@@ -106,6 +107,14 @@ Route::middleware(['auth', 'session.valid', 'user.type:super_admin'])->prefix('d
     Route::delete('/{id}', [DeliveryMethodController::class, 'destroy'])->name('destroy');
 });
 
+// Super Admin Zones
+Route::middleware(['auth', 'session.valid', 'user.type:super_admin'])->prefix('dashboard/super-admin/zones')->name('dashboard.super-admin.zones.')->group(function () {
+    Route::get('/', [ZoneController::class, 'index'])->name('index');
+    Route::post('/', [ZoneController::class, 'store'])->name('store');
+    Route::put('/{id}', [ZoneController::class, 'update'])->name('update');
+    Route::delete('/{id}', [ZoneController::class, 'destroy'])->name('destroy');
+});
+
 Route::get('/dashboard/admin', function () {
     return Inertia::render('Dashboard/AdminDashboard');
 })->middleware(['auth', 'session.valid', 'user.type:admin'])->name('dashboard.admin');
@@ -176,6 +185,14 @@ Route::middleware(['auth', 'session.valid', 'user.type:admin'])->prefix('dashboa
     Route::post('/', [DeliveryMethodController::class, 'store'])->name('store');
     Route::put('/{id}', [DeliveryMethodController::class, 'update'])->name('update');
     Route::delete('/{id}', [DeliveryMethodController::class, 'destroy'])->name('destroy');
+});
+
+// Admin Zones
+Route::middleware(['auth', 'session.valid', 'user.type:admin'])->prefix('dashboard/admin/zones')->name('dashboard.admin.zones.')->group(function () {
+    Route::get('/', [ZoneController::class, 'index'])->name('index');
+    Route::post('/', [ZoneController::class, 'store'])->name('store');
+    Route::put('/{id}', [ZoneController::class, 'update'])->name('update');
+    Route::delete('/{id}', [ZoneController::class, 'destroy'])->name('destroy');
 });
 
 Route::get('/dashboard/vendor', [VendorController::class, 'index'])
