@@ -47,11 +47,20 @@ class ProofOfDelivery extends Model
     }
 
     /**
-     * Get the order detail for the proof of delivery.
+     * Get the order for the proof of delivery.
      */
-    public function orderDetail()
+    public function order()
     {
-        return $this->belongsTo(OrderDetail::class, 'order_id');
+        return $this->belongsTo(Order::class, 'order_id');
+    }
+
+    /**
+     * Get the order detail for the proof of delivery (accessed through order relationship).
+     * This is an accessor that accesses OrderDetail through the Order relationship.
+     */
+    public function getOrderDetailAttribute()
+    {
+        return $this->order?->orderDetail;
     }
 }
 

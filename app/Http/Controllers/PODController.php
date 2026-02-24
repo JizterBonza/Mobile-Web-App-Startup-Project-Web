@@ -22,9 +22,9 @@ class PODController extends Controller
     {
         // Validate the request
         $validator = Validator::make($request->all(), [
-            'orderId' => 'required|string|exists:order_details,id',
+            'orderId' => 'required|exists:orders,id',
             'riderId' => 'nullable|exists:users,id',
-            'image' => 'required|image|mimes:jpeg,png,jpg,gif,webp|max:5120', // 5MB max
+            'image' => 'required|image|mimes:jpeg,png,jpg,gif,webp|max:5120',
             'latitude' => 'required|numeric|between:-90,90',
             'longitude' => 'required|numeric|between:-180,180',
             'remarks' => 'nullable|string|max:1000',
@@ -39,56 +39,89 @@ class PODController extends Controller
             ], 422);
         }
 
-        // Verify that the order exists
-        $orderDetail = OrderDetail::find($request->orderId);
-        if (!$orderDetail) {
+        // Find the order using orders.id sent by the app
+        $order = Order::find($request->orderId);
+        if (!$order) {
             return response()->json([
                 'success' => false,
                 'message' => 'Order not found'
             ], 404);
         }
 
-        // Get rider_id from request or from the order
+        // Find the order detail using order_detail_id from the order
+        $orderDetail = OrderDetail::find($order->order_detail_id);
+        if (!$orderDetail) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Order detail not found'
+            ], 404);
+        }
+
+        // Get rider_id: prioritize request, then order
         $riderId = $request->riderId;
-        if (!$riderId) {
-            // Try to get rider_id from the order
-            $order = Order::where('order_detail_id', $request->orderId)->first();
-            if ($order && $order->rider_id) {
-                $riderId = $order->rider_id;
-            }
+        if (!$riderId && $order->rider_id) {
+            $riderId = $order->rider_id;
         }
 
         try {
+            // Check if POD entry already exists for this order
+            $proofOfDelivery = ProofOfDelivery::where('order_id', $order->id)->first();
+
             // Handle image upload
             $imagePath = null;
             if ($request->hasFile('image')) {
+                // If updating existing POD, delete old image if exists
+                if ($proofOfDelivery && $proofOfDelivery->image_path) {
+                    $oldPath = str_replace('/storage/', '', $proofOfDelivery->image_path);
+                    if (Storage::disk('public')->exists($oldPath)) {
+                        Storage::disk('public')->delete($oldPath);
+                    }
+                }
+
                 // Generate a unique filename to prevent conflicts
                 $filename = Str::uuid() . '_' . time() . '.' . $request->file('image')->getClientOriginalExtension();
-                
+
                 // Store the image in pod_images directory
                 $path = $request->file('image')->storeAs('pod_images', $filename, 'public');
-                
+
                 // Save the full path for database storage
                 $imagePath = '/storage/' . $path;
             }
 
-            // Create the proof of delivery record
-            $proofOfDelivery = ProofOfDelivery::create([
-                'order_id' => $request->orderId,
-                'rider_id' => $riderId,
-                'latitude' => $request->latitude,
-                'longitude' => $request->longitude,
-                'image_path' => $imagePath,
-                'remarks' => $request->remarks,
-                'status' => $request->status ?? 'pending',
-            ]);
+            if ($proofOfDelivery) {
+                // Update existing POD entry
+                $proofOfDelivery->update([
+                    'latitude' => $request->latitude,
+                    'longitude' => $request->longitude,
+                    'image_path' => $imagePath,
+                    'remarks' => $request->remarks,
+                    'status' => $request->status ?? 'pending',
+                ]);
+
+                $message = 'Proof of delivery updated successfully';
+                $statusCode = 200;
+            } else {
+                // Create new proof of delivery record using order id
+                $proofOfDelivery = ProofOfDelivery::create([
+                    'order_id' => $order->id,
+                    'rider_id' => $riderId,
+                    'latitude' => $request->latitude,
+                    'longitude' => $request->longitude,
+                    'image_path' => $imagePath,
+                    'remarks' => $request->remarks,
+                    'status' => $request->status ?? 'pending',
+                ]);
+
+                $message = 'Proof of delivery created successfully';
+                $statusCode = 201;
+            }
 
             // Load the relationship for response
-            $proofOfDelivery->load('orderDetail');
+            $proofOfDelivery->load('order.orderDetail');
 
             return response()->json([
                 'success' => true,
-                'message' => 'Proof of delivery created successfully',
+                'message' => $message,
                 'data' => [
                     'id' => $proofOfDelivery->id,
                     'orderId' => $proofOfDelivery->order_id,
@@ -101,7 +134,7 @@ class PODController extends Controller
                     'status' => $proofOfDelivery->status,
                     'orderDetail' => $proofOfDelivery->orderDetail,
                 ]
-            ], 201);
+            ], $statusCode);
 
         } catch (\Exception $e) {
             // If image was uploaded but database save failed, delete the image
@@ -129,7 +162,7 @@ class PODController extends Controller
     public function getByOrder($orderId)
     {
         $proofOfDeliveries = ProofOfDelivery::where('order_id', $orderId)
-            ->with('orderDetail')
+            ->with('order.orderDetail')
             ->orderBy('created_at', 'desc')
             ->get();
 
@@ -162,7 +195,7 @@ class PODController extends Controller
     public function getByRider($riderId)
     {
         $proofOfDeliveries = ProofOfDelivery::where('rider_id', $riderId)
-            ->with('orderDetail')
+            ->with('order.orderDetail')
             ->orderBy('created_at', 'desc')
             ->get();
 
@@ -194,7 +227,7 @@ class PODController extends Controller
      */
     public function show($id)
     {
-        $proofOfDelivery = ProofOfDelivery::with('orderDetail')->find($id);
+        $proofOfDelivery = ProofOfDelivery::with('order.orderDetail')->find($id);
 
         if (!$proofOfDelivery) {
             return response()->json([
@@ -257,12 +290,7 @@ class PODController extends Controller
         try {
             $updateData = [];
 
-            // Only allow updating: image_path, latitude, longitude, remarks, and status
-            // Timestamp (updated_at) is automatically updated by Laravel
-
-            // Handle image update
             if ($request->hasFile('image')) {
-                // Delete old image if exists
                 if ($proofOfDelivery->image_path) {
                     $oldPath = str_replace('/storage/', '', $proofOfDelivery->image_path);
                     if (Storage::disk('public')->exists($oldPath)) {
@@ -270,37 +298,32 @@ class PODController extends Controller
                     }
                 }
 
-                // Upload new image
                 $filename = Str::uuid() . '_' . time() . '.' . $request->file('image')->getClientOriginalExtension();
                 $path = $request->file('image')->storeAs('pod_images', $filename, 'public');
                 $updateData['image_path'] = '/storage/' . $path;
             }
 
-            // Update latitude
             if ($request->has('latitude')) {
                 $updateData['latitude'] = $request->latitude;
             }
 
-            // Update longitude
             if ($request->has('longitude')) {
                 $updateData['longitude'] = $request->longitude;
             }
 
-            // Update remarks
             if ($request->has('remarks')) {
                 $updateData['remarks'] = $request->remarks;
             }
 
-            // Update status
             if ($request->has('status')) {
                 $updateData['status'] = $request->status;
             }
 
-            // Only update if there's data to update
             if (!empty($updateData)) {
                 $proofOfDelivery->update($updateData);
             }
-            $proofOfDelivery->load('orderDetail');
+
+            $proofOfDelivery->load('order.orderDetail');
 
             return response()->json([
                 'success' => true,
@@ -346,7 +369,6 @@ class PODController extends Controller
         }
 
         try {
-            // Delete associated image
             if ($proofOfDelivery->image_path) {
                 $pathToDelete = str_replace('/storage/', '', $proofOfDelivery->image_path);
                 if (Storage::disk('public')->exists($pathToDelete)) {
@@ -370,4 +392,3 @@ class PODController extends Controller
         }
     }
 }
-

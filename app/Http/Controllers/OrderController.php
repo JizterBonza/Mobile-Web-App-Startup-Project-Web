@@ -496,20 +496,20 @@ class OrderController extends Controller
      */
     private function createProofOfDeliveryEntry(Order $order)
     {
-        // Check if order has order_detail_id
-        if (!$order->order_detail_id) {
+        // Check if order has id
+        if (!$order->id) {
             return;
         }
 
         // Check if POD entry already exists for this order
-        $existingPOD = ProofOfDelivery::where('order_id', $order->order_detail_id)
+        $existingPOD = ProofOfDelivery::where('order_id', $order->id)
             ->where('status', 'pending')
             ->first();
 
         // Only create if no pending POD entry exists
         if (!$existingPOD) {
             ProofOfDelivery::create([
-                'order_id' => $order->order_detail_id,
+                'order_id' => $order->id,
                 'rider_id' => $order->rider_id,
                 'latitude' => null,
                 'longitude' => null,
