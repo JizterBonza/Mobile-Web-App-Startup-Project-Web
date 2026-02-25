@@ -1,9 +1,28 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useForm, router, Link } from '@inertiajs/react'
 import AdminLayout from '../../Layouts/AdminLayout'
 import PinLocationMap from '../../Components/PinLocationMap'
 
 export default function AgrivetShops({ auth, agrivet, zones = [], shops = [], flash }) {
+  // Zones with valid boundaries for map (polygons + labels)
+  const zonesForMap = useMemo(
+    () =>
+      (zones || []).filter(
+        (z) => z.boundary && Array.isArray(z.boundary) && z.boundary.length >= 3
+      ),
+    [zones]
+  )
+  // Shops with valid coordinates for map markers
+  const shopsForMap = useMemo(
+    () =>
+      (shops || []).filter((s) => {
+        const lat = Number(s.shop_lat ?? s.latitude)
+        const lng = Number(s.shop_long ?? s.longitude)
+        return !Number.isNaN(lat) && !Number.isNaN(lng)
+      }),
+    [shops]
+  )
+
   const [showAddModal, setShowAddModal] = useState(false)
   const [showAddModalAnimation, setShowAddModalAnimation] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
@@ -23,7 +42,6 @@ export default function AgrivetShops({ auth, agrivet, zones = [], shops = [], fl
     shop_long: '',
     contact_number: '',
     shop_status: 'active',
-    zone_id: '',
   })
 
   const editForm = useForm({
@@ -36,7 +54,6 @@ export default function AgrivetShops({ auth, agrivet, zones = [], shops = [], fl
     shop_long: '',
     contact_number: '',
     shop_status: 'active',
-    zone_id: '',
   })
 
   // Handle add modal animation
@@ -133,7 +150,6 @@ export default function AgrivetShops({ auth, agrivet, zones = [], shops = [], fl
       shop_long: shop.shop_long || '',
       contact_number: shop.contact_number || '',
       shop_status: shop.shop_status || 'active',
-      zone_id: shop.zone_id ? String(shop.zone_id) : '',
     })
     setShowEditModal(true)
     setShowEditModalAnimation(false)
@@ -352,27 +368,6 @@ export default function AgrivetShops({ auth, agrivet, zones = [], shops = [], fl
                     <div className="row">
                       <div className="col-md-12">
                         <div className="form-group">
-                          <label>Zone</label>
-                          <select
-                            className={`form-control ${addForm.errors.zone_id ? 'is-invalid' : ''}`}
-                            value={addForm.data.zone_id}
-                            onChange={(e) => addForm.setData('zone_id', e.target.value)}
-                          >
-                            <option value="">No zone</option>
-                            {(zones || []).map((z) => (
-                              <option key={z.id} value={z.id}>{z.name}</option>
-                            ))}
-                          </select>
-                          {addForm.errors.zone_id && (
-                            <div className="invalid-feedback">{addForm.errors.zone_id}</div>
-                          )}
-                          <small className="form-text text-muted">Optional. Assign this shop to a zone (manage zones in Zones menu).</small>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="row">
-                      <div className="col-md-12">
-                        <div className="form-group">
                           <label>Description</label>
                           <textarea
                             className={`form-control ${addForm.errors.shop_description ? 'is-invalid' : ''}`}
@@ -402,6 +397,8 @@ export default function AgrivetShops({ auth, agrivet, zones = [], shops = [], fl
                                 shop_long: loc.longitude,
                               })
                             }}
+                            zones={zonesForMap}
+                            shopLocations={shopsForMap}
                             height={320}
                             error={addForm.errors.shop_address}
                           />
@@ -579,26 +576,6 @@ export default function AgrivetShops({ auth, agrivet, zones = [], shops = [], fl
                     <div className="row">
                       <div className="col-md-12">
                         <div className="form-group">
-                          <label>Zone</label>
-                          <select
-                            className={`form-control ${editForm.errors.zone_id ? 'is-invalid' : ''}`}
-                            value={editForm.data.zone_id}
-                            onChange={(e) => editForm.setData('zone_id', e.target.value)}
-                          >
-                            <option value="">No zone</option>
-                            {(zones || []).map((z) => (
-                              <option key={z.id} value={z.id}>{z.name}</option>
-                            ))}
-                          </select>
-                          {editForm.errors.zone_id && (
-                            <div className="invalid-feedback">{editForm.errors.zone_id}</div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                    <div className="row">
-                      <div className="col-md-12">
-                        <div className="form-group">
                           <label>Description</label>
                           <textarea
                             className={`form-control ${editForm.errors.shop_description ? 'is-invalid' : ''}`}
@@ -619,6 +596,8 @@ export default function AgrivetShops({ auth, agrivet, zones = [], shops = [], fl
                           <PinLocationMap
                             initialLat={editForm.data.shop_lat ? parseFloat(editForm.data.shop_lat) : undefined}
                             initialLng={editForm.data.shop_long ? parseFloat(editForm.data.shop_long) : undefined}
+                            zones={zonesForMap}
+                            shopLocations={shopsForMap}
                             initialAddress={editForm.data.shop_address}
                             initialCity={editForm.data.shop_city}
                             initialPostalCode={editForm.data.shop_postal_code}
