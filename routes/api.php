@@ -13,6 +13,7 @@ use App\Http\Controllers\AddressController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\ShopController;
 use App\Http\Controllers\MobileController;
+use App\Http\Controllers\PaymentMethodController;
 use App\Http\Controllers\ActivityLogController;
 use Illuminate\Http\Request;
 
@@ -121,6 +122,9 @@ Route::delete('shops/{id}', [ShopController::class, 'destroy']);
 
 // Delivery method routes
 Route::get('delivery-methods', [MobileController::class, 'getDeliveryMethods']);
+
+// Payment method routes
+Route::get('payment-methods/active', [PaymentMethodController::class, 'getActive']);
 
 // Order status routes
 Route::get('order-statuses', [MobileController::class, 'getOrderStatuses']);

@@ -9,6 +9,7 @@ use App\Models\Item;
 use App\Models\Cart;
 use App\Models\Notification;
 use App\Models\ProofOfDelivery;
+use App\Models\OrderStatus;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\DB;
@@ -271,10 +272,14 @@ class OrderController extends Controller
             $orderDetail = OrderDetail::create($orderDetailData);
 
             // Create order
+            // Get pending order status ID from order_status table
+            $pendingStatus = OrderStatus::where('stat_description', 'Pending')->first();
+            $pendingStatusId = $pendingStatus ? $pendingStatus->id : 1; // Default to 1 if not found
+            
             $orderData = [
                 'user_id' => $data['user_id'],
                 'order_detail_id' => $orderDetail->id,
-                'order_status' => $data['order_status'] ?? 'pending',
+                'order_status' => $data['order_status'] ?? $pendingStatusId,
                 'ordered_at' => $data['ordered_at'] ?? now(),
             ];
 
@@ -289,7 +294,7 @@ class OrderController extends Controller
                         'shop_id' => (int) $item['shop_id'],
                         'quantity' => (int) $item['quantity'],
                         'price_at_purchase' => (float) $item['price_at_purchase'],
-                        'item_status' => 'ordered',
+                        'item_status' => 1,
                     ]);
 
                     // Update item quantity and sold_count using locked item
