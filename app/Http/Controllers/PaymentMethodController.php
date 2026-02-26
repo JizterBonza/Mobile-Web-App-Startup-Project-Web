@@ -154,4 +154,24 @@ class PaymentMethodController extends Controller
             'success' => 'Payment method deleted successfully!',
         ]);
     }
+
+    /**
+     * Get active payment methods only (id and name).
+     *
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function getActive()
+    {
+        $paymentMethods = PaymentMethod::where('status', true)
+            ->orderBy('name', 'asc')
+            ->get()
+            ->map(function ($pm) {
+                return [
+                    'id' => $pm->id,
+                    'name' => $pm->name,
+                ];
+            });
+
+        return response()->json($paymentMethods);
+    }
 }
