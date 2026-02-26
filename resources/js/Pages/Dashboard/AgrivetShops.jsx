@@ -1,9 +1,28 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useForm, router, Link } from '@inertiajs/react'
 import AdminLayout from '../../Layouts/AdminLayout'
 import PinLocationMap from '../../Components/PinLocationMap'
 
-export default function AgrivetShops({ auth, agrivet, shops = [], flash }) {
+export default function AgrivetShops({ auth, agrivet, zones = [], shops = [], flash }) {
+  // Zones with valid boundaries for map (polygons + labels)
+  const zonesForMap = useMemo(
+    () =>
+      (zones || []).filter(
+        (z) => z.boundary && Array.isArray(z.boundary) && z.boundary.length >= 3
+      ),
+    [zones]
+  )
+  // Shops with valid coordinates for map markers
+  const shopsForMap = useMemo(
+    () =>
+      (shops || []).filter((s) => {
+        const lat = Number(s.shop_lat ?? s.latitude)
+        const lng = Number(s.shop_long ?? s.longitude)
+        return !Number.isNaN(lat) && !Number.isNaN(lng)
+      }),
+    [shops]
+  )
+
   const [showAddModal, setShowAddModal] = useState(false)
   const [showAddModalAnimation, setShowAddModalAnimation] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
@@ -224,6 +243,7 @@ export default function AgrivetShops({ auth, agrivet, shops = [], flash }) {
                   <tr>
                     <th>ID</th>
                     <th>Shop Name</th>
+                    <th>Zone</th>
                     <th>Address</th>
                     <th>Contact</th>
                     <th>Vendors</th>
@@ -236,13 +256,14 @@ export default function AgrivetShops({ auth, agrivet, shops = [], flash }) {
                 <tbody>
                   {shops.length === 0 ? (
                     <tr>
-                      <td colSpan="9" className="text-center">No shops found</td>
+                      <td colSpan="10" className="text-center">No shops found</td>
                     </tr>
                   ) : (
                     shops.map((shop) => (
                       <tr key={shop.id}>
                         <td>{shop.id}</td>
                         <td>{shop.shop_name}</td>
+                        <td>{shop.zone_name ? <span className="badge badge-secondary">{shop.zone_name}</span> : '-'}</td>
                         <td>{shop.shop_address || '-'}</td>
                         <td>{shop.contact_number || '-'}</td>
                         <td>
@@ -376,6 +397,8 @@ export default function AgrivetShops({ auth, agrivet, shops = [], flash }) {
                                 shop_long: loc.longitude,
                               })
                             }}
+                            zones={zonesForMap}
+                            shopLocations={shopsForMap}
                             height={320}
                             error={addForm.errors.shop_address}
                           />
@@ -573,6 +596,8 @@ export default function AgrivetShops({ auth, agrivet, shops = [], flash }) {
                           <PinLocationMap
                             initialLat={editForm.data.shop_lat ? parseFloat(editForm.data.shop_lat) : undefined}
                             initialLng={editForm.data.shop_long ? parseFloat(editForm.data.shop_long) : undefined}
+                            zones={zonesForMap}
+                            shopLocations={shopsForMap}
                             initialAddress={editForm.data.shop_address}
                             initialCity={editForm.data.shop_city}
                             initialPostalCode={editForm.data.shop_postal_code}

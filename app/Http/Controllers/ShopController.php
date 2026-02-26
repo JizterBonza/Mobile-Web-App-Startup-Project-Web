@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Shop;
+use App\Models\Zone;
 use App\Models\RatingReview;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
@@ -149,8 +150,18 @@ class ShopController extends Controller
             ], 422);
         }
 
+        // If shop has coordinates, set zone_id to the zone whose boundary contains this point
+        $zoneId = null;
+        if ($request->filled('shop_lat') && $request->filled('shop_long')) {
+            $zone = Zone::findZoneContainingPoint((float) $request->shop_lat, (float) $request->shop_long);
+            if ($zone) {
+                $zoneId = $zone->id;
+            }
+        }
+
         $shop = Shop::create([
             'agrivet_id' => $request->agrivet_id,
+            'zone_id' => $zoneId,
             'shop_name' => $request->shop_name,
             'shop_description' => $request->shop_description,
             'shop_address' => $request->shop_address,
@@ -204,7 +215,7 @@ class ShopController extends Controller
             ], 422);
         }
 
-        $shop->update($request->only([
+        $data = $request->only([
             'agrivet_id',
             'shop_name',
             'shop_description',
@@ -213,7 +224,15 @@ class ShopController extends Controller
             'shop_long',
             'contact_number',
             'shop_status',
-        ]));
+        ]);
+
+        // If shop coordinates are provided, set zone_id to the zone whose boundary contains this point
+        if ($request->filled('shop_lat') && $request->filled('shop_long')) {
+            $zone = Zone::findZoneContainingPoint((float) $request->shop_lat, (float) $request->shop_long);
+            $data['zone_id'] = $zone?->id;
+        }
+
+        $shop->update($data);
 
         return response()->json([
             'success' => true,

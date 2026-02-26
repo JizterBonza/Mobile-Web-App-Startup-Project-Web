@@ -14,7 +14,117 @@ import { useState, useEffect, useRef } from 'react'
  * - height: Map container height (default: 320px)
  * - className: Extra CSS classes for the wrapper
  * - error: Error message to show below map
+ * - zoneBoundaries: Optional array of polygon paths to draw on the map. Each path is an array of { lat, lng }.
+ * - zones: Optional array of { name, boundary } to draw zone polygons with name labels in the center.
+ * - shopLocations: Optional array of { id, shop_name, shop_lat, shop_long } to show shop markers on the map.
  */
+
+function getPolygonCentroid(path) {
+  if (!Array.isArray(path) || path.length === 0) return null
+  let sumLat = 0
+  let sumLng = 0
+  for (const p of path) {
+    sumLat += Number(p.lat ?? p.latitude ?? 0)
+    sumLng += Number(p.lng ?? p.longitude ?? 0)
+  }
+  return { lat: sumLat / path.length, lng: sumLng / path.length }
+}
+
+function createZoneLabelOverlay(map, position, zoneName) {
+  if (!window.google?.maps?.OverlayView) return null
+  const div = document.createElement('div')
+  div.className = 'zone-label-overlay'
+  div.textContent = zoneName
+  div.style.cssText = [
+    'position: absolute',
+    'padding: 4px 10px',
+    'background: rgba(25, 135, 84, 0.9)',
+    'color: #fff',
+    'font-size: 13px',
+    'font-weight: 600',
+    'border-radius: 4px',
+    'white-space: nowrap',
+    'pointer-events: none',
+    'box-shadow: 0 1px 3px rgba(0,0,0,0.3)',
+    'transform: translate(-50%, -50%)',
+  ].join(';')
+
+  class LabelOverlay extends window.google.maps.OverlayView {
+    constructor() {
+      super()
+    }
+    onAdd() {
+      const panes = this.getPanes()
+      if (panes?.overlayMouseTarget) panes.overlayMouseTarget.appendChild(div)
+      else if (panes?.overlayLayer) panes.overlayLayer.appendChild(div)
+    }
+    draw() {
+      const pos = position
+      const projection = this.getProjection()
+      if (!projection) return
+      const point = projection.fromLatLngToDivPixel(new window.google.maps.LatLng(pos.lat, pos.lng))
+      if (point) {
+        div.style.left = point.x + 'px'
+        div.style.top = point.y + 'px'
+      }
+    }
+    onRemove() {
+      if (div.parentNode) div.parentNode.removeChild(div)
+    }
+  }
+  const overlay = new LabelOverlay()
+  overlay.setMap(map)
+  return overlay
+}
+
+/** Shop name label below the marker (position = marker lat/lng). */
+function createShopLabelOverlay(map, position, shopName) {
+  if (!window.google?.maps?.OverlayView) return null
+  const div = document.createElement('div')
+  div.className = 'shop-label-overlay'
+  div.textContent = shopName || 'Shop'
+  div.style.cssText = [
+    'position: absolute',
+    'padding: 3px 8px',
+    'background: rgba(13, 110, 253, 0.95)',
+    'color: #fff',
+    'font-size: 12px',
+    'font-weight: 600',
+    'border-radius: 4px',
+    'white-space: nowrap',
+    'max-width: 180px',
+    'overflow: hidden',
+    'text-overflow: ellipsis',
+    'pointer-events: none',
+    'box-shadow: 0 1px 3px rgba(0,0,0,0.3)',
+    'transform: translate(-50%, 0)',
+  ].join(';')
+
+  const offsetY = 16 // pixels below marker center
+  class ShopLabelOverlay extends window.google.maps.OverlayView {
+    onAdd() {
+      const panes = this.getPanes()
+      if (panes?.overlayMouseTarget) panes.overlayMouseTarget.appendChild(div)
+      else if (panes?.overlayLayer) panes.overlayLayer.appendChild(div)
+    }
+    draw() {
+      const projection = this.getProjection()
+      if (!projection) return
+      const point = projection.fromLatLngToDivPixel(new window.google.maps.LatLng(position.lat, position.lng))
+      if (point) {
+        div.style.left = point.x + 'px'
+        div.style.top = (point.y + offsetY) + 'px'
+      }
+    }
+    onRemove() {
+      if (div.parentNode) div.parentNode.removeChild(div)
+    }
+  }
+  const overlay = new ShopLabelOverlay()
+  overlay.setMap(map)
+  return overlay
+}
+
 const DEFAULT_CENTER = { lat: 14.5995, lng: 120.9842 } // Manila area
 const DEFAULT_ZOOM = 14
 
@@ -29,10 +139,17 @@ export default function PinLocationMap({
   height = 320,
   className = '',
   error,
+  zoneBoundaries = [],
+  zones = [],
+  shopLocations = [],
 }) {
   const mapRef = useRef(null)
   const mapInstanceRef = useRef(null)
   const markerRef = useRef(null)
+  const polygonsRef = useRef([])
+  const zoneLabelOverlaysRef = useRef([])
+  const shopMarkersRef = useRef([])
+  const shopLabelOverlaysRef = useRef([])
   const [isGoogleLoaded, setIsGoogleLoaded] = useState(false)
   const [isGeocoding, setIsGeocoding] = useState(false)
   const [mapError, setMapError] = useState(null)
@@ -146,14 +263,86 @@ export default function PinLocationMap({
       }
     })
 
+    // Draw zone boundaries (polygons) and zone name labels
+    const polygons = []
+    const labelOverlays = []
+    const pathsToDraw = Array.isArray(zones) && zones.length > 0
+      ? zones.map((z) => ({
+          name: z.name,
+          path: Array.isArray(z.boundary) ? z.boundary.map((p) => ({ lat: Number(p.lat ?? p.latitude ?? 0), lng: Number(p.lng ?? p.longitude ?? 0) })) : [],
+        }))
+      : (Array.isArray(zoneBoundaries) ? zoneBoundaries : []).map((path) => ({ name: null, path }))
+
+    for (const { name, path } of pathsToDraw) {
+      const rawPath = path.map((p) => ({ lat: Number(p.lat ?? p.latitude ?? 0), lng: Number(p.lng ?? p.longitude ?? 0) }))
+      if (rawPath.length < 3) continue
+      const polygon = new window.google.maps.Polygon({
+        paths: rawPath,
+        strokeColor: '#198754',
+        strokeOpacity: 0.9,
+        strokeWeight: 2,
+        fillColor: '#198754',
+        fillOpacity: 0.15,
+        map,
+      })
+      polygons.push(polygon)
+      if (name) {
+        const centroid = getPolygonCentroid(rawPath)
+        if (centroid) {
+          const overlay = createZoneLabelOverlay(map, centroid, name)
+          if (overlay) labelOverlays.push(overlay)
+        }
+      }
+    }
+    polygonsRef.current = polygons
+    zoneLabelOverlaysRef.current = labelOverlays
+
+    // Shop location markers and name labels
+    const shopMarkers = []
+    const shopLabelOverlays = []
+    if (Array.isArray(shopLocations) && shopLocations.length > 0) {
+      for (const shop of shopLocations) {
+        const lat = Number(shop.shop_lat ?? shop.latitude)
+        const lng = Number(shop.shop_long ?? shop.longitude)
+        if (Number.isNaN(lat) || Number.isNaN(lng)) continue
+        const position = { lat, lng }
+        const marker = new window.google.maps.Marker({
+          position,
+          map,
+          title: shop.shop_name ?? shop.name ?? 'Shop',
+          icon: {
+            path: window.google.maps.SymbolPath.CIRCLE,
+            scale: 10,
+            fillColor: '#0d6efd',
+            fillOpacity: 1,
+            strokeColor: '#fff',
+            strokeWeight: 2,
+          },
+        })
+        shopMarkers.push(marker)
+        const nameLabel = createShopLabelOverlay(map, position, shop.shop_name ?? shop.name ?? 'Shop')
+        if (nameLabel) shopLabelOverlays.push(nameLabel)
+      }
+    }
+    shopMarkersRef.current = shopMarkers
+    shopLabelOverlaysRef.current = shopLabelOverlays
+
     return () => {
+      polygonsRef.current.forEach((p) => p.setMap(null))
+      polygonsRef.current = []
+      zoneLabelOverlaysRef.current.forEach((o) => o.setMap(null))
+      zoneLabelOverlaysRef.current = []
+      shopMarkersRef.current.forEach((m) => m.setMap(null))
+      shopMarkersRef.current = []
+      shopLabelOverlaysRef.current.forEach((o) => o.setMap(null))
+      shopLabelOverlaysRef.current = []
       if (markerRef.current) {
         markerRef.current.setMap(null)
         markerRef.current = null
       }
       mapInstanceRef.current = null
     }
-  }, [isGoogleLoaded, initialLat, initialLng])
+  }, [isGoogleLoaded, initialLat, initialLng, zoneBoundaries, zones, shopLocations])
 
   function reverseGeocode(lat, lng) {
     if (!window.google?.maps?.Geocoder) return
