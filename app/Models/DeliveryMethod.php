@@ -23,6 +23,7 @@ class DeliveryMethod extends Model
      */
     protected $fillable = [
         'description',
+        'info',
         'status',
     ];
 
