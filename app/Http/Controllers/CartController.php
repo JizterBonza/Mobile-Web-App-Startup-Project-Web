@@ -9,6 +9,26 @@ use Illuminate\Support\Facades\Validator;
 
 class CartController extends Controller
 {
+    /** Cart select: exclude status, created_at, updated_at */
+    private const CART_SELECT = ['id', 'user_id', 'item_id', 'quantity', 'price_snapshot'];
+
+    /** Item select: exclude item_status, created_at, updated_at */
+    private const ITEM_SELECT = ['id', 'shop_id', 'item_name', 'item_description', 'item_price', 'item_quantity', 'category', 'item_images', 'average_rating', 'total_reviews', 'sold_count'];
+
+    /** Shop select: exclude shop_status, created_at, updated_at */
+    private const SHOP_SELECT = ['id', 'agrivet_id', 'zone_id', 'shop_name', 'shop_description', 'shop_address', 'shop_city', 'shop_postal_code', 'shop_lat', 'shop_long', 'contact_number', 'average_rating', 'total_reviews'];
+
+    /** Eager load for cart response with constrained columns */
+    private function cartWith(): array
+    {
+        return [
+            'item:' . implode(',', self::ITEM_SELECT),
+            'item.shop:' . implode(',', self::SHOP_SELECT),
+            'item.shop.zone:id,name',
+            'user',
+        ];
+    }
+
     /**
      * Fetch all cart items
      *
@@ -17,7 +37,8 @@ class CartController extends Controller
      */
     public function index(Request $request)
     {
-        $query = Cart::with(['item', 'user']);
+        $query = Cart::select(self::CART_SELECT)
+            ->with($this->cartWith());
 
         // Filter by user_id if provided
         if ($request->has('user_id')) {
@@ -52,7 +73,9 @@ class CartController extends Controller
      */
     public function show($id)
     {
-        $cart = Cart::with(['item', 'user'])->find($id);
+        $cart = Cart::select(self::CART_SELECT)
+            ->with($this->cartWith())
+            ->find($id);
 
         if (!$cart) {
             return response()->json([
@@ -75,7 +98,12 @@ class CartController extends Controller
      */
     public function getByUser($userId)
     {
-        $carts = Cart::with(['item'])
+        $carts = Cart::select(self::CART_SELECT)
+            ->with([
+                'item:' . implode(',', self::ITEM_SELECT),
+                'item.shop:' . implode(',', self::SHOP_SELECT),
+                'item.shop.zone:id,name',
+            ])
             ->where('user_id', $userId)
             ->where('status', 'active')
             ->orderBy('created_at', 'desc')
@@ -132,10 +160,12 @@ class CartController extends Controller
             $existingCart->price_snapshot = $item->item_price;
             $existingCart->save();
 
+            $existingCart->load($this->cartWith());
+            $existingCart->makeHidden(['status', 'created_at', 'updated_at']);
             return response()->json([
                 'success' => true,
                 'message' => 'Cart item quantity updated successfully',
-                'data' => $existingCart->load(['item', 'user'])
+                'data' => $existingCart
             ]);
         }
 
@@ -149,10 +179,12 @@ class CartController extends Controller
             'created_at' => now(),
         ]);
 
+        $cart->load($this->cartWith());
+        $cart->makeHidden(['status', 'created_at', 'updated_at']);
         return response()->json([
             'success' => true,
             'message' => 'Item added to cart successfully',
-            'data' => $cart->load(['item', 'user'])
+            'data' => $cart
         ], 201);
     }
 
@@ -197,10 +229,12 @@ class CartController extends Controller
 
         $cart->update($request->only(['quantity', 'status']));
 
+        $cart->load($this->cartWith());
+        $cart->makeHidden(['status', 'created_at', 'updated_at']);
         return response()->json([
             'success' => true,
             'message' => 'Cart item updated successfully',
-            'data' => $cart->load(['item', 'user'])
+            'data' => $cart
         ]);
     }
 
