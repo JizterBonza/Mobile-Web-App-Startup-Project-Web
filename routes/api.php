@@ -15,6 +15,7 @@ use App\Http\Controllers\ShopController;
 use App\Http\Controllers\MobileController;
 use App\Http\Controllers\PaymentMethodController;
 use App\Http\Controllers\ActivityLogController;
+use App\Http\Controllers\PaymentController;
 use Illuminate\Http\Request;
 
 Route::post('register', [MobileAuthController::class, 'register']);
@@ -132,3 +133,8 @@ Route::get('order-statuses', [MobileController::class, 'getOrderStatuses']);
 // Activity log routes (audit trail)
 Route::get('activity-logs', [ActivityLogController::class, 'index']);
 Route::get('activity-logs/{id}', [ActivityLogController::class, 'show']);
+
+//Paymongo routes
+Route::post('/payment/intent', [PaymentController::class,'createIntent']);
+Route::post('/payment/attach', [PaymentController::class,'attachPayment']);
+Route::get('/payment-success', [PaymentController::class, 'paymentSuccess']);
