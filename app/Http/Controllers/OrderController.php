@@ -306,6 +306,23 @@ class OrderController extends Controller
                         $itemModel->save();
                     }
                 }
+
+                // Populate order_shops: one entry per unique shop_id in this order
+                $uniqueShopIds = array_values(array_unique(array_column($data['items'], 'shop_id')));
+                $now = now();
+                $orderShopRows = array_map(function ($shopId) use ($order, $pendingStatusId, $now) {
+                    return [
+                        'order_id' => $order->id,
+                        'shop_id' => (int) $shopId,
+                        'rider_id' => null,
+                        'order_status' => $pendingStatusId,
+                        'created_at' => $now,
+                        'updated_at' => $now,
+                    ];
+                }, $uniqueShopIds);
+                if (!empty($orderShopRows)) {
+                    DB::table('order_shops')->insert($orderShopRows);
+                }
             }
 
             // Update cart items status to 'co' (checked out) for ordered items
