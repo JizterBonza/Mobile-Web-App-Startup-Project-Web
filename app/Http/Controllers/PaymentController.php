@@ -60,4 +60,16 @@ class PaymentController extends Controller
             'status' => $status
         ]);
     }
+
+    public function checkout(Request $request)
+    {
+        $amount = $request->amount;
+
+        $session = $this->paymongo->createCheckoutSession($amount);
+
+        return response()->json([
+            'checkout_url' => $session['data']['attributes']['checkout_url'],
+            'session_id' => $session['data']['id']
+        ]);
+    }
 }

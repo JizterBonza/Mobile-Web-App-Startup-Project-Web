@@ -6,38 +6,42 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
-    /**
-     * Run the migrations.
-     */
     public function up(): void
     {
-        if (!Schema::hasTable('payments')) {
-            Schema::create('payments', function (Blueprint $table) {
-            $table->id(); // Primary key
+        Schema::create('payments', function (Blueprint $table) {
+            $table->id();
 
-            // Foreign key
-            $table->unsignedBigInteger('order_id');
+            $table->foreignId('order_id')->constrained()->cascadeOnDelete();
+
+            // PayMongo references
+            $table->string('checkout_session_id')->nullable();
+            $table->string('payment_intent_id')->nullable();
+            $table->string('payment_id')->nullable();
 
             // Payment details
-            $table->string('payment_method', 50);
-            $table->string('payment_status', 50)->default('pending');
-            $table->decimal('amount_paid', 10, 2);
-            $table->string('transaction_id', 100)->nullable(); 
-            $table->text('payment_details')->nullable(); // receipt or response
-            $table->timestamp('paid_at')->nullable();
+            $table->decimal('amount', 10, 2);
+            $table->string('currency')->default('PHP');
+            $table->string('payment_method')->nullable();
 
-            // Timestamps
+            // status
+            $table->enum('status', [
+                'pending',
+                'paid',
+                'failed',
+                'refunded',
+                'partially_refunded'
+            ])->default('pending');
+
+            // provider
+            $table->string('provider')->default('paymongo');
+
+            // extra webhook payload
+            $table->json('metadata')->nullable();
+
             $table->timestamps();
-
-            // Foreign key constraint
-            //$table->foreign('order_id')->references('id')->on('orders')->onDelete('cascade');
-            });
-        }
+        });
     }
 
-    /**
-     * Reverse the migrations.
-     */
     public function down(): void
     {
         Schema::dropIfExists('payments');
