@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use App\Services\PaymongoService;
+use App\Models\Payment;
 
 class PaymentController extends Controller
 {

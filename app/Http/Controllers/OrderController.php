@@ -10,6 +10,8 @@ use App\Models\Cart;
 use App\Models\Notification;
 use App\Models\ProofOfDelivery;
 use App\Models\OrderStatus;
+use App\Models\Payment;
+use App\Services\PaymongoService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\DB;
@@ -18,6 +20,12 @@ use App\Models\Address;
 
 class OrderController extends Controller
 {
+    protected $paymongo;
+
+    public function __construct(PaymongoService $paymongo)
+    {
+        $this->paymongo = $paymongo;
+    }
     /**
      * Fetch all orders
      *
@@ -358,11 +366,27 @@ class OrderController extends Controller
                 "/orders/{$order->id}"
             );
 
-            return response()->json([
+            $responseData = [
                 'success' => true,
                 'message' => 'Order created successfully',
-                'data' => $order
-            ], 201);
+                'data' => $order,
+            ];
+
+            if ($data['payment_method'] !== 'cod') {
+                $session = $this->paymongo->createCheckoutSession($orderDetail->total_amount);
+
+                Payment::create([
+                    'order_id' => $order->id,
+                    'checkout_session_id' => $session['data']['id'],
+                    'amount' => $orderDetail->total_amount,
+                    'status' => 'pending',
+                ]);
+
+                $responseData['checkout_url'] = $session['data']['attributes']['checkout_url'];
+                $responseData['session_id'] = $session['data']['id'];
+            }
+
+            return response()->json($responseData, 201);
         });
     }
 
