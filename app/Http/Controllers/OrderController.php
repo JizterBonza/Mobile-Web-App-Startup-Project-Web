@@ -10,14 +10,23 @@ use App\Models\Cart;
 use App\Models\Notification;
 use App\Models\ProofOfDelivery;
 use App\Models\OrderStatus;
+use App\Models\Payment;
+use App\Services\PaymongoService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use App\Models\Address;
+use App\Models\Shop;
 
 class OrderController extends Controller
 {
+    protected $paymongo;
+
+    public function __construct(PaymongoService $paymongo)
+    {
+        $this->paymongo = $paymongo;
+    }
     /**
      * Fetch all orders
      *
@@ -103,7 +112,29 @@ class OrderController extends Controller
     }
 
     /**
-     * Fetch all orders by rider ID
+     * Fetch order-shops by rider ID with items per order_id and shop_id from order_items.
+     *
+     * Sample response:
+     * {
+     *   "success": true,
+     *   "data": [
+     *     {
+     *       "order_shop_id": 1,
+     *       "order_id": 5,
+     *       "shop_id": 2,
+     *       "rider_id": 10,
+     *       "order_status": 1,
+     *       "order": { "id": 5, "user_id": 3, "order_detail_id": 4, "order_status": 2, "rider_id": 10, "user": {...}, "orderDetail": {"address": {...}} },
+     *       "shop": { "id": 2, "shop_name": "Agrivet A", "shop_address": "...", ... },
+     *       "items": [
+     *         { "id": 101, "order_id": 5, "item_id": 20, "shop_id": 2, "quantity": 2, "price_at_purchase": "150.00", "item": { "id": 20, "item_name": "Product X", ... } },
+     *         { "id": 102, "order_id": 5, "item_id": 21, "shop_id": 2, "quantity": 1, "price_at_purchase": "80.00", "item": { "id": 21, "item_name": "Product Y", ... } }
+     *       ]
+     *     },
+     *     { "order_shop_id": 2, "order_id": 5, "shop_id": 3, "rider_id": 10, "order_status": 1, "order": {...}, "shop": {...}, "items": [...] }
+     *   ],
+     *   "count": 2
+     * }
      *
      * @param int $riderId
      * @param Request $request
@@ -111,23 +142,62 @@ class OrderController extends Controller
      */
     public function getByRider($riderId, Request $request)
     {
-        $query = Order::with(['user', 'orderDetail.address:id,recipient_name,contact_number,latitude,longitude', 'orderItems.item'])
+        // Use rider_id from order_shops (rider is assigned per order per shop)
+        $orderShopsQuery = DB::table('order_shops')
             ->where('rider_id', $riderId);
 
-        // Filter by order_status if provided
         if ($request->has('order_status')) {
-            $query->where('order_status', $request->order_status);
+            $orderShopsQuery->where('order_status', $request->order_status);
         }
 
-        // Order by ordered_at descending (newest first)
-        $query->orderBy('ordered_at', 'desc');
+        $orderShops = $orderShopsQuery->orderBy('created_at', 'desc')->get();
 
-        $orders = $query->get();
+        if ($orderShops->isEmpty()) {
+            return response()->json([
+                'success' => true,
+                'data' => [],
+                'count' => 0,
+            ]);
+        }
+
+        $orderIds = $orderShops->pluck('order_id')->unique()->values()->all();
+        $shopIds = $orderShops->pluck('shop_id')->unique()->values()->all();
+
+        $orders = Order::with(['user', 'orderDetail.address:id,recipient_name,contact_number,latitude,longitude'])
+            ->whereIn('id', $orderIds)
+            ->get()
+            ->keyBy('id');
+
+        $shops = Shop::whereIn('id', $shopIds)->get()->keyBy('id');
+
+        $orderItems = OrderItem::with('item')
+            ->whereIn('order_id', $orderIds)
+            ->get();
+
+        $itemsByOrderAndShop = $orderItems->groupBy(function ($oi) {
+            return $oi->order_id . '_' . $oi->shop_id;
+        });
+
+        $data = $orderShops->map(function ($os) use ($orders, $shops, $itemsByOrderAndShop) {
+            $key = $os->order_id . '_' . $os->shop_id;
+            $items = $itemsByOrderAndShop->get($key, collect())->values()->all();
+
+            return [
+                'order_shop_id' => $os->id,
+                'order_id' => $os->order_id,
+                'shop_id' => $os->shop_id,
+                'rider_id' => $os->rider_id,
+                'order_status' => $os->order_status,
+                'order' => $orders->get($os->order_id),
+                'shop' => $shops->get($os->shop_id),
+                'items' => $items,
+            ];
+        })->values()->all();
 
         return response()->json([
             'success' => true,
-            'data' => $orders,
-            'count' => $orders->count()
+            'data' => $data,
+            'count' => count($data),
         ]);
     }
 
@@ -358,11 +428,28 @@ class OrderController extends Controller
                 "/orders/{$order->id}"
             );
 
-            return response()->json([
+            $responseData = [
                 'success' => true,
                 'message' => 'Order created successfully',
-                'data' => $order
-            ], 201);
+                'data' => $order,
+            ];
+
+            if ($data['payment_method'] !== 'cod') {
+                $session = $this->paymongo->createCheckoutSession($orderDetail->total_amount);
+
+                Payment::create([
+                    'order_id' => $order->id,
+                    'checkout_session_id' => $session['data']['id'],
+                    'checkout_url' => $session['data']['attributes']['checkout_url'],
+                    'amount' => $orderDetail->total_amount,
+                    'status' => 'pending',
+                ]);
+
+                $responseData['checkout_url'] = $session['data']['attributes']['checkout_url'];
+                $responseData['session_id'] = $session['data']['id'];
+            }
+
+            return response()->json($responseData, 201);
         });
     }
 
@@ -442,6 +529,13 @@ class OrderController extends Controller
 
         if (!empty($orderUpdateData)) {
             $order->update($orderUpdateData);
+            // Update order_status in order_shops only for the specific order_id and shop_id when shop_id is provided
+            if (isset($orderUpdateData['order_status']) && $request->has('shop_id')) {
+                DB::table('order_shops')
+                    ->where('order_id', $order->id)
+                    ->where('shop_id', $request->shop_id)
+                    ->update(['order_status' => $orderUpdateData['order_status']]);
+            }
         }
 
         // Create POD entry if status changed to in-transit (status ID: 5)
@@ -470,6 +564,7 @@ class OrderController extends Controller
     {
         $validator = Validator::make($request->all(), [
             'status' => 'required|integer|exists:order_status,id',
+            'shop_id' => 'required|integer|exists:shops,id',
         ]);
 
         if ($validator->fails()) {
@@ -494,6 +589,12 @@ class OrderController extends Controller
         $newStatus = $request->status;
 
         $order->update(['order_status' => $newStatus]);
+
+        // Update order_status only for the specific order_id and shop_id in order_shops
+        DB::table('order_shops')
+            ->where('order_id', $order->id)
+            ->where('shop_id', $request->shop_id)
+            ->update(['order_status' => $newStatus]);
 
         // Create POD entry if status changed to in-transit (status ID: 5)
         if ((int)$newStatus === 5 && $oldStatus !== $newStatus) {
@@ -560,7 +661,9 @@ class OrderController extends Controller
         }
 
         // Update order status to Cancelled instead of deleting
-        $order->update(['order_status' => 'Cancelled']);
+        $cancelledStatus = OrderStatus::where('stat_description', 'Cancelled')->first();
+        $cancelledStatusId = $cancelledStatus ? $cancelledStatus->id : 7; // Default to 7 if not found
+        $order->update(['order_status' => $cancelledStatusId]);
 
         // Refresh the model to get updated values and load relationships
         $order->refresh();

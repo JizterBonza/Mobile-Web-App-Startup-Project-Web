@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use App\Services\PaymongoService;
+use App\Models\Payment;
 
 class PaymentController extends Controller
 {
@@ -70,6 +71,36 @@ class PaymentController extends Controller
         return response()->json([
             'checkout_url' => $session['data']['attributes']['checkout_url'],
             'session_id' => $session['data']['id']
+        ]);
+    }
+
+    /**
+     * Get checkout_url for an order by order_id.
+     *
+     * @param int $orderId
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function getCheckoutUrlByOrderId($orderId)
+    {
+        $payment = Payment::where('order_id', $orderId)->first();
+
+        if (!$payment) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Payment not found for this order',
+            ], 404);
+        }
+
+        if (empty($payment->checkout_url)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Checkout URL not available for this order',
+            ], 404);
+        }
+
+        return response()->json([
+            'success' => true,
+            'checkout_url' => $payment->checkout_url,
         ]);
     }
 }
