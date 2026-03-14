@@ -14,6 +14,7 @@ class Payment extends Model
         'checkout_session_id',
         'payment_intent_id',
         'payment_id',
+        'checkout_url',
         'amount',
         'currency',
         'payment_method',
