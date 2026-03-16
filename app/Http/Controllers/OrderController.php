@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Order;
 use App\Models\OrderDetail;
 use App\Models\OrderItem;
+use App\Models\OrderShop;
 use App\Models\Item;
 use App\Models\Cart;
 use App\Models\Notification;
@@ -26,16 +27,18 @@ class OrderController extends Controller
      */
     public function index(Request $request)
     {
-        $query = Order::with(['user', 'orderDetail', 'orderItems']);
+        $query = Order::with(['user', 'orderDetail', 'orderItems', 'orderShops']);
 
         // Filter by user_id if provided
         if ($request->has('user_id')) {
             $query->where('user_id', $request->user_id);
         }
 
-        // Filter by order_status if provided
+        // Filter by order_status if provided (via order_shops)
         if ($request->has('order_status')) {
-            $query->where('order_status', $request->order_status);
+            $query->whereHas('orderShops', function ($q) use ($request) {
+                $q->where('order_status', $request->order_status);
+            });
         }
 
         // Order by ordered_at descending (newest first)
@@ -58,7 +61,7 @@ class OrderController extends Controller
      */
     public function show($id)
     {
-        $order = Order::with(['user', 'orderDetail', 'orderItems'])->find($id);
+        $order = Order::with(['user', 'orderDetail', 'orderItems', 'orderShops'])->find($id);
 
         if (!$order) {
             return response()->json([
@@ -82,12 +85,14 @@ class OrderController extends Controller
      */
     public function getByUser($userId, Request $request)
     {
-        $query = Order::with(['user', 'orderDetail', 'orderItems.item'])
+        $query = Order::with(['user', 'orderDetail', 'orderItems.item', 'orderShops'])
             ->where('user_id', $userId);
 
-        // Filter by order_status if provided
+        // Filter by order_status if provided (via order_shops)
         if ($request->has('order_status')) {
-            $query->where('order_status', $request->order_status);
+            $query->whereHas('orderShops', function ($q) use ($request) {
+                $q->where('order_status', $request->order_status);
+            });
         }
 
         // Order by ordered_at descending (newest first)
@@ -111,12 +116,16 @@ class OrderController extends Controller
      */
     public function getByRider($riderId, Request $request)
     {
-        $query = Order::with(['user', 'orderDetail.address:id,recipient_name,contact_number,latitude,longitude', 'orderItems.item'])
-            ->where('rider_id', $riderId);
+        $query = Order::with(['user', 'orderDetail.address:id,recipient_name,contact_number,latitude,longitude', 'orderItems.item', 'orderShops'])
+            ->whereHas('orderShops', function ($q) use ($riderId) {
+                $q->where('rider_id', $riderId);
+            });
 
-        // Filter by order_status if provided
+        // Filter by order_status if provided (via order_shops)
         if ($request->has('order_status')) {
-            $query->where('order_status', $request->order_status);
+            $query->whereHas('orderShops', function ($q) use ($request, $riderId) {
+                $q->where('rider_id', $riderId)->where('order_status', $request->order_status);
+            });
         }
 
         // Order by ordered_at descending (newest first)
@@ -146,13 +155,18 @@ class OrderController extends Controller
                 'order_details.*',
                 'orders.id as order_id',
                 'orders.user_id',
-                'orders.order_status',
+                DB::raw('(SELECT order_status FROM order_shops WHERE order_shops.order_id = orders.id LIMIT 1) as order_status'),
                 'orders.ordered_at',
             );
 
-        // Filter by order_status if provided
+        // Filter by order_status if provided (via order_shops)
         if ($request->has('order_status')) {
-            $query->where('orders.order_status', $request->order_status);
+            $query->whereExists(function ($q) use ($request) {
+                $q->select(DB::raw(1))
+                    ->from('order_shops')
+                    ->whereColumn('order_shops.order_id', 'orders.id')
+                    ->where('order_shops.order_status', $request->order_status);
+            });
         }
 
         // Filter by payment_status if provided
@@ -271,15 +285,13 @@ class OrderController extends Controller
 
             $orderDetail = OrderDetail::create($orderDetailData);
 
-            // Create order
-            // Get pending order status ID from order_status table
+            // Create order (order_status and rider_id live on order_shops only)
             $pendingStatus = OrderStatus::where('stat_description', 'Pending')->first();
-            $pendingStatusId = $pendingStatus ? $pendingStatus->id : 1; // Default to 1 if not found
-            
+            $pendingStatusId = $pendingStatus ? $pendingStatus->id : 1;
+
             $orderData = [
                 'user_id' => $data['user_id'],
                 'order_detail_id' => $orderDetail->id,
-                'order_status' => $data['order_status'] ?? $pendingStatusId,
                 'ordered_at' => $data['ordered_at'] ?? now(),
             ];
 
@@ -338,8 +350,8 @@ class OrderController extends Controller
                 ->where('status', '!=', 'co')
                 ->update(['status' => 'co']);
 
-            // Load relationships
-            $order->load(['user', 'orderDetail', 'orderItems']);
+            // Load relationships (include orderShops for appended order_status/rider_id in response)
+            $order->load(['user', 'orderDetail', 'orderItems', 'orderShops']);
 
             // Create notification for the user
             Notification::createForUser(
@@ -385,9 +397,10 @@ class OrderController extends Controller
         }
 
         $validator = Validator::make($request->all(), [
-            // Order fields
+            // Order fields (order_status and rider_id apply to order_shops)
             'user_id' => 'sometimes|exists:users,id',
             'order_status' => 'nullable|integer|exists:order_status,id',
+            'rider_id' => 'nullable|exists:users,id',
             'ordered_at' => 'nullable|date',
             
             // Order detail fields
@@ -427,8 +440,8 @@ class OrderController extends Controller
             $order->orderDetail->update($orderDetailData);
         }
 
-        // Update order if any order fields are provided
-        $orderFields = ['user_id', 'order_status', 'ordered_at'];
+        // Update order if any order fields are provided (order_status and rider_id live on order_shops)
+        $orderFields = ['user_id', 'ordered_at'];
         $orderUpdateData = [];
         foreach ($orderFields as $field) {
             if ($request->has($field)) {
@@ -436,21 +449,29 @@ class OrderController extends Controller
             }
         }
 
-        // Check if order_status is being changed to in-transit
-        $oldStatus = $order->order_status;
-        $newStatus = $request->has('order_status') ? $request->order_status : null;
-
         if (!empty($orderUpdateData)) {
             $order->update($orderUpdateData);
         }
 
+        // Update order_status and/or rider_id on all order_shops for this order
+        $order->load('orderShops');
+        $oldStatus = $order->orderShops->first()?->order_status;
+        $newStatus = null;
+        if ($request->has('order_status')) {
+            $newStatus = $request->order_status;
+            OrderShop::where('order_id', $order->id)->update(['order_status' => $newStatus]);
+        }
+        if ($request->has('rider_id')) {
+            OrderShop::where('order_id', $order->id)->update(['rider_id' => $request->rider_id]);
+        }
+
         // Create POD entry if status changed to in-transit (status ID: 5)
-        if ($newStatus && (int)$newStatus === 5 && $oldStatus !== $newStatus) {
+        if ($newStatus && (int)$newStatus === 5 && $oldStatus != $newStatus) {
             $this->createProofOfDeliveryEntry($order);
         }
 
         // Load relationships
-        $order->load(['user', 'orderDetail', 'orderItems']);
+        $order->load(['user', 'orderDetail', 'orderItems', 'orderShops']);
 
         return response()->json([
             'success' => true,
@@ -480,7 +501,7 @@ class OrderController extends Controller
             ], 422);
         }
 
-        $order = Order::find($id);
+        $order = Order::with('orderShops')->find($id);
 
         if (!$order) {
             return response()->json([
@@ -489,19 +510,18 @@ class OrderController extends Controller
             ], 404);
         }
 
-        // Store old status before update
-        $oldStatus = $order->order_status;
+        $oldStatus = $order->orderShops->first()?->order_status;
         $newStatus = $request->status;
 
-        $order->update(['order_status' => $newStatus]);
+        OrderShop::where('order_id', $order->id)->update(['order_status' => $newStatus]);
 
         // Create POD entry if status changed to in-transit (status ID: 5)
-        if ((int)$newStatus === 5 && $oldStatus !== $newStatus) {
+        if ((int)$newStatus === 5 && $oldStatus != $newStatus) {
             $this->createProofOfDeliveryEntry($order);
         }
 
         // Load relationships
-        $order->load(['user', 'orderDetail', 'orderItems']);
+        $order->load(['user', 'orderDetail', 'orderItems', 'orderShops']);
 
         return response()->json([
             'success' => true,
@@ -518,21 +538,21 @@ class OrderController extends Controller
      */
     private function createProofOfDeliveryEntry(Order $order)
     {
-        // Check if order has id
         if (!$order->id) {
             return;
         }
 
-        // Check if POD entry already exists for this order
+        $order->loadMissing('orderShops');
+        $riderId = $order->orderShops->firstWhere('rider_id', '!=', null)?->rider_id ?? null;
+
         $existingPOD = ProofOfDelivery::where('order_id', $order->id)
             ->where('status', 'pending')
             ->first();
 
-        // Only create if no pending POD entry exists
         if (!$existingPOD) {
             ProofOfDelivery::create([
                 'order_id' => $order->id,
-                'rider_id' => $order->rider_id,
+                'rider_id' => $riderId,
                 'latitude' => null,
                 'longitude' => null,
                 'image_path' => null,
@@ -559,12 +579,11 @@ class OrderController extends Controller
             ], 404);
         }
 
-        // Update order status to Cancelled instead of deleting
-        $order->update(['order_status' => 'Cancelled']);
+        // Update all order_shops for this order to Cancelled status
+        $cancelledStatusId = OrderStatus::where('stat_description', 'Cancelled')->value('id') ?? 7;
+        OrderShop::where('order_id', $order->id)->update(['order_status' => $cancelledStatusId]);
 
-        // Refresh the model to get updated values and load relationships
-        $order->refresh();
-        $order->load(['user', 'orderDetail', 'orderItems']);
+        $order->load(['user', 'orderDetail', 'orderItems', 'orderShops']);
 
         // Create notification for order cancellation
         Notification::createForUser(

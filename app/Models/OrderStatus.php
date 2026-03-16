@@ -39,11 +39,11 @@ class OrderStatus extends Model
     }
 
     /**
-     * Get the orders with this status.
+     * Get the order_shops with this status.
      */
-    public function orders()
+    public function orderShops()
     {
-        return $this->hasMany(Order::class, 'order_status_id');
+        return $this->hasMany(OrderShop::class, 'order_status', 'id');
     }
 }
 
