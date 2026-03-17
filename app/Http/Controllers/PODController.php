@@ -6,6 +6,7 @@ use App\Models\ProofOfDelivery;
 use App\Models\OrderDetail;
 use App\Models\Order;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -57,10 +58,13 @@ class PODController extends Controller
             ], 404);
         }
 
-        // Get rider_id: prioritize request, then order
+        // Get rider_id: prioritize request, then from order_shops for this order
         $riderId = $request->riderId;
-        if (!$riderId && $order->rider_id) {
-            $riderId = $order->rider_id;
+        if (!$riderId) {
+            $riderId = DB::table('order_shops')
+                ->where('order_id', $order->id)
+                ->whereNotNull('rider_id')
+                ->value('rider_id');
         }
 
         try {

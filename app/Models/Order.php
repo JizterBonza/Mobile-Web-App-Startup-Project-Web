@@ -45,10 +45,15 @@ class Order extends Model
     protected $fillable = [
         'user_id',
         'order_detail_id',
-        'order_status',
-        'rider_id',
         'ordered_at',
     ];
+
+    /**
+     * Attributes to append for API (resolved from order_shops).
+     *
+     * @var array<int, string>
+     */
+    protected $appends = ['order_status', 'rider_id'];
 
     /**
      * Get the attributes that should be cast.
@@ -87,5 +92,35 @@ class Order extends Model
         return $this->hasMany(OrderItem::class);
     }
 
+    /**
+     * Get the order_shops for this order (one per shop in the order).
+     */
+    public function orderShops()
+    {
+        return $this->hasMany(OrderShop::class);
+    }
+
+    /**
+     * Resolve order_status from order_shops (first shop's status) for API compatibility.
+     */
+    public function getOrderStatusAttribute($value)
+    {
+        if ($this->relationLoaded('orderShops') && $this->orderShops->isNotEmpty()) {
+            return $this->orderShops->first()->order_status;
+        }
+        return $value;
+    }
+
+    /**
+     * Resolve rider_id from order_shops (first non-null) for API compatibility.
+     */
+    public function getRiderIdAttribute($value)
+    {
+        if ($this->relationLoaded('orderShops')) {
+            $firstWithRider = $this->orderShops->firstWhere('rider_id', '!=', null);
+            return $firstWithRider ? $firstWithRider->rider_id : null;
+        }
+        return $value;
+    }
 }
 

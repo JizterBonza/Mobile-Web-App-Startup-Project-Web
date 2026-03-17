@@ -184,7 +184,7 @@ export default function OrderItems({ auth, order, orderItems = [], orderItemStat
           <div className="card-body">
             <h5 className="card-title">Order #{order.id}</h5>
             <p className="mb-1"><strong>Customer:</strong> {order.customer_name} ({order.customer_email})</p>
-            <p className="mb-1"><strong>Order status:</strong> <span className="badge badge-info">{order.order_status}</span></p>
+            <p className="mb-1"><strong>Order status:</strong> {getStatusBadge(order.order_status_description ?? order.order_status ?? '')}</p>
             <p className="mb-0"><strong>Ordered at:</strong> {new Date(order.ordered_at).toLocaleString()}</p>
           </div>
         </div>

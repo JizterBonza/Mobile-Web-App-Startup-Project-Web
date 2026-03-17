@@ -628,24 +628,28 @@ class VendorController extends Controller
                 ->with('error', 'You are not associated with any Shop.');
         }
 
-        // Get distinct orders that have at least one order_item from this shop (one row per order)
+        // Get distinct orders that have at least one order_item from this shop; status from order_shops for this shop
         $orders = DB::table('orders')
             ->join('order_items', 'orders.id', '=', 'order_items.order_id')
             ->join('items', 'order_items.item_id', '=', 'items.id')
+            ->join('order_shops', function ($join) use ($shop) {
+                $join->on('order_shops.order_id', '=', 'orders.id')
+                    ->where('order_shops.shop_id', '=', $shop->id);
+            })
             ->join('users', 'orders.user_id', '=', 'users.id')
             ->join('user_details', 'users.user_detail_id', '=', 'user_details.id')
-            ->leftJoin('order_status', 'orders.order_status', '=', 'order_status.id')
+            ->leftJoin('order_status', 'order_shops.order_status', '=', 'order_status.id')
             ->where('items.shop_id', $shop->id)
             ->select(
                 'orders.id',
-                'orders.order_status',
+                'order_shops.order_status',
                 'order_status.stat_description as order_status_description',
                 'orders.ordered_at',
                 'user_details.first_name',
                 'user_details.last_name',
                 'user_details.email'
             )
-            ->groupBy('orders.id', 'orders.order_status', 'order_status.stat_description', 'orders.ordered_at', 'user_details.first_name', 'user_details.last_name', 'user_details.email')
+            ->groupBy('orders.id', 'order_shops.order_status', 'order_status.stat_description', 'orders.ordered_at', 'user_details.first_name', 'user_details.last_name', 'user_details.email')
             ->orderBy('orders.ordered_at', 'desc')
             ->get();
 
@@ -681,15 +685,21 @@ class VendorController extends Controller
                 ->with('error', 'You are not associated with any Shop.');
         }
 
-        // Verify the order has at least one item from this shop
+        // Verify the order has at least one item from this shop; get order_status from order_shops for this shop
         $order = DB::table('orders')
+            ->join('order_shops', function ($join) use ($shop) {
+                $join->on('order_shops.order_id', '=', 'orders.id')
+                    ->where('order_shops.shop_id', '=', $shop->id);
+            })
             ->join('users', 'orders.user_id', '=', 'users.id')
             ->join('user_details', 'users.user_detail_id', '=', 'user_details.id')
             ->leftJoin('order_details', 'orders.order_detail_id', '=', 'order_details.id')
+            ->leftJoin('order_status', 'order_shops.order_status', '=', 'order_status.id')
             ->where('orders.id', $orderId)
             ->select(
                 'orders.id',
-                'orders.order_status',
+                'order_shops.order_status',
+                'order_status.stat_description as order_status_description',
                 'orders.ordered_at',
                 'orders.order_detail_id',
                 'user_details.first_name',
@@ -747,6 +757,7 @@ class VendorController extends Controller
             'order' => [
                 'id' => $order->id,
                 'order_status' => $order->order_status,
+                'order_status_description' => $order->order_status_description ?? '—',
                 'order_detail_id' => $order->order_detail_id ?? null,
                 'delivery_method_id' => $order->delivery_method_id !== null ? (int) $order->delivery_method_id : null,
                 'ordered_at' => $order->ordered_at,
@@ -832,8 +843,9 @@ class VendorController extends Controller
                     ? (int) $orderStatusByDeliveryMethod[$deliveryMethodId]
                     : null;
                 if ($newOrderStatus !== null) {
-                    DB::table('orders')
-                        ->where('id', $orderItem->order_id)
+                    DB::table('order_shops')
+                        ->where('order_id', $orderItem->order_id)
+                        ->where('shop_id', $shop->id)
                         ->update([
                             'order_status' => $newOrderStatus,
                             'updated_at' => now(),
@@ -856,8 +868,9 @@ class VendorController extends Controller
                     ->where('stat_description', 'Preparing')
                     ->value('id');
                 if ($preparingOrderStatusId !== null) {
-                    DB::table('orders')
-                        ->where('id', $orderItem->order_id)
+                    DB::table('order_shops')
+                        ->where('order_id', $orderItem->order_id)
+                        ->where('shop_id', $shop->id)
                         ->update([
                             'order_status' => (int) $preparingOrderStatusId,
                             'updated_at' => now(),
