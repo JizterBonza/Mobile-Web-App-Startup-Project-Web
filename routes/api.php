@@ -56,6 +56,7 @@ Route::get('orders/user/{userId}', [OrderController::class, 'getByUser']);
 Route::get('orders/rider/{riderId}', [OrderController::class, 'getByRider']);
 Route::get('orders/details/user/{userId}', [OrderController::class, 'getOrderDetailsByUser']);
 Route::get('orders/{id}', [OrderController::class, 'show']);
+Route::post('orders/calculate-fee', [OrderController::class, 'calculateFee']);
 Route::post('orders/create', [OrderController::class, 'store']);
 Route::put('orders/{id}', [OrderController::class, 'update']);
 Route::put('orders/{id}/status', [OrderController::class, 'updateStatus']);

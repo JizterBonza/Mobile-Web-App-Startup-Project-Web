@@ -147,16 +147,10 @@ class OrderController extends Controller
      */
     public function getByRider($riderId, Request $request)
     {
-        $query = Order::with(['user', 'orderDetail.address:id,recipient_name,contact_number,latitude,longitude', 'orderItems.item', 'orderShops'])
-            ->whereHas('orderShops', function ($q) use ($riderId) {
-                $q->where('rider_id', $riderId);
-            });
+        $orderShopsQuery = OrderShop::where('rider_id', $riderId);
 
-        // Filter by order_status if provided (via order_shops)
         if ($request->has('order_status')) {
-            $query->whereHas('orderShops', function ($q) use ($request, $riderId) {
-                $q->where('rider_id', $riderId)->where('order_status', $request->order_status);
-            });
+            $orderShopsQuery->where('order_status', $request->order_status);
         }
 
         $orderShops = $orderShopsQuery->orderBy('created_at', 'desc')->get();
@@ -281,7 +275,7 @@ class OrderController extends Controller
             'shipping_address_id' => 'required|exists:addresses,id',
             'order_instruction' => 'nullable|string',
             'delivery_method_id' => 'required|exists:delivery_method,id',
-            'payment_method' => 'required|string|max:50',
+            'payment_method' => 'nullable|string|max:50',
             'payment_status' => 'nullable|string|max:50',
             
             // Order items
@@ -301,8 +295,16 @@ class OrderController extends Controller
             ], 422);
         }
 
+        $paymentMethod = $data['payment_method'] ?? null;
+        if ($paymentMethod === null || $paymentMethod === '') {
+            $paymentMethod = null;
+        } elseif (is_string($paymentMethod)) {
+            $trimmed = trim($paymentMethod);
+            $paymentMethod = $trimmed === '' ? null : $trimmed;
+        }
+
         // Use database transaction to ensure atomicity and prevent race conditions
-        return DB::transaction(function () use ($data) {
+        return DB::transaction(function () use ($data, $paymentMethod) {
             // Check inventory availability inside transaction to prevent race conditions
             $lockedItems = [];
             foreach ($data['items'] as $item) {
@@ -349,7 +351,7 @@ class OrderController extends Controller
                 'shipping_address' => Address::find($data['shipping_address_id'])->full_address,//get the shipping address from the addresses table
                 'order_instruction' => $data['order_instruction'] ?? null,
                 'delivery_method_id' => $data['delivery_method_id'],
-                'payment_method' => $data['payment_method'],
+                'payment_method' => $paymentMethod ?? null,
                 'payment_status' => $data['payment_status'] ?? 'pending',
             ];
 
@@ -446,7 +448,7 @@ class OrderController extends Controller
                 'data' => $order,
             ];
 
-            if ($data['payment_method'] !== 'cod') {
+            if ($paymentMethod !== 'cod') {
                 $session = $this->paymongo->createCheckoutSession($orderDetail->total_amount);
 
                 Payment::create([
@@ -463,6 +465,83 @@ class OrderController extends Controller
 
             return response()->json($responseData, 201);
         });
+    }
+
+    /**
+     * Convert a weight value from any supported metric unit to kilograms.
+     */
+    private function convertToKg(float $weight, ?string $metric): float
+    {
+        // Default to 'kg' when metric is null, then normalize to lowercase
+        return match (strtolower(trim($metric ?? 'kg'))) {
+            'g'   => $weight / 1000,          // grams to kilograms
+            'mg'  => $weight / 1_000_000,      // milligrams to kilograms
+            'lb', 'lbs' => $weight * 0.453592, // pounds to kilograms
+            'oz'  => $weight * 0.0283495,      // ounces to kilograms
+            'ml'  => $weight / 1000,           // milliliters to kilograms (assumes water density ~1 kg/L)
+            'l'   => $weight,                  // liters to kilograms (assumes water density ~1 kg/L)
+            'kg'  => $weight,
+            default => $weight,                // unknown metric — treat as kg
+        };
+    }
+
+    /**
+     * Calculate order fees without persisting anything.
+     * Handling fee is waived when total weight does not exceed 25 kg.
+     */
+    public function calculateFee(Request $request)
+    {
+        $data = $request->all();
+
+        $validator = Validator::make($data, [
+            'items' => 'required|array|min:1',
+            'items.*.item_id' => 'required|exists:items,id',
+            'items.*.quantity' => 'required|integer|min:1',
+            'items.*.price_at_purchase' => 'required|numeric|min:0',
+            'handling_fee' => 'nullable|numeric|min:0',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation error',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        $subtotal = 0;
+        $totalWeightKg = 0;
+
+        // Batch-fetch all items to avoid N+1 queries, keyed by id for fast lookup
+        $itemIds = array_column($data['items'], 'item_id');
+        $items = Item::whereIn('id', $itemIds)->get()->keyBy('id');
+
+        foreach ($data['items'] as $entry) {
+            $quantity = (int) $entry['quantity'];
+            $subtotal += (float) $entry['price_at_purchase'] * $quantity;
+
+            // Look up item's weight & metric, convert to kg, and multiply by quantity
+            $itemModel = $items->get($entry['item_id']);
+            if ($itemModel && $itemModel->weight !== null) {
+                $totalWeightKg += $this->convertToKg((float) $itemModel->weight, $itemModel->metric) * $quantity;
+            }
+        }
+
+        // Waive handling fee if total weight is 25 kg or under; otherwise use provided fee or default ₱50
+        $handlingFee = $totalWeightKg > 25
+            ? (float) ($data['handling_fee'] ?? 50.00)
+            : 0.00;
+
+        $totalAmount = $subtotal + $handlingFee;
+
+        return response()->json([
+            'success' => true,
+            'subtotal' => round($subtotal, 2),
+            'total_weight_kg' => round($totalWeightKg, 2),
+            'handling_fee' => round($handlingFee, 2),
+            'handling_fee_waived' => $totalWeightKg <= 25,
+            'total_amount' => round($totalAmount, 2),
+        ]);
     }
 
     /**
@@ -605,10 +684,11 @@ class OrderController extends Controller
             ], 404);
         }
 
-        $oldStatus = $order->orderShops->first()?->order_status;
         $newStatus = $request->status;
 
-        OrderShop::where('order_id', $order->id)->update(['order_status' => $newStatus]);
+        // Get the old status for the specific shop being updated (for POD trigger check)
+        $orderShop = $order->orderShops->where('shop_id', $request->shop_id)->first();
+        $oldStatus = $orderShop?->order_status;
 
         // Update order_status only for the specific order_id and shop_id in order_shops
         DB::table('order_shops')
@@ -681,7 +761,13 @@ class OrderController extends Controller
         }
 
         // Update all order_shops for this order to Cancelled status
-        $cancelledStatusId = OrderStatus::where('stat_description', 'Cancelled')->value('id') ?? 7;
+        $cancelledStatusId = OrderStatus::whereIn('stat_description', ['Cancelled', 'cancelled'])->value('id');
+        if (!$cancelledStatusId) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Cancelled status not found'
+            ], 404);
+        }
         OrderShop::where('order_id', $order->id)->update(['order_status' => $cancelledStatusId]);
 
         $order->load(['user', 'orderDetail', 'orderItems', 'orderShops']);
