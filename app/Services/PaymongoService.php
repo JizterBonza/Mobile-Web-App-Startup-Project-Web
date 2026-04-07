@@ -195,4 +195,23 @@ class PaymongoService
 
         return $response->json();
     }
+
+    public function registerWebhook(string $url, array $events = [
+        'checkout_session.payment.paid',
+        'checkout_session.payment.failed',
+    ])
+    {
+        $response = Http::withOptions(['verify' => false])
+            ->withBasicAuth($this->secret, '')
+            ->post($this->baseUrl . '/webhooks', [
+                'data' => [
+                    'attributes' => [
+                        'url' => $url,
+                        'events' => $events,
+                    ]
+                ]
+            ]);
+
+        return $response->json();
+    }
 }

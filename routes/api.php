@@ -141,3 +141,4 @@ Route::post('/payment/attach', [PaymentController::class,'attachPayment']);
 Route::get('/payment-success', [PaymentController::class, 'paymentSuccess']);
 Route::post('/payment/checkout', [PaymentController::class,'checkout']);
 Route::get('/payment/checkout-url/{orderId}', [PaymentController::class, 'getCheckoutUrlByOrderId']);
+Route::post('/payment/webhook', [PaymentController::class, 'handleWebhook']);

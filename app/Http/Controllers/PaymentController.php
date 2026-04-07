@@ -74,6 +74,65 @@ class PaymentController extends Controller
         ]);
     }
 
+    public function handleWebhook(Request $request)
+    {
+        $rawBody = $request->getContent();
+        $signatureHeader = $request->header('Paymongo-Signature');
+
+        if (!$this->verifyWebhookSignature($rawBody, $signatureHeader)) {
+            return response()->json(['error' => 'Invalid signature'], 401);
+        }
+
+        $payload = json_decode($rawBody, true);
+        $eventType = $payload['data']['attributes']['type'] ?? null;
+        $data = $payload['data']['attributes']['data'] ?? null;
+
+        switch ($eventType) {
+            case 'checkout_session.payment.paid':
+                $this->handleCheckoutPaid($data);
+                break;
+            case 'checkout_session.payment.failed':
+                // handle failed payment if needed
+                break;
+        }
+
+        return response()->json(['received' => true]);
+    }
+
+    private function verifyWebhookSignature(string $rawBody, ?string $signatureHeader): bool
+    {
+        if (!$signatureHeader) return false;
+
+        $parts = [];
+        foreach (explode(',', $signatureHeader) as $part) {
+            [$key, $value] = explode('=', $part, 2);
+            $parts[$key] = $value;
+        }
+
+        $timestamp = $parts['t'] ?? null;
+        $testSig = $parts['te'] ?? null;
+        $liveSig = $parts['li'] ?? null;
+
+        if (!$timestamp) return false;
+
+        $message = $timestamp . '.' . $rawBody;
+        $secret = config('services.paymongo.webhook_secret');
+        $computed = hash_hmac('sha256', $message, $secret);
+
+        $expectedSig = app()->environment('production') ? $liveSig : $testSig;
+
+        return hash_equals($computed, $expectedSig ?? '');
+    }
+
+    private function handleCheckoutPaid(array $data): void
+    {
+        $sessionId = $data['id'] ?? null;
+        $payment = Payment::where('checkout_session_id', $sessionId)->first();
+        if ($payment) {
+            $payment->update(['status' => 'paid']);
+        }
+    }
+
     /**
      * Get checkout_url for an order by order_id.
      *
