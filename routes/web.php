@@ -18,6 +18,9 @@ Route::get('/', function () {
     return Inertia::render('Welcome');
 });
 
+Route::redirect('/admin', '/login');
+Route::redirect('/register-store', '/register');
+
 // Authentication Routes
 Route::get('/login', [AuthController::class, 'showLogin'])->name('login');
 Route::post('/login', [AuthController::class, 'login']);

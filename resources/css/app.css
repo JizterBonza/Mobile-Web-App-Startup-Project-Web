@@ -2,6 +2,7 @@
 
 /* Tailwind CSS */
 @import 'tailwindcss';
+@import './klasmeyt-template.css';
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
