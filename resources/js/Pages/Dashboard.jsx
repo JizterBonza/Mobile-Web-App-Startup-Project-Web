@@ -1,153 +1,75 @@
-import { useEffect, useState } from 'react'
-import AdminLayout from '../Layouts/AdminLayout'
+import KlasmeytDashboardLayout from '../Layouts/KlasmeytDashboardLayout'
+import { KlasmeytStatCard } from '../Components/Dashboard/KlasmeytStatCard'
+import { useDashboardSession } from '../hooks/useDashboardSession'
 
 export default function Dashboard({ auth }) {
-  const [sessionInfo, setSessionInfo] = useState(null);
-  const [sessionValid, setSessionValid] = useState(true);
+    const { sessionInfo, sessionValid } = useDashboardSession()
 
-  // Check session validity periodically
-  useEffect(() => {
-    const checkSession = async () => {
-      try {
-        const response = await fetch('/session/check', {
-          method: 'GET',
-          headers: {
-            'X-Requested-With': 'XMLHttpRequest',
-            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content')
-          }
-        });
-        
-        if (response.ok) {
-          const data = await response.json();
-          setSessionInfo(data.session_data);
-          setSessionValid(data.valid);
-        } else {
-          setSessionValid(false);
-        }
-      } catch (error) {
-        console.error('Session check failed:', error);
-        setSessionValid(false);
-      }
-    };
+    return (
+        <KlasmeytDashboardLayout auth={auth} title="Dashboard">
+            {!sessionValid && (
+                <div
+                    role="alert"
+                    className="mb-6 rounded-xl border-2 border-red-200 bg-red-50 p-4 text-sm text-red-800"
+                >
+                    <p className="font-semibold">Session expired</p>
+                    <p className="mt-1 text-red-700">Refresh the page to sign in again.</p>
+                </div>
+            )}
 
-    // Check session immediately
-    checkSession();
+            {sessionInfo && sessionValid && (
+                <div
+                    role="status"
+                    className="mb-6 rounded-xl border border-[#BFDBFE] bg-[#EFF6FF] p-4 text-sm text-[#1E3A5F]"
+                >
+                    <p className="font-semibold text-[#102059]">Session information</p>
+                    <dl className="mt-3 grid gap-3 sm:grid-cols-3">
+                        <div>
+                            <dt className="text-xs font-bold uppercase tracking-wide text-[#6B7280]">
+                                Login time
+                            </dt>
+                            <dd className="mt-1 font-medium">{new Date(sessionInfo.login_time).toLocaleString()}</dd>
+                        </div>
+                        <div>
+                            <dt className="text-xs font-bold uppercase tracking-wide text-[#6B7280]">
+                                Last activity
+                            </dt>
+                            <dd className="mt-1 font-medium">
+                                {new Date(sessionInfo.last_activity).toLocaleString()}
+                            </dd>
+                        </div>
+                        <div>
+                            <dt className="text-xs font-bold uppercase tracking-wide text-[#6B7280]">
+                                Session timeout
+                            </dt>
+                            <dd className="mt-1 font-medium">
+                                {new Date(sessionInfo.session_timeout).toLocaleString()}
+                            </dd>
+                        </div>
+                    </dl>
+                </div>
+            )}
 
-    // Check session every 5 minutes
-    const interval = setInterval(checkSession, 5 * 60 * 1000);
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                <KlasmeytStatCard label="New orders" value="150" iconClass="fas fa-shopping-bag" />
+                <KlasmeytStatCard label="Bounce rate" value="53%" iconClass="fas fa-chart-line" />
+                <KlasmeytStatCard label="Registrations" value="44" iconClass="fas fa-user-plus" />
+                <KlasmeytStatCard label="Unique visitors" value="65" iconClass="fas fa-eye" />
+            </div>
 
-    return () => clearInterval(interval);
-  }, []);
-
-  return (
-    <AdminLayout auth={auth} title="Dashboard">
-      {/* Session Status Alert */}
-      {!sessionValid && (
-        <div className="alert alert-danger alert-dismissible">
-          <button type="button" className="close" data-dismiss="alert" aria-hidden="true">&times;</button>
-          <h5><i className="icon fas fa-ban"></i> Session Expired!</h5>
-          Your session has expired. Please refresh the page to login again.
-        </div>
-      )}
-
-      {/* Session Information */}
-      {sessionInfo && sessionValid && (
-        <div className="alert alert-info alert-dismissible">
-          <button type="button" className="close" data-dismiss="alert" aria-hidden="true">&times;</button>
-          <h5><i className="icon fas fa-info"></i> Session Information</h5>
-          <div className="row">
-            <div className="col-md-4">
-              <strong>Login Time:</strong><br />
-              {new Date(sessionInfo.login_time).toLocaleString()}
-            </div>
-            <div className="col-md-4">
-              <strong>Last Activity:</strong><br />
-              {new Date(sessionInfo.last_activity).toLocaleString()}
-            </div>
-            <div className="col-md-4">
-              <strong>Session Timeout:</strong><br />
-              {new Date(sessionInfo.session_timeout).toLocaleString()}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Dashboard Content */}
-      <div className="row">
-        <div className="col-lg-3 col-6">
-          <div className="small-box bg-info">
-            <div className="inner">
-              <h3>150</h3>
-              <p>New Orders</p>
-            </div>
-            <div className="icon">
-              <i className="ion ion-bag"></i>
-            </div>
-            <a href="#" className="small-box-footer">More info <i className="fas fa-arrow-circle-right"></i></a>
-          </div>
-        </div>
-        
-        <div className="col-lg-3 col-6">
-          <div className="small-box bg-success">
-            <div className="inner">
-              <h3>53<sup style={{fontSize: '20px'}}>%</sup></h3>
-              <p>Bounce Rate</p>
-            </div>
-            <div className="icon">
-              <i className="ion ion-stats-bars"></i>
-            </div>
-            <a href="#" className="small-box-footer">More info <i className="fas fa-arrow-circle-right"></i></a>
-          </div>
-        </div>
-        
-        <div className="col-lg-3 col-6">
-          <div className="small-box bg-warning">
-            <div className="inner">
-              <h3>44</h3>
-              <p>User Registrations</p>
-            </div>
-            <div className="icon">
-              <i className="ion ion-person-add"></i>
-            </div>
-            <a href="#" className="small-box-footer">More info <i className="fas fa-arrow-circle-right"></i></a>
-          </div>
-        </div>
-        
-        <div className="col-lg-3 col-6">
-          <div className="small-box bg-danger">
-            <div className="inner">
-              <h3>65</h3>
-              <p>Unique Visitors</p>
-            </div>
-            <div className="icon">
-              <i className="ion ion-pie-graph"></i>
-            </div>
-            <a href="#" className="small-box-footer">More info <i className="fas fa-arrow-circle-right"></i></a>
-          </div>
-        </div>
-      </div>
-
-      {/* Main content area */}
-      <div className="row">
-        <div className="col-12">
-          <div className="card">
-            <div className="card-header">
-              <h3 className="card-title">Welcome to Agrify Connect Dashboard</h3>
-            </div>
-            <div className="card-body">
-              <div className="text-center">
-                <h4>Dashboard Content</h4>
-                <p className="text-muted">Your dashboard is ready! Start building your application.</p>
+            <section className="mt-8 rounded-2xl border border-[#E5E7EB] bg-white p-8 shadow-sm">
+                <h2 className="text-xl font-semibold text-[#102059]">Agrify Connect</h2>
+                <p className="mt-3 text-sm leading-relaxed text-[#6B7280]">
+                    Your dashboard is ready. This overview uses the same Klasmeyt visual language as the public
+                    landing page and sign-in flow.
+                </p>
                 {sessionValid && (
-                  <div className="alert alert-success">
-                    <i className="fas fa-check"></i> Session is active and valid
-                  </div>
+                    <p className="mt-6 inline-flex items-center gap-2 rounded-lg bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-800">
+                        <i className="fas fa-check-circle" />
+                        Session active
+                    </p>
                 )}
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </AdminLayout>
-  )
+            </section>
+        </KlasmeytDashboardLayout>
+    )
 }

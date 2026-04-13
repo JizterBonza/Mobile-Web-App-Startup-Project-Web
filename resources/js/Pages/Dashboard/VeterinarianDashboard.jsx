@@ -1,133 +1,42 @@
-import { useEffect, useState } from 'react'
-import AdminLayout from '../../Layouts/AdminLayout'
+import KlasmeytDashboardLayout from '../../Layouts/KlasmeytDashboardLayout'
+import { KlasmeytStatCard } from '../../Components/Dashboard/KlasmeytStatCard'
+import { useDashboardSession } from '../../hooks/useDashboardSession'
 
 export default function VeterinarianDashboard({ auth }) {
-  const [sessionInfo, setSessionInfo] = useState(null);
-  const [sessionValid, setSessionValid] = useState(true);
+    const { sessionValid } = useDashboardSession()
 
-  // Check session validity periodically
-  useEffect(() => {
-    const checkSession = async () => {
-      try {
-        const response = await fetch('/session/check', {
-          method: 'GET',
-          headers: {
-            'X-Requested-With': 'XMLHttpRequest',
-            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content')
-          }
-        });
-        
-        if (response.ok) {
-          const data = await response.json();
-          setSessionInfo(data.session_data);
-          setSessionValid(data.valid);
-        } else {
-          setSessionValid(false);
-        }
-      } catch (error) {
-        console.error('Session check failed:', error);
-        setSessionValid(false);
-      }
-    };
+    return (
+        <KlasmeytDashboardLayout auth={auth} title="Veterinarian Dashboard">
+            {!sessionValid && (
+                <div
+                    role="alert"
+                    className="mb-6 rounded-xl border-2 border-red-200 bg-red-50 p-4 text-sm text-red-800"
+                >
+                    <p className="font-semibold">Session expired</p>
+                    <p className="mt-1 text-red-700">Refresh the page to sign in again.</p>
+                </div>
+            )}
 
-    // Check session immediately
-    checkSession();
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                <KlasmeytStatCard label="Appointments" value="0" iconClass="fas fa-calendar-check" />
+                <KlasmeytStatCard label="Patients" value="0" iconClass="fas fa-paw" />
+                <KlasmeytStatCard label="Consultations" value="0" iconClass="fas fa-stethoscope" />
+                <KlasmeytStatCard label="Prescriptions" value="0" iconClass="fas fa-prescription" />
+            </div>
 
-    // Check session every 5 minutes
-    const interval = setInterval(checkSession, 5 * 60 * 1000);
-
-    return () => clearInterval(interval);
-  }, []);
-
-  return (
-    <AdminLayout auth={auth} title="Veterinarian Dashboard">
-      {/* Session Status Alert */}
-      {!sessionValid && (
-        <div className="alert alert-danger alert-dismissible">
-          <button type="button" className="close" data-dismiss="alert" aria-hidden="true">&times;</button>
-          <h5><i className="icon fas fa-ban"></i> Session Expired!</h5>
-          Your session has expired. Please refresh the page to login again.
-        </div>
-      )}
-
-      {/* Dashboard Content */}
-      <div className="row">
-        <div className="col-lg-3 col-6">
-          <div className="small-box bg-info">
-            <div className="inner">
-              <h3>0</h3>
-              <p>Appointments</p>
-            </div>
-            <div className="icon">
-              <i className="fas fa-calendar-check"></i>
-            </div>
-            <a href="#" className="small-box-footer">More info <i className="fas fa-arrow-circle-right"></i></a>
-          </div>
-        </div>
-        
-        <div className="col-lg-3 col-6">
-          <div className="small-box bg-success">
-            <div className="inner">
-              <h3>0</h3>
-              <p>Patients</p>
-            </div>
-            <div className="icon">
-              <i className="fas fa-paw"></i>
-            </div>
-            <a href="#" className="small-box-footer">More info <i className="fas fa-arrow-circle-right"></i></a>
-          </div>
-        </div>
-        
-        <div className="col-lg-3 col-6">
-          <div className="small-box bg-warning">
-            <div className="inner">
-              <h3>0</h3>
-              <p>Consultations</p>
-            </div>
-            <div className="icon">
-              <i className="fas fa-stethoscope"></i>
-            </div>
-            <a href="#" className="small-box-footer">More info <i className="fas fa-arrow-circle-right"></i></a>
-          </div>
-        </div>
-        
-        <div className="col-lg-3 col-6">
-          <div className="small-box bg-danger">
-            <div className="inner">
-              <h3>0</h3>
-              <p>Prescriptions</p>
-            </div>
-            <div className="icon">
-              <i className="fas fa-prescription"></i>
-            </div>
-            <a href="#" className="small-box-footer">More info <i className="fas fa-arrow-circle-right"></i></a>
-          </div>
-        </div>
-      </div>
-
-      {/* Main content area */}
-      <div className="row">
-        <div className="col-12">
-          <div className="card">
-            <div className="card-header">
-              <h3 className="card-title">Veterinarian Dashboard</h3>
-            </div>
-            <div className="card-body">
-              <div className="text-center">
-                <h4>Welcome, {auth.user.name}!</h4>
-                <p className="text-muted">You are logged in as <strong>Veterinarian</strong></p>
-                <p className="text-muted">Manage your appointments, patients, and consultations from here.</p>
+            <section className="mt-8 rounded-2xl border border-[#E5E7EB] bg-white p-8 shadow-sm">
+                <h2 className="text-xl font-semibold text-[#102059]">Welcome, {auth.user.name}</h2>
+                <p className="mt-3 text-sm leading-relaxed text-[#6B7280]">
+                    You are signed in as <span className="font-semibold text-[#102059]">Veterinarian</span>.
+                    Use this hub for appointments, cases, and consultations as features are connected.
+                </p>
                 {sessionValid && (
-                  <div className="alert alert-success">
-                    <i className="fas fa-check"></i> Session is active and valid
-                  </div>
+                    <p className="mt-6 inline-flex items-center gap-2 rounded-lg bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-800">
+                        <i className="fas fa-check-circle" />
+                        Session active
+                    </p>
                 )}
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </AdminLayout>
-  )
+            </section>
+        </KlasmeytDashboardLayout>
+    )
 }
-
