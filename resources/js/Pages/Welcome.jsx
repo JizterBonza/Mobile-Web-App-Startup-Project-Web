@@ -1,11 +1,8 @@
 import { Head } from '@inertiajs/react'
-import { HeroSection } from '../Components/Landing/HeroSection'
-import { WhatIsKlasmeyt } from '../Components/Landing/WhatIsKlasmeyt'
-import { ForBreeders } from '../Components/Landing/ForBreeders'
-import { ForStores } from '../Components/Landing/ForStores'
-import { HowItWorks } from '../Components/Landing/HowItWorks'
-import { WhyKlasmeyt } from '../Components/Landing/WhyKlasmeyt'
-import { CallToAction } from '../Components/Landing/CallToAction'
+import { AboutSection } from '../Components/Landing/AboutSection'
+import { ContactSection } from '../Components/Landing/ContactSection'
+import { FeatureSection } from '../Components/Landing/FeatureSection'
+import { HomeSection } from '../Components/Landing/HomeSection'
 import { Footer } from '../Components/Landing/Footer'
 
 export default function Welcome() {
@@ -13,13 +10,10 @@ export default function Welcome() {
     <>
       <Head title="Klasmeyt - Digital Marketplace for Gamefowl Enthusiasts" />
       <div className="klasmeyt-landing min-h-screen bg-white">
-        <HeroSection />
-        <WhatIsKlasmeyt />
-        <ForBreeders />
-        <ForStores />
-        <HowItWorks />
-        <WhyKlasmeyt />
-        <CallToAction />
+        <HomeSection />
+        <AboutSection />
+        <FeatureSection />
+        <ContactSection />
         <Footer />
       </div>
     </>

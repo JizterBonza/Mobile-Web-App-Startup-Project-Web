@@ -2,134 +2,80 @@ import { Link } from '@inertiajs/react'
 
 export function Footer() {
   return (
-    <footer className="bg-[#102059] text-white py-16">
+    <footer id="footer" className="scroll-mt-20 border-t border-white/10 bg-[#102059] py-16 text-white">
       <div className="container mx-auto px-6">
-        <div className="max-w-6xl mx-auto">
-          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-12 mb-16">
-            {/* Brand */}
+        <div className="mx-auto max-w-6xl">
+          <div className="mb-12 grid gap-12 md:grid-cols-2 lg:grid-cols-4">
             <div>
-              <div className="text-2xl font-semibold text-white mb-4">
-                Klasmeyt
-              </div>
-              <p className="text-sm text-gray-400">
-                Built for the gamefowl community.
+              <div className="mb-4 text-2xl font-semibold">Klasmeyt</div>
+              <p className="text-sm text-gray-400 leading-relaxed">
+                Digital marketplace for gamefowl supplies—built for stores, breeders, and enthusiasts.
               </p>
             </div>
-
-            {/* For Buyers */}
             <div>
-              <h3 className="font-semibold text-sm mb-4 text-white">
-                For Buyers
-              </h3>
+              <h3 className="mb-4 text-sm font-semibold text-white">Navigate</h3>
               <ul className="space-y-3 text-sm text-gray-400">
                 <li>
-                  <a
-                    href="#for-buyers"
-                    className="hover:text-white transition-colors"
-                  >
-                    Browse Products
+                  <a href="#home" className="transition-colors hover:text-white">
+                    Home
                   </a>
                 </li>
                 <li>
-                  <a
-                    href="#how-it-works"
-                    className="hover:text-white transition-colors"
-                  >
-                    How It Works
+                  <a href="#about" className="transition-colors hover:text-white">
+                    About
                   </a>
                 </li>
                 <li>
-                  <a
-                    href="#for-buyers"
-                    className="hover:text-white transition-colors"
-                  >
-                    Download App
+                  <a href="#feature" className="transition-colors hover:text-white">
+                    Feature
+                  </a>
+                </li>
+                <li>
+                  <a href="#contact" className="transition-colors hover:text-white">
+                    Contact
                   </a>
                 </li>
               </ul>
             </div>
-
-            {/* For Stores */}
             <div>
-              <h3 className="font-semibold text-sm mb-4 text-white">
-                For Stores
-              </h3>
+              <h3 className="mb-4 text-sm font-semibold text-white">For stores</h3>
               <ul className="space-y-3 text-sm text-gray-400">
                 <li>
-                  <a
-                    href="#for-stores"
-                    className="hover:text-white transition-colors"
-                  >
-                    Become a Trusted Store
-                  </a>
+                  <Link href="/register-store" className="transition-colors hover:text-white">
+                    Register your store
+                  </Link>
                 </li>
                 <li>
-                  <a
-                    href="#for-stores"
-                    className="hover:text-white transition-colors"
-                  >
-                    Benefits
-                  </a>
-                </li>
-                <li>
-                  <a
-                    href="#"
-                    className="hover:text-white transition-colors"
-                  >
-                    Support
+                  <a href="#feature" className="transition-colors hover:text-white">
+                    Platform features
                   </a>
                 </li>
               </ul>
             </div>
-
-            {/* Company */}
             <div>
-              <h3 className="font-semibold text-sm mb-4 text-white">
-                Company
-              </h3>
+              <h3 className="mb-4 text-sm font-semibold text-white">Company</h3>
               <ul className="space-y-3 text-sm text-gray-400">
                 <li>
-                  <a
-                    href="#"
-                    className="hover:text-white transition-colors"
-                  >
+                  <a href="#contact" className="transition-colors hover:text-white">
                     Contact
                   </a>
                 </li>
                 <li>
-                  <a
-                    href="#"
-                    className="hover:text-white transition-colors"
-                  >
-                    Privacy
-                  </a>
+                  <span className="cursor-default text-gray-500">Privacy</span>
                 </li>
                 <li>
-                  <a
-                    href="#"
-                    className="hover:text-white transition-colors"
-                  >
-                    Terms
-                  </a>
+                  <span className="cursor-default text-gray-500">Terms</span>
                 </li>
                 <li>
-                  <Link
-                    href="/admin"
-                    className="hover:text-white transition-colors"
-                  >
+                  <Link href="/admin" className="transition-colors hover:text-white">
                     Admin Centre
                   </Link>
                 </li>
               </ul>
             </div>
           </div>
-
-          {/* Bottom Bar */}
-          <div className="pt-8 border-t border-white/20 text-gray-400 text-xs">
-            <p>
-              &copy; {new Date().getFullYear()} Klasmeyt. All
-              rights reserved.
-            </p>
+          <div className="border-t border-white/20 pt-8 text-xs text-gray-400">
+            <p>&copy; {new Date().getFullYear()} Klasmeyt. All rights reserved.</p>
           </div>
         </div>
       </div>
