@@ -1,27 +1,40 @@
+const sectionBg = '#0B132B'
+const headlineRed = '#FF2020'
+
 export function AboutSection() {
   return (
-    <section id="about" className="scroll-mt-20 border-t border-gray-100 bg-[#F8F9FB] py-20 lg:py-28">
-      <div className="container mx-auto px-6">
-        <div className="mx-auto max-w-3xl text-center">
-          <h2 className="mb-4 text-3xl font-semibold text-[#102059] sm:text-4xl">About Klasmeyt</h2>
-          <p className="mb-6 text-lg text-gray-600">
-            We built Klasmeyt so breeders and small-scale farmers can source feed, medicine, and supplies
-            without guessing who to trust.
-          </p>
-        </div>
-        <div className="mx-auto mt-14 grid max-w-5xl gap-10 md:grid-cols-2 md:gap-12">
-          <div className="rounded-2xl border border-gray-200/80 bg-white p-8 shadow-sm">
-            <h3 className="mb-3 text-lg font-semibold text-[#102059]">Our mission</h3>
-            <p className="text-gray-600 leading-relaxed">
-              Make it simple to find reputable stores, compare what you need, and keep your flock healthy—with clear
-              information and a marketplace designed for how you already work.
+    <section
+      id="about"
+      className="scroll-mt-20 py-20 lg:py-28 xl:py-32"
+      style={{ backgroundColor: sectionBg }}
+    >
+      <div className="mx-auto max-w-[1400px] px-6 sm:px-10 lg:px-16">
+        <div className="mx-auto text-center">
+          <p className="text-sm font-bold tracking-wide text-white sm:text-[15px]">About</p>
+
+          <h2
+            className="mx-auto mt-8 max-w-[60rem] px-2 leading-[1.15] sm:mt-10 sm:leading-tight lg:mt-12 lg:leading-[1.1] xl:max-w-[64rem] xl:leading-[1.08]"
+            style={{
+              color: headlineRed,
+              fontSize: '3rem',
+              fontWeight: 'bold',
+            }}
+          >
+            Raising strong and healthy gamefowl starts with the right supplies.
+          </h2>
+
+          <div className="mx-auto mt-10 max-w-xl space-y-6 text-base font-normal leading-relaxed text-white sm:mt-12 sm:max-w-[34rem] sm:text-lg lg:mt-14">
+            <p>
+              Klasmeyt is a digital marketplace where enthusiasts, breeders, and farmers can find trusted
+              products from nearby agrivet and gamefowl supply stores.
             </p>
-          </div>
-          <div className="rounded-2xl border border-gray-200/80 bg-white p-8 shadow-sm">
-            <h3 className="mb-3 text-lg font-semibold text-[#102059]">Who we serve</h3>
-            <p className="text-gray-600 leading-relaxed">
-              Enthusiasts ordering for home setups, breeders scaling operations, and local stores that want to reach
-              serious buyers online—without losing the personal touch of their shop.
+            <p>
+              Instead of searching multiple shops or messaging different sellers, you can browse products, place
+              your order, and get the supplies you need—all in one place.
+            </p>
+            <p>
+              At the same time, local stores can reach more customers by bringing their products close to gamefowl
+              community.
             </p>
           </div>
         </div>

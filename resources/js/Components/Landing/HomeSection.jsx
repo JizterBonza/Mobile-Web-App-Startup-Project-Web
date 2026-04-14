@@ -1,26 +1,8 @@
 import { Link } from '@inertiajs/react'
+import primaryLogo from '../../../../Logo/Primary Logo.png'
 
 const navy = '#0B132B'
 const pageBg = '#DCDCDC'
-
-function RoosterMark({ className = '' }) {
-  return (
-    <svg
-      className={className}
-      viewBox="0 0 56 48"
-      width="44"
-      height="38"
-      aria-hidden
-      xmlns="http://www.w3.org/2000/svg"
-    >
-      <path
-        fill="#E20E28"
-        d="M28 2c-.8 0-1.6.4-2 1.1l-2.2 4.5-1.8-2.4c-.7-.9-2-.9-2.8-.2s-.9 2-.2 2.8l2.4 3.1-3.6-.5c-1.1-.2-2.1.5-2.3 1.6s.5 2.1 1.6 2.3l4 .6c-2.2 1.8-3.6 4.5-3.6 7.6 0 2.6 1 5 2.7 6.8l-1.2 6.8c-.2 1.1.5 2.1 1.6 2.3h.4c1 0 1.8-.7 2-1.7l.9-5.2h2.8l.9 5.2c.2 1 1 1.7 2 1.7 1.1-.2 1.8-1.2 1.6-2.3l-1.2-6.8c1.7-1.8 2.7-4.2 2.7-6.8 0-3.1-1.4-5.8-3.6-7.6l4-.6c1.1-.2 1.8-1.2 1.6-2.3s-1.2-1.8-2.3-1.6l-3.6.5 2.4-3.1c.7-.9.5-2.1-.2-2.8s-2.1-.7-2.8.2l-1.8 2.4-2.2-4.5c-.4-.7-1.2-1.1-2-1.1Z"
-      />
-      <ellipse cx="28" cy="34" rx="11" ry="7" fill="#E20E28" />
-    </svg>
-  )
-}
 
 export function HomeSection() {
   const navLinkClass =
@@ -37,38 +19,38 @@ export function HomeSection() {
         style={{ backgroundColor: pageBg }}
       >
         <nav
-          className="mx-auto flex max-w-[1400px] flex-wrap items-center gap-4 px-6 py-4 sm:px-10 lg:px-14"
+          className="mx-auto max-w-[1400px] px-0 py-4"
           aria-label="Primary"
         >
-          <a
-            href="#home"
-            className="shrink-0 flex flex-col items-start gap-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0B132B]/30 focus-visible:ring-offset-2 focus-visible:ring-offset-[#DCDCDC]"
-          >
-            <RoosterMark className="shrink-0" />
-            <span
-              className="text-lg font-bold uppercase leading-none tracking-wide sm:text-xl"
-              style={{ color: navy }}
+          <div className="flex w-full flex-wrap items-center justify-between gap-4">
+            <a
+              href="#home"
+              className="shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0B132B]/30 focus-visible:ring-offset-2 focus-visible:ring-offset-[#DCDCDC]"
             >
-              KLASMEYT
-            </span>
-          </a>
+              <img
+                src={primaryLogo}
+                alt="Klasmeyt"
+                className="h-[72px] w-auto max-w-[min(100%,300px)] object-contain object-left sm:h-[100px]"
+              />
+            </a>
 
-          <div className="ml-auto flex flex-wrap items-center justify-end gap-6 sm:gap-8 lg:gap-10">
-            <a href="#about" style={{ color: navy }} className={navLinkClass}>
-              About
-            </a>
-            <a href="#feature" style={{ color: navy }} className={navLinkClass}>
-              Features
-            </a>
-            <a href="#contact" style={{ color: navy }} className={navLinkClass}>
-              Contact
-            </a>
-            <Link
-              href="/admin"
-              className="rounded-[10px] border border-neutral-300/80 bg-white px-5 py-2.5 text-sm font-medium text-neutral-900 shadow-sm transition-[box-shadow,background-color] hover:bg-neutral-50 hover:shadow"
-            >
-              Admin Centre
-            </Link>
+            <div className="flex flex-wrap items-center justify-end gap-6 sm:gap-8 lg:gap-10">
+              <a href="#about" style={{ color: navy }} className={navLinkClass}>
+                About
+              </a>
+              <a href="#feature" style={{ color: navy }} className={navLinkClass}>
+                Features
+              </a>
+              <a href="#contact" style={{ color: navy }} className={navLinkClass}>
+                Contact
+              </a>
+              <Link
+                href="/admin"
+                className="rounded-[10px] border border-neutral-300/80 bg-white px-5 py-2.5 text-sm font-medium text-neutral-900 shadow-sm transition-[box-shadow,background-color] hover:bg-neutral-50 hover:shadow"
+              >
+                Admin Centre
+              </Link>
+            </div>
           </div>
         </nav>
       </header>
