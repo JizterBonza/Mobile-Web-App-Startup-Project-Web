@@ -1,81 +1,63 @@
-import { Link } from '@inertiajs/react'
+function AgrifyWordmark() {
+  return (
+    <div className="mt-1 flex flex-col items-center leading-none md:items-end">
+      <span className="flex items-baseline font-bold italic text-[#555] uppercase tracking-tight" style={{ fontSize: '30px' }}>
+        <span>AGR</span>
+        <span className="relative inline-flex min-w-[0.55em] justify-center">
+          <span className="relative z-10">I</span>
+          <svg
+            className="pointer-events-none absolute -top-0.5 left-1/2 h-2.5 w-3 -translate-x-1/2 text-[#666]"
+            viewBox="0 0 12 10"
+            aria-hidden
+          >
+            <path
+              d="M1 8 Q6 0 11 8"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.4"
+              strokeLinecap="round"
+            />
+          </svg>
+        </span>
+        <span>FY</span>
+      </span>
+      <span className="mt-1 text-[11px] font-normal tracking-[0.35em] text-[#999] not-italic normal-case">
+        Connect
+      </span>
+    </div>
+  )
+}
 
 export function Footer() {
+  const year = new Date().getFullYear()
+
   return (
-    <footer id="footer" className="scroll-mt-20 border-t border-white/10 bg-[#102059] py-16 text-white">
-      <div className="container mx-auto px-6">
-        <div className="mx-auto max-w-6xl">
-          <div className="mb-12 grid gap-12 md:grid-cols-2 lg:grid-cols-4">
-            <div>
-              <div className="mb-4 text-2xl font-semibold">Klasmeyt</div>
-              <p className="text-sm text-gray-400 leading-relaxed">
-                Digital marketplace for gamefowl supplies—built for stores, breeders, and enthusiasts.
-              </p>
-            </div>
-            <div>
-              <h3 className="mb-4 text-sm font-semibold text-white">Navigate</h3>
-              <ul className="space-y-3 text-sm text-gray-400">
-                <li>
-                  <a href="#home" className="transition-colors hover:text-white">
-                    Home
-                  </a>
-                </li>
-                <li>
-                  <a href="#about" className="transition-colors hover:text-white">
-                    About
-                  </a>
-                </li>
-                <li>
-                  <a href="#feature" className="transition-colors hover:text-white">
-                    Feature
-                  </a>
-                </li>
-                <li>
-                  <a href="#contact" className="transition-colors hover:text-white">
-                    Contact
-                  </a>
-                </li>
-              </ul>
-            </div>
-            <div>
-              <h3 className="mb-4 text-sm font-semibold text-white">For stores</h3>
-              <ul className="space-y-3 text-sm text-gray-400">
-                <li>
-                  <Link href="/register-store" className="transition-colors hover:text-white">
-                    Register your store
-                  </Link>
-                </li>
-                <li>
-                  <a href="#feature" className="transition-colors hover:text-white">
-                    Platform features
-                  </a>
-                </li>
-              </ul>
-            </div>
-            <div>
-              <h3 className="mb-4 text-sm font-semibold text-white">Company</h3>
-              <ul className="space-y-3 text-sm text-gray-400">
-                <li>
-                  <a href="#contact" className="transition-colors hover:text-white">
-                    Contact
-                  </a>
-                </li>
-                <li>
-                  <span className="cursor-default text-gray-500">Privacy</span>
-                </li>
-                <li>
-                  <span className="cursor-default text-gray-500">Terms</span>
-                </li>
-                <li>
-                  <Link href="/admin" className="transition-colors hover:text-white">
-                    Admin Centre
-                  </Link>
-                </li>
-              </ul>
-            </div>
-          </div>
-          <div className="border-t border-white/20 pt-8 text-xs text-gray-400">
-            <p>&copy; {new Date().getFullYear()} Klasmeyt. All rights reserved.</p>
+    <footer
+      id="footer"
+      className="scroll-mt-20 border-t border-gray-100 bg-white py-10 font-sans"
+    >
+      <div className="container mx-auto max-w-6xl px-6">
+        <div className="grid grid-cols-1 items-center gap-8 text-center md:grid-cols-3 md:gap-6 md:text-left">
+          <p className="text-sm text-[#999] md:text-left">&copy; {year} Klasmeyt. All rights reserved</p>
+
+          <nav
+            className="flex flex-wrap items-center justify-center gap-x-12 gap-y-3 text-sm md:justify-center"
+            aria-label="Legal"
+          >
+            <a href="#privacy-policy" className="text-black transition-opacity hover:opacity-75" style={{ color: '#0B132B', marginRight: '30px' }}>
+              Privacy Policy
+            </a>
+            <a href="#terms-of-service" className="text-black transition-opacity hover:opacity-75" style={{ color: '#0B132B', marginRight: '30px' }}>
+              Terms of Service
+            </a>
+            <a href="#cookie-policy" className="text-black transition-opacity hover:opacity-75" style={{ color: '#0B132B', marginRight: '30px' }}>
+              Cookie Policy
+            </a>
+          </nav>
+
+          <div className="flex flex-col items-center md:items-end">
+            <p className="text-xs text-[#999]" style={{ marginBottom: '0px' }}>Developed by</p>
+            <AgrifyWordmark />
           </div>
         </div>
       </div>
