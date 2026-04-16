@@ -128,9 +128,26 @@ class PaymentController extends Controller
     {
         $sessionId = $data['id'] ?? null;
         $payment = Payment::where('checkout_session_id', $sessionId)->first();
-        if ($payment) {
-            $payment->update(['status' => 'paid']);
+
+        if (!$payment) {
+            return;
         }
+
+        // PayMongo attaches the actual Payment resources to the checkout session.
+        // The first (and typically only) payment holds the method the customer used.
+        $paymongoPayment = $data['attributes']['payments'][0] ?? null;
+        $paymentAttrs = $paymongoPayment['attributes'] ?? [];
+
+        $paymentMethod = $paymentAttrs['source']['type']
+            ?? $paymentAttrs['payment_method_used']
+            ?? null;
+
+        $payment->update([
+            'status' => 'paid',
+            'payment_method' => $paymentMethod,
+            'payment_id' => $paymongoPayment['id'] ?? $payment->payment_id,
+            'metadata' => $data,
+        ]);
     }
 
     /**
