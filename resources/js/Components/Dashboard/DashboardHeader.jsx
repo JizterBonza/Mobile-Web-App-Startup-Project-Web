@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useForm, usePage } from '@inertiajs/react'
 import { Bell, ChevronDown, LogOut, Settings } from 'lucide-react'
 
@@ -49,11 +49,23 @@ export function DashboardHeader({
     const { post } = useForm()
     const [showUserDropdown, setShowUserDropdown] = useState(false)
     const [showNotifications, setShowNotifications] = useState(false)
+    const activeNavItemRef = useRef(null)
 
     const activeTab = useMemo(
         () => getActiveNavId(url, navigationItems),
         [url, navigationItems],
     )
+
+    useEffect(() => {
+        // When the header nav overflows, ensure the active pill stays visible.
+        if (activeNavItemRef.current?.scrollIntoView) {
+            activeNavItemRef.current.scrollIntoView({
+                block: 'nearest',
+                inline: 'center',
+                behavior: 'smooth',
+            })
+        }
+    }, [activeTab])
 
     const initials = userInitials ?? initialsFromName(userName)
 
@@ -75,18 +87,19 @@ export function DashboardHeader({
                     </Link>
                 </div>
 
-                <nav className="absolute left-1/2 hidden -translate-x-1/2 md:flex">
-                    <div className="flex items-center gap-0.5 rounded-full border border-[#E5E7EB] bg-white/90 p-0.5 backdrop-blur-sm">
+                <nav className="absolute left-1/2 hidden w-[min(980px,calc(100vw-20rem))] -translate-x-1/2 md:flex" style={{ paddingLeft: '0px', paddingRight: '0px' }}>
+                    <div className="flex w-full items-center gap-0.5 overflow-x-auto rounded-full bg-white/90 p-0.5 backdrop-blur-sm">
                         {navigationItems.map((item) => (
                             <Link
                                 key={item.id}
                                 href={item.href}
+                                ref={activeTab === item.id ? activeNavItemRef : null}
                                 className={`whitespace-nowrap rounded-full px-4 py-2 text-sm font-medium transition-all ${
                                     activeTab === item.id
-                                        ? 'bg-[#102059] text-white'
+                                        ? 'bg-[#244693] text-white'
                                         : 'bg-transparent text-[#4B5563] hover:text-[#102059]'
                                 }`}
-                                style={{ fontFamily: 'Inter Condensed, sans-serif' }}
+                                style={{ fontFamily: 'Inter Condensed, sans-serif', backgroundColor: activeTab === item.id ? '#244693' : 'transparent', color: activeTab === item.id ? 'white' : '#4B5563' }}
                             >
                                 {item.label}
                             </Link>
@@ -230,5 +243,25 @@ export const SUPER_ADMIN_HEADER_NAV = [
         id: 'products',
         href: '/dashboard/super-admin/categories',
         matchPaths: ['/dashboard/super-admin/categories', '/dashboard/super-admin/sub-categories'],
+    },
+    {
+        label: 'Activity Logs',
+        id: 'activity-logs',
+        href: '/dashboard/super-admin/activity-logs',
+    },
+    {
+        label: 'Payment Methods',
+        id: 'payment-methods',
+        href: '/dashboard/super-admin/payment-methods',
+    },
+    {
+        label: 'Delivery Methods',
+        id: 'delivery-methods',
+        href: '/dashboard/super-admin/delivery-methods',
+    },
+    {
+        label: 'Zones',
+        id: 'zones',
+        href: '/dashboard/super-admin/zones',
     },
 ]
