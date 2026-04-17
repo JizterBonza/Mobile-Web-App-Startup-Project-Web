@@ -60,7 +60,7 @@ export default function Login() {
                     <div className="p-8 sm:p-12 lg:p-16">
                         <div className="text-center mb-10 lg:mb-12">
                             <Link href="/">
-                                <h1 className="text-4xl font-bold text-[#102059]">Klasmeyt</h1>
+                                <h1 className="text-4xl font-bold text-[#0A1540]" style={{color: '#0A1540', fontWeight: 'bold'}}>Klasmeyt</h1>
                             </Link>
                         </div>
 
@@ -206,8 +206,8 @@ export default function Login() {
                         <div className="absolute top-0 right-0 w-96 h-96 bg-white/10 rounded-full blur-3xl pointer-events-none" />
 
                         <div className="relative z-10">
-                            <h2 className="text-3xl font-bold text-white mb-3 uppercase tracking-wide">
-                                Admin Centre
+                            <h2 className="text-3xl font-bold text-white mb-3 uppercase tracking-wide" style={{color: 'white', fontWeight: 'bold'}}>
+                                Admin Center
                             </h2>
                             <p className="text-sm text-[#ffffffc7] leading-relaxed">
                                 Complete business management for agrivet stores and vendors. Sign in to access your
