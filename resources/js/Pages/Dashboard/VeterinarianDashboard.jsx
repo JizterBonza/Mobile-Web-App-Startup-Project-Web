@@ -7,16 +7,6 @@ export default function VeterinarianDashboard({ auth }) {
 
     return (
         <KlasmeytDashboardLayout auth={auth} title="Veterinarian Dashboard">
-            {!sessionValid && (
-                <div
-                    role="alert"
-                    className="mb-6 rounded-xl border-2 border-red-200 bg-red-50 p-4 text-sm text-red-800"
-                >
-                    <p className="font-semibold">Session expired</p>
-                    <p className="mt-1 text-red-700">Refresh the page to sign in again.</p>
-                </div>
-            )}
-
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
                 <KlasmeytStatCard label="Appointments" value="0" iconClass="fas fa-calendar-check" />
                 <KlasmeytStatCard label="Patients" value="0" iconClass="fas fa-paw" />

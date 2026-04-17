@@ -1,9 +1,26 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Head, Link, useForm, usePage } from '@inertiajs/react';
 import { Eye, EyeOff, HelpCircle, X, Send, ArrowLeft } from 'lucide-react';
 
 export default function Login() {
-    const { flash } = usePage().props;
+    const page = usePage();
+    const { flash, auth } = page.props;
+
+    const sessionExpiredNotice = useMemo(() => {
+        if (auth?.user) {
+            return null;
+        }
+        const fromPageUrl = page.url.includes('session_expired=1');
+        const fromBrowser =
+            typeof window !== 'undefined' &&
+            new URLSearchParams(window.location.search).get('session_expired') === '1';
+        const fromQuery = fromPageUrl || fromBrowser;
+        const fromFlash = typeof flash?.message === 'string' && flash.message.trim() !== '';
+        if (!fromQuery && !fromFlash) {
+            return null;
+        }
+        return fromFlash ? flash.message : 'Your session has expired. Please sign in again to continue.';
+    }, [auth?.user, flash?.message, page.url]);
     const { data, setData, post, processing, errors } = useForm({
         email: '',
         password: '',
@@ -63,6 +80,16 @@ export default function Login() {
                                 <h1 className="text-4xl font-bold text-[#0A1540]" style={{color: '#0A1540', fontWeight: 'bold'}}>Klasmeyt</h1>
                             </Link>
                         </div>
+
+                        {sessionExpiredNotice && (
+                            <div
+                                role="status"
+                                className="mb-6 rounded-lg border border-amber-200 bg-amber-50 p-4"
+                            >
+                                <p className="text-sm font-semibold text-amber-900">Session notice</p>
+                                <p className="mt-1 text-sm text-amber-800">{sessionExpiredNotice}</p>
+                            </div>
+                        )}
 
                         {formError && (
                             <div className="mb-6 p-4 bg-red-50 border-2 border-red-200 rounded-lg">

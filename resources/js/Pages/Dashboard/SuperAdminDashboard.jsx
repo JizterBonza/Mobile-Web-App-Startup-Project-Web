@@ -3,7 +3,7 @@ import { SuperAdminPlatformInsights } from '../../Components/Dashboard/SuperAdmi
 import { useDashboardSession } from '../../hooks/useDashboardSession'
 
 export default function SuperAdminDashboard({ auth, insights }) {
-    const { sessionValid } = useDashboardSession()
+    useDashboardSession()
 
     const userStats = insights?.userStats
     const orderMetrics = insights?.orderMetrics
@@ -16,16 +16,6 @@ export default function SuperAdminDashboard({ auth, insights }) {
             title="Super Admin Dashboard"
             notificationCount={insights?.notificationCount ?? 0}
         >
-            {!sessionValid && (
-                <div
-                    role="alert"
-                    className="mb-6 rounded-xl border-2 border-red-200 bg-red-50 p-4 text-sm text-red-800"
-                >
-                    <p className="font-semibold">Session expired</p>
-                    <p className="mt-1 text-red-700">Refresh the page to sign in again.</p>
-                </div>
-            )}
-
             <SuperAdminPlatformInsights
                 userStats={userStats}
                 orderMetrics={orderMetrics}

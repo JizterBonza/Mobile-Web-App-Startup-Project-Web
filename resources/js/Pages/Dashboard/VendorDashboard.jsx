@@ -8,16 +8,6 @@ export default function VendorDashboard({ auth, shop, agrivet, stats = {} }) {
 
     return (
         <KlasmeytDashboardLayout auth={auth} title="Vendor Dashboard">
-            {!sessionValid && (
-                <div
-                    role="alert"
-                    className="mb-6 rounded-xl border-2 border-red-200 bg-red-50 p-4 text-sm text-red-800"
-                >
-                    <p className="font-semibold">Session expired</p>
-                    <p className="mt-1 text-red-700">Refresh the page to sign in again.</p>
-                </div>
-            )}
-
             {!shop && (
                 <div
                     role="alert"

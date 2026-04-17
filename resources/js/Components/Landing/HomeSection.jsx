@@ -15,7 +15,7 @@ export function HomeSection() {
       style={{ backgroundColor: pageBg }}
     >
       <header
-        className="fixed inset-x-0 top-0 z-50 shadow-[0_1px_0_rgba(0,0,0,0.06)]"
+        className="fixed inset-x-0 top-0 z-50 shadow-[0_1px_0_rgba(0,0,0,0)]"
         style={{ backgroundColor: pageBg }}
       >
         <nav

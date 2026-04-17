@@ -83,7 +83,7 @@ export function DashboardHeader({
             <div className="flex items-center justify-between px-4 py-3 sm:px-6">
                 <div className="flex min-w-0 flex-shrink-0 items-center gap-2">
                     {menuToggle}
-                    <Link href="/" className="flex min-w-0 items-center">
+                    <Link className="flex min-w-0 items-center">
                         <img
                             src={primaryLogo}
                             alt="Klasmeyt"
