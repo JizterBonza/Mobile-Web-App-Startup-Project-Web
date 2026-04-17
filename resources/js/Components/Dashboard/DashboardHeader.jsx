@@ -93,7 +93,7 @@ export function DashboardHeader({
                 </div>
 
                 <nav className="absolute left-1/2 hidden w-[min(980px,calc(100vw-20rem))] -translate-x-1/2 md:flex" style={{ paddingLeft: '0px', paddingRight: '0px' }}>
-                    <div className="flex w-full items-center gap-0.5 overflow-x-auto rounded-full bg-white/90 p-0.5 backdrop-blur-sm">
+                    <div className="flex w-full items-center gap-0.5 overflow-x-auto border border-[#E5E7EB] rounded-full p-0.5 backdrop-blur-sm">
                         {navigationItems.map((item) => (
                             <Link
                                 key={item.id}
@@ -122,7 +122,7 @@ export function DashboardHeader({
                     <button
                         type="button"
                         onClick={() => setShowNotifications(!showNotifications)}
-                        className="relative rounded-lg p-2 text-[#6B7280] transition-colors hover:bg-[#F3F4F6]"
+                        className="relative rounded-lg text-[#6B7280] transition-colors hover:bg-[#F3F4F6]"
                         aria-label="Notifications"
                     >
                         <Bell className="h-5 w-5" />
@@ -145,13 +145,13 @@ export function DashboardHeader({
                             <div className="hidden flex-col items-start lg:flex">
                                 <p
                                     className="text-sm font-bold text-[#1F2937]"
-                                    style={{ fontFamily: 'Inter Condensed, sans-serif' }}
+                                    style={{ fontFamily: 'Inter Condensed, sans-serif', marginBottom: '0px' }}
                                 >
                                     {userName}
                                 </p>
                                 <p
                                     className="text-xs text-[#6B7280]"
-                                    style={{ fontFamily: 'Inter Condensed, sans-serif' }}
+                                    style={{ fontFamily: 'Inter Condensed, sans-serif', marginBottom: '0px' }}
                                 >
                                     {userEmail}
                                 </p>
