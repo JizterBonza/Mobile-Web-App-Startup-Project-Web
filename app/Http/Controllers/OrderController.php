@@ -16,6 +16,7 @@ use App\Services\PaymongoService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use App\Models\Address;
 use App\Models\Shop;
@@ -94,7 +95,13 @@ class OrderController extends Controller
      */
     public function getByUser($userId, Request $request)
     {
-        $query = Order::with(['user', 'orderDetail', 'orderItems.item', 'orderShops'])
+        $query = Order::with([
+                'user',
+                'orderDetail',
+                'orderItems.item',
+                'orderShops',
+                'payment:payments.id,payments.order_id,payments.status,payments.payment_method',
+            ])
             ->where('user_id', $userId);
 
         // Filter by order_status if provided (via order_shops)
@@ -451,16 +458,37 @@ class OrderController extends Controller
             if ($paymentMethod !== 'cod') {
                 $session = $this->paymongo->createCheckoutSession($orderDetail->total_amount);
 
+                // PayMongo returns an `errors` array (not `data`) on failure,
+                // and network/SSL issues can bubble up as an empty/null payload.
+                if (!is_array($session) || !empty($session['errors'])) {
+                    Log::error('PayMongo checkout session creation failed', [
+                        'order_id' => $order->id,
+                        'response' => $session,
+                    ]);
+                    throw new \RuntimeException('Failed to create payment checkout session. Please try again.');
+                }
+
+                $sessionId = $session['data']['id'] ?? null;
+                $checkoutUrl = $session['data']['attributes']['checkout_url'] ?? null;
+
+                if (!$sessionId || !$checkoutUrl) {
+                    Log::error('PayMongo checkout session response malformed', [
+                        'order_id' => $order->id,
+                        'response' => $session,
+                    ]);
+                    throw new \RuntimeException('Invalid payment checkout response. Please try again.');
+                }
+
                 Payment::create([
                     'order_id' => $order->id,
-                    'checkout_session_id' => $session['data']['id'],
-                    'checkout_url' => $session['data']['attributes']['checkout_url'],
+                    'checkout_session_id' => $sessionId,
+                    'checkout_url' => $checkoutUrl,
                     'amount' => $orderDetail->total_amount,
                     'status' => 'pending',
                 ]);
 
-                $responseData['checkout_url'] = $session['data']['attributes']['checkout_url'];
-                $responseData['session_id'] = $session['data']['id'];
+                $responseData['checkout_url'] = $checkoutUrl;
+                $responseData['session_id'] = $sessionId;
             }
 
             return response()->json($responseData, 201);
@@ -486,8 +514,37 @@ class OrderController extends Controller
     }
 
     /**
+     * Compute the handling fee given a total weight in kilograms.
+     *
+     * Tiers:
+     *   - ≤ 25 kg       : free
+     *   - 25.01–100 kg  : ₱50 flat
+     *   - > 100 kg      : ₱50 + ₱15 per (started) 10 kg over 100, capped at ₱150
+     */
+    private function calculateHandlingFee(float $totalWeightKg): float
+    {
+        if ($totalWeightKg <= 25) {
+            return 0.00;
+        }
+
+        $fee = 50.00;
+
+        if ($totalWeightKg > 100) {
+            $extraTenKgBlocks = (int) ceil(($totalWeightKg - 100) / 10);
+            $fee += $extraTenKgBlocks * 15;
+        }
+
+        return (float) min($fee, 150.00);
+    }
+
+    /**
      * Calculate order fees without persisting anything.
-     * Handling fee is waived when total weight does not exceed 25 kg.
+     *
+     * Handling fee tiers (based on total weight in kg):
+     *   - 0 – 25 kg       : free (₱0)
+     *   - 25.01 – 100 kg  : ₱50 flat
+     *   - Every additional (or partial) 10 kg beyond 100 kg adds ₱15
+     *   - Cap: ₱150
      */
     public function calculateFee(Request $request)
     {
@@ -498,7 +555,6 @@ class OrderController extends Controller
             'items.*.item_id' => 'required|exists:items,id',
             'items.*.quantity' => 'required|integer|min:1',
             'items.*.price_at_purchase' => 'required|numeric|min:0',
-            'handling_fee' => 'nullable|numeric|min:0',
         ]);
 
         if ($validator->fails()) {
@@ -527,10 +583,7 @@ class OrderController extends Controller
             }
         }
 
-        // Waive handling fee if total weight is 25 kg or under; otherwise use provided fee or default ₱50
-        $handlingFee = $totalWeightKg > 25
-            ? (float) ($data['handling_fee'] ?? 50.00)
-            : 0.00;
+        $handlingFee = $this->calculateHandlingFee($totalWeightKg);
 
         $totalAmount = $subtotal + $handlingFee;
 

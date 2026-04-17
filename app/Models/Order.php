@@ -101,6 +101,15 @@ class Order extends Model
     }
 
     /**
+     * Get the latest payment attached to this order (null for COD orders).
+     * Uses latestOfMany() so retries/new attempts surface the most recent record.
+     */
+    public function payment()
+    {
+        return $this->hasOne(Payment::class)->latestOfMany();
+    }
+
+    /**
      * Resolve order_status from order_shops (first shop's status) for API compatibility.
      */
     public function getOrderStatusAttribute($value)
