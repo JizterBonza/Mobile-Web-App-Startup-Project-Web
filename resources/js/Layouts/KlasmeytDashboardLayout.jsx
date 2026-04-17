@@ -363,7 +363,9 @@ export default function KlasmeytDashboardLayout({
                         </header>
                     )}
 
-                    <main className="relative z-10 px-4 py-8 sm:px-6 lg:px-10">{children}</main>
+                    <main className="relative z-10 w-full min-w-0 px-5 py-8 sm:px-8 sm:py-10 lg:px-12 lg:py-10 xl:px-14">
+                        {children}
+                    </main>
                 </div>
             </div>
         </>

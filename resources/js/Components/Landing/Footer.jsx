@@ -36,7 +36,7 @@ export function Footer() {
       id="footer"
       className="scroll-mt-20 border-t border-gray-100 bg-white py-10 font-sans"
     >
-      <div className="container mx-auto max-w-6xl px-6">
+      <div className="w-full max-w-none px-6 sm:px-10 lg:px-14 xl:px-16 2xl:px-20">
         <div className="grid grid-cols-1 items-center gap-8 text-center md:grid-cols-3 md:gap-6 md:text-left">
           <p className="text-sm text-[#999] md:text-left">&copy; {year} Klasmeyt. All rights reserved</p>
 

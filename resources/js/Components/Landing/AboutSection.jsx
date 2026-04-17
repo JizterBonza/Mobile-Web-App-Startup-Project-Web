@@ -8,7 +8,7 @@ export function AboutSection() {
       className="scroll-mt-20 py-20 lg:py-28 xl:py-32"
       style={{ backgroundColor: sectionBg }}
     >
-      <div className="mx-auto max-w-[1400px] px-6 sm:px-10 lg:px-16">
+      <div className="w-full max-w-none px-6 sm:px-10 lg:px-14 xl:px-16 2xl:px-20">
         <div className="mx-auto text-center">
           <p className="text-sm font-bold tracking-wide text-white sm:text-[15px]">About</p>
 

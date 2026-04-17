@@ -66,14 +66,16 @@
     label {
         @apply block text-sm font-medium leading-6 text-slate-900 first-letter:capitalize;
     }
-    header {
+    /* Scoped away from .klasmeyt-landing (marketing + Klasmeyt dashboard shell) so nav/header keep layout utilities */
+    body:not(:has(.klasmeyt-landing)) header {
         @apply bg-slate-800 shadow-md;
     }
-    header nav {
+    body:not(:has(.klasmeyt-landing)) header nav {
         @apply p-5 max-w-screen-lg mx-auto flex items-center justify-between;
     }
+    /* Full-width primary content; dashboards use <main> and need room for tables/cards */
     main {
-        @apply max-w-screen-lg mx-auto;
+        @apply w-full max-w-none min-w-0;
     }
     
     /* Fix AdminLTE navbar to use full width */

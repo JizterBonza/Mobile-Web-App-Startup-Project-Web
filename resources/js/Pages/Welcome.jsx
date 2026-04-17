@@ -9,7 +9,7 @@ export default function Welcome() {
   return (
     <>
       <Head title="Klasmeyt - Digital Marketplace for Gamefowl Enthusiasts" />
-      <div className="klasmeyt-landing min-h-screen bg-white">
+      <div className="klasmeyt-landing min-h-screen w-full max-w-none bg-white">
         <HomeSection />
         <AboutSection />
         <FeatureSection />

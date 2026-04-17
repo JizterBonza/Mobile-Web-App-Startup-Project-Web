@@ -63,7 +63,7 @@ function FeatureCard({ title, body, bgColor }) {
 export function FeatureSection() {
   return (
     <section id="feature" className="scroll-mt-20 bg-white py-16 lg:py-24">
-      <div className="mx-auto max-w-[1400px] px-6 sm:px-10 lg:px-16">
+      <div className="w-full max-w-none px-6 sm:px-10 lg:px-14 xl:px-16 2xl:px-20">
         {/* Buyers: text left, grid right */}
         <div className="grid gap-12 lg:grid-cols-2 lg:items-center lg:gap-16 xl:gap-20">
           <div className="max-w-xl lg:max-w-none">

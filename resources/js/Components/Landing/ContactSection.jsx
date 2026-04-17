@@ -55,7 +55,7 @@ const socialLinks = [
 export function ContactSection() {
   return (
     <section id="contact" className="scroll-mt-20 py-16 lg:py-24" style={{ backgroundColor: sectionBg }}>
-      <div className="mx-auto max-w-[1400px] px-6 sm:px-10 lg:px-16">
+      <div className="w-full max-w-none px-6 sm:px-10 lg:px-14 xl:px-16 2xl:px-20">
         <div className="grid gap-12 lg:grid-cols-2 lg:gap-16 xl:gap-20 lg:items-start">
           <div className="max-w-xl">
             <p className="text-base font-medium text-white sm:text-lg">Get in Touch</p>

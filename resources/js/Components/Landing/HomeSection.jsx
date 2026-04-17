@@ -19,7 +19,7 @@ export function HomeSection() {
         style={{ backgroundColor: pageBg }}
       >
         <nav
-          className="mx-auto max-w-[1400px] px-0 py-4"
+          className="w-full max-w-none px-6 py-4 sm:px-10 lg:px-14 xl:px-16 2xl:px-20"
           aria-label="Primary"
         >
           <div className="flex w-full flex-wrap items-center justify-between gap-4">
@@ -56,10 +56,10 @@ export function HomeSection() {
       </header>
 
       <div
-        className="relative z-10 flex min-h-screen flex-col justify-center px-8 pb-28 pt-32 sm:px-12 lg:px-16 lg:pt-28"
+        className="relative z-10 flex min-h-screen w-full max-w-none flex-col justify-center px-6 pb-28 pt-32 sm:px-10 lg:px-14 lg:pt-28 xl:px-16 2xl:px-20"
         style={{ backgroundColor: pageBg }}
       >
-        <div className="mx-auto w-full max-w-[1400px]">
+        <div className="w-full max-w-none">
           <div className="max-w-3xl">
             <h1
               className="mb-6 text-3xl font-bold uppercase leading-[1.15] tracking-tight sm:text-4xl md:text-5xl lg:text-[2.75rem] lg:leading-tight xl:text-5xl"
