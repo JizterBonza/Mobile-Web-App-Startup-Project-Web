@@ -148,7 +148,7 @@ export default function Login() {
                                 {processing ? 'Signing in...' : 'Sign In'}
                             </button>
 
-                            <div className="relative py-2">
+                            <div className="relative py-2" style={{ marginTop: '24px'}}>
                                 <div className="absolute inset-0 flex items-center">
                                     <div className="w-full border-t border-[#E5E7EB]" />
                                 </div>
@@ -232,7 +232,7 @@ export default function Login() {
                         <div className="relative bg-white rounded-2xl border border-[#E5E7EB] max-w-md w-full overflow-hidden max-h-[90vh] flex flex-col shadow-xl">
                             <div className="bg-gradient-to-r from-[#244693] to-[#102059] p-6 shrink-0">
                                 <div className="flex items-center justify-between">
-                                    <h3 className="text-xl font-bold text-white uppercase tracking-wide">
+                                    <h3 className="text-xl font-bold text-white uppercase tracking-wide" style={{color: 'white', fontWeight: 'bold'}}>
                                         Need help?
                                     </h3>
                                     <button
@@ -317,7 +317,7 @@ export default function Login() {
                                         className="flex-1 py-2.5 bg-[#E20E28] hover:bg-[#C00D24] text-white font-semibold text-sm rounded-lg transition-all flex items-center justify-center gap-2"
                                     >
                                         <Send className="w-4 h-4" />
-                                        Submit
+                                        Submit Ticket
                                     </button>
                                 </div>
                             </form>

@@ -48,7 +48,7 @@ export function HomeSection() {
                 href="/admin"
                 className="rounded-[10px] border border-neutral-300/80 bg-white px-5 py-2.5 text-sm font-medium text-neutral-900 shadow-sm transition-[box-shadow,background-color] hover:bg-neutral-50 hover:shadow"
               >
-                Admin Centre
+                Admin Center
               </Link>
             </div>
           </div>
