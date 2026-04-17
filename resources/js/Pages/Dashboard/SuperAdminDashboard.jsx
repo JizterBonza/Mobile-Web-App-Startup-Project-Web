@@ -1,9 +1,4 @@
-import { Menu } from 'lucide-react'
-import KlasmeytDashboardLayout from '../../Layouts/KlasmeytDashboardLayout'
-import {
-    DashboardHeader,
-    SUPER_ADMIN_HEADER_NAV,
-} from '../../Components/Dashboard/DashboardHeader'
+import SuperAdminKlasmeytLayout from '../../Layouts/SuperAdminKlasmeytLayout'
 import { SuperAdminPlatformInsights } from '../../Components/Dashboard/SuperAdminPlatformInsights'
 import { useDashboardSession } from '../../hooks/useDashboardSession'
 
@@ -16,28 +11,10 @@ export default function SuperAdminDashboard({ auth, insights }) {
     const topRiders = insights?.topRiders ?? []
 
     return (
-        <KlasmeytDashboardLayout
+        <SuperAdminKlasmeytLayout
             auth={auth}
             title="Super Admin Dashboard"
-            renderHeader={({ toggleSidebar, sidebarOpen }) => (
-                <DashboardHeader
-                    menuToggle={
-                        <button
-                            type="button"
-                            className="rounded-lg border border-[#E5E7EB] p-2 text-[#6B7280] hover:bg-[#F9FAFB]"
-                            onClick={toggleSidebar}
-                            aria-expanded={sidebarOpen}
-                            aria-label="Toggle sidebar"
-                        >
-                            <Menu className="h-5 w-5" />
-                        </button>
-                    }
-                    navigationItems={SUPER_ADMIN_HEADER_NAV}
-                    notificationCount={insights?.notificationCount ?? 0}
-                    userName={auth.user.name}
-                    userEmail={auth.user.email}
-                />
-            )}
+            notificationCount={insights?.notificationCount ?? 0}
         >
             {!sessionValid && (
                 <div
@@ -55,6 +32,6 @@ export default function SuperAdminDashboard({ auth, insights }) {
                 topStores={topStores}
                 topRiders={topRiders}
             />
-        </KlasmeytDashboardLayout>
+        </SuperAdminKlasmeytLayout>
     )
 }

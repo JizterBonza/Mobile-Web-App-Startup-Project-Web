@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useForm, router, Link } from '@inertiajs/react'
-import AdminLayout from '../../Layouts/AdminLayout'
+import SuperAdminOrAdminLayout from '../../Layouts/SuperAdminOrAdminLayout'
 import PinLocationMap from '../../Components/PinLocationMap'
 
 export default function AgrivetManagement({ auth, agrivets = [], flash }) {
@@ -187,7 +187,7 @@ export default function AgrivetManagement({ auth, agrivets = [], flash }) {
   }
 
   return (
-    <AdminLayout auth={auth} title="Agrivet Management">
+    <SuperAdminOrAdminLayout auth={auth} title="Agrivet Management">
       {/* Flash Messages */}
       {flash?.success && (
         <div className="alert alert-success alert-dismissible fade show" role="alert">
@@ -917,7 +917,7 @@ export default function AgrivetManagement({ auth, agrivets = [], flash }) {
           </div>
         </>
       )}
-    </AdminLayout>
+    </SuperAdminOrAdminLayout>
   )
 }
 

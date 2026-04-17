@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useForm, router } from '@inertiajs/react'
-import AdminLayout from '../../Layouts/AdminLayout'
+import SuperAdminOrAdminLayout from '../../Layouts/SuperAdminOrAdminLayout'
 import ZoneDrawMap from '../../Components/ZoneDrawMap'
 
 export default function ZonesManagement({ auth, zones = [], flash }) {
@@ -150,7 +150,7 @@ export default function ZonesManagement({ auth, zones = [], flash }) {
     )
 
   return (
-    <AdminLayout auth={auth} title="Zones">
+    <SuperAdminOrAdminLayout auth={auth} title="Zones">
       {flash?.success && showSuccessAlert && (
         <div className="alert alert-success alert-dismissible fade show" role="alert">
           <strong>Success!</strong> {flash.success}
@@ -398,6 +398,6 @@ export default function ZonesManagement({ auth, zones = [], flash }) {
           </div>
         </>
       )}
-    </AdminLayout>
+    </SuperAdminOrAdminLayout>
   )
 }

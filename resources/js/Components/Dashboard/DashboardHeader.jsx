@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useForm, usePage } from '@inertiajs/react'
 import { Bell, ChevronDown, LogOut, Settings } from 'lucide-react'
+import primaryLogo from '../../../../Logo/Primary Logo.png'
 
 /**
  * Klasmeyt template: Create Klasmeyt Landing Page (Template) (Copy)/src/app/components/shared/DashboardHeader.tsx
@@ -39,6 +40,8 @@ function initialsFromName(name) {
 
 export function DashboardHeader({
     menuToggle = null,
+    /** Shown next to the menu toggle when the sidebar is open (e.g. desktop collapse control). */
+    sidebarHideToggle = null,
     navigationItems,
     notificationCount = 0,
     userName,
@@ -80,10 +83,12 @@ export function DashboardHeader({
             <div className="flex items-center justify-between px-4 py-3 sm:px-6">
                 <div className="flex min-w-0 flex-shrink-0 items-center gap-2">
                     {menuToggle}
-                    <Link href="/" className="min-w-0">
-                        <h1 className="flex h-10 items-center truncate text-2xl font-bold text-[#102059]">
-                            Klasmeyt
-                        </h1>
+                    <Link href="/" className="flex min-w-0 items-center">
+                        <img
+                            src={primaryLogo}
+                            alt="Klasmeyt"
+                            className="h-12 w-auto max-w-[min(100%,15rem)] object-contain object-left sm:h-14 sm:max-w-[min(100%,18rem)]"
+                        />
                     </Link>
                 </div>
 
@@ -108,12 +113,12 @@ export function DashboardHeader({
                 </nav>
 
                 <div className="flex flex-shrink-0 items-center gap-2 sm:gap-3">
-                    <Link
+                    {/* <Link
                         href="/"
                         className="hidden shrink-0 text-sm font-medium text-[#6B7280] transition-colors hover:text-[#102059] sm:inline"
                     >
                         Back to site
-                    </Link>
+                    </Link> */}
                     <button
                         type="button"
                         onClick={() => setShowNotifications(!showNotifications)}

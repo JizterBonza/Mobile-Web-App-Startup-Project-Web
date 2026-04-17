@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useForm, router, Link } from '@inertiajs/react'
-import AdminLayout from '../../Layouts/AdminLayout'
+import SuperAdminOrAdminLayout from '../../Layouts/SuperAdminOrAdminLayout'
 import PinLocationMap from '../../Components/PinLocationMap'
 
 export default function AgrivetShops({ auth, agrivet, zones = [], shops = [], flash }) {
@@ -191,7 +191,7 @@ export default function AgrivetShops({ auth, agrivet, zones = [], shops = [], fl
   }
 
   return (
-    <AdminLayout auth={auth} title={`Shops - ${agrivet.name}`}>
+    <SuperAdminOrAdminLayout auth={auth} title={`Shops - ${agrivet.name}`}>
       {/* Flash Messages */}
       {flash?.success && (
         <div className="alert alert-success alert-dismissible fade show" role="alert">
@@ -808,6 +808,6 @@ export default function AgrivetShops({ auth, agrivet, zones = [], shops = [], fl
           </div>
         </>
       )}
-    </AdminLayout>
+    </SuperAdminOrAdminLayout>
   )
 }

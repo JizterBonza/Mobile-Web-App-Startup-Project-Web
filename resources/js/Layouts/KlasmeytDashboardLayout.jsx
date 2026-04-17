@@ -1,6 +1,7 @@
 import { Head, Link, useForm } from '@inertiajs/react'
 import { useEffect, useRef, useState } from 'react'
 import { Menu, X } from 'lucide-react'
+import primaryLogo from '../../../Logo/Primary Logo.png'
 
 function dashboardHomePath(userType) {
     switch (userType) {
@@ -47,10 +48,10 @@ function SuperAdminNav({ productOpen, setProductOpen }) {
                 Dashboard
             </NavLink>
             <NavLink href="/dashboard/super-admin/users" iconClass="fas fa-users">
-                User Management
+                Accounts
             </NavLink>
             <NavLink href="/dashboard/super-admin/agrivets" iconClass="fas fa-clinic-medical">
-                Agrivet Management
+                Agrivets
             </NavLink>
             <button
                 type="button"
@@ -58,7 +59,7 @@ function SuperAdminNav({ productOpen, setProductOpen }) {
                 className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium text-white/90 transition-colors hover:bg-white/10"
             >
                 <i className="fas fa-box w-5 text-center text-white/70" />
-                <span className="flex-1">Product Management</span>
+                <span className="flex-1">Products</span>
                 <i className={`fas fa-chevron-${productOpen ? 'up' : 'down'} text-xs text-white/50`} />
             </button>
             {productOpen && (
@@ -188,7 +189,6 @@ export default function KlasmeytDashboardLayout({
             setIsLarge(mq.matches)
         }
         sync()
-        setSidebarOpen(mq.matches)
         const onChange = () => {
             sync()
             if (!mq.matches) {
@@ -243,10 +243,15 @@ export default function KlasmeytDashboardLayout({
                     className={`fixed inset-y-0 left-0 z-40 flex w-72 flex-col border-r border-[#1a2d6e] bg-[#102059] shadow-xl transition-transform duration-200 ease-out ${
                         sidebarOpen ? 'translate-x-0' : '-translate-x-full'
                     }`}
+                    style={{ backgroundColor: 'black'}}
                 >
                     <div className="flex h-16 items-center justify-between border-b border-white/10 px-4">
-                        <Link href="/" className="text-xl font-bold tracking-tight text-white">
-                            Klasmeyt
+                        <Link href="/" className="flex min-w-0 shrink-0 items-center">
+                            <img
+                                src={primaryLogo}
+                                alt="Klasmeyt"
+                                className="h-12 w-auto max-w-[min(100%,15rem)] object-contain object-left" style={{height: '90px'}}
+                            />
                         </Link>
                         <button
                             type="button"

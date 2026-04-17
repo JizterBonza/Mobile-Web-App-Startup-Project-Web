@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useForm, router, Link } from '@inertiajs/react'
-import AdminLayout from '../../Layouts/AdminLayout'
+import SuperAdminOrAdminLayout from '../../Layouts/SuperAdminOrAdminLayout'
 
 export default function AgrivetVendors({ auth, agrivet, shop, vendors = [], availableVendors = [], flash }) {
   const [showAddModal, setShowAddModal] = useState(false)
@@ -206,7 +206,7 @@ export default function AgrivetVendors({ auth, agrivet, shop, vendors = [], avai
   }
 
   return (
-    <AdminLayout auth={auth} title={`Vendors - ${shop.shop_name} (${agrivet.name})`}>
+    <SuperAdminOrAdminLayout auth={auth} title={`Vendors - ${shop.shop_name} (${agrivet.name})`}>
       {/* Flash Messages */}
       {flash?.success && (
         <div className="alert alert-success alert-dismissible fade show" role="alert">
@@ -753,7 +753,7 @@ export default function AgrivetVendors({ auth, agrivet, shop, vendors = [], avai
           </div>
         </>
       )}
-    </AdminLayout>
+    </SuperAdminOrAdminLayout>
   )
 }
 

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useForm, Link } from '@inertiajs/react'
-import AdminLayout from '../../Layouts/AdminLayout'
+import SuperAdminOrAdminLayout from '../../Layouts/SuperAdminOrAdminLayout'
 
 export default function Settings({ auth, userData, flash }) {
   const [showCurrentPassword, setShowCurrentPassword] = useState(false)
@@ -47,7 +47,7 @@ export default function Settings({ auth, userData, flash }) {
   }
 
   return (
-    <AdminLayout auth={auth} title="Settings">
+    <SuperAdminOrAdminLayout auth={auth} title="Settings">
       {/* Success Alert */}
       {flash?.success && (
         <div className="alert alert-success alert-dismissible fade show">
@@ -320,7 +320,7 @@ export default function Settings({ auth, userData, flash }) {
           </div>
         </div>
       </div>
-    </AdminLayout>
+    </SuperAdminOrAdminLayout>
   )
 }
 

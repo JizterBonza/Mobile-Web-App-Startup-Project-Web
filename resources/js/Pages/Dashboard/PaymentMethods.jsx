@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useForm, router } from '@inertiajs/react'
-import AdminLayout from '../../Layouts/AdminLayout'
+import SuperAdminOrAdminLayout from '../../Layouts/SuperAdminOrAdminLayout'
 
 export default function PaymentMethods({ auth, paymentMethods = [], flash }) {
   const [showAddModal, setShowAddModal] = useState(false)
@@ -160,7 +160,7 @@ export default function PaymentMethods({ auth, paymentMethods = [], flash }) {
   const baseRoute = getBaseRoute()
 
   return (
-    <AdminLayout auth={auth} title="Payment Methods">
+    <SuperAdminOrAdminLayout auth={auth} title="Payment Methods">
       {flash?.success && showSuccessAlert && (
         <div className="alert alert-success alert-dismissible fade show" role="alert">
           <strong>Success!</strong> {flash.success}
@@ -453,6 +453,6 @@ export default function PaymentMethods({ auth, paymentMethods = [], flash }) {
           </div>
         </>
       )}
-    </AdminLayout>
+    </SuperAdminOrAdminLayout>
   )
 }

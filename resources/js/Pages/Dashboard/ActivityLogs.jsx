@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { router } from '@inertiajs/react'
-import AdminLayout from '../../Layouts/AdminLayout'
+import SuperAdminOrAdminLayout from '../../Layouts/SuperAdminOrAdminLayout'
 
 export default function ActivityLogs({ auth, activityLogs, filters = {} }) {
   const [action, setAction] = useState(filters.action ?? '')
@@ -51,7 +51,7 @@ export default function ActivityLogs({ auth, activityLogs, filters = {} }) {
   const hasFilters = action || subjectType || fromDate || toDate || userId
 
   return (
-    <AdminLayout auth={auth} title="Activity Logs">
+    <SuperAdminOrAdminLayout auth={auth} title="Activity Logs">
       <div className="row">
         <div className="col-12">
           <div className="card card-outline card-primary mb-3">
@@ -299,6 +299,6 @@ export default function ActivityLogs({ auth, activityLogs, filters = {} }) {
           </div>
         </>
       )}
-    </AdminLayout>
+    </SuperAdminOrAdminLayout>
   )
 }

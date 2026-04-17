@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useForm, router } from '@inertiajs/react'
-import AdminLayout from '../../Layouts/AdminLayout'
+import SuperAdminOrAdminLayout from '../../Layouts/SuperAdminOrAdminLayout'
 
 export default function Categories({ auth, categories = [], flash }) {
   const [showAddModal, setShowAddModal] = useState(false)
@@ -170,7 +170,7 @@ export default function Categories({ auth, categories = [], flash }) {
   const baseRoute = getBaseRoute()
 
   return (
-    <AdminLayout auth={auth} title="Categories">
+    <SuperAdminOrAdminLayout auth={auth} title="Categories">
       {/* Flash Messages */}
       {flash?.success && showSuccessAlert && (
         <div className="alert alert-success alert-dismissible fade show" role="alert">
@@ -475,6 +475,6 @@ export default function Categories({ auth, categories = [], flash }) {
           </div>
         </>
       )}
-    </AdminLayout>
+    </SuperAdminOrAdminLayout>
   )
 }

@@ -3,7 +3,7 @@ import { useState, useRef, useEffect } from 'react'
 
 export default function AdminLayout({ children, auth, title = 'Dashboard' }) {
   const { post } = useForm();
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
   const profileDropdownRef = useRef(null);
 
@@ -211,75 +211,7 @@ export default function AdminLayout({ children, auth, title = 'Dashboard' }) {
             {/* Sidebar Menu */}
             <nav className="mt-2">
               <ul className="nav nav-pills nav-sidebar flex-column" data-widget="treeview" role="menu" data-accordion="false">
-                {auth.user.user_type === 'super_admin' ? (
-                  <>
-                    <li className="nav-item">
-                      <Link href="/dashboard/super-admin" className="nav-link">
-                        <i className="nav-icon fas fa-tachometer-alt"></i>
-                        <p>Dashboard</p>
-                      </Link>
-                    </li>
-                    <li className="nav-item">
-                      <Link href="/dashboard/super-admin/users" className="nav-link">
-                        <i className="nav-icon fas fa-users"></i>
-                        <p>User Management</p>
-                      </Link>
-                    </li>
-                    <li className="nav-item">
-                      <Link href="/dashboard/super-admin/agrivets" className="nav-link">
-                        <i className="nav-icon fas fa-clinic-medical"></i>
-                        <p>Agrivet Management</p>
-                      </Link>
-                    </li>
-                    <li className="nav-item">
-                      <a href="#" className="nav-link" onClick={handleMenuToggle}>
-                        <i className="nav-icon fas fa-box"></i>
-                        <p>
-                          Product Management
-                          <i className="right fas fa-angle-left"></i>
-                        </p>
-                      </a>
-                      <ul className="nav nav-treeview">
-                        <li className="nav-item">
-                          <Link href="/dashboard/super-admin/categories" className="nav-link">
-                            <i className="far fa-circle nav-icon"></i>
-                            <p>Categories</p>
-                          </Link>
-                        </li>
-                        <li className="nav-item">
-                          <Link href="/dashboard/super-admin/sub-categories" className="nav-link">
-                            <i className="far fa-circle nav-icon"></i>
-                            <p>Sub-Categories</p>
-                          </Link>
-                        </li>
-                      </ul>
-                    </li>
-                    <li className="nav-item">
-                      <Link href="/dashboard/super-admin/activity-logs" className="nav-link">
-                        <i className="nav-icon fas fa-history"></i>
-                        <p>Activity Logs</p>
-                      </Link>
-                    </li>
-                    <li className="nav-item">
-                      <Link href="/dashboard/super-admin/payment-methods" className="nav-link">
-                        <i className="nav-icon fas fa-credit-card"></i>
-                        <p>Payment Methods</p>
-                      </Link>
-                    </li>
-                    <li className="nav-item">
-                      <Link href="/dashboard/super-admin/delivery-methods" className="nav-link">
-                        <i className="nav-icon fas fa-truck"></i>
-                        <p>Delivery Methods</p>
-                      </Link>
-                    </li>
-                    <li className="nav-item">
-                      <Link href="/dashboard/super-admin/zones" className="nav-link">
-                        <i className="nav-icon fas fa-map-marked-alt"></i>
-                        <p>Zones</p>
-                      </Link>
-                    </li>
-                  </>
-                ) : auth.user.user_type === 'admin' ? (
+                {auth.user.user_type === 'admin' ? (
                   <>
                     <li className="nav-item">
                       <Link href="/dashboard/admin" className="nav-link">
