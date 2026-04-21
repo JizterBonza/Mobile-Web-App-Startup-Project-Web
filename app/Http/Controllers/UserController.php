@@ -45,9 +45,21 @@ class UserController extends Controller
                 ];
             });
 
-        return Inertia::render('Dashboard/UserManagement', [
+        return Inertia::render('Dashboard/Accounts', [
             'users' => $users,
         ]);
+    }
+
+    /**
+     * Placeholder for the template "Clear All Data" action (demo localStorage wipe).
+     * A full platform reset is environment-specific and is not executed here.
+     */
+    public function clearAllPlatformData()
+    {
+        return redirect()->back()->with(
+            'error',
+            'Bulk platform data reset is not enabled for this installation. Use database maintenance tools if you need a full reset.',
+        );
     }
 
     /**

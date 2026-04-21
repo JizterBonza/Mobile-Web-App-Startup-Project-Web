@@ -91,7 +91,7 @@ function AdminNav({ productOpen, setProductOpen }) {
                 Dashboard
             </NavLink>
             <NavLink href="/dashboard/admin/users" iconClass="fas fa-users">
-                User Management
+                Accounts
             </NavLink>
             <NavLink href="/dashboard/admin/agrivets" iconClass="fas fa-clinic-medical">
                 Agrivet Management
@@ -222,14 +222,6 @@ export default function KlasmeytDashboardLayout({
         <>
             <Head title={title} />
             <div className="klasmeyt-landing min-h-screen bg-[#F8F9FB]">
-                <div
-                    className="pointer-events-none fixed inset-0 opacity-[0.04]"
-                    style={{
-                        backgroundImage: `repeating-linear-gradient(0deg, #102059 0px, #102059 1px, transparent 1px, transparent 20px),
-                           repeating-linear-gradient(90deg, #102059 0px, #102059 1px, transparent 1px, transparent 20px)`,
-                    }}
-                />
-
                 {sidebarOpen && !isLarge && (
                     <button
                         type="button"
