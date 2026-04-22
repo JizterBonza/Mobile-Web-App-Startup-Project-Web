@@ -29,6 +29,7 @@ class Shop extends Model
         'shop_address',
         'shop_city',
         'shop_postal_code',
+        'shop_province',
         'shop_lat',
         'shop_long',
         'contact_number',

@@ -24,8 +24,12 @@ class CheckUserType
 
         $user = Auth::user();
 
-        // Check if user has the required user type
-        if (!$user->user_type || $user->user_type !== $userType) {
+        $allowedTypes = str_contains($userType, '|')
+            ? array_map('trim', explode('|', $userType))
+            : [$userType];
+
+        // Check if user has one of the allowed user types
+        if (!$user->user_type || ! in_array($user->user_type, $allowedTypes, true)) {
             // Redirect to user's own dashboard if they try to access another type's dashboard
             return redirect($user->getDashboardUrl())->with('error', 'You do not have permission to access that page.');
         }

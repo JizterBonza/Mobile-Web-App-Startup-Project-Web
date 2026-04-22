@@ -54,6 +54,8 @@ Route::middleware(['auth', 'session.valid', 'user.type:super_admin'])->prefix('d
 // Agrivet Management Routes
 Route::middleware(['auth', 'session.valid', 'user.type:super_admin'])->prefix('dashboard/super-admin/agrivets')->name('dashboard.super-admin.agrivets.')->group(function () {
     Route::get('/', [AgrivetController::class, 'index'])->name('index');
+    Route::get('/create', [AgrivetController::class, 'create'])->name('create');
+    Route::post('/setup-wizard', [AgrivetController::class, 'storeSetupWizard'])->name('setup-wizard.store');
     Route::post('/', [AgrivetController::class, 'store'])->name('store');
     
     // Shop Routes (must come before /{id} routes)
@@ -134,6 +136,8 @@ Route::middleware(['auth', 'session.valid', 'user.type:admin'])->prefix('dashboa
 // Admin Agrivet Management Routes
 Route::middleware(['auth', 'session.valid', 'user.type:admin'])->prefix('dashboard/admin/agrivets')->name('dashboard.admin.agrivets.')->group(function () {
     Route::get('/', [AgrivetController::class, 'index'])->name('index');
+    Route::get('/create', [AgrivetController::class, 'create'])->name('create');
+    Route::post('/setup-wizard', [AgrivetController::class, 'storeSetupWizard'])->name('setup-wizard.store');
     Route::post('/', [AgrivetController::class, 'store'])->name('store');
     
     // Shop Routes (must come before /{id} routes)
@@ -200,11 +204,11 @@ Route::middleware(['auth', 'session.valid', 'user.type:admin'])->prefix('dashboa
 });
 
 Route::get('/dashboard/vendor', [VendorController::class, 'index'])
-    ->middleware(['auth', 'session.valid', 'user.type:vendor'])
+    ->middleware(['auth', 'session.valid', 'user.type:vendor|owner_manager'])
     ->name('dashboard.vendor');
 
-// Vendor Management Routes
-Route::middleware(['auth', 'session.valid', 'user.type:vendor'])->prefix('dashboard/vendor')->name('dashboard.vendor.')->group(function () {
+// Vendor Management Routes (store owners who log in as vendor or owner_manager)
+Route::middleware(['auth', 'session.valid', 'user.type:vendor|owner_manager'])->prefix('dashboard/vendor')->name('dashboard.vendor.')->group(function () {
     // Store Management
     Route::get('/store', [VendorController::class, 'storeIndex'])->name('store.index');
     Route::post('/store', [VendorController::class, 'storeUpdate'])->name('store.update');

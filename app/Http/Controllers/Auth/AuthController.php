@@ -114,6 +114,13 @@ class AuthController extends Controller
             }
         }
 
+        // Owner/manager accounts must be linked to their Agrivet
+        if ($user->user_type === User::TYPE_OWNER_MANAGER && ! $user->agrivet_id) {
+            throw ValidationException::withMessages([
+                'email' => 'Your owner/manager account is not linked to an Agrivet. Please contact support.',
+            ]);
+        }
+
         // Login the user
         Auth::login($user, $request->boolean('remember'));
         

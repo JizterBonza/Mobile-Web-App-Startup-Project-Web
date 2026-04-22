@@ -13,6 +13,7 @@ export default function StoreManagement({ auth, shop, agrivet, flash }) {
     shop_name: shop?.shop_name || '',
     shop_description: shop?.shop_description || '',
     shop_address: shop?.shop_address || '',
+    shop_province: shop?.shop_province || '',
     shop_lat: shop?.shop_lat || '',
     shop_long: shop?.shop_long || '',
     contact_number: shop?.contact_number || '',
@@ -118,6 +119,9 @@ export default function StoreManagement({ auth, shop, agrivet, flash }) {
                       
                       <dt className="col-sm-4">Address:</dt>
                       <dd className="col-sm-8">{shop.shop_address || <span className="text-muted">N/A</span>}</dd>
+                      
+                      <dt className="col-sm-4">Province:</dt>
+                      <dd className="col-sm-8">{shop.shop_province || <span className="text-muted">N/A</span>}</dd>
                       
                       <dt className="col-sm-4">Contact Number:</dt>
                       <dd className="col-sm-8">{shop.contact_number || <span className="text-muted">N/A</span>}</dd>
@@ -283,6 +287,19 @@ export default function StoreManagement({ auth, shop, agrivet, flash }) {
                         placeholder="Enter shop address"
                         error={form.errors.shop_address}
                       />
+                    </div>
+                    <div className="form-group">
+                      <label>Province</label>
+                      <input
+                        type="text"
+                        className={`form-control ${form.errors.shop_province ? 'is-invalid' : ''}`}
+                        value={form.data.shop_province}
+                        onChange={(e) => form.setData('shop_province', e.target.value)}
+                        placeholder="Province"
+                      />
+                      {form.errors.shop_province && (
+                        <div className="invalid-feedback">{form.errors.shop_province}</div>
+                      )}
                     </div>
                     <div className="row">
                       <div className="col-md-6">

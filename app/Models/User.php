@@ -24,6 +24,7 @@ class User extends Authenticatable
     const TYPE_VETERINARIAN = 'veterinarian';
     const TYPE_CUSTOMER = 'customer';
     const TYPE_RIDER = 'rider';
+    const TYPE_OWNER_MANAGER = 'owner_manager';
 
     /**
      * The attributes that are mass assignable.
@@ -35,6 +36,7 @@ class User extends Authenticatable
         'user_credential_id',
         'status',
         'user_type',
+        'agrivet_id',
     ];
 
     /**
@@ -84,9 +86,18 @@ class User extends Authenticatable
             self::TYPE_SUPER_ADMIN => '/dashboard/super-admin',
             self::TYPE_ADMIN => '/dashboard/admin',
             self::TYPE_VENDOR => '/dashboard/vendor',
+            self::TYPE_OWNER_MANAGER => '/dashboard/vendor',
             self::TYPE_VETERINARIAN => '/dashboard/veterinarian',
             default => '/dashboard',
         };
+    }
+
+    /**
+     * Agrivet this owner/manager account manages (stores under this business).
+     */
+    public function managedAgrivet()
+    {
+        return $this->belongsTo(Agrivet::class, 'agrivet_id');
     }
 
     /**

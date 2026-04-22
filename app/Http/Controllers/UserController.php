@@ -22,9 +22,9 @@ class UserController extends Controller
         $currentUser = auth()->user();
         $query = User::with(['userDetail', 'userCredential']);
 
-        // If current user is Admin, filter to show only Vendors, Veterinarians, and Riders
+        // If current user is Admin, filter to show only operational roles they manage
         if ($currentUser->user_type === 'admin') {
-            $query->whereIn('user_type', ['vendor', 'veterinarian', 'rider']);
+            $query->whereIn('user_type', ['vendor', 'veterinarian', 'rider', 'owner_manager']);
         }
 
         $users = $query->orderBy('created_at', 'desc')
@@ -70,10 +70,10 @@ class UserController extends Controller
         $currentUser = auth()->user();
         
         // Determine allowed user types based on current user's role
-        $allowedUserTypes = ['super_admin', 'admin', 'vendor', 'veterinarian', 'customer', 'rider'];
+        $allowedUserTypes = ['super_admin', 'admin', 'vendor', 'veterinarian', 'customer', 'rider', 'owner_manager'];
         if ($currentUser->user_type === 'admin') {
-            // Admin can only create Vendors, Veterinarians, and Riders
-            $allowedUserTypes = ['vendor', 'veterinarian', 'rider'];
+            // Admin can only create Vendors, Veterinarians, Riders, and Owner/Managers
+            $allowedUserTypes = ['vendor', 'veterinarian', 'rider', 'owner_manager'];
         }
 
         $request->validate([
@@ -159,10 +159,10 @@ class UserController extends Controller
         }
 
         // Determine allowed user types based on current user's role
-        $allowedUserTypes = ['super_admin', 'admin', 'vendor', 'veterinarian', 'customer', 'rider'];
+        $allowedUserTypes = ['super_admin', 'admin', 'vendor', 'veterinarian', 'customer', 'rider', 'owner_manager'];
         if ($currentUser->user_type === 'admin') {
-            // Admin can only update to Vendors, Veterinarians, and Riders
-            $allowedUserTypes = ['vendor', 'veterinarian', 'rider'];
+            // Admin can only update to Vendors, Veterinarians, Riders, and Owner/Managers
+            $allowedUserTypes = ['vendor', 'veterinarian', 'rider', 'owner_manager'];
         }
 
         $request->validate([

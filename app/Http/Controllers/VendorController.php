@@ -24,13 +24,19 @@ class VendorController extends Controller
      */
     private function getVendorShop()
     {
-        $vendor = auth()->user();
+        $user = auth()->user();
+
+        if ($user->user_type === User::TYPE_OWNER_MANAGER && $user->agrivet_id) {
+            return Shop::where('agrivet_id', $user->agrivet_id)->orderBy('id')->first();
+        }
+
+        $vendor = $user;
         $vendor->load('shops');
-        
+
         if ($vendor->shops->isEmpty()) {
             return null;
         }
-        
+
         // Get the first active shop (vendors typically have one)
         return $vendor->shops->first();
     }
@@ -54,13 +60,19 @@ class VendorController extends Controller
      */
     private function getVendorShopWithAgrivet()
     {
-        $vendor = auth()->user();
+        $user = auth()->user();
+
+        if ($user->user_type === User::TYPE_OWNER_MANAGER && $user->agrivet_id) {
+            return Shop::with('agrivet')->where('agrivet_id', $user->agrivet_id)->orderBy('id')->first();
+        }
+
+        $vendor = $user;
         $vendor->load(['shops.agrivet']);
-        
+
         if ($vendor->shops->isEmpty()) {
             return null;
         }
-        
+
         return $vendor->shops->first();
     }
 
@@ -146,6 +158,7 @@ class VendorController extends Controller
                 'shop_name' => $shop->shop_name,
                 'shop_description' => $shop->shop_description,
                 'shop_address' => $shop->shop_address,
+                'shop_province' => $shop->shop_province,
                 'shop_lat' => $shop->shop_lat,
                 'shop_long' => $shop->shop_long,
                 'contact_number' => $shop->contact_number,
@@ -183,6 +196,7 @@ class VendorController extends Controller
             'shop_name' => 'required|string|max:150',
             'shop_description' => 'nullable|string',
             'shop_address' => 'nullable|string|max:255',
+            'shop_province' => 'nullable|string|max:100',
             'shop_lat' => 'nullable|numeric',
             'shop_long' => 'nullable|numeric',
             'contact_number' => 'nullable|string|max:20',
@@ -193,6 +207,7 @@ class VendorController extends Controller
             'shop_name' => $request->shop_name,
             'shop_description' => $request->shop_description,
             'shop_address' => $request->shop_address,
+            'shop_province' => $request->shop_province,
             'shop_lat' => $request->shop_lat,
             'shop_long' => $request->shop_long,
             'contact_number' => $request->contact_number,

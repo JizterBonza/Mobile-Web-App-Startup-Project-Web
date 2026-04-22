@@ -37,6 +37,7 @@ export default function AgrivetShops({ auth, agrivet, zones = [], shops = [], fl
     shop_description: '',
     shop_address: '',
     shop_city: '',
+    shop_province: '',
     shop_postal_code: '',
     shop_lat: '',
     shop_long: '',
@@ -49,6 +50,7 @@ export default function AgrivetShops({ auth, agrivet, zones = [], shops = [], fl
     shop_description: '',
     shop_address: '',
     shop_city: '',
+    shop_province: '',
     shop_postal_code: '',
     shop_lat: '',
     shop_long: '',
@@ -145,6 +147,7 @@ export default function AgrivetShops({ auth, agrivet, zones = [], shops = [], fl
       shop_description: shop.shop_description || '',
       shop_address: shop.shop_address || '',
       shop_city: shop.shop_city || '',
+      shop_province: shop.shop_province || '',
       shop_postal_code: shop.shop_postal_code || '',
       shop_lat: shop.shop_lat || '',
       shop_long: shop.shop_long || '',
@@ -245,6 +248,7 @@ export default function AgrivetShops({ auth, agrivet, zones = [], shops = [], fl
                     <th>Shop Name</th>
                     <th>Zone</th>
                     <th>Address</th>
+                    <th>Province</th>
                     <th>Contact</th>
                     <th>Vendors</th>
                     <th>Rating</th>
@@ -256,7 +260,7 @@ export default function AgrivetShops({ auth, agrivet, zones = [], shops = [], fl
                 <tbody>
                   {shops.length === 0 ? (
                     <tr>
-                      <td colSpan="10" className="text-center">No shops found</td>
+                      <td colSpan="11" className="text-center">No shops found</td>
                     </tr>
                   ) : (
                     shops.map((shop) => (
@@ -265,6 +269,7 @@ export default function AgrivetShops({ auth, agrivet, zones = [], shops = [], fl
                         <td>{shop.shop_name}</td>
                         <td>{shop.zone_name ? <span className="badge badge-secondary">{shop.zone_name}</span> : '-'}</td>
                         <td>{shop.shop_address || '-'}</td>
+                        <td>{shop.shop_province || '-'}</td>
                         <td>{shop.contact_number || '-'}</td>
                         <td>
                           <span className="badge badge-info">{shop.vendors_count || 0} vendor(s)</span>
@@ -390,9 +395,14 @@ export default function AgrivetShops({ auth, agrivet, zones = [], shops = [], fl
                             initialLng={addForm.data.shop_long ? parseFloat(addForm.data.shop_long) : undefined}
                             initialAddress={addForm.data.shop_address}
                             initialCity={addForm.data.shop_city}
+                            initialProvince={addForm.data.shop_province}
                             initialPostalCode={addForm.data.shop_postal_code}
                             onLocationSelect={(loc) => {
                               addForm.setData({
+                                shop_address: loc.address ?? '',
+                                shop_city: loc.city ?? '',
+                                shop_province: loc.province ?? '',
+                                shop_postal_code: loc.postal_code ?? '',
                                 shop_lat: loc.latitude,
                                 shop_long: loc.longitude,
                               })
@@ -406,7 +416,7 @@ export default function AgrivetShops({ auth, agrivet, zones = [], shops = [], fl
                       </div>
                     </div>
                     <div className="row">
-                      <div className="col-md-6">
+                      <div className="col-md-12">
                         <div className="form-group">
                           <label>Address</label>
                           <input
@@ -421,7 +431,9 @@ export default function AgrivetShops({ auth, agrivet, zones = [], shops = [], fl
                           )}
                         </div>
                       </div>
-                      <div className="col-md-3">
+                    </div>
+                    <div className="row">
+                      <div className="col-md-4">
                         <div className="form-group">
                           <label>City</label>
                           <input
@@ -436,7 +448,22 @@ export default function AgrivetShops({ auth, agrivet, zones = [], shops = [], fl
                           )}
                         </div>
                       </div>
-                      <div className="col-md-3">
+                      <div className="col-md-4">
+                        <div className="form-group">
+                          <label>Province</label>
+                          <input
+                            type="text"
+                            className={`form-control ${addForm.errors.shop_province ? 'is-invalid' : ''}`}
+                            value={addForm.data.shop_province}
+                            onChange={(e) => addForm.setData('shop_province', e.target.value)}
+                            placeholder="Enter province"
+                          />
+                          {addForm.errors.shop_province && (
+                            <div className="invalid-feedback">{addForm.errors.shop_province}</div>
+                          )}
+                        </div>
+                      </div>
+                      <div className="col-md-4">
                         <div className="form-group">
                           <label>Postal Code</label>
                           <input
@@ -600,11 +627,13 @@ export default function AgrivetShops({ auth, agrivet, zones = [], shops = [], fl
                             shopLocations={shopsForMap}
                             initialAddress={editForm.data.shop_address}
                             initialCity={editForm.data.shop_city}
+                            initialProvince={editForm.data.shop_province}
                             initialPostalCode={editForm.data.shop_postal_code}
                             onLocationSelect={(loc) => {
                               editForm.setData({
                                 shop_address: loc.address,
                                 shop_city: loc.city ?? '',
+                                shop_province: loc.province ?? '',
                                 shop_postal_code: loc.postal_code ?? '',
                                 shop_lat: loc.latitude,
                                 shop_long: loc.longitude,
@@ -617,7 +646,7 @@ export default function AgrivetShops({ auth, agrivet, zones = [], shops = [], fl
                       </div>
                     </div>
                     <div className="row">
-                      <div className="col-md-6">
+                      <div className="col-md-12">
                         <div className="form-group">
                           <label>Address</label>
                           <input
@@ -633,7 +662,9 @@ export default function AgrivetShops({ auth, agrivet, zones = [], shops = [], fl
                           )}
                         </div>
                       </div>
-                      <div className="col-md-3">
+                    </div>
+                    <div className="row">
+                      <div className="col-md-4">
                         <div className="form-group">
                           <label>City</label>
                           <input
@@ -648,7 +679,22 @@ export default function AgrivetShops({ auth, agrivet, zones = [], shops = [], fl
                           )}
                         </div>
                       </div>
-                      <div className="col-md-3">
+                      <div className="col-md-4">
+                        <div className="form-group">
+                          <label>Province</label>
+                          <input
+                            type="text"
+                            className={`form-control ${editForm.errors.shop_province ? 'is-invalid' : ''}`}
+                            value={editForm.data.shop_province}
+                            onChange={(e) => editForm.setData('shop_province', e.target.value)}
+                            placeholder="Auto-filled or enter province"
+                          />
+                          {editForm.errors.shop_province && (
+                            <div className="invalid-feedback">{editForm.errors.shop_province}</div>
+                          )}
+                        </div>
+                      </div>
+                      <div className="col-md-4">
                         <div className="form-group">
                           <label>Postal Code</label>
                           <input

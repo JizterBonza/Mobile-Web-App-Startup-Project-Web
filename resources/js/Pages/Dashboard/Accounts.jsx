@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Head, useForm, router } from '@inertiajs/react'
 import {
     Bike,
+    Building2,
     Database,
     Pencil,
     Plus,
@@ -19,16 +20,39 @@ import KlasmeytDashboardLayout from '../../Layouts/KlasmeytDashboardLayout'
 import SuperAdminKlasmeytLayout from '../../Layouts/SuperAdminKlasmeytLayout'
 import { useDashboardSession } from '../../hooks/useDashboardSession'
 
-const ROLE_ORDER = ['super_admin', 'admin', 'vendor', 'veterinarian', 'customer', 'rider']
+const ROLE_ORDER = ['super_admin', 'admin', 'vendor', 'owner_manager', 'veterinarian', 'customer', 'rider']
 
 const ROLE_META = {
     super_admin: { label: 'Super Admin', Icon: Shield, iconBg: 'bg-[#244693]' },
     admin: { label: 'Admin', Icon: UserCog, iconBg: 'bg-[#102059]' },
     vendor: { label: 'Vendor', Icon: Store, iconBg: 'bg-[#D3A218]' },
+    owner_manager: { label: 'Owner / Manager', Icon: Building2, iconBg: 'bg-[#102059]' },
     veterinarian: { label: 'Veterinarian', Icon: Stethoscope, iconBg: 'bg-[#102059]' },
     customer: { label: 'Customer', Icon: UsersRound, iconBg: 'bg-[#6B7280]' },
     rider: { label: 'Rider', Icon: Bike, iconBg: 'bg-[#244693]' },
     other: { label: 'Other', Icon: Users, iconBg: 'bg-[#9CA3AF]' },
+}
+
+/** Short blurbs for the create-account role picker (aligned with SuperAdminDashboard template) */
+const CREATE_ROLE_DESCRIPTIONS = {
+    super_admin: 'Full platform access and management',
+    admin: 'Administrative access to manage operations',
+    vendor: 'Product vendor or store owner',
+    owner_manager: 'Manages an Agrivet business and its stores (dashboard login)',
+    veterinarian: 'Licensed veterinary professional',
+    customer: 'End customer account',
+    rider: 'Delivery and logistics personnel',
+}
+
+/** Icon colors on role cards (matches SuperAdminDashboard picker styling) */
+const ROLE_PICKER_ICON_CLASS = {
+    super_admin: 'text-[#244693]',
+    admin: 'text-[#244693]',
+    vendor: 'text-[#D3A218]',
+    owner_manager: 'text-[#102059]',
+    veterinarian: 'text-[#102059]',
+    customer: 'text-[#6B7280]',
+    rider: 'text-[#244693]',
 }
 
 function StatDot({ active }) {
@@ -98,6 +122,7 @@ export default function Accounts({ auth, users = [], flash }) {
     const clearAllForm = useForm({})
 
     const [showClearAllDataModal, setShowClearAllDataModal] = useState(false)
+    const [showRoleSelectionModal, setShowRoleSelectionModal] = useState(false)
     const [showAddModal, setShowAddModal] = useState(false)
     const [showAddModalAnimation, setShowAddModalAnimation] = useState(false)
     const [showEditModal, setShowEditModal] = useState(false)
@@ -156,6 +181,7 @@ export default function Accounts({ auth, users = [], flash }) {
         if (auth?.user?.user_type === 'admin') {
             return [
                 { value: 'vendor', label: 'Vendor' },
+                { value: 'owner_manager', label: 'Owner / Manager' },
                 { value: 'veterinarian', label: 'Veterinarian' },
                 { value: 'rider', label: 'Rider' },
             ]
@@ -164,6 +190,7 @@ export default function Accounts({ auth, users = [], flash }) {
             { value: 'super_admin', label: 'Super Admin' },
             { value: 'admin', label: 'Admin' },
             { value: 'vendor', label: 'Vendor' },
+            { value: 'owner_manager', label: 'Owner / Manager' },
             { value: 'veterinarian', label: 'Veterinarian' },
             { value: 'customer', label: 'Customer' },
             { value: 'rider', label: 'Rider' },
@@ -176,7 +203,22 @@ export default function Accounts({ auth, users = [], flash }) {
     const getBaseRoute = () =>
         auth?.user?.user_type === 'admin' ? '/dashboard/admin/users' : '/dashboard/super-admin/users'
 
+    const getAddAgrivetUrl = () =>
+        auth?.user?.user_type === 'admin' ? '/dashboard/admin/agrivets/create' : '/dashboard/super-admin/agrivets/create'
+
+    const handleNavigateToAddAgrivet = () => {
+        setShowRoleSelectionModal(false)
+        router.visit(getAddAgrivetUrl())
+    }
+
     const handleOpenCreateAccount = () => {
+        addForm.reset()
+        setShowRoleSelectionModal(true)
+    }
+
+    const handleSelectCreateRole = (userTypeValue) => {
+        setShowRoleSelectionModal(false)
+        addForm.setData('user_type', userTypeValue)
         setShowAddModal(true)
         setShowAddModalAnimation(false)
     }
@@ -766,6 +808,92 @@ export default function Accounts({ auth, users = [], flash }) {
                     </div>
                 </div>
             </div>
+
+            {/* Role Selection Modal for Create Account — matches Klasmeyt SuperAdminDashboard template */}
+            {showRoleSelectionModal && (
+                <div
+                    className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+                    role="presentation"
+                    onClick={() => setShowRoleSelectionModal(false)}
+                >
+                    <div
+                        className="w-full max-w-2xl rounded-lg border border-[#E5E7EB] bg-white p-6"
+                        role="dialog"
+                        aria-modal="true"
+                        aria-labelledby="role-selection-title"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div className="mb-6 flex items-center justify-between">
+                            <h3
+                                id="role-selection-title"
+                                className="text-lg font-semibold text-[#102059]"
+                                style={{ fontFamily: 'Inter Condensed, sans-serif' }}
+                            >
+                                Select Account Role
+                            </h3>
+                            <button
+                                type="button"
+                                onClick={() => setShowRoleSelectionModal(false)}
+                                className="rounded p-1 transition-colors hover:bg-[#F8F9FB]"
+                            >
+                                <X className="h-5 w-5 text-[#6B7280]" />
+                            </button>
+                        </div>
+                        <p className="mb-6 text-sm text-[#6B7280]">Choose the type of account you want to create:</p>
+                        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                            
+                            {(auth?.user?.user_type === 'super_admin' || auth?.user?.user_type === 'admin') && (
+                                <button
+                                    type="button"
+                                    onClick={handleNavigateToAddAgrivet}
+                                    className="group flex items-start gap-4 rounded-lg border border-[#E5E7EB] p-4 text-left transition-all hover:border-[#102059] hover:bg-[#F8F9FB]"
+                                >
+                                    <div className="rounded-lg bg-[#F8F9FB] p-2 transition-colors group-hover:bg-[#102059]">
+                                        <Building2 className="h-6 w-6 text-[#E20E28] transition-colors group-hover:text-white" />
+                                    </div>
+                                    <div className="min-w-0 flex-1">
+                                        <h4
+                                            className="mb-1 font-semibold text-[#102059]"
+                                            style={{ fontFamily: 'Inter Condensed, sans-serif' }}
+                                        >
+                                            Agrivet
+                                        </h4>
+                                        <p className="text-xs text-[#6B7280]">Agrivet store owner and manager — full onboarding wizard</p>
+                                    </div>
+                                </button>
+                            )}
+                            {userTypes.map(({ value, label }) => {
+                                const meta = ROLE_META[value] || ROLE_META.other
+                                const Icon = meta.Icon
+                                const blurb = CREATE_ROLE_DESCRIPTIONS[value] || 'Create this account type'
+                                return (
+                                    <button
+                                        key={value}
+                                        type="button"
+                                        onClick={() => handleSelectCreateRole(value)}
+                                        className="group flex items-start gap-4 rounded-lg border border-[#E5E7EB] p-4 text-left transition-all hover:border-[#102059] hover:bg-[#F8F9FB]"
+                                    >
+                                        <div className="rounded-lg bg-[#F8F9FB] p-2 transition-colors group-hover:bg-[#102059]">
+                                            <Icon
+                                                className={`h-6 w-6 transition-colors group-hover:text-white ${ROLE_PICKER_ICON_CLASS[value] || 'text-[#244693]'}`}
+                                            />
+                                        </div>
+                                        <div className="min-w-0 flex-1">
+                                            <h4
+                                                className="mb-1 font-semibold text-[#102059]"
+                                                style={{ fontFamily: 'Inter Condensed, sans-serif' }}
+                                            >
+                                                {label}
+                                            </h4>
+                                            <p className="text-xs text-[#6B7280]">{blurb}</p>
+                                        </div>
+                                    </button>
+                                )
+                            })}
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Add modal */}
             {showAddModal && (
