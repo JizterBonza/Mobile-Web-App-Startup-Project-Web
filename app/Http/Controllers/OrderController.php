@@ -8,6 +8,7 @@ use App\Models\OrderItem;
 use App\Models\OrderShop;
 use App\Models\Item;
 use App\Models\Cart;
+use App\Models\HandlingFeeSetting;
 use App\Models\Notification;
 use App\Models\ProofOfDelivery;
 use App\Models\OrderStatus;
@@ -314,6 +315,7 @@ class OrderController extends Controller
         return DB::transaction(function () use ($data, $paymentMethod) {
             // Check inventory availability inside transaction to prevent race conditions
             $lockedItems = [];
+            $serverTotalWeightKg = 0.0;
             foreach ($data['items'] as $item) {
                 // Lock the item row for update to prevent concurrent modifications
                 $itemModel = Item::lockForUpdate()->find($item['item_id']);
@@ -342,12 +344,36 @@ class OrderController extends Controller
                     ], 400);
                 }
 
+                // Accumulate total weight from server-side item data so the handling
+                // fee check cannot be bypassed by client-supplied weights.
+                if ($itemModel->weight !== null) {
+                    $serverTotalWeightKg += $this->convertToKg((float) $itemModel->weight, $itemModel->metric) * $orderedQuantity;
+                }
+
                 // Store locked item for later update
                 $lockedItems[$item['item_id']] = [
                     'model' => $itemModel,
                     'ordered_quantity' => $orderedQuantity
                 ];
             }
+
+            // Validate that the client's total_amount covers the DB-configured
+            // handling fee for this cart's weight. We allow the client to include
+            // extra (e.g. shipping) on top of subtotal+handling, but not less.
+            $serverHandlingFee = $this->calculateHandlingFee($serverTotalWeightKg);
+            $clientSubtotal = (float) ($data['subtotal'] ?? 0);
+            $clientTotal = (float) ($data['total_amount'] ?? 0);
+            $minTotal = $clientSubtotal + $serverHandlingFee;
+            if ($clientTotal + 0.01 < $minTotal) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Total amount is below the required handling fee for this order.',
+                    'expected_minimum_total' => round($minTotal, 2),
+                    'server_handling_fee' => round($serverHandlingFee, 2),
+                    'server_total_weight_kg' => round($serverTotalWeightKg, 2),
+                ], 422);
+            }
+
             // Create order detail first
             $orderDetailData = [
                 'order_code' => $data['order_code'] ?? '#ORD-' . strtoupper(Str::random(10)),
@@ -514,37 +540,68 @@ class OrderController extends Controller
     }
 
     /**
-     * Compute the handling fee given a total weight in kilograms.
+     * Compute the handling fee given a total weight in kilograms, using the
+     * currently active row from `handling_fee_settings`.
      *
-     * Tiers:
-     *   - ≤ 25 kg       : free
-     *   - 25.01–100 kg  : ₱50 flat
-     *   - > 100 kg      : ₱50 + ₱15 per (started) 10 kg over 100, capped at ₱150
+     * Tiers (values come from DB, defaults shown):
+     *   - W ≤ free_until_kg              : free
+     *   - free_until_kg < W ≤ increment_threshold_kg : base_fee
+     *   - W > increment_threshold_kg     : base_fee + ceil((W - threshold) / block_kg) * fee_per_block
+     *   - Final result is capped at max_fee.
      */
     private function calculateHandlingFee(float $totalWeightKg): float
     {
-        if ($totalWeightKg <= 25) {
+        $settings = $this->getHandlingFeeSettings();
+
+        $freeUntilKg = (float) $settings->free_until_kg;
+
+        if ($totalWeightKg <= $freeUntilKg) {
             return 0.00;
         }
 
-        $fee = 50.00;
+        $fee = (float) $settings->base_fee;
+        $threshold = (float) $settings->increment_threshold_kg;
 
-        if ($totalWeightKg > 100) {
-            $extraTenKgBlocks = (int) ceil(($totalWeightKg - 100) / 10);
-            $fee += $extraTenKgBlocks * 15;
+        if ($totalWeightKg > $threshold) {
+            $blockKg = max((float) $settings->increment_block_kg, 0.0001);
+            $extraBlocks = (int) ceil(($totalWeightKg - $threshold) / $blockKg);
+            $fee += $extraBlocks * (float) $settings->increment_fee_per_block;
         }
 
-        return (float) min($fee, 150.00);
+        return (float) min($fee, (float) $settings->max_fee);
+    }
+
+    /**
+     * Resolve the active handling-fee configuration. Falls back to the legacy
+     * hardcoded tiers if no active row exists, so fee calculation never fails.
+     */
+    private function getHandlingFeeSettings(): HandlingFeeSetting
+    {
+        $active = HandlingFeeSetting::getActive();
+
+        if ($active) {
+            return $active;
+        }
+
+        Log::warning('No active handling_fee_settings row found; using hardcoded fallback.');
+
+        return new HandlingFeeSetting([
+            'free_until_kg' => 25.000,
+            'base_fee' => 50.00,
+            'increment_threshold_kg' => 100.000,
+            'increment_block_kg' => 10.000,
+            'increment_fee_per_block' => 15.00,
+            'max_fee' => 150.00,
+            'status' => HandlingFeeSetting::STATUS_ACTIVE,
+        ]);
     }
 
     /**
      * Calculate order fees without persisting anything.
      *
-     * Handling fee tiers (based on total weight in kg):
-     *   - 0 – 25 kg       : free (₱0)
-     *   - 25.01 – 100 kg  : ₱50 flat
-     *   - Every additional (or partial) 10 kg beyond 100 kg adds ₱15
-     *   - Cap: ₱150
+     * Handling fee tiers are loaded from the active `handling_fee_settings`
+     * row, so values can be updated in the database without a code change.
+     * See `calculateHandlingFee()` for the algorithm.
      */
     public function calculateFee(Request $request)
     {
@@ -583,6 +640,7 @@ class OrderController extends Controller
             }
         }
 
+        $settings = $this->getHandlingFeeSettings();
         $handlingFee = $this->calculateHandlingFee($totalWeightKg);
 
         $totalAmount = $subtotal + $handlingFee;
@@ -592,7 +650,7 @@ class OrderController extends Controller
             'subtotal' => round($subtotal, 2),
             'total_weight_kg' => round($totalWeightKg, 2),
             'handling_fee' => round($handlingFee, 2),
-            'handling_fee_waived' => $totalWeightKg <= 25,
+            'handling_fee_waived' => $totalWeightKg <= (float) $settings->free_until_kg,
             'total_amount' => round($totalAmount, 2),
         ]);
     }
