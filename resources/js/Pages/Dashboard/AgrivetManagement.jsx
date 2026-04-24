@@ -3,6 +3,8 @@ import { useForm, router, Link } from '@inertiajs/react'
 import SuperAdminOrAdminLayout from '../../Layouts/SuperAdminOrAdminLayout'
 
 export default function AgrivetManagement({ auth, agrivets = [], flash }) {
+  const [showSuccessAlert, setShowSuccessAlert] = useState(true)
+  const [showErrorAlert, setShowErrorAlert] = useState(true)
   const [showAddModal, setShowAddModal] = useState(false)
   const [showAddModalAnimation, setShowAddModalAnimation] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
@@ -62,6 +64,11 @@ export default function AgrivetManagement({ auth, agrivets = [], flash }) {
       setShowRemoveModalAnimation(false)
     }
   }, [showRemoveModal])
+
+  useEffect(() => {
+    if (flash?.success) setShowSuccessAlert(true)
+    if (flash?.error) setShowErrorAlert(true)
+  }, [flash?.success, flash?.error])
 
   // Modal close handlers with animation
   const closeAddModal = () => {
@@ -173,19 +180,37 @@ export default function AgrivetManagement({ auth, agrivets = [], flash }) {
   return (
     <SuperAdminOrAdminLayout auth={auth} title="Agrivet Management">
       {/* Flash Messages */}
-      {flash?.success && (
+      {flash?.success && showSuccessAlert && (
         <div className="alert alert-success alert-dismissible fade show" role="alert">
           <strong>Success!</strong> {flash.success}
-          <button type="button" className="close" data-dismiss="alert" aria-label="Close" onClick={() => router.reload({ only: ['flash'] })}>
+          <button
+            type="button"
+            className="close"
+            data-dismiss="alert"
+            aria-label="Close"
+            onClick={(e) => {
+              e.preventDefault()
+              setShowSuccessAlert(false)
+            }}
+          >
             <span aria-hidden="true">&times;</span>
           </button>
         </div>
       )}
 
-      {flash?.error && (
+      {flash?.error && showErrorAlert && (
         <div className="alert alert-danger alert-dismissible fade show" role="alert">
           <strong>Error!</strong> {flash.error}
-          <button type="button" className="close" data-dismiss="alert" aria-label="Close" onClick={() => router.reload({ only: ['flash'] })}>
+          <button
+            type="button"
+            className="close"
+            data-dismiss="alert"
+            aria-label="Close"
+            onClick={(e) => {
+              e.preventDefault()
+              setShowErrorAlert(false)
+            }}
+          >
             <span aria-hidden="true">&times;</span>
           </button>
         </div>

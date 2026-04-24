@@ -112,14 +112,19 @@ export default function AddAgrivet({ auth, zones = [], flash }) {
         isSubmittingRef.current = true
         const daysSorted = [...operatingDays].sort((a, b) => FULL_DAYS.indexOf(a) - FULL_DAYS.indexOf(b))
 
-        // Inertia v2: `transform()` does not return the form for chaining — call `post` separately.
-        // Setting here avoids relying on `transform()` inside event handlers (see Inertia useForm docs).
-        form.setData('operating_days', daysSorted.join(', '))
+        // Ensure `operating_days` is included in the SAME request.
+        // `setData()` is async; using `transform()` avoids the “submit twice” issue caused by stale state.
+        form.transform((data) => ({
+            ...data,
+            operating_days: daysSorted.join(', '),
+        }))
         form.post(`${baseRoute}/setup-wizard`, {
             forceFormData: true,
             preserveScroll: true,
             onFinish: () => {
                 isSubmittingRef.current = false
+                // Reset transform so it doesn't affect other submissions.
+                form.transform((data) => data)
             },
         })
     }
