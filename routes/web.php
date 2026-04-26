@@ -45,6 +45,7 @@ Route::get('/dashboard/super-admin', function () {
 // User Management Routes
 Route::middleware(['auth', 'session.valid', 'user.type:super_admin'])->prefix('dashboard/super-admin/users')->name('dashboard.super-admin.users.')->group(function () {
     Route::get('/', [UserController::class, 'index'])->name('index');
+    Route::get('/add-admin', [UserController::class, 'createAdmin'])->name('add-admin');
     Route::post('/clear-all-data', [UserController::class, 'clearAllPlatformData'])->name('clear-all-data');
     Route::post('/', [UserController::class, 'store'])->name('store');
     Route::put('/{id}', [UserController::class, 'update'])->name('update');

@@ -51,6 +51,14 @@ class UserController extends Controller
     }
 
     /**
+     * Show the dedicated add-admin wizard (super admin only).
+     */
+    public function createAdmin()
+    {
+        return Inertia::render('Dashboard/AddAdmin');
+    }
+
+    /**
      * Placeholder for the template "Clear All Data" action (demo localStorage wipe).
      * A full platform reset is environment-specific and is not executed here.
      */

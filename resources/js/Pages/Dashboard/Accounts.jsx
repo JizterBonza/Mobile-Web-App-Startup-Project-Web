@@ -218,6 +218,10 @@ export default function Accounts({ auth, users = [], flash }) {
 
     const handleSelectCreateRole = (userTypeValue) => {
         setShowRoleSelectionModal(false)
+        if (userTypeValue === 'admin' && auth?.user?.user_type === 'super_admin') {
+            router.visit('/dashboard/super-admin/users/add-admin')
+            return
+        }
         addForm.setData('user_type', userTypeValue)
         setShowAddModal(true)
         setShowAddModalAnimation(false)
