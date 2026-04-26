@@ -15,6 +15,7 @@ class Zone extends Model
         'name',
         'description',
         'boundary',
+        'is_cod',
         'status',
     ];
 
@@ -22,6 +23,7 @@ class Zone extends Model
     {
         return [
             'boundary' => 'array',
+            'is_cod' => 'boolean',
             'status' => 'boolean',
         ];
     }

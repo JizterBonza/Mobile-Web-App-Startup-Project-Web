@@ -24,7 +24,7 @@ class CartController extends Controller
         return [
             'item:' . implode(',', self::ITEM_SELECT),
             'item.shop:' . implode(',', self::SHOP_SELECT),
-            'item.shop.zone:id,name',
+            'item.shop.zone:id,name,is_cod',
             'user',
         ];
     }
@@ -102,7 +102,7 @@ class CartController extends Controller
             ->with([
                 'item:' . implode(',', self::ITEM_SELECT),
                 'item.shop:' . implode(',', self::SHOP_SELECT),
-                'item.shop.zone:id,name',
+                'item.shop.zone:id,name,is_cod',
             ])
             ->where('user_id', $userId)
             ->where('status', 'active')
