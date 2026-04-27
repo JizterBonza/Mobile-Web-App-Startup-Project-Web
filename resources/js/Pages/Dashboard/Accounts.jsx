@@ -20,13 +20,12 @@ import KlasmeytDashboardLayout from '../../Layouts/KlasmeytDashboardLayout'
 import SuperAdminKlasmeytLayout from '../../Layouts/SuperAdminKlasmeytLayout'
 import { useDashboardSession } from '../../hooks/useDashboardSession'
 
-const ROLE_ORDER = ['super_admin', 'admin', 'vendor', 'owner_manager', 'veterinarian', 'customer', 'rider']
+const ROLE_ORDER = ['super_admin', 'admin', 'vendor', 'veterinarian', 'customer', 'rider']
 
 const ROLE_META = {
     super_admin: { label: 'Super Admin', Icon: Shield, iconBg: 'bg-[#244693]' },
     admin: { label: 'Admin', Icon: UserCog, iconBg: 'bg-[#102059]' },
     vendor: { label: 'Vendor', Icon: Store, iconBg: 'bg-[#D3A218]' },
-    owner_manager: { label: 'Owner / Manager', Icon: Building2, iconBg: 'bg-[#102059]' },
     veterinarian: { label: 'Veterinarian', Icon: Stethoscope, iconBg: 'bg-[#102059]' },
     customer: { label: 'Customer', Icon: UsersRound, iconBg: 'bg-[#6B7280]' },
     rider: { label: 'Rider', Icon: Bike, iconBg: 'bg-[#244693]' },
@@ -181,7 +180,6 @@ export default function Accounts({ auth, users = [], flash }) {
         if (auth?.user?.user_type === 'admin') {
             return [
                 { value: 'vendor', label: 'Vendor' },
-                { value: 'owner_manager', label: 'Owner / Manager' },
                 { value: 'veterinarian', label: 'Veterinarian' },
                 { value: 'rider', label: 'Rider' },
             ]
@@ -190,7 +188,6 @@ export default function Accounts({ auth, users = [], flash }) {
             { value: 'super_admin', label: 'Super Admin' },
             { value: 'admin', label: 'Admin' },
             { value: 'vendor', label: 'Vendor' },
-            { value: 'owner_manager', label: 'Owner / Manager' },
             { value: 'veterinarian', label: 'Veterinarian' },
             { value: 'customer', label: 'Customer' },
             { value: 'rider', label: 'Rider' },
@@ -220,6 +217,11 @@ export default function Accounts({ auth, users = [], flash }) {
         setShowRoleSelectionModal(false)
         if (userTypeValue === 'admin' && auth?.user?.user_type === 'super_admin') {
             router.visit('/dashboard/super-admin/users/add-admin')
+            return
+        }
+        if (userTypeValue === 'vendor') {
+            const prefix = auth?.user?.user_type === 'admin' ? '/dashboard/admin' : '/dashboard/super-admin'
+            router.visit(`${prefix}/users/vendor-registration`)
             return
         }
         addForm.setData('user_type', userTypeValue)

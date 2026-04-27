@@ -13,6 +13,8 @@ export default function AgrivetVendors({ auth, agrivet, shop, vendors = [], avai
   const [showAddExistingModalAnimation, setShowAddExistingModalAnimation] = useState(false)
   const [selectedVendor, setSelectedVendor] = useState(null)
   const [vendorToRemove, setVendorToRemove] = useState(null)
+  const [flashSuccessDismissed, setFlashSuccessDismissed] = useState(false)
+  const [flashErrorDismissed, setFlashErrorDismissed] = useState(false)
 
   const addForm = useForm({
     first_name: '',
@@ -126,6 +128,11 @@ export default function AgrivetVendors({ auth, agrivet, shop, vendors = [], avai
     }
   }, [flash])
 
+  useEffect(() => {
+    setFlashSuccessDismissed(false)
+    setFlashErrorDismissed(false)
+  }, [flash?.success, flash?.error])
+
   // Determine base route based on user type
   const getBaseRoute = () => {
     return auth?.user?.user_type === 'admin' 
@@ -208,19 +215,31 @@ export default function AgrivetVendors({ auth, agrivet, shop, vendors = [], avai
   return (
     <SuperAdminOrAdminLayout auth={auth} title={`Vendors - ${shop.shop_name} (${agrivet.name})`}>
       {/* Flash Messages */}
-      {flash?.success && (
+      {flash?.success && !flashSuccessDismissed && (
         <div className="alert alert-success alert-dismissible fade show" role="alert">
           <strong>Success!</strong> {flash.success}
-          <button type="button" className="close" data-dismiss="alert" aria-label="Close" onClick={() => router.reload({ only: ['flash'] })}>
+          <button
+            type="button"
+            className="close"
+            data-dismiss="alert"
+            aria-label="Close"
+            onClick={() => setFlashSuccessDismissed(true)}
+          >
             <span aria-hidden="true">&times;</span>
           </button>
         </div>
       )}
 
-      {flash?.error && (
+      {flash?.error && !flashErrorDismissed && (
         <div className="alert alert-danger alert-dismissible fade show" role="alert">
           <strong>Error!</strong> {flash.error}
-          <button type="button" className="close" data-dismiss="alert" aria-label="Close" onClick={() => router.reload({ only: ['flash'] })}>
+          <button
+            type="button"
+            className="close"
+            data-dismiss="alert"
+            aria-label="Close"
+            onClick={() => setFlashErrorDismissed(true)}
+          >
             <span aria-hidden="true">&times;</span>
           </button>
         </div>

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\ActivityLog;
+use App\Models\Agrivet;
 use App\Models\User;
 use App\Models\UserDetail;
 use App\Models\UserCredential;
@@ -56,6 +57,35 @@ class UserController extends Controller
     public function createAdmin()
     {
         return Inertia::render('Dashboard/AddAdmin');
+    }
+
+    /**
+     * Multi-step vendor registration (Klasmeyt template parity): assign agrivet + shop, then create vendor via shop endpoint.
+     */
+    public function vendorRegistration()
+    {
+        $agrivets = Agrivet::with(['shops' => function ($query) {
+            $query->orderBy('shop_name');
+        }])
+            ->orderBy('name')
+            ->get()
+            ->map(function ($agrivet) {
+                return [
+                    'id' => $agrivet->id,
+                    'name' => $agrivet->name,
+                    'shops' => $agrivet->shops->map(function ($shop) {
+                        return [
+                            'id' => $shop->id,
+                            'shop_name' => $shop->shop_name,
+                            'shop_city' => $shop->shop_city,
+                        ];
+                    }),
+                ];
+            });
+
+        return Inertia::render('Dashboard/VendorRegistration', [
+            'agrivets' => $agrivets,
+        ]);
     }
 
     /**
