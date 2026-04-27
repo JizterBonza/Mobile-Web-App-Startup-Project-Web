@@ -40,6 +40,13 @@ class UserDetail extends Model
         'vet_clinic_address',
         'vet_license_front_path',
         'vet_license_back_path',
+        'rider_license_number',
+        'rider_vehicle_type',
+        'rider_vehicle_brand',
+        'rider_vehicle_model',
+        'rider_license_front_path',
+        'rider_license_back_path',
+        'rider_vehicle_registration_path',
     ];
 
     /**

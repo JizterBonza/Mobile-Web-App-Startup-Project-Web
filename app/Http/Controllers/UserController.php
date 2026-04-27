@@ -97,6 +97,14 @@ class UserController extends Controller
     }
 
     /**
+     * Multi-step rider registration (Klasmeyt template parity).
+     */
+    public function riderRegistration()
+    {
+        return Inertia::render('Dashboard/RiderRegistration');
+    }
+
+    /**
      * Placeholder for the template "Clear All Data" action (demo localStorage wipe).
      * A full platform reset is environment-specific and is not executed here.
      */
@@ -148,6 +156,19 @@ class UserController extends Controller
             ]);
         }
 
+        if ($request->user_type === 'rider') {
+            $rules['mobile_number'] = 'required|string|max:20';
+            $rules = array_merge($rules, [
+                'rider_license_number' => 'required|string|max:100',
+                'rider_vehicle_type' => 'required|string|max:50',
+                'rider_vehicle_brand' => 'required|string|max:100',
+                'rider_vehicle_model' => 'required|string|max:100',
+                'driving_license_front' => 'required|file|image|max:5120',
+                'driving_license_back' => 'required|file|image|max:5120',
+                'vehicle_registration' => 'required|file|image|max:5120',
+            ]);
+        }
+
         $request->validate($rules);
 
         try {
@@ -169,6 +190,16 @@ class UserController extends Controller
                 ];
             }
 
+            $riderDetail = [];
+            if ($request->user_type === 'rider') {
+                $riderDetail = [
+                    'rider_license_number' => $request->rider_license_number,
+                    'rider_vehicle_type' => $request->rider_vehicle_type,
+                    'rider_vehicle_brand' => $request->rider_vehicle_brand,
+                    'rider_vehicle_model' => $request->rider_vehicle_model,
+                ];
+            }
+
             // Create UserDetail
             $userDetail = UserDetail::create(array_merge([
                 'first_name' => $request->first_name,
@@ -176,7 +207,7 @@ class UserController extends Controller
                 'last_name' => $request->last_name,
                 'email' => $request->email,
                 'mobile_number' => $request->mobile_number ?? null,
-            ], $vetDetail));
+            ], $vetDetail, $riderDetail));
 
             // Create UserCredential
             $userCredential = UserCredential::create([
@@ -198,6 +229,22 @@ class UserController extends Controller
                 $userDetail->update([
                     'vet_license_front_path' => $frontPath,
                     'vet_license_back_path' => $backPath,
+                ]);
+            }
+
+            if (
+                $request->user_type === 'rider'
+                && $request->hasFile('driving_license_front')
+                && $request->hasFile('driving_license_back')
+                && $request->hasFile('vehicle_registration')
+            ) {
+                $dlFront = $request->file('driving_license_front')->store("rider-documents/{$user->id}", 'public');
+                $dlBack = $request->file('driving_license_back')->store("rider-documents/{$user->id}", 'public');
+                $reg = $request->file('vehicle_registration')->store("rider-documents/{$user->id}", 'public');
+                $userDetail->update([
+                    'rider_license_front_path' => $dlFront,
+                    'rider_license_back_path' => $dlBack,
+                    'rider_vehicle_registration_path' => $reg,
                 ]);
             }
 

@@ -229,6 +229,11 @@ export default function Accounts({ auth, users = [], flash }) {
             router.visit(`${prefix}/users/veterinarian-registration`)
             return
         }
+        if (userTypeValue === 'rider') {
+            const prefix = auth?.user?.user_type === 'admin' ? '/dashboard/admin' : '/dashboard/super-admin'
+            router.visit(`${prefix}/users/rider-registration`)
+            return
+        }
         addForm.setData('user_type', userTypeValue)
         setShowAddModal(true)
         setShowAddModalAnimation(false)
