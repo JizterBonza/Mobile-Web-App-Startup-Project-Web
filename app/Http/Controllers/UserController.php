@@ -89,6 +89,14 @@ class UserController extends Controller
     }
 
     /**
+     * Multi-step veterinarian registration (Klasmeyt template parity).
+     */
+    public function veterinarianRegistration()
+    {
+        return Inertia::render('Dashboard/VeterinarianRegistration');
+    }
+
+    /**
      * Placeholder for the template "Clear All Data" action (demo localStorage wipe).
      * A full platform reset is environment-specific and is not executed here.
      */
@@ -114,7 +122,7 @@ class UserController extends Controller
             $allowedUserTypes = ['vendor', 'veterinarian', 'rider', 'owner_manager'];
         }
 
-        $request->validate([
+        $rules = [
             'first_name' => 'required|string|max:100',
             'middle_name' => 'nullable|string|max:100',
             'last_name' => 'required|string|max:100',
@@ -124,7 +132,23 @@ class UserController extends Controller
             'username' => 'nullable|string|max:100|unique:user_credentials,username',
             'user_type' => ['required', 'string', 'in:' . implode(',', $allowedUserTypes)],
             'status' => 'nullable|string|in:active,inactive',
-        ]);
+        ];
+
+        if ($request->user_type === 'veterinarian') {
+            $rules = array_merge($rules, [
+                'vet_license_number' => 'required|string|max:100',
+                'vet_license_expiration' => 'required|date',
+                'vet_issuing_authority' => 'required|string|max:100',
+                'vet_service_area' => 'required|string|max:255',
+                'vet_specialization' => 'required|string|max:255',
+                'vet_clinic_name' => 'nullable|string|max:255',
+                'vet_clinic_address' => 'nullable|string',
+                'license_front' => 'required|file|image|max:5120',
+                'license_back' => 'required|file|image|max:5120',
+            ]);
+        }
+
+        $request->validate($rules);
 
         try {
             DB::beginTransaction();
@@ -132,14 +156,27 @@ class UserController extends Controller
             // Generate username from email if not provided
             $username = $request->username ?? explode('@', $request->email)[0] . '_' . time();
 
+            $vetDetail = [];
+            if ($request->user_type === 'veterinarian') {
+                $vetDetail = [
+                    'vet_license_number' => $request->vet_license_number,
+                    'vet_license_expiration' => $request->vet_license_expiration,
+                    'vet_issuing_authority' => $request->vet_issuing_authority,
+                    'vet_service_area' => $request->vet_service_area,
+                    'vet_specialization' => $request->vet_specialization,
+                    'vet_clinic_name' => $request->vet_clinic_name,
+                    'vet_clinic_address' => $request->vet_clinic_address,
+                ];
+            }
+
             // Create UserDetail
-            $userDetail = UserDetail::create([
+            $userDetail = UserDetail::create(array_merge([
                 'first_name' => $request->first_name,
                 'middle_name' => $request->middle_name ?? null,
                 'last_name' => $request->last_name,
                 'email' => $request->email,
                 'mobile_number' => $request->mobile_number ?? null,
-            ]);
+            ], $vetDetail));
 
             // Create UserCredential
             $userCredential = UserCredential::create([
@@ -154,6 +191,15 @@ class UserController extends Controller
                 'status' => $request->status ?? 'active',
                 'user_type' => $request->user_type,
             ]);
+
+            if ($request->user_type === 'veterinarian' && $request->hasFile('license_front') && $request->hasFile('license_back')) {
+                $frontPath = $request->file('license_front')->store("veterinarian-licenses/{$user->id}", 'public');
+                $backPath = $request->file('license_back')->store("veterinarian-licenses/{$user->id}", 'public');
+                $userDetail->update([
+                    'vet_license_front_path' => $frontPath,
+                    'vet_license_back_path' => $backPath,
+                ]);
+            }
 
             DB::commit();
 

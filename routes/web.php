@@ -47,6 +47,7 @@ Route::middleware(['auth', 'session.valid', 'user.type:super_admin'])->prefix('d
     Route::get('/', [UserController::class, 'index'])->name('index');
     Route::get('/add-admin', [UserController::class, 'createAdmin'])->name('add-admin');
     Route::get('/vendor-registration', [UserController::class, 'vendorRegistration'])->name('vendor-registration');
+    Route::get('/veterinarian-registration', [UserController::class, 'veterinarianRegistration'])->name('veterinarian-registration');
     Route::post('/clear-all-data', [UserController::class, 'clearAllPlatformData'])->name('clear-all-data');
     Route::post('/', [UserController::class, 'store'])->name('store');
     Route::put('/{id}', [UserController::class, 'update'])->name('update');
@@ -131,6 +132,7 @@ Route::get('/dashboard/admin', function () {
 Route::middleware(['auth', 'session.valid', 'user.type:admin'])->prefix('dashboard/admin/users')->name('dashboard.admin.users.')->group(function () {
     Route::get('/', [UserController::class, 'index'])->name('index');
     Route::get('/vendor-registration', [UserController::class, 'vendorRegistration'])->name('vendor-registration');
+    Route::get('/veterinarian-registration', [UserController::class, 'veterinarianRegistration'])->name('veterinarian-registration');
     Route::post('/', [UserController::class, 'store'])->name('store');
     Route::put('/{id}', [UserController::class, 'update'])->name('update');
     Route::delete('/{id}', [UserController::class, 'deactivate'])->name('deactivate');
