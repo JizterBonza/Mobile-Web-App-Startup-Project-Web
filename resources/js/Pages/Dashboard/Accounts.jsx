@@ -878,7 +878,9 @@ export default function Accounts({ auth, users = [], flash }) {
                                     </div>
                                 </button>
                             )}
-                            {userTypes.map(({ value, label }) => {
+                            {userTypes
+                                .filter(({ value }) => value !== 'customer')
+                                .map(({ value, label }) => {
                                 const meta = ROLE_META[value] || ROLE_META.other
                                 const Icon = meta.Icon
                                 const blurb = CREATE_ROLE_DESCRIPTIONS[value] || 'Create this account type'
@@ -906,7 +908,7 @@ export default function Accounts({ auth, users = [], flash }) {
                                     </button>
                                 )
                             })}
-                        </div>
+                            </div>
                     </div>
                 </div>
             )}
