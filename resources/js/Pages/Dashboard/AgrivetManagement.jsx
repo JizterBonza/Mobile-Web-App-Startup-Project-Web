@@ -1,6 +1,16 @@
-import { useState, useEffect } from 'react'
-import { useForm, router, Link } from '@inertiajs/react'
+import { useState, useEffect, useMemo } from 'react'
+import { useForm, router } from '@inertiajs/react'
+import { Search, Trash2, Pencil, Store } from 'lucide-react'
 import SuperAdminOrAdminLayout from '../../Layouts/SuperAdminOrAdminLayout'
+
+function getInitials(name) {
+  if (!name || typeof name !== 'string') return '?'
+  const parts = name.trim().split(/\s+/).filter(Boolean)
+  if (parts.length >= 2) {
+    return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase()
+  }
+  return name.slice(0, 2).toUpperCase()
+}
 
 export default function AgrivetManagement({ auth, agrivets = [], flash }) {
   const [showSuccessAlert, setShowSuccessAlert] = useState(true)
@@ -13,6 +23,12 @@ export default function AgrivetManagement({ auth, agrivets = [], flash }) {
   const [showRemoveModalAnimation, setShowRemoveModalAnimation] = useState(false)
   const [selectedAgrivet, setSelectedAgrivet] = useState(null)
   const [agrivetToRemove, setAgrivetToRemove] = useState(null)
+
+  const [searchQuery, setSearchQuery] = useState('')
+  const [sortBy, setSortBy] = useState('name')
+  const [statusFilter, setStatusFilter] = useState('All')
+  const [itemsPerPage, setItemsPerPage] = useState(10)
+  const [currentAgrivetPage, setCurrentAgrivetPage] = useState(1)
 
   const addForm = useForm({
     name: '',
@@ -27,6 +43,18 @@ export default function AgrivetManagement({ auth, agrivets = [], flash }) {
   })
 
   const editForm = useForm({
+    name: '',
+    registered_business_name: '',
+    owner_name: '',
+    description: '',
+    contact_number: '',
+    email: '',
+    permits: '',
+    logo_url: '',
+    status: 'active',
+  })
+
+  const statusToggleForm = useForm({
     name: '',
     registered_business_name: '',
     owner_name: '',
@@ -115,6 +143,63 @@ export default function AgrivetManagement({ auth, agrivets = [], flash }) {
       : '/dashboard/super-admin/agrivets'
   }
 
+  const sortedAgrivets = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase()
+    let list = agrivets.filter((a) => {
+      if (statusFilter === 'Active' && a.status !== 'active') return false
+      if (statusFilter === 'Inactive' && a.status !== 'inactive') return false
+      if (!q) return true
+      const name = (a.name || '').toLowerCase()
+      const owner = (a.owner_name || '').toLowerCase()
+      const email = (a.email || '').toLowerCase()
+      return name.includes(q) || owner.includes(q) || email.includes(q)
+    })
+    list = [...list].sort((a, b) => {
+      if (sortBy === 'name') {
+        return (a.name || '').localeCompare(b.name || '')
+      }
+      const ta = a.created_at ? new Date(a.created_at).getTime() : 0
+      const tb = b.created_at ? new Date(b.created_at).getTime() : 0
+      return tb - ta
+    })
+    return list
+  }, [agrivets, searchQuery, sortBy, statusFilter])
+
+  const totalAgrivetPages = Math.max(1, Math.ceil(sortedAgrivets.length / itemsPerPage))
+  const agrivetStartIndex = (currentAgrivetPage - 1) * itemsPerPage
+  const agrivetEndIndex = agrivetStartIndex + itemsPerPage
+  const displayedAgrivets = sortedAgrivets.slice(agrivetStartIndex, agrivetEndIndex)
+
+  useEffect(() => {
+    setCurrentAgrivetPage(1)
+  }, [searchQuery, sortBy, statusFilter, itemsPerPage])
+
+  useEffect(() => {
+    if (currentAgrivetPage > totalAgrivetPages) {
+      setCurrentAgrivetPage(Math.max(1, totalAgrivetPages))
+    }
+  }, [currentAgrivetPage, totalAgrivetPages])
+
+  const handleStatusToggle = (e, agrivet) => {
+    e.stopPropagation()
+    if (statusToggleForm.processing) return
+    const newStatus = agrivet.status === 'active' ? 'inactive' : 'active'
+    statusToggleForm.setData({
+      name: agrivet.name,
+      registered_business_name: agrivet.registered_business_name || '',
+      owner_name: agrivet.owner_name || '',
+      description: agrivet.description || '',
+      contact_number: agrivet.contact_number || '',
+      email: agrivet.email || '',
+      permits: agrivet.permits || '',
+      logo_url: agrivet.logo_url || '',
+      status: newStatus,
+    })
+    statusToggleForm.put(`${getBaseRoute()}/${agrivet.id}`, {
+      preserveScroll: true,
+    })
+  }
+
   const handleAddAgrivet = (e) => {
     e.preventDefault()
     addForm.post(getBaseRoute(), {
@@ -170,12 +255,8 @@ export default function AgrivetManagement({ auth, agrivets = [], flash }) {
     }
   }
 
-  const getStatusBadge = (status) => {
-    if (status === 'active') {
-      return <span className="badge badge-success">Active</span>
-    }
-    return <span className="badge badge-danger">Inactive</span>
-  }
+  const filterSelectClass =
+    'text-sm border border-[#E5E7EB] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#102059] focus:border-transparent px-[20px] py-[8px] bg-[#ffffff]'
 
   return (
     <SuperAdminOrAdminLayout auth={auth} title="Agrivet Management">
@@ -216,86 +297,245 @@ export default function AgrivetManagement({ auth, agrivets = [], flash }) {
         </div>
       )}
 
-      <div className="row">
-        <div className="col-12">
-          <div className="card">
-            <div className="card-header">
-              <h3 className="card-title">Agrivet List</h3>
-              <div className="card-tools">
-                <button
-                  type="button"
-                  className="btn btn-primary btn-sm"
-                  onClick={() => {
-                    setShowAddModal(true)
-                    setShowAddModalAnimation(false)
-                  }}
-                >
-                  <i className="fas fa-plus"></i> Add Agrivet
-                </button>
-              </div>
+      <div>
+        {/* Page header — matches SuperAdminDashboard Agrivets tab */}
+        <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h1 className="mb-2 text-2xl font-semibold text-[#102059]">Agrivets</h1>
+            <p className="text-sm text-[#6B7280]">
+              Manage all registered agrivet stores in the system
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setShowAddModal(true)
+              setShowAddModalAnimation(false)
+            }}
+            className="shrink-0 rounded-lg bg-[#244693] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#102059]"
+          >
+            Add Agrivet
+          </button>
+        </div>
+
+        {/* Filters bar */}
+        <div className="mb-6 p-[0px]">
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between bg-transparent">
+            <div className="relative max-w-md flex-1">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#9CA3AF]" />
+              <input
+                type="text"
+                placeholder="Search agrivet name, owner, or email..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full rounded-lg border border-[#E5E7EB] bg-[#ffffff] py-2 pl-10 pr-4 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[#102059]"
+              />
             </div>
-            <div className="card-body table-responsive p-0">
-              <table className="table table-hover text-nowrap">
-                <thead>
-                  <tr>
-                    <th>ID</th>
-                    <th>Agrivet Name</th>
-                    <th>Contact Number</th>
-                    <th>Email</th>
-                    <th>Shops</th>
-                    <th>Status</th>
-                    <th>Created At</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {agrivets.length === 0 ? (
-                    <tr>
-                      <td colSpan="8" className="text-center">No agrivets found</td>
-                    </tr>
-                  ) : (
-                    agrivets.map((agrivet) => (
-                      <tr key={agrivet.id}>
-                        <td>{agrivet.id}</td>
-                        <td>{agrivet.name}</td>
-                        <td>{agrivet.contact_number || '-'}</td>
-                        <td>{agrivet.email || '-'}</td>
-                        <td>
-                          <span className="badge badge-info">{agrivet.shops_count || 0} shop(s)</span>
-                        </td>
-                        <td>{getStatusBadge(agrivet.status)}</td>
-                        <td>{new Date(agrivet.created_at).toLocaleDateString()}</td>
-                        <td>
-                          <Link
-                            href={`${getBaseRoute()}/${agrivet.id}/shops`}
-                            className="btn btn-sm btn-success mr-1"
-                            title="View Shops"
-                          >
-                            <i className="fas fa-store"></i>
-                          </Link>
+
+            <div className="flex flex-wrap gap-3">
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value)}
+                className={filterSelectClass}
+              >
+                <option value="name">Sort by Name</option>
+                <option value="date">Sort by Date Added</option>
+              </select>
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                className={filterSelectClass}
+              >
+                <option value="All">All Status</option>
+                <option value="Active">Active</option>
+                <option value="Inactive">Inactive</option>
+              </select>
+              <select
+                value={itemsPerPage}
+                onChange={(e) => setItemsPerPage(Number(e.target.value))}
+                className="rounded-lg border border-[#E5E7EB] bg-[#ffffff] px-4 py-2 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[#102059]"
+              >
+                <option value={5}>Show 5</option>
+                <option value={10}>Show 10</option>
+                <option value={25}>Show 25</option>
+                <option value={50}>Show 50</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        {/* Agrivets list */}
+        <div className="rounded-lg border border-[#E5E7EB] bg-white">
+          <div className="divide-y divide-[#E5E7EB]">
+            {displayedAgrivets.length > 0 ? (
+              displayedAgrivets.map((agrivet) => {
+                const statusLabel = agrivet.status === 'active' ? 'Active' : 'Inactive'
+                const dateAdded = agrivet.created_at
+                  ? new Date(agrivet.created_at).toLocaleDateString('en-US', {
+                      year: 'numeric',
+                      month: 'short',
+                      day: 'numeric',
+                    })
+                  : 'N/A'
+                return (
+                  <div
+                    key={agrivet.id}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => router.visit(`${getBaseRoute()}/${agrivet.id}/shops`)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault()
+                        router.visit(`${getBaseRoute()}/${agrivet.id}/shops`)
+                      }
+                    }}
+                    className="cursor-pointer px-6 py-4 transition-colors hover:bg-[#F8F9FB]"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-[#E5E7EB] bg-[#102059]">
+                        <span className="text-sm font-bold text-white">
+                          {getInitials(agrivet.name)}
+                        </span>
+                      </div>
+
+                      <div className="grid min-w-0 flex-1 grid-cols-1 gap-4 gap-y-3 lg:grid-cols-[1fr_200px_140px_auto] lg:items-center">
+                        <div className="min-w-0">
+                          <div className="text-sm font-bold text-[#102059]">
+                            {agrivet.name || 'N/A'}
+                          </div>
+                          <div className="text-sm text-[#6B7280]">
+                            {agrivet.owner_name || 'N/A'}
+                            {agrivet.email ? (
+                              <span className="block truncate text-xs text-[#9CA3AF] sm:inline sm:ml-2">
+                                {agrivet.email}
+                              </span>
+                            ) : null}
+                          </div>
+                          <div className="mt-1 text-xs text-[#9CA3AF] lg:hidden">
+                            {agrivet.shops_count ?? 0} shop(s) · Added {dateAdded}
+                          </div>
+                        </div>
+
+                        <div className="hidden items-center lg:flex">
+                          <div>
+                            <div className="text-xs font-semibold uppercase tracking-wider text-[#9CA3AF]">
+                              Date Added
+                            </div>
+                            <div className="mt-0.5 text-xs text-[#9CA3AF]">{dateAdded}</div>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-3">
                           <button
-                            className="btn btn-sm btn-info mr-1"
-                            onClick={() => handleEditAgrivet(agrivet)}
-                            title="Edit Agrivet"
+                            type="button"
+                            onClick={(e) => handleStatusToggle(e, agrivet)}
+                            disabled={statusToggleForm.processing}
+                            className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-all duration-300 disabled:opacity-50 ${
+                              agrivet.status === 'active' ? 'bg-[#00C950]' : 'bg-[#D1D5DB]'
+                            }`}
+                            aria-pressed={agrivet.status === 'active'}
+                            aria-label={`Toggle status for ${agrivet.name}`}
+                            style={{ borderRadius: '0.7rem' }}
                           >
-                            <i className="fas fa-edit"></i>
+                            <span
+                              className={`inline-block h-5 w-5 transform rounded-full bg-white transition-all duration-300 ${
+                                agrivet.status === 'active' ? 'translate-x-[22px]' : 'translate-x-[2px]'
+                              }`}
+                            />
+                          </button>
+                          <span className="text-xs font-semibold text-[#6B7280]">{statusLabel}</span>
+                        </div>
+
+                        <div className="flex items-center justify-end gap-1">
+                          {/* <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              router.visit(`${getBaseRoute()}/${agrivet.id}/shops`)
+                            }}
+                            className="rounded-lg p-1.5 text-[#244693] transition-colors hover:bg-[#F3F4F6]"
+                            title="View shops"
+                          >
+                            <Store className="h-5 w-5" />
+                          </button> */}
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleEditAgrivet(agrivet)
+                            }}
+                            className="rounded-lg p-1.5 text-[#244693] transition-colors hover:bg-[#F3F4F6]"
+                            title="Edit agrivet"
+                          >
+                            <Pencil className="h-5 w-5" />
                           </button>
                           {agrivet.status === 'active' && (
                             <button
-                              className="btn btn-sm btn-danger"
-                              onClick={() => handleDeactivateAgrivet(agrivet.id)}
-                              title="Deactivate Agrivet"
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleDeactivateAgrivet(agrivet.id)
+                              }}
+                              className="rounded-lg p-1.5 text-[#E20E28] transition-colors hover:bg-[#FEE2E2]"
+                              title="Deactivate agrivet"
                             >
-                              <i className="fas fa-trash"></i>
+                              <Trash2 className="h-5 w-5" />
                             </button>
                           )}
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })
+            ) : (
+              <div className="py-12 text-center">
+                <p className="text-sm text-[#9CA3AF]">
+                  No agrivets found matching your search criteria
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Results count + pagination */}
+        <div className="mt-4 rounded-lg border border-[#E5E7EB] bg-white px-6 py-3">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-xs text-[#6B7280]">
+              Showing{' '}
+              <span className="font-semibold text-[#102059]">
+                {sortedAgrivets.length === 0
+                  ? '0'
+                  : `${agrivetStartIndex + 1}-${Math.min(agrivetEndIndex, sortedAgrivets.length)}`}
+              </span>{' '}
+              of <span className="font-semibold text-[#102059]">{sortedAgrivets.length}</span> agrivets
+              {searchQuery && ` matching "${searchQuery}"`}
+              {statusFilter !== 'All' && ` with status "${statusFilter}"`}
+            </p>
+
+            {totalAgrivetPages > 1 && (
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  className="rounded-lg px-3 py-1.5 text-xs font-semibold text-[#65676B] transition-colors hover:bg-[#F0F2F5] hover:text-[#244693] disabled:cursor-not-allowed disabled:opacity-50"
+                  disabled={currentAgrivetPage === 1}
+                  onClick={() => setCurrentAgrivetPage(currentAgrivetPage - 1)}
+                >
+                  Previous
+                </button>
+                <span className="text-xs text-[#6B7280]">
+                  Page {currentAgrivetPage} of {totalAgrivetPages}
+                </span>
+                <button
+                  type="button"
+                  className="rounded-lg px-3 py-1.5 text-xs font-semibold text-[#244693] transition-colors hover:bg-[#F0F2F5] disabled:cursor-not-allowed disabled:opacity-50"
+                  disabled={currentAgrivetPage === totalAgrivetPages}
+                  onClick={() => setCurrentAgrivetPage(currentAgrivetPage + 1)}
+                >
+                  Next
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </div>

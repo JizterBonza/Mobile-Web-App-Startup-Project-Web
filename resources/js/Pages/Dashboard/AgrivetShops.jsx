@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
-import { useForm, router, Link } from '@inertiajs/react'
+import { useForm, router } from '@inertiajs/react'
+import { ArrowLeft, Plus, Star, Store, Trash2, Pencil, Users } from 'lucide-react'
 import SuperAdminOrAdminLayout from '../../Layouts/SuperAdminOrAdminLayout'
 import PinLocationMap from '../../Components/PinLocationMap'
 
@@ -193,11 +194,14 @@ export default function AgrivetShops({ auth, agrivet, zones = [], shops = [], fl
     }
   }
 
-  const getStatusBadge = (status) => {
-    if (status === 'active') {
-      return <span className="badge badge-success">Active</span>
-    }
-    return <span className="badge badge-danger">Inactive</span>
+  const openRemoveStore = (e, shop) => {
+    e.stopPropagation()
+    handleRemoveShop(shop.id)
+  }
+
+  const ratingValue = (shop) => {
+    const n = parseFloat(shop.average_rating)
+    return Number.isFinite(n) ? n : 0
   }
 
   return (
@@ -233,106 +237,217 @@ export default function AgrivetShops({ auth, agrivet, zones = [], shops = [], fl
         </div>
       )}
 
-      <div className="row mb-3">
-        <div className="col-12">
-          <Link href={getBaseRoute()} className="btn btn-secondary btn-sm">
-            <i className="fas fa-arrow-left"></i> Back to Agrivets
-          </Link>
+      <div>
+        {/* Back + title */}
+        <div className="mb-6">
+          <button
+            type="button"
+            onClick={() => router.visit(getBaseRoute())}
+            className="group mb-4 rounded-lg border border-[#E5E7EB] bg-white p-3 transition-all hover:bg-[#F9FAFB]"
+            title="Back to Agrivets"
+          >
+            <ArrowLeft className="h-5 w-5 text-[#6B7280] transition-colors group-hover:text-[#102059]" />
+          </button>
+          <h1 className="text-2xl font-semibold text-[#102059]">{agrivet.name}</h1>
         </div>
-      </div>
 
-      <div className="row">
-        <div className="col-12">
-          <div className="card">
-            <div className="card-header">
-              <h3 className="card-title">Shops for {agrivet.name}</h3>
-              <div className="card-tools">
-                <button
-                  type="button"
-                  className="btn btn-primary btn-sm"
-                  onClick={() => {
-                    setShowAddModal(true)
-                    setShowAddModalAnimation(false)
-                  }}
-                >
-                  <i className="fas fa-plus"></i> Add Shop
-                </button>
-              </div>
+        {/* Account Information */}
+        <div className="mb-6 rounded-lg border border-[#E5E7EB] bg-white p-6">
+          <h2 className="mb-4 text-lg font-semibold text-[#102059]">Account Information</h2>
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+            <div>
+              <label className="text-xs font-semibold uppercase tracking-wider text-[#6B7280]">
+                Owner Name
+              </label>
+              <p className="mt-1 text-sm text-[#102059]">{agrivet.owner_name || 'N/A'}</p>
             </div>
-            <div className="card-body table-responsive p-0">
-              <table className="table table-hover text-nowrap">
-                <thead>
-                  <tr>
-                    <th>ID</th>
-                    <th>Shop Name</th>
-                    <th>Zone</th>
-                    <th>Address</th>
-                    <th>Province</th>
-                    <th>Contact</th>
-                    <th>Vendors</th>
-                    <th>Rating</th>
-                    <th>Status</th>
-                    <th>Created At</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {shops.length === 0 ? (
-                    <tr>
-                      <td colSpan="11" className="text-center">No shops found</td>
-                    </tr>
-                  ) : (
-                    shops.map((shop) => (
-                      <tr key={shop.id}>
-                        <td>{shop.id}</td>
-                        <td>{shop.shop_name}</td>
-                        <td>{shop.zone_name ? <span className="badge badge-secondary">{shop.zone_name}</span> : '-'}</td>
-                        <td>{shop.shop_address || '-'}</td>
-                        <td>{shop.shop_province || '-'}</td>
-                        <td>{shop.contact_number || '-'}</td>
-                        <td>
-                          <span className="badge badge-info">{shop.vendors_count || 0} vendor(s)</span>
-                        </td>
-                        <td>
-                          <span className="badge badge-warning">
-                            <i className="fas fa-star mr-1"></i>
-                            {shop.average_rating || '0.00'} ({shop.total_reviews || 0})
-                          </span>
-                        </td>
-                        <td>{getStatusBadge(shop.shop_status)}</td>
-                        <td>{new Date(shop.created_at).toLocaleDateString()}</td>
-                        <td>
-                          <Link
-                            href={`${getBaseRoute()}/${agrivet.id}/shops/${shop.id}/vendors`}
-                            className="btn btn-sm btn-primary mr-1"
-                            title="View Vendors"
-                          >
-                            <i className="fas fa-users"></i>
-                          </Link>
+            <div>
+              <label className="text-xs font-semibold uppercase tracking-wider text-[#6B7280]">
+                Email Address
+              </label>
+              <p className="mt-1 text-sm text-[#102059]">{agrivet.email || 'N/A'}</p>
+            </div>
+            <div>
+              <label className="text-xs font-semibold uppercase tracking-wider text-[#6B7280]">
+                Phone Number
+              </label>
+              <p className="mt-1 text-sm text-[#102059]">{agrivet.contact_number || 'N/A'}</p>
+            </div>
+          </div>
+        </div>
+
+        {/* List of Stores */}
+        <div>
+          <h2 className="mb-4 text-lg font-semibold text-[#102059]">List of Stores</h2>
+          {shops.length > 0 ? (
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+              {shops.map((shop) => {
+                const r = ratingValue(shop)
+                const statusActive = shop.shop_status === 'active'
+                const statusLabel = statusActive ? 'Active' : 'Inactive'
+                return (
+                  <div
+                    key={shop.id}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() =>
+                      router.visit(`${getBaseRoute()}/${agrivet.id}/shops/${shop.id}/vendors`)
+                    }
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault()
+                        router.visit(`${getBaseRoute()}/${agrivet.id}/shops/${shop.id}/vendors`)
+                      }
+                    }}
+                    className="cursor-pointer overflow-hidden rounded-lg border border-[#E5E7EB] bg-white text-left transition-all hover:border-[#102059] hover:shadow-md"
+                  >
+                    {/* Cover */}
+                    <div className="relative h-40 w-full overflow-hidden bg-[#F8F9FB]">
+                      <div className="flex h-full w-full items-center justify-center">
+                        <Store className="h-14 w-14 text-[#E5E7EB]" aria-hidden />
+                      </div>
+                      <span
+                        className={`absolute right-3 top-3 inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold backdrop-blur-sm ${
+                          statusActive
+                            ? 'bg-[#E8F5E9]/90 text-[#2E7D32]'
+                            : 'bg-[#FFEBEE]/90 text-[#C62828]'
+                        }`}
+                      >
+                        {statusLabel}
+                      </span>
+                    </div>
+
+                    <div className="p-5">
+                      <div className="mb-3 flex items-start justify-between gap-2">
+                        <h3 className="flex-1 text-sm font-bold text-[#102059]">{shop.shop_name}</h3>
+                        <div className="flex shrink-0 items-center gap-0.5">
                           <button
-                            className="btn btn-sm btn-info mr-1"
-                            onClick={() => handleEditShop(shop)}
-                            title="Edit Shop"
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              router.visit(`${getBaseRoute()}/${agrivet.id}/shops/${shop.id}/vendors`)
+                            }}
+                            className="rounded-lg p-1.5 text-[#244693] transition-colors hover:bg-[#F3F4F6]"
+                            title="Vendors"
                           >
-                            <i className="fas fa-edit"></i>
+                            <Users className="h-4 w-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleEditShop(shop)
+                            }}
+                            className="rounded-lg p-1.5 text-[#244693] transition-colors hover:bg-[#F3F4F6]"
+                            title="Edit shop"
+                          >
+                            <Pencil className="h-4 w-4" />
                           </button>
                           {shop.shop_status === 'active' && (
                             <button
-                              className="btn btn-sm btn-danger"
-                              onClick={() => handleRemoveShop(shop.id)}
-                              title="Deactivate Shop"
+                              type="button"
+                              onClick={(e) => openRemoveStore(e, shop)}
+                              className="rounded-lg p-1.5 text-[#E20E28] transition-colors hover:bg-[#FEE2E2]"
+                              title="Remove store"
                             >
-                              <i className="fas fa-trash"></i>
+                              <Trash2 className="h-4 w-4" />
                             </button>
                           )}
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
+                        </div>
+                      </div>
+
+                      <div className="mb-3 flex items-center gap-1.5">
+                        <div className="flex items-center gap-0.5">
+                          {[1, 2, 3, 4, 5].map((star) => (
+                            <Star
+                              key={star}
+                              className={`h-3.5 w-3.5 ${
+                                star <= Math.floor(r)
+                                  ? 'fill-[#D3A218] text-[#D3A218]'
+                                  : star - 0.5 <= r
+                                    ? 'fill-[#D3A218] text-[#D3A218]'
+                                    : 'fill-[#E5E7EB] text-[#E5E7EB]'
+                              }`}
+                            />
+                          ))}
+                        </div>
+                        <span className="text-xs font-semibold text-[#102059]">{r.toFixed(1)}</span>
+                        {shop.total_reviews != null && (
+                          <span className="text-xs text-[#9CA3AF]">({shop.total_reviews} reviews)</span>
+                        )}
+                      </div>
+
+                      <div className="mb-3 space-y-0.5 text-xs text-[#6B7280]">
+                        <p>{shop.shop_address || '—'}</p>
+                        <p>
+                          {shop.shop_city || '—'}
+                          {shop.shop_province ? `, ${shop.shop_province}` : ''}
+                        </p>
+                        {shop.shop_postal_code ? <p>{shop.shop_postal_code}</p> : null}
+                      </div>
+
+                      <div className="my-3 border-t border-[#E5E7EB]" />
+
+                      <div className="space-y-1 text-xs text-[#6B7280]">
+                        <div>
+                          <span className="font-semibold text-[#102059]">Zone:</span>{' '}
+                          {shop.zone_name || '—'}
+                        </div>
+                        <div>
+                          <span className="font-semibold text-[#102059]">Contact:</span>{' '}
+                          {shop.contact_number || '—'}
+                        </div>
+                        <div>
+                          <span className="font-semibold text-[#102059]">Days:</span> —
+                        </div>
+                        <div>
+                          <span className="font-semibold text-[#102059]">Hours:</span> —
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+
+              <button
+                type="button"
+                className="group flex min-h-[280px] flex-col items-center justify-center rounded-lg border-2 border-dashed border-[#E5E7EB] bg-white p-5 transition-all hover:border-[#102059] hover:bg-[#F8F9FB]"
+                onClick={() => {
+                  setShowAddModal(true)
+                  setShowAddModalAnimation(false)
+                }}
+              >
+                <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-[#F8F9FB] transition-colors group-hover:bg-[#102059]">
+                  <Plus className="h-6 w-6 text-[#6B7280] transition-colors group-hover:text-white" />
+                </div>
+                <h3 className="mb-1 text-sm font-bold text-[#102059]">Add New Store</h3>
+                <p className="text-center text-xs text-[#6B7280]">
+                  Click to add a new branch or store location
+                </p>
+              </button>
             </div>
-          </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+              <button
+                type="button"
+                className="group flex min-h-[280px] flex-col items-center justify-center rounded-lg border-2 border-dashed border-[#E5E7EB] bg-white p-5 transition-all hover:border-[#102059] hover:bg-[#F8F9FB]"
+                onClick={() => {
+                  setShowAddModal(true)
+                  setShowAddModalAnimation(false)
+                }}
+              >
+                <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-[#F8F9FB] transition-colors group-hover:bg-[#102059]">
+                  <Plus className="h-6 w-6 text-[#6B7280] transition-colors group-hover:text-white" />
+                </div>
+                <h3 className="mb-1 text-sm font-bold text-[#102059]">Add First Store</h3>
+                <p className="text-center text-xs text-[#6B7280]">
+                  This agrivet has no stores yet.
+                  <br />
+                  Click to add the first store.
+                </p>
+              </button>
+            </div>
+          )}
         </div>
       </div>
 

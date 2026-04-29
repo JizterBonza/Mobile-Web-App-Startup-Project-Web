@@ -392,6 +392,9 @@ class AgrivetController extends Controller
             'agrivet' => [
                 'id' => $agrivet->id,
                 'name' => $agrivet->name,
+                'owner_name' => $agrivet->owner_name,
+                'email' => $agrivet->email,
+                'contact_number' => $agrivet->contact_number,
             ],
             'zones' => $zones->map(fn ($z) => ['id' => $z->id, 'name' => $z->name, 'boundary' => $z->boundary]),
             'shops' => $shops,
