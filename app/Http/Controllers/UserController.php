@@ -60,6 +60,14 @@ class UserController extends Controller
     }
 
     /**
+     * Show the dedicated add-super-admin wizard (super admin only).
+     */
+    public function createSuperAdmin()
+    {
+        return Inertia::render('Dashboard/AddSuperAdmin');
+    }
+
+    /**
      * Multi-step vendor registration (Klasmeyt template parity): assign agrivet + shop, then create vendor via shop endpoint.
      */
     public function vendorRegistration()

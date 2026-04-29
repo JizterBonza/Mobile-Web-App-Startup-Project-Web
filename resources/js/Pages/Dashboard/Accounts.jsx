@@ -215,6 +215,10 @@ export default function Accounts({ auth, users = [], flash }) {
 
     const handleSelectCreateRole = (userTypeValue) => {
         setShowRoleSelectionModal(false)
+        if (userTypeValue === 'super_admin' && auth?.user?.user_type === 'super_admin') {
+            router.visit('/dashboard/super-admin/users/add-super-admin')
+            return
+        }
         if (userTypeValue === 'admin' && auth?.user?.user_type === 'super_admin') {
             router.visit('/dashboard/super-admin/users/add-admin')
             return
@@ -1034,7 +1038,15 @@ export default function Accounts({ auth, users = [], flash }) {
                                                 required
                                                 className={`${inputClass} ${addForm.errors.user_type ? 'border-red-400' : ''}`}
                                                 value={addForm.data.user_type}
-                                                onChange={(e) => addForm.setData('user_type', e.target.value)}
+                                                onChange={(e) => {
+                                                    const v = e.target.value
+                                                    if (v === 'super_admin' && auth?.user?.user_type === 'super_admin') {
+                                                        closeAddModal()
+                                                        router.visit('/dashboard/super-admin/users/add-super-admin')
+                                                        return
+                                                    }
+                                                    addForm.setData('user_type', v)
+                                                }}
                                             >
                                                 {userTypes.map((type) => (
                                                     <option key={type.value} value={type.value}>

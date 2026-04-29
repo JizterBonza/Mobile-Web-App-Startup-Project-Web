@@ -46,6 +46,7 @@ Route::get('/dashboard/super-admin', function () {
 Route::middleware(['auth', 'session.valid', 'user.type:super_admin'])->prefix('dashboard/super-admin/users')->name('dashboard.super-admin.users.')->group(function () {
     Route::get('/', [UserController::class, 'index'])->name('index');
     Route::get('/add-admin', [UserController::class, 'createAdmin'])->name('add-admin');
+    Route::get('/add-super-admin', [UserController::class, 'createSuperAdmin'])->name('add-super-admin');
     Route::get('/vendor-registration', [UserController::class, 'vendorRegistration'])->name('vendor-registration');
     Route::get('/veterinarian-registration', [UserController::class, 'veterinarianRegistration'])->name('veterinarian-registration');
     Route::get('/rider-registration', [UserController::class, 'riderRegistration'])->name('rider-registration');
