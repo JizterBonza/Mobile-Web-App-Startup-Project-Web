@@ -68,6 +68,7 @@ Route::middleware(['auth', 'session.valid', 'user.type:super_admin'])->prefix('d
     Route::post('/{id}/shops', [AgrivetController::class, 'storeShop'])->name('shops.store');
     Route::put('/{id}/shops/{shopId}', [AgrivetController::class, 'updateShop'])->name('shops.update');
     Route::delete('/{id}/shops/{shopId}', [AgrivetController::class, 'removeShop'])->name('shops.remove');
+    Route::get('/{id}/shops/{shopId}/store-information', [AgrivetController::class, 'showStoreInformation'])->name('shops.store-information');
     
     // Shop Vendors Routes
     Route::get('/{id}/shops/{shopId}/vendors', [AgrivetController::class, 'showVendors'])->name('shops.vendors.index');
@@ -153,6 +154,7 @@ Route::middleware(['auth', 'session.valid', 'user.type:admin'])->prefix('dashboa
     Route::post('/{id}/shops', [AgrivetController::class, 'storeShop'])->name('shops.store');
     Route::put('/{id}/shops/{shopId}', [AgrivetController::class, 'updateShop'])->name('shops.update');
     Route::delete('/{id}/shops/{shopId}', [AgrivetController::class, 'removeShop'])->name('shops.remove');
+    Route::get('/{id}/shops/{shopId}/store-information', [AgrivetController::class, 'showStoreInformation'])->name('shops.store-information');
     
     // Shop Vendors Routes
     Route::get('/{id}/shops/{shopId}/vendors', [AgrivetController::class, 'showVendors'])->name('shops.vendors.index');

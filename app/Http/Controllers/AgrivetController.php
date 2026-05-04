@@ -557,6 +557,67 @@ class AgrivetController extends Controller
     }
 
     /**
+     * Store information hub (tabs: about, vendors, products, insights).
+     */
+    public function showStoreInformation($id, $shopId)
+    {
+        $agrivet = Agrivet::findOrFail($id);
+        $shop = Shop::where('agrivet_id', $agrivet->id)->with('zone')->findOrFail($shopId);
+
+        $vendors = $shop->vendors()
+            ->where('user_type', 'vendor')
+            ->with(['userDetail', 'userCredential'])
+            ->orderBy('created_at', 'desc')
+            ->get()
+            ->map(function ($vendor) {
+                return [
+                    'id' => $vendor->id,
+                    'first_name' => $vendor->userDetail->first_name ?? '',
+                    'middle_name' => $vendor->userDetail->middle_name ?? '',
+                    'last_name' => $vendor->userDetail->last_name ?? '',
+                    'email' => $vendor->userDetail->email ?? '',
+                    'mobile_number' => $vendor->userDetail->mobile_number ?? '',
+                    'username' => $vendor->userCredential->username ?? '',
+                    'status' => $vendor->status,
+                    'pivot' => [
+                        'status' => $vendor->pivot->status ?? 'active',
+                    ],
+                    'created_at' => $vendor->created_at->format('Y-m-d H:i:s'),
+                ];
+            });
+
+        return Inertia::render('Dashboard/AgrivetStoreInformation', [
+            'agrivet' => [
+                'id' => $agrivet->id,
+                'name' => $agrivet->name,
+                'owner_name' => $agrivet->owner_name,
+                'email' => $agrivet->email,
+                'contact_number' => $agrivet->contact_number,
+                'status' => $agrivet->status,
+            ],
+            'shop' => [
+                'id' => $shop->id,
+                'zone_id' => $shop->zone_id,
+                'zone_name' => $shop->zone?->name,
+                'shop_name' => $shop->shop_name,
+                'shop_description' => $shop->shop_description,
+                'shop_address' => $shop->shop_address,
+                'shop_city' => $shop->shop_city,
+                'shop_postal_code' => $shop->shop_postal_code,
+                'shop_province' => $shop->shop_province,
+                'shop_lat' => $shop->shop_lat,
+                'shop_long' => $shop->shop_long,
+                'contact_number' => $shop->contact_number,
+                'average_rating' => $shop->average_rating,
+                'total_reviews' => $shop->total_reviews,
+                'shop_status' => $shop->shop_status,
+                'created_at' => $shop->created_at->format('Y-m-d H:i:s'),
+            ],
+            'vendors' => $vendors,
+        ]);
+    }
+
+    /**
      * Display vendors for a specific shop.
      */
     public function showVendors($id, $shopId)

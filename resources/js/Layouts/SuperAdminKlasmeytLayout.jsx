@@ -10,11 +10,13 @@ export default function SuperAdminKlasmeytLayout({
     auth,
     title = 'Dashboard',
     notificationCount = 0,
+    mainClassName = '',
 }) {
     return (
         <KlasmeytDashboardLayout
             auth={auth}
             title={title}
+            mainClassName={mainClassName}
             renderHeader={({ toggleSidebar, sidebarOpen, isLarge }) => (
                 <DashboardHeader
                     menuToggle={

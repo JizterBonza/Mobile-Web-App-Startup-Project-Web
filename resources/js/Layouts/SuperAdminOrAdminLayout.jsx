@@ -9,10 +9,16 @@ export default function SuperAdminOrAdminLayout({
     auth,
     title = 'Dashboard',
     notificationCount = 0,
+    mainClassName = '',
 }) {
     if (auth?.user?.user_type === 'super_admin') {
         return (
-            <SuperAdminKlasmeytLayout auth={auth} title={title} notificationCount={notificationCount}>
+            <SuperAdminKlasmeytLayout
+                auth={auth}
+                title={title}
+                notificationCount={notificationCount}
+                mainClassName={mainClassName}
+            >
                 {children}
             </SuperAdminKlasmeytLayout>
         )

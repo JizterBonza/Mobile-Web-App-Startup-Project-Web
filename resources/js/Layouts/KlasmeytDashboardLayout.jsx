@@ -173,6 +173,8 @@ export default function KlasmeytDashboardLayout({
     headerActions = null,
     /** When set, replaces the default title bar (e.g. Super Admin + template DashboardHeader). */
     renderHeader = null,
+    /** Extra classes appended to the main content container. */
+    mainClassName = '',
 }) {
     const { post } = useForm()
     const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -355,7 +357,9 @@ export default function KlasmeytDashboardLayout({
                         </header>
                     )}
 
-                    <main className="relative z-10 w-full min-w-0 px-5 py-8 sm:px-8 sm:py-10 lg:px-12 lg:py-10 xl:px-14">
+                    <main
+                        className={`relative z-10 w-full min-w-0 px-5 py-8 sm:px-8 sm:py-10 lg:px-12 lg:py-10 xl:px-14 ${mainClassName}`.trim()}
+                    >
                         {children}
                     </main>
                 </div>

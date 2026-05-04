@@ -291,12 +291,16 @@ export default function AgrivetShops({ auth, agrivet, zones = [], shops = [], fl
                     role="button"
                     tabIndex={0}
                     onClick={() =>
-                      router.visit(`${getBaseRoute()}/${agrivet.id}/shops/${shop.id}/vendors`)
+                      router.visit(
+                        `${getBaseRoute()}/${agrivet.id}/shops/${shop.id}/store-information`
+                      )
                     }
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' || e.key === ' ') {
                         e.preventDefault()
-                        router.visit(`${getBaseRoute()}/${agrivet.id}/shops/${shop.id}/vendors`)
+                        router.visit(
+                          `${getBaseRoute()}/${agrivet.id}/shops/${shop.id}/store-information`
+                        )
                       }
                     }}
                     className="cursor-pointer overflow-hidden rounded-lg border border-[#E5E7EB] bg-white text-left transition-all hover:border-[#102059] hover:shadow-md"
@@ -325,10 +329,12 @@ export default function AgrivetShops({ auth, agrivet, zones = [], shops = [], fl
                             type="button"
                             onClick={(e) => {
                               e.stopPropagation()
-                              router.visit(`${getBaseRoute()}/${agrivet.id}/shops/${shop.id}/vendors`)
+                              router.visit(
+                                `${getBaseRoute()}/${agrivet.id}/shops/${shop.id}/store-information`
+                              )
                             }}
                             className="rounded-lg p-1.5 text-[#244693] transition-colors hover:bg-[#F3F4F6]"
-                            title="Vendors"
+                            title="Store information — Vendors"
                           >
                             <Users className="h-4 w-4" />
                           </button>
