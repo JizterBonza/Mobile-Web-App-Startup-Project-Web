@@ -246,8 +246,12 @@ export const SUPER_ADMIN_HEADER_NAV = [
     {
         label: 'Products',
         id: 'products',
-        href: '/dashboard/super-admin/categories',
-        matchPaths: ['/dashboard/super-admin/categories', '/dashboard/super-admin/sub-categories'],
+        href: '/dashboard/super-admin/products',
+        matchPaths: [
+            '/dashboard/super-admin/products',
+            '/dashboard/super-admin/categories',
+            '/dashboard/super-admin/sub-categories',
+        ],
     },
     {
         label: 'Activity Logs',

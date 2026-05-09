@@ -64,6 +64,7 @@ function SuperAdminNav({ productOpen, setProductOpen }) {
             </button>
             {productOpen && (
                 <div className="mt-1 space-y-0.5 border-l border-white/10 ml-4 pl-2">
+                    <SubNavLink href="/dashboard/super-admin/products">All Products</SubNavLink>
                     <SubNavLink href="/dashboard/super-admin/categories">Categories</SubNavLink>
                     <SubNavLink href="/dashboard/super-admin/sub-categories">Sub-Categories</SubNavLink>
                 </div>
@@ -357,11 +358,24 @@ export default function KlasmeytDashboardLayout({
                         </header>
                     )}
 
-                    <main
-                        className={`relative z-10 w-full min-w-0 px-5 py-8 sm:px-8 sm:py-10 lg:px-12 lg:py-10 xl:px-14 ${mainClassName}`.trim()}
-                    >
-                        {children}
-                    </main>
+                    {(() => {
+                        const wantsNoPadding =
+                            typeof mainClassName === 'string' &&
+                            (mainClassName.split(/\s+/).includes('p-0') ||
+                                mainClassName.split(/\s+/).includes('px-0'))
+
+                        const basePadding = wantsNoPadding
+                            ? ''
+                            : 'px-5 py-8 sm:px-8 sm:py-10 lg:px-12 lg:py-10 xl:px-14'
+
+                        return (
+                            <main
+                                className={`relative z-10 w-full min-w-0 ${basePadding} ${mainClassName}`.trim()}
+                            >
+                                {children}
+                            </main>
+                        )
+                    })()}
                 </div>
             </div>
         </>

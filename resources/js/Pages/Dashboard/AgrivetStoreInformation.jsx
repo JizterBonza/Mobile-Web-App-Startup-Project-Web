@@ -360,6 +360,7 @@ export default function AgrivetStoreInformation({ auth, agrivet, shop, vendors =
                         store.status === 'Active' ? 'bg-[#00C950]' : 'bg-[#D1D5DB]'
                       } opacity-60 cursor-not-allowed`}
                       title="Status toggle shown for reference (read-only here)"
+                      style={{ borderRadius: '0.7rem' }}
                     >
                       <span
                         className={`inline-block h-5 w-5 transform rounded-full bg-white transition-all duration-300 ${
@@ -618,7 +619,8 @@ export default function AgrivetStoreInformation({ auth, agrivet, shop, vendors =
                         </button>
                         <Link
                           href={vendorsRoute}
-                          className="flex items-center gap-2 px-4 py-2.5 bg-[#244693] text-white text-sm font-semibold rounded-lg hover:bg-[#1a3570] transition-colors"
+                          className="flex items-center gap-2 px-4 py-2.5 bg-[#244693] text-sm font-semibold rounded-lg hover:bg-[#1a3570] transition-colors"
+                          style={{ border:'1px solid #dee2e6', color: '#1f2d3d'}}
                         >
                           <UserPlus className="w-4 h-4" />
                           Add Vendor
