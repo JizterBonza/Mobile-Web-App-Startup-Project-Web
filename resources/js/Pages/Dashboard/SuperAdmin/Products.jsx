@@ -100,20 +100,20 @@ export default function SuperAdminProducts({ auth, products = [] }) {
         <SuperAdminOrAdminLayout auth={auth} title="Products">
             <div>
                 {/* Page header — matches AgrivetManagement layout */}
-                <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                    <div>
-                        <h1 className="mb-2 text-2xl font-semibold text-[#102059]">Products</h1>
-                        <p className="text-sm text-[#6B7280]">View all registered products in the system</p>
-                    </div>
-                    <Link
-                        href="/dashboard/vendor/products"
-                        className="shrink-0 rounded-lg bg-[#244693] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#102059]"
-                    >
-                        <span className="inline-flex items-center gap-2">
+                <div className="mb-6">
+                    <h1 className="mb-2 text-2xl font-semibold text-[#102059]">Products</h1>
+                    <p className="text-sm text-[#6B7280]">View all registered products in the system</p>
+
+                    <div className="mt-4">
+                        <Link
+                            href="/dashboard/vendor/products"
+                            className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#102059] px-6 py-2 text-sm font-medium text-white transition-colors hover:bg-[#244693] whitespace-nowrap"
+                            style={{backgroundColor: '#102059'}}
+                        >
                             <Plus className="h-4 w-4" />
-                            Manage Products
-                        </span>
-                    </Link>
+                            Register Product
+                        </Link>
+                    </div>
                 </div>
 
                 {/* Filters bar */}
