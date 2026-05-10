@@ -370,7 +370,7 @@ export default function KlasmeytDashboardLayout({
 
                         return (
                             <main
-                                className={`relative z-10 w-full min-w-0 ${basePadding} ${mainClassName}`.trim()}
+                                className={`relative w-full min-w-0 ${basePadding} ${mainClassName}`.trim()}
                             >
                                 {children}
                             </main>
