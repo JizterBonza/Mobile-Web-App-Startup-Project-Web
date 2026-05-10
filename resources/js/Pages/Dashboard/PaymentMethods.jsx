@@ -220,7 +220,7 @@ export default function PaymentMethods({ auth, paymentMethods = [], flash }) {
             onClick={() => { setShowAddModal(true); setShowAddModalAnimation(false) }}
             className="shrink-0 rounded-lg bg-[#244693] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#102059]"
           >
-            Add Payment Method
+            + Add Payment Method
           </button>
         </div>
 

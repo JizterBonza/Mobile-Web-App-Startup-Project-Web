@@ -306,7 +306,7 @@ export default function AgrivetManagement({ auth, agrivets = [], flash }) {
               Manage all registered agrivet stores in the system
             </p>
           </div>
-          <button
+          {/* <button
             type="button"
             onClick={() => {
               setShowAddModal(true)
@@ -315,7 +315,7 @@ export default function AgrivetManagement({ auth, agrivets = [], flash }) {
             className="shrink-0 rounded-lg bg-[#244693] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#102059]"
           >
             Add Agrivet
-          </button>
+          </button> */}
         </div>
 
         {/* Filters bar */}
