@@ -486,6 +486,8 @@ class AgrivetController extends Controller
             'contact_number' => 'nullable|string|max:20',
             'shop_status' => 'nullable|string|in:active,inactive',
             'zone_id' => 'nullable|exists:zones,id',
+            'operating_days' => 'nullable|string|max:255',
+            'operating_hours' => 'nullable|string|max:100',
         ]);
 
         // If shop has coordinates, set zone_id to the zone whose boundary contains this point
@@ -510,22 +512,50 @@ class AgrivetController extends Controller
                 'contact_number' => $request->contact_number ?? null,
                 'shop_status' => $request->shop_status ?? $shop->shop_status,
                 'zone_id' => $zoneId,
+                'operating_days' => $request->operating_days ?? $shop->operating_days,
+                'operating_hours' => $request->operating_hours ?? $shop->operating_hours,
             ]);
 
             ActivityLog::log('updated', "Shop updated: {$shop->shop_name}", $shop, $oldShopValues, $shop->fresh()->toArray());
 
             $currentUser = auth()->user();
-            $redirectRoute = $currentUser->user_type === 'admin' 
-                ? 'dashboard.admin.agrivets.shops.index' 
-                : 'dashboard.super-admin.agrivets.shops.index';
+            $redirectRoute = $currentUser->user_type === 'admin'
+                ? 'dashboard.admin.agrivets.shops.store-information'
+                : 'dashboard.super-admin.agrivets.shops.store-information';
 
-            return redirect()->route($redirectRoute, $id)
+            return redirect()->route($redirectRoute, [$id, $shopId])
                 ->with('success', 'Shop updated successfully.');
         } catch (\Exception $e) {
             return redirect()->back()
                 ->withErrors(['error' => 'Failed to update shop. Please try again.'])
                 ->withInput();
         }
+    }
+
+    /**
+     * Update shop cover photo.
+     */
+    public function updateShopCoverPhoto(Request $request, $id, $shopId)
+    {
+        $agrivet = Agrivet::findOrFail($id);
+        $shop = Shop::where('agrivet_id', $agrivet->id)->findOrFail($shopId);
+
+        $request->validate([
+            'cover_photo' => 'required|image|mimes:jpeg,png,jpg,gif,webp|max:5120',
+        ]);
+
+        $path = $request->file('cover_photo')->store('shops/covers', 'public');
+        $shop->update(['logo_url' => $path]);
+
+        ActivityLog::log('updated', "Shop cover photo updated: {$shop->shop_name}", $shop);
+
+        $currentUser = auth()->user();
+        $redirectRoute = $currentUser->user_type === 'admin'
+            ? 'dashboard.admin.agrivets.shops.store-information'
+            : 'dashboard.super-admin.agrivets.shops.store-information';
+
+        return redirect()->route($redirectRoute, [$id, $shopId])
+            ->with('success', 'Cover photo updated successfully.');
     }
 
     /**
@@ -611,6 +641,9 @@ class AgrivetController extends Controller
                 'average_rating' => $shop->average_rating,
                 'total_reviews' => $shop->total_reviews,
                 'shop_status' => $shop->shop_status,
+                'logo_url' => $shop->logo_url,
+                'operating_days' => $shop->operating_days,
+                'operating_hours' => $shop->operating_hours,
                 'created_at' => $shop->created_at->format('Y-m-d H:i:s'),
             ],
             'vendors' => $vendors,

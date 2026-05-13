@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Link } from '@inertiajs/react'
+import { Link, router } from '@inertiajs/react'
 import {
   ArrowLeft,
   CheckCircle,
@@ -37,6 +37,50 @@ import {
 import SuperAdminOrAdminLayout from '../../Layouts/SuperAdminOrAdminLayout'
 
 const tabOrder = ['about', 'vendors', 'products', 'insights']
+
+const DAY_ORDER = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+
+function formatOperatingDays(days) {
+  if (!days || days.length === 0) return ''
+  const sorted = [...days].sort((a, b) => DAY_ORDER.indexOf(a) - DAY_ORDER.indexOf(b))
+  const indices = sorted.map((d) => DAY_ORDER.indexOf(d))
+  const consecutive = indices.length > 1 && indices.every((v, i, arr) => i === 0 || v === arr[i - 1] + 1)
+  return consecutive ? `${sorted[0]} - ${sorted[sorted.length - 1]}` : sorted.join(', ')
+}
+
+function formatOperatingHours(opening, closing) {
+  if (!opening || !closing) return ''
+  const fmt = (t) => {
+    const [h, m] = t.split(':').map(Number)
+    const period = h >= 12 ? 'PM' : 'AM'
+    const display = h === 0 ? 12 : h > 12 ? h - 12 : h
+    return `${display}:${String(m).padStart(2, '0')} ${period}`
+  }
+  return `${fmt(opening)} - ${fmt(closing)}`
+}
+
+function parseOperatingDays(str) {
+  if (!str) return []
+  const rangeMatch = str.trim().match(/^(\w+)\s*-\s*(\w+)$/)
+  if (rangeMatch) {
+    const start = DAY_ORDER.indexOf(rangeMatch[1])
+    const end = DAY_ORDER.indexOf(rangeMatch[2])
+    if (start !== -1 && end !== -1 && start <= end) return DAY_ORDER.slice(start, end + 1)
+  }
+  return str.split(',').map((d) => d.trim()).filter((d) => DAY_ORDER.includes(d))
+}
+
+function parseTimeToInput(timeStr) {
+  if (!timeStr) return ''
+  const match = timeStr.trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i)
+  if (!match) return ''
+  let hours = parseInt(match[1])
+  const minutes = match[2]
+  const period = match[3].toUpperCase()
+  if (period === 'PM' && hours !== 12) hours += 12
+  if (period === 'AM' && hours === 12) hours = 0
+  return `${String(hours).padStart(2, '0')}:${minutes}`
+}
 
 function vendorDisplayName(v) {
   const mid = v.middle_name ? `${v.middle_name} ` : ''
@@ -76,10 +120,11 @@ export default function AgrivetStoreInformation({ auth, agrivet, shop, vendors =
       zipCode: shop.shop_postal_code || '',
       latitude: Number.isFinite(lat) ? lat : 13.7565,
       longitude: Number.isFinite(lng) ? lng : 121.0583,
-      operatingDays: '—',
-      operatingHours: '—',
-      coverPhoto:
-        'https://images.unsplash.com/photo-1516382799247-87df95d790b7?auto=format&fit=crop&w=1600&q=60',
+      operatingDays: shop.operating_days || '—',
+      operatingHours: shop.operating_hours || '—',
+      coverPhoto: shop.logo_url
+        ? `/storage/${shop.logo_url}`
+        : 'https://images.unsplash.com/photo-1516382799247-87df95d790b7?auto=format&fit=crop&w=1600&q=60',
       permitPhoto:
         'https://images.unsplash.com/photo-1524995997946-a1c2e315a42f?auto=format&fit=crop&w=1200&q=60',
     }
@@ -154,6 +199,30 @@ export default function AgrivetStoreInformation({ auth, agrivet, shop, vendors =
     setTimeout(() => setShowSuccessMessage(false), 5000)
   }
 
+  // Edit Store Information modal state
+  const [showEditStoreModal, setShowEditStoreModal] = useState(false)
+  const [showEditStoreConfirmModal, setShowEditStoreConfirmModal] = useState(false)
+  const [editStoreData, setEditStoreData] = useState(() => {
+    const hoursParts = shop.operating_hours ? shop.operating_hours.split(' - ') : []
+    return {
+      storeName: shop.shop_name || '',
+      street: shop.shop_address || '',
+      barangay: '',
+      city: shop.shop_city || '',
+      province: shop.shop_province || '',
+      zipCode: shop.shop_postal_code || '',
+      operatingDays: parseOperatingDays(shop.operating_days),
+      openingTime: hoursParts[0] ? parseTimeToInput(hoursParts[0]) : '',
+      closingTime: hoursParts[1] ? parseTimeToInput(hoursParts[1]) : '',
+    }
+  })
+
+  // Cover photo modal state
+  const [showEditCoverPhotoModal, setShowEditCoverPhotoModal] = useState(false)
+  const [coverPhotoPreview, setCoverPhotoPreview] = useState(null)
+  const [coverPhotoFile, setCoverPhotoFile] = useState(null)
+  const [showCoverPhotoConfirmModal, setShowCoverPhotoConfirmModal] = useState(false)
+
   // Vendors UI state (view-only here; full CRUD stays in `AgrivetVendors`)
   const [showReassignModal, setShowReassignModal] = useState(false)
   const [showVendorStatusConfirmModal, setShowVendorStatusConfirmModal] = useState(false)
@@ -195,6 +264,67 @@ export default function AgrivetStoreInformation({ auth, agrivet, shop, vendors =
   const cancelStatusChange = () => {
     setShowVendorStatusConfirmModal(false)
     setVendorToToggle(null)
+  }
+
+  const handleSaveStoreInfo = () => {
+    setShowEditStoreConfirmModal(true)
+  }
+
+  const handleConfirmSaveStoreInfo = () => {
+    const updateUrl = `${getBaseRoute()}/${agrivet.id}/shops/${shop.id}`
+    router.put(updateUrl, {
+      shop_name: editStoreData.storeName,
+      shop_address: editStoreData.street,
+      shop_city: editStoreData.city,
+      shop_province: editStoreData.province,
+      shop_postal_code: editStoreData.zipCode,
+      operating_days: formatOperatingDays(editStoreData.operatingDays),
+      operating_hours: formatOperatingHours(editStoreData.openingTime, editStoreData.closingTime),
+    }, {
+      preserveScroll: true,
+      preserveState: true,
+      onSuccess: () => {
+        setShowEditStoreConfirmModal(false)
+        setShowEditStoreModal(false)
+        showSuccess('storeEdit', editStoreData.storeName)
+      },
+      onError: () => {
+        setShowEditStoreConfirmModal(false)
+      },
+    })
+  }
+
+  const handleCoverPhotoUpload = (e) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      setCoverPhotoFile(file)
+      const reader = new FileReader()
+      reader.onloadend = () => setCoverPhotoPreview(reader.result)
+      reader.readAsDataURL(file)
+    }
+  }
+
+  const handleSaveCoverPhoto = () => {
+    if (!coverPhotoFile) return
+    setShowCoverPhotoConfirmModal(true)
+  }
+
+  const handleConfirmSaveCoverPhoto = () => {
+    const coverPhotoUrl = `${getBaseRoute()}/${agrivet.id}/shops/${shop.id}/cover-photo`
+    router.post(coverPhotoUrl, { cover_photo: coverPhotoFile }, {
+      preserveScroll: true,
+      preserveState: true,
+      onSuccess: () => {
+        setShowCoverPhotoConfirmModal(false)
+        setShowEditCoverPhotoModal(false)
+        setCoverPhotoPreview(null)
+        setCoverPhotoFile(null)
+        showSuccess('storeEdit', store.storeName)
+      },
+      onError: () => {
+        setShowCoverPhotoConfirmModal(false)
+      },
+    })
   }
 
   // Products UI (template-like sample)
@@ -337,8 +467,8 @@ export default function AgrivetStoreInformation({ auth, agrivet, shop, vendors =
               </div>
               <button
                 className="absolute top-4 right-4 w-10 h-10 bg-white/90 hover:bg-white rounded-full flex items-center justify-center shadow-lg transition-all hover:scale-110"
-                onClick={() => showSuccess('storeEdit', store.storeName)}
-                title="Edit cover photo (reference UI)"
+                onClick={() => setShowEditCoverPhotoModal(true)}
+                title="Update cover photo"
               >
                 <Pencil className="w-5 h-5 text-[#244693]" />
               </button>
@@ -376,8 +506,7 @@ export default function AgrivetStoreInformation({ auth, agrivet, shop, vendors =
                   {activeTab === 'about' && (
                     <button
                       className="px-4 py-2 bg-[#244693] text-white text-sm font-semibold rounded-lg hover:bg-[#1a3570] transition-colors flex items-center gap-2"
-                      onClick={() => showSuccess('storeEdit', store.storeName)}
-                      title="Edit Info (reference UI)"
+                      onClick={() => setShowEditStoreModal(true)}
                     >
                       <Pencil className="w-4 h-4" />
                       Edit Info
@@ -1095,6 +1224,283 @@ export default function AgrivetStoreInformation({ auth, agrivet, shop, vendors =
             </motion.div>
           </AnimatePresence>
         </div>
+
+        {/* Edit Store Information Modal */}
+        {showEditStoreModal && (
+          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto">
+              <div className="sticky top-0 bg-white border-b border-[#E5E7EB] px-6 py-4 flex items-center justify-between">
+                <h3 className="text-xl font-bold text-[#102059]">Edit Store Information</h3>
+                <button
+                  className="w-8 h-8 bg-[#F0F2F5] hover:bg-[#E5E7EB] rounded-full flex items-center justify-center text-[#65676B] transition-colors"
+                  onClick={() => setShowEditStoreModal(false)}
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+              <div className="p-6 space-y-6">
+                <div>
+                  <label className="block text-sm font-semibold text-[#102059] mb-2">Store Name</label>
+                  <input
+                    type="text"
+                    value={editStoreData.storeName}
+                    onChange={(e) => setEditStoreData({ ...editStoreData, storeName: e.target.value })}
+                    className="w-full px-4 py-2.5 border border-[#E5E7EB] rounded-lg text-sm text-[#102059] focus:outline-none focus:border-[#244693]"
+                    placeholder="Enter store name"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-semibold text-[#102059] mb-2">Street</label>
+                    <input
+                      type="text"
+                      value={editStoreData.street}
+                      onChange={(e) => setEditStoreData({ ...editStoreData, street: e.target.value })}
+                      className="w-full px-4 py-2.5 border border-[#E5E7EB] rounded-lg text-sm text-[#102059] focus:outline-none focus:border-[#244693]"
+                      placeholder="Street address"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-[#102059] mb-2">Barangay</label>
+                    <input
+                      type="text"
+                      value={editStoreData.barangay}
+                      onChange={(e) => setEditStoreData({ ...editStoreData, barangay: e.target.value })}
+                      className="w-full px-4 py-2.5 border border-[#E5E7EB] rounded-lg text-sm text-[#102059] focus:outline-none focus:border-[#244693]"
+                      placeholder="Barangay"
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-semibold text-[#102059] mb-2">City/Municipality</label>
+                    <input
+                      type="text"
+                      value={editStoreData.city}
+                      onChange={(e) => setEditStoreData({ ...editStoreData, city: e.target.value })}
+                      className="w-full px-4 py-2.5 border border-[#E5E7EB] rounded-lg text-sm text-[#102059] focus:outline-none focus:border-[#244693]"
+                      placeholder="City/Municipality"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-[#102059] mb-2">Province</label>
+                    <input
+                      type="text"
+                      value={editStoreData.province}
+                      onChange={(e) => setEditStoreData({ ...editStoreData, province: e.target.value })}
+                      className="w-full px-4 py-2.5 border border-[#E5E7EB] rounded-lg text-sm text-[#102059] focus:outline-none focus:border-[#244693]"
+                      placeholder="Province"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-[#102059] mb-2">
+                    Operating Days <span className="text-[#E20E28]">*</span>
+                  </label>
+                  <div className="grid grid-cols-7 gap-2">
+                    {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day, index) => {
+                      const fullDay = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'][index]
+                      const isSelected = editStoreData.operatingDays.includes(fullDay)
+                      return (
+                        <button
+                          key={day}
+                          type="button"
+                          onClick={() => {
+                            setEditStoreData({
+                              ...editStoreData,
+                              operatingDays: isSelected
+                                ? editStoreData.operatingDays.filter((d) => d !== fullDay)
+                                : [...editStoreData.operatingDays, fullDay],
+                            })
+                          }}
+                          className={`py-3 px-2 text-xs font-semibold rounded-lg border-2 transition-all ${
+                            isSelected
+                              ? 'bg-[#102059] border-[#102059] text-white'
+                              : 'bg-white border-[#E5E7EB] text-[#6B7280] hover:border-[#102059]'
+                          }`}
+                        >
+                          {day}
+                        </button>
+                      )
+                    })}
+                  </div>
+                  {editStoreData.operatingDays.length > 0 && (
+                    <div className="mt-3 pt-3 border-t border-[#E5E7EB]">
+                      <p className="text-xs text-[#102059]">
+                        <span className="font-semibold">Selected:</span>{' '}
+                        {editStoreData.operatingDays
+                          .slice()
+                          .sort((a, b) => {
+                            const order = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+                            return order.indexOf(a) - order.indexOf(b)
+                          })
+                          .join(', ')}
+                      </p>
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-[#102059] mb-2">
+                    Operating Hours <span className="text-[#E20E28]">*</span>
+                  </label>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs text-[#65676B] mb-2">Opening Time <span className="text-[#E20E28]">*</span></label>
+                      <input
+                        type="time"
+                        value={editStoreData.openingTime}
+                        onChange={(e) => setEditStoreData({ ...editStoreData, openingTime: e.target.value })}
+                        className="w-full px-4 py-2.5 border border-[#E5E7EB] rounded-lg text-sm text-[#102059] focus:outline-none focus:border-[#244693]"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-[#65676B] mb-2">Closing Time <span className="text-[#E20E28]">*</span></label>
+                      <input
+                        type="time"
+                        value={editStoreData.closingTime}
+                        onChange={(e) => setEditStoreData({ ...editStoreData, closingTime: e.target.value })}
+                        className="w-full px-4 py-2.5 border border-[#E5E7EB] rounded-lg text-sm text-[#102059] focus:outline-none focus:border-[#244693]"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="sticky bottom-0 bg-white border-t border-[#E5E7EB] px-6 py-4 flex items-center justify-end gap-3">
+                <button
+                  className="px-4 py-2.5 bg-white text-[#65676B] border border-[#E5E7EB] text-sm font-semibold rounded-lg hover:bg-[#F9FAFB] transition-colors"
+                  onClick={() => setShowEditStoreModal(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  className="px-4 py-2.5 bg-[#244693] text-white text-sm font-semibold rounded-lg hover:bg-[#1a3570] transition-colors"
+                  onClick={handleSaveStoreInfo}
+                >
+                  Save Changes
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Edit Store Information Confirm Modal */}
+        {showEditStoreConfirmModal && (
+          <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4">
+            <div className="bg-white rounded-xl max-w-md w-full p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-xl font-bold text-[#102059]">Save Changes</h3>
+                <button
+                  className="w-8 h-8 bg-[#F0F2F5] hover:bg-[#E5E7EB] rounded-full flex items-center justify-center text-[#65676B] transition-colors"
+                  onClick={() => setShowEditStoreConfirmModal(false)}
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+              <p className="text-sm text-[#65676B] leading-relaxed">
+                Are you sure you want to save changes to <span className="font-semibold text-[#102059]">{editStoreData.storeName}</span>?
+              </p>
+              <div className="flex items-center justify-end mt-6 gap-2">
+                <button
+                  className="px-4 py-2.5 bg-white border border-[#E5E7EB] text-sm font-semibold rounded-lg hover:bg-[#F9FAFB] transition-colors"
+                  onClick={() => setShowEditStoreConfirmModal(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  className="px-4 py-2.5 bg-[#244693] text-white text-sm font-semibold rounded-lg hover:bg-[#1a3570] transition-colors"
+                  onClick={handleConfirmSaveStoreInfo}
+                >
+                  Confirm
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Update Cover Photo Modal */}
+        {showEditCoverPhotoModal && (
+          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+              <div className="sticky top-0 bg-white border-b border-[#E5E7EB] px-6 py-4 flex items-center justify-between">
+                <h3 className="text-xl font-bold text-[#102059]">Update Cover Photo</h3>
+                <button
+                  className="w-8 h-8 bg-[#F0F2F5] hover:bg-[#E5E7EB] rounded-full flex items-center justify-center text-[#65676B] transition-colors"
+                  onClick={() => { setShowEditCoverPhotoModal(false); setCoverPhotoPreview(null) }}
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+              <div className="p-6 space-y-6">
+                <div>
+                  <label className="block text-sm font-semibold text-[#102059] mb-3">Upload New Cover Photo</label>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleCoverPhotoUpload}
+                    className="w-full px-4 py-2.5 border border-[#E5E7EB] rounded-lg text-sm text-[#102059] focus:outline-none focus:border-[#244693] file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-[#244693] file:text-white hover:file:bg-[#1a3570] file:cursor-pointer"
+                  />
+                </div>
+                {coverPhotoPreview && (
+                  <div>
+                    <label className="block text-sm font-semibold text-[#102059] mb-3">Preview</label>
+                    <div className="aspect-[4/1] rounded-lg overflow-hidden border border-[#E5E7EB]">
+                      <img src={coverPhotoPreview} alt="Cover Photo Preview" className="w-full h-full object-cover" />
+                    </div>
+                  </div>
+                )}
+              </div>
+              <div className="sticky bottom-0 bg-white border-t border-[#E5E7EB] px-6 py-4 flex items-center justify-end gap-3">
+                <button
+                  className="px-4 py-2.5 bg-white text-[#65676B] border border-[#E5E7EB] text-sm font-semibold rounded-lg hover:bg-[#F9FAFB] transition-colors"
+                  onClick={() => { setShowEditCoverPhotoModal(false); setCoverPhotoPreview(null) }}
+                >
+                  Cancel
+                </button>
+                <button
+                  className="px-4 py-2.5 bg-[#244693] text-white text-sm font-semibold rounded-lg hover:bg-[#1a3570] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  onClick={handleSaveCoverPhoto}
+                  disabled={!coverPhotoPreview}
+                >
+                  Save Changes
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Cover Photo Confirm Modal */}
+        {showCoverPhotoConfirmModal && (
+          <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4">
+            <div className="bg-white rounded-xl max-w-md w-full p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-xl font-bold text-[#102059]">Update Cover Photo</h3>
+                <button
+                  className="w-8 h-8 bg-[#F0F2F5] hover:bg-[#E5E7EB] rounded-full flex items-center justify-center text-[#65676B] transition-colors"
+                  onClick={() => setShowCoverPhotoConfirmModal(false)}
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+              <p className="text-sm text-[#65676B] leading-relaxed">
+                Are you sure you want to update the cover photo for <span className="font-semibold text-[#102059]">{store.storeName}</span>?
+              </p>
+              <div className="flex items-center justify-end mt-6 gap-2">
+                <button
+                  className="px-4 py-2.5 bg-white border border-[#E5E7EB] text-sm font-semibold rounded-lg hover:bg-[#F9FAFB] transition-colors"
+                  onClick={() => setShowCoverPhotoConfirmModal(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  className="px-4 py-2.5 bg-[#244693] text-white text-sm font-semibold rounded-lg hover:bg-[#1a3570] transition-colors"
+                  onClick={handleConfirmSaveCoverPhoto}
+                >
+                  Confirm
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Reassign Vendor Modal (reference UI) */}
         {showReassignModal && (

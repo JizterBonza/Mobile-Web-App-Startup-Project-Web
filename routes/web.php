@@ -97,14 +97,15 @@ Route::middleware(['auth', 'session.valid', 'user.type:super_admin'])->prefix('d
     Route::put('/{id}/shops/{shopId}', [AgrivetController::class, 'updateShop'])->name('shops.update');
     Route::delete('/{id}/shops/{shopId}', [AgrivetController::class, 'removeShop'])->name('shops.remove');
     Route::get('/{id}/shops/{shopId}/store-information', [AgrivetController::class, 'showStoreInformation'])->name('shops.store-information');
-    
+    Route::post('/{id}/shops/{shopId}/cover-photo', [AgrivetController::class, 'updateShopCoverPhoto'])->name('shops.cover-photo');
+
     // Shop Vendors Routes
     Route::get('/{id}/shops/{shopId}/vendors', [AgrivetController::class, 'showVendors'])->name('shops.vendors.index');
     Route::post('/{id}/shops/{shopId}/vendors', [AgrivetController::class, 'storeVendor'])->name('shops.vendors.store');
     Route::put('/{id}/shops/{shopId}/vendors/{vendorId}', [AgrivetController::class, 'updateVendor'])->name('shops.vendors.update');
     Route::delete('/{id}/shops/{shopId}/vendors/{vendorId}', [AgrivetController::class, 'removeVendor'])->name('shops.vendors.remove');
     Route::post('/{id}/shops/{shopId}/vendors/add-existing', [AgrivetController::class, 'addExistingVendor'])->name('shops.vendors.add-existing');
-    
+
     Route::put('/{id}', [AgrivetController::class, 'update'])->name('update');
     Route::delete('/{id}', [AgrivetController::class, 'destroy'])->name('destroy');
 });
@@ -183,14 +184,15 @@ Route::middleware(['auth', 'session.valid', 'user.type:admin'])->prefix('dashboa
     Route::put('/{id}/shops/{shopId}', [AgrivetController::class, 'updateShop'])->name('shops.update');
     Route::delete('/{id}/shops/{shopId}', [AgrivetController::class, 'removeShop'])->name('shops.remove');
     Route::get('/{id}/shops/{shopId}/store-information', [AgrivetController::class, 'showStoreInformation'])->name('shops.store-information');
-    
+    Route::post('/{id}/shops/{shopId}/cover-photo', [AgrivetController::class, 'updateShopCoverPhoto'])->name('shops.cover-photo');
+
     // Shop Vendors Routes
     Route::get('/{id}/shops/{shopId}/vendors', [AgrivetController::class, 'showVendors'])->name('shops.vendors.index');
     Route::post('/{id}/shops/{shopId}/vendors', [AgrivetController::class, 'storeVendor'])->name('shops.vendors.store');
     Route::put('/{id}/shops/{shopId}/vendors/{vendorId}', [AgrivetController::class, 'updateVendor'])->name('shops.vendors.update');
     Route::delete('/{id}/shops/{shopId}/vendors/{vendorId}', [AgrivetController::class, 'removeVendor'])->name('shops.vendors.remove');
     Route::post('/{id}/shops/{shopId}/vendors/add-existing', [AgrivetController::class, 'addExistingVendor'])->name('shops.vendors.add-existing');
-    
+
     Route::put('/{id}', [AgrivetController::class, 'update'])->name('update');
     Route::delete('/{id}', [AgrivetController::class, 'destroy'])->name('destroy');
 });
