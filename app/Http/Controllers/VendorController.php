@@ -336,6 +336,64 @@ class VendorController extends Controller
     }
 
     /**
+     * Show the form for creating a new product.
+     */
+    public function productsCreate()
+    {
+        $shop = $this->getVendorShopWithAgrivet();
+
+        if (!$shop) {
+            return redirect()->route('dashboard.vendor')
+                ->with('error', 'You are not associated with any Shop.');
+        }
+
+        $agrivet = $shop->agrivet;
+        $stockImages = $agrivet ? ProductImage::where('agrivet_id', $agrivet->id)
+            ->where('status', 'active')
+            ->orderBy('category')
+            ->orderBy('name')
+            ->get()
+            ->map(function ($image) {
+                return [
+                    'id' => $image->id,
+                    'name' => $image->name,
+                    'image_url' => $image->image_url,
+                    'category' => $image->category,
+                ];
+            }) : collect([]);
+
+        $categories = Category::where('status', 'active')
+            ->orderBy('category_name')
+            ->get()
+            ->map(function ($category) {
+                return [
+                    'id' => $category->id,
+                    'name' => $category->category_name,
+                ];
+            });
+
+        $subCategories = SubCategory::where('sub_category_status', 'active')
+            ->orderBy('sub_category_name')
+            ->get()
+            ->map(function ($subCategory) {
+                return [
+                    'id' => $subCategory->id,
+                    'name' => $subCategory->sub_category_name,
+                ];
+            });
+
+        return Inertia::render('Dashboard/Vendor/RegisterProduct', [
+            'shop' => [
+                'id' => $shop->id,
+                'shop_name' => $shop->shop_name,
+            ],
+            'stockImages' => $stockImages,
+            'categories' => $categories,
+            'subCategories' => $subCategories,
+        ]);
+    }
+
+    /**
      * Store a new product.
      */
     public function productsStore(Request $request)

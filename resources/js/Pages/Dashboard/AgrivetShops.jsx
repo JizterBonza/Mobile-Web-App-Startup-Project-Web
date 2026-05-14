@@ -325,7 +325,7 @@ export default function AgrivetShops({ auth, agrivet, zones = [], shops = [], fl
                       <div className="mb-3 flex items-start justify-between gap-2">
                         <h3 className="flex-1 text-sm font-bold text-[#102059]">{shop.shop_name}</h3>
                         <div className="flex shrink-0 items-center gap-0.5">
-                          <button
+                          {/* <button
                             type="button"
                             onClick={(e) => {
                               e.stopPropagation()
@@ -348,7 +348,7 @@ export default function AgrivetShops({ auth, agrivet, zones = [], shops = [], fl
                             title="Edit shop"
                           >
                             <Pencil className="h-4 w-4" />
-                          </button>
+                          </button> */}
                           {shop.shop_status === 'active' && (
                             <button
                               type="button"

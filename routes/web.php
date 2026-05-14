@@ -11,9 +11,9 @@ use App\Http\Controllers\ActivityLogController;
 use App\Http\Controllers\PaymentMethodController;
 use App\Http\Controllers\DeliveryMethodController;
 use App\Http\Controllers\ZoneController;
+use App\Http\Controllers\SuperAdminProductController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
-use App\Models\Item;
 
 Route::get('/', function () {
     return Inertia::render('Welcome');
@@ -43,32 +43,17 @@ Route::get('/dashboard/super-admin', function () {
     return Inertia::render('Dashboard/SuperAdminDashboard');
 })->middleware(['auth', 'session.valid', 'user.type:super_admin'])->name('dashboard.super-admin');
 
-Route::get('/dashboard/super-admin/products', function () {
-    $products = Item::query()
-        ->with(['shop', 'categoryRelation'])
-        ->latest()
-        ->get()
-        ->map(function ($item) {
-            return [
-                'id' => $item->id,
-                'item_name' => $item->item_name,
-                'category' => $item->category,
-                'category_name' => optional($item->categoryRelation)->category_name,
-                'item_status' => $item->item_status,
-                'item_images' => $item->item_images,
-                'sold_count' => $item->sold_count,
-                'created_at' => $item->created_at,
-                'shop_name' => optional($item->shop)->shop_name,
-                // Optional fields (UI displays if present)
-                'weight' => $item->weight ?? null,
-                'metric' => $item->metric ?? null,
-            ];
-        });
+Route::get('/dashboard/super-admin/products/create', [SuperAdminProductController::class, 'create'])
+    ->middleware(['auth', 'session.valid', 'user.type:super_admin'])
+    ->name('dashboard.super-admin.products.create');
 
-    return Inertia::render('Dashboard/SuperAdmin/Products', [
-        'products' => $products,
-    ]);
-})->middleware(['auth', 'session.valid', 'user.type:super_admin'])->name('dashboard.super-admin.products');
+Route::post('/dashboard/super-admin/products', [SuperAdminProductController::class, 'store'])
+    ->middleware(['auth', 'session.valid', 'user.type:super_admin'])
+    ->name('dashboard.super-admin.products.store');
+
+Route::get('/dashboard/super-admin/products', [SuperAdminProductController::class, 'index'])
+    ->middleware(['auth', 'session.valid', 'user.type:super_admin'])
+    ->name('dashboard.super-admin.products');
 
 // User Management Routes
 Route::middleware(['auth', 'session.valid', 'user.type:super_admin'])->prefix('dashboard/super-admin/users')->name('dashboard.super-admin.users.')->group(function () {
@@ -255,6 +240,7 @@ Route::middleware(['auth', 'session.valid', 'user.type:vendor|owner_manager'])->
     
     // Products
     Route::get('/products', [VendorController::class, 'productsIndex'])->name('products.index');
+    Route::get('/products/create', [VendorController::class, 'productsCreate'])->name('products.create');
     Route::post('/products', [VendorController::class, 'productsStore'])->name('products.store');
     Route::put('/products/{id}', [VendorController::class, 'productsUpdate'])->name('products.update');
     Route::delete('/products/{id}', [VendorController::class, 'productsDestroy'])->name('products.destroy');

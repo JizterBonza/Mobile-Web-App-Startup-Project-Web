@@ -444,12 +444,9 @@ export default function Products({ auth, products = [], shop, flash, stockImages
                 <button
                   type="button"
                   className="btn btn-primary btn-sm"
-                  onClick={() => {
-                    setShowAddModal(true)
-                    setShowAddModalAnimation(false)
-                  }}
+                  onClick={() => router.visit('/dashboard/vendor/products/create')}
                 >
-                  <i className="fas fa-plus"></i> Add Product
+                  <i className="fas fa-plus"></i> Register Product
                 </button>
               </div>
             </div>
