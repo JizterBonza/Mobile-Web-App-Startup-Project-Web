@@ -3,7 +3,7 @@ import { useForm, router } from '@inertiajs/react'
 import { ArrowLeft, Check, X, CheckCircle, Upload, Star } from 'lucide-react'
 import SuperAdminOrAdminLayout from '../../../Layouts/SuperAdminOrAdminLayout'
 
-export default function SuperAdminRegisterProduct({ auth, categories = [], authUser }) {
+export default function SuperAdminRegisterProduct({ auth, categories = [], subCategories = [], authUser }) {
     const [currentStep, setCurrentStep] = useState(1)
     const [errorMessage, setErrorMessage] = useState(null)
     const [showSuccessModal, setShowSuccessModal] = useState(false)
@@ -17,6 +17,7 @@ export default function SuperAdminRegisterProduct({ auth, categories = [], authU
         brand:               '',
         product_name:        '',
         category_id:         '',
+        sub_category_id:     '',
         weight:              '',
         unit:                'kg',
         description:         '',
@@ -95,6 +96,7 @@ export default function SuperAdminRegisterProduct({ auth, categories = [], authU
         fd.append('brand',               form.data.brand)
         fd.append('product_name',        form.data.product_name)
         fd.append('category_id',         form.data.category_id)
+        fd.append('sub_category_id',     form.data.sub_category_id)
         fd.append('weight',              form.data.weight)
         fd.append('unit',                form.data.unit)
         fd.append('description',         form.data.description)
@@ -112,7 +114,8 @@ export default function SuperAdminRegisterProduct({ auth, categories = [], authU
         })
     }
 
-    const getCategoryName = (id) => categories.find(c => String(c.id) === String(id))?.name ?? '—'
+    const getCategoryName    = (id) => categories.find(c => String(c.id) === String(id))?.name ?? '—'
+    const getSubCategoryName = (id) => subCategories.find(s => String(s.id) === String(id))?.name ?? '—'
     const uploadedCount   = uploadedPhotos.filter(p => p !== null).length
 
     // ── Shared style tokens ─────────────────────────────────────────
@@ -218,19 +221,34 @@ export default function SuperAdminRegisterProduct({ auth, categories = [], authU
                                 {form.errors.product_name && <p className="mt-1 text-xs text-[#E20E28]">{form.errors.product_name}</p>}
                             </div>
 
-                            {/* Category */}
-                            <div>
-                                <label className={labelClass}>Category</label>
-                                <select
-                                    className={inputClass}
-                                    value={form.data.category_id}
-                                    onChange={e => form.setData('category_id', e.target.value)}
-                                >
-                                    <option value="">Select Category</option>
-                                    {categories.map(c => (
-                                        <option key={c.id} value={c.id}>{c.name}</option>
-                                    ))}
-                                </select>
+                            {/* Category & Sub Category */}
+                            <div className="grid gap-4 md:grid-cols-2">
+                                <div>
+                                    <label className={labelClass}>Category</label>
+                                    <select
+                                        className={inputClass}
+                                        value={form.data.category_id}
+                                        onChange={e => form.setData('category_id', e.target.value)}
+                                    >
+                                        <option value="">Select Category</option>
+                                        {categories.map(c => (
+                                            <option key={c.id} value={c.id}>{c.name}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className={labelClass}>Sub Category</label>
+                                    <select
+                                        className={inputClass}
+                                        value={form.data.sub_category_id}
+                                        onChange={e => form.setData('sub_category_id', e.target.value)}
+                                    >
+                                        <option value="">Select Sub Category</option>
+                                        {subCategories.map(s => (
+                                            <option key={s.id} value={s.id}>{s.name}</option>
+                                        ))}
+                                    </select>
+                                </div>
                             </div>
 
                             {/* Weight/Size + Unit */}
@@ -431,6 +449,7 @@ export default function SuperAdminRegisterProduct({ auth, categories = [], authU
                                         { label: 'Product Name', value: form.data.product_name },
                                         { label: 'Brand',        value: form.data.brand || '—' },
                                         { label: 'Category',     value: form.data.category_id ? getCategoryName(form.data.category_id) : '—' },
+                                        { label: 'Sub Category', value: form.data.sub_category_id ? getSubCategoryName(form.data.sub_category_id) : '—' },
                                         { label: 'Unit',         value: form.data.weight ? `${form.data.weight} ${form.data.unit}` : '—' },
                                     ].map(row => (
                                         <div key={row.label} className="flex justify-between text-sm">

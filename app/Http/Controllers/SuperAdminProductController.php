@@ -7,6 +7,7 @@ use Inertia\Inertia;
 use App\Models\ActivityLog;
 use App\Models\ProductCatalog;
 use App\Models\Category;
+use App\Models\SubCategory;
 
 class SuperAdminProductController extends Controller
 {
@@ -15,7 +16,7 @@ class SuperAdminProductController extends Controller
      */
     public function index()
     {
-        $products = ProductCatalog::with('category', 'creator')
+        $products = ProductCatalog::with('category', 'subCategory', 'creator')
             ->latest()
             ->get()
             ->map(fn($p) => [
@@ -23,6 +24,7 @@ class SuperAdminProductController extends Controller
                 'brand'               => $p->brand,
                 'product_name'        => $p->product_name,
                 'category_name'       => optional($p->category)->category_name,
+                'sub_category_name'   => optional($p->subCategory)->sub_category_name,
                 'weight'              => $p->weight,
                 'unit'                => $p->unit,
                 'images'              => $p->images ?? [],
@@ -47,9 +49,15 @@ class SuperAdminProductController extends Controller
             ->get()
             ->map(fn($c) => ['id' => $c->id, 'name' => $c->category_name]);
 
+        $subCategories = SubCategory::where('sub_category_status', 'active')
+            ->orderBy('sub_category_name')
+            ->get()
+            ->map(fn($s) => ['id' => $s->id, 'name' => $s->sub_category_name]);
+
         return Inertia::render('Dashboard/SuperAdmin/RegisterProduct', [
-            'categories' => $categories,
-            'authUser'   => [
+            'categories'    => $categories,
+            'subCategories' => $subCategories,
+            'authUser'      => [
                 'name' => auth()->user()->name,
                 'role' => auth()->user()->user_type ?? 'Super Admin',
             ],
@@ -65,6 +73,7 @@ class SuperAdminProductController extends Controller
             'brand'               => 'nullable|string|max:150',
             'product_name'        => 'required|string|max:150',
             'category_id'         => 'nullable|exists:category,id',
+            'sub_category_id'     => 'nullable|exists:sub_categories,id',
             'weight'              => 'nullable|numeric|min:0',
             'unit'                => 'nullable|string|max:50',
             'description'         => 'nullable|string|max:320',
@@ -83,6 +92,7 @@ class SuperAdminProductController extends Controller
             'brand'               => $request->brand,
             'product_name'        => $request->product_name,
             'category_id'         => $request->category_id,
+            'sub_category_id'     => $request->sub_category_id,
             'weight'              => $request->weight,
             'unit'                => $request->unit,
             'description'         => $request->description,

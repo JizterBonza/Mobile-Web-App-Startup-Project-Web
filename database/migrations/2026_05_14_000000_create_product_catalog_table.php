@@ -13,6 +13,7 @@ return new class extends Migration
             $table->string('brand', 150)->nullable();
             $table->string('product_name', 150);
             $table->unsignedBigInteger('category_id')->nullable();
+            $table->unsignedBigInteger('sub_category_id')->nullable();
             $table->decimal('weight', 10, 3)->nullable();
             $table->string('unit', 50)->nullable();
             $table->text('description')->nullable();
@@ -23,6 +24,7 @@ return new class extends Migration
             $table->timestamps();
 
             $table->foreign('category_id')->references('id')->on('category')->nullOnDelete();
+            $table->foreign('sub_category_id')->references('id')->on('sub_categories')->nullOnDelete();
             $table->foreign('created_by')->references('id')->on('users')->nullOnDelete();
         });
     }

@@ -88,14 +88,28 @@ export default function SuperAdminProducts({ auth, products = [], flash }) {
                     <p className="text-sm text-[#6B7280]">
                         Manage the platform product catalog. Vendors can only add products listed here to their shop inventory.
                     </p>
-                    <div className="mt-4">
+                    <div className="mt-4 flex flex-wrap gap-3">
                         <Link
                             href="/dashboard/super-admin/products/create"
-                            className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#102059] px-6 py-2 text-sm font-medium text-white transition-colors hover:bg-[#244693]"
+                            className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#102059] px-5 py-2 text-sm font-medium text-white transition-colors hover:bg-[#244693]"
                             style={{ backgroundColor: '#102059', border: '1px solid #102059' }}
                         >
                             <Plus className="h-4 w-4" />
                             Register Product
+                        </Link>
+                        <Link
+                            href="/dashboard/super-admin/categories"
+                            className="inline-flex items-center justify-center gap-2 rounded-lg border border-[#102059] px-5 py-2 text-sm font-medium text-white transition-colors hover:bg-[#F0F7FF]"
+                            style={{ backgroundColor: '#102059', border: '1px solid #102059' }}
+                        >
+                            Go to Categories
+                        </Link>
+                        <Link
+                            href="/dashboard/super-admin/sub-categories"
+                            className="inline-flex items-center justify-center gap-2 rounded-lg border border-[#102059] px-5 py-2 text-sm font-medium text-white transition-colors hover:bg-[#F0F7FF]"
+                            style={{ backgroundColor: '#102059', border: '1px solid #102059' }}
+                        >
+                            Go to Sub-Categories
                         </Link>
                     </div>
                 </div>
