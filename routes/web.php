@@ -12,6 +12,7 @@ use App\Http\Controllers\PaymentMethodController;
 use App\Http\Controllers\DeliveryMethodController;
 use App\Http\Controllers\ZoneController;
 use App\Http\Controllers\SuperAdminProductController;
+use App\Http\Controllers\DashboardController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
@@ -39,9 +40,8 @@ Route::middleware(['auth', 'session.valid'])->group(function () {
 });
 
 // Protected Routes - User Type Specific Dashboards
-Route::get('/dashboard/super-admin', function () {
-    return Inertia::render('Dashboard/SuperAdminDashboard');
-})->middleware(['auth', 'session.valid', 'user.type:super_admin'])->name('dashboard.super-admin');
+Route::get('/dashboard/super-admin', [DashboardController::class, 'superAdmin'])
+    ->middleware(['auth', 'session.valid', 'user.type:super_admin'])->name('dashboard.super-admin');
 
 Route::get('/dashboard/super-admin/products/create', [SuperAdminProductController::class, 'create'])
     ->middleware(['auth', 'session.valid', 'user.type:super_admin'])
@@ -141,9 +141,8 @@ Route::middleware(['auth', 'session.valid', 'user.type:super_admin'])->prefix('d
     Route::delete('/{id}', [ZoneController::class, 'destroy'])->name('destroy');
 });
 
-Route::get('/dashboard/admin', function () {
-    return Inertia::render('Dashboard/AdminDashboard');
-})->middleware(['auth', 'session.valid', 'user.type:admin'])->name('dashboard.admin');
+Route::get('/dashboard/admin', [DashboardController::class, 'admin'])
+    ->middleware(['auth', 'session.valid', 'user.type:admin'])->name('dashboard.admin');
 
 // Admin User Management Routes
 Route::middleware(['auth', 'session.valid', 'user.type:admin'])->prefix('dashboard/admin/users')->name('dashboard.admin.users.')->group(function () {

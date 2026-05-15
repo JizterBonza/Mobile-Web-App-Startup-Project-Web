@@ -2,16 +2,16 @@ import KlasmeytDashboardLayout from '../../Layouts/KlasmeytDashboardLayout'
 import { KlasmeytStatCard } from '../../Components/Dashboard/KlasmeytStatCard'
 import { useDashboardSession } from '../../hooks/useDashboardSession'
 
-export default function AdminDashboard({ auth }) {
+export default function AdminDashboard({ auth, stats = {} }) {
     const { sessionValid } = useDashboardSession()
 
     return (
         <KlasmeytDashboardLayout auth={auth} title="Admin Dashboard">
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                <KlasmeytStatCard label="Pending orders" value="0" iconClass="fas fa-shopping-cart" />
-                <KlasmeytStatCard label="Active vendors" value="0" iconClass="fas fa-store" />
-                <KlasmeytStatCard label="Active veterinarians" value="0" iconClass="fas fa-user-md" />
-                <KlasmeytStatCard label="Support tickets" value="0" iconClass="fas fa-ticket-alt" />
+                <KlasmeytStatCard label="Pending orders" value={String(stats.pending_orders ?? 0)} iconClass="fas fa-shopping-cart" />
+                <KlasmeytStatCard label="Active vendors" value={String(stats.active_vendors ?? 0)} iconClass="fas fa-store" />
+                <KlasmeytStatCard label="Active veterinarians" value={String(stats.active_veterinarians ?? 0)} iconClass="fas fa-user-md" />
+                <KlasmeytStatCard label="Support tickets" value={String(stats.support_tickets ?? 0)} iconClass="fas fa-ticket-alt" />
             </div>
 
             <section className="mt-8 rounded-2xl border border-[#E5E7EB] bg-white p-8 shadow-sm">
