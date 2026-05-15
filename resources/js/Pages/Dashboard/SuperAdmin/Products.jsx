@@ -160,7 +160,7 @@ export default function SuperAdminProducts({ auth, products = [], flash }) {
                         {displayed.length > 0 ? displayed.map(product => {
                             const primarySrc = product.photos[product.primaryIndex] ?? product.photos[0]
                             return (
-                                <div key={product.id} className="px-6 py-4 transition-colors hover:bg-[#F8F9FB]">
+                                <Link key={product.id} href={`/dashboard/super-admin/products/${product.id}`} className="block px-6 py-4 transition-colors hover:bg-[#F8F9FB] cursor-pointer">
                                     <div className="flex items-center gap-4">
                                         {/* Thumbnail */}
                                         <div className="relative flex h-14 w-14 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg border border-[#E5E7EB] bg-[#F0F2F5]">
@@ -227,7 +227,7 @@ export default function SuperAdminProducts({ auth, products = [], flash }) {
                                             </div>
                                         </div>
                                     </div>
-                                </div>
+                                </Link>
                             )
                         }) : (
                             <div className="py-16 text-center">

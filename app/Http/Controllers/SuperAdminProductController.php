@@ -65,6 +65,32 @@ class SuperAdminProductController extends Controller
     }
 
     /**
+     * Show a single product catalog entry.
+     */
+    public function show($id)
+    {
+        $p = ProductCatalog::with('category', 'subCategory', 'creator')->findOrFail($id);
+
+        return Inertia::render('Dashboard/SuperAdmin/ProductShow', [
+            'product' => [
+                'id'                  => $p->id,
+                'brand'               => $p->brand,
+                'product_name'        => $p->product_name,
+                'category_name'       => optional($p->category)->category_name,
+                'sub_category_name'   => optional($p->subCategory)->sub_category_name,
+                'weight'              => $p->weight,
+                'unit'                => $p->unit,
+                'description'         => $p->description,
+                'images'              => $p->images ?? [],
+                'primary_image_index' => $p->primary_image_index ?? 0,
+                'status'              => $p->status,
+                'created_by_name'     => optional($p->creator)->name,
+                'created_at'          => $p->created_at,
+            ],
+        ]);
+    }
+
+    /**
      * Store a new product in the catalog.
      */
     public function store(Request $request)

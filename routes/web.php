@@ -55,6 +55,10 @@ Route::get('/dashboard/super-admin/products', [SuperAdminProductController::clas
     ->middleware(['auth', 'session.valid', 'user.type:super_admin'])
     ->name('dashboard.super-admin.products');
 
+Route::get('/dashboard/super-admin/products/{id}', [SuperAdminProductController::class, 'show'])
+    ->middleware(['auth', 'session.valid', 'user.type:super_admin'])
+    ->name('dashboard.super-admin.products.show');
+
 // User Management Routes
 Route::middleware(['auth', 'session.valid', 'user.type:super_admin'])->prefix('dashboard/super-admin/users')->name('dashboard.super-admin.users.')->group(function () {
     Route::get('/', [UserController::class, 'index'])->name('index');
