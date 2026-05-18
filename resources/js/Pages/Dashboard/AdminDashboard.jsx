@@ -1,32 +1,27 @@
-import KlasmeytDashboardLayout from '../../Layouts/KlasmeytDashboardLayout'
-import { KlasmeytStatCard } from '../../Components/Dashboard/KlasmeytStatCard'
+import AdminKlasmeytLayout from '../../Layouts/AdminKlasmeytLayout'
+import { SuperAdminPlatformInsights } from '../../Components/Dashboard/SuperAdminPlatformInsights'
 import { useDashboardSession } from '../../hooks/useDashboardSession'
 
-export default function AdminDashboard({ auth, stats = {} }) {
-    const { sessionValid } = useDashboardSession()
+export default function AdminDashboard({ auth, insights }) {
+    useDashboardSession()
+
+    const userStats = insights?.userStats
+    const orderMetrics = insights?.orderMetrics
+    const topStores = insights?.topStores ?? []
+    const topRiders = insights?.topRiders ?? []
 
     return (
-        <KlasmeytDashboardLayout auth={auth} title="Admin Dashboard">
-            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                <KlasmeytStatCard label="Pending orders" value={String(stats.pending_orders ?? 0)} iconClass="fas fa-shopping-cart" />
-                <KlasmeytStatCard label="Active vendors" value={String(stats.active_vendors ?? 0)} iconClass="fas fa-store" />
-                <KlasmeytStatCard label="Active veterinarians" value={String(stats.active_veterinarians ?? 0)} iconClass="fas fa-user-md" />
-                <KlasmeytStatCard label="Support tickets" value={String(stats.support_tickets ?? 0)} iconClass="fas fa-ticket-alt" />
-            </div>
-
-            <section className="mt-8 rounded-2xl border border-[#E5E7EB] bg-white p-8 shadow-sm">
-                <h2 className="text-xl font-semibold text-[#102059]">Welcome, {auth.user.name}</h2>
-                <p className="mt-3 text-sm leading-relaxed text-[#6B7280]">
-                    You are signed in as <span className="font-semibold text-[#102059]">Admin</span>. Manage
-                    vendors, veterinarians, orders, and day-to-day operations from the menu.
-                </p>
-                {sessionValid && (
-                    <p className="mt-6 inline-flex items-center gap-2 rounded-lg bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-800">
-                        <i className="fas fa-check-circle" />
-                        Session active
-                    </p>
-                )}
-            </section>
-        </KlasmeytDashboardLayout>
+        <AdminKlasmeytLayout
+            auth={auth}
+            title="Admin Dashboard"
+            notificationCount={insights?.notificationCount ?? 0}
+        >
+            <SuperAdminPlatformInsights
+                userStats={userStats}
+                orderMetrics={orderMetrics}
+                topStores={topStores}
+                topRiders={topRiders}
+            />
+        </AdminKlasmeytLayout>
     )
 }

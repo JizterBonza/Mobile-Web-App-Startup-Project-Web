@@ -16,7 +16,7 @@ import {
     UsersRound,
     X,
 } from 'lucide-react'
-import KlasmeytDashboardLayout from '../../Layouts/KlasmeytDashboardLayout'
+import AdminKlasmeytLayout from '../../Layouts/AdminKlasmeytLayout'
 import SuperAdminKlasmeytLayout from '../../Layouts/SuperAdminKlasmeytLayout'
 import { useDashboardSession } from '../../hooks/useDashboardSession'
 
@@ -112,7 +112,11 @@ function AccountsShell({ auth, title, children }) {
             </SuperAdminKlasmeytLayout>
         )
     }
-    return <KlasmeytDashboardLayout auth={auth} title={title}>{children}</KlasmeytDashboardLayout>
+    return (
+        <AdminKlasmeytLayout auth={auth} title={title} notificationCount={0}>
+            {children}
+        </AdminKlasmeytLayout>
+    )
 }
 
 export default function Accounts({ auth, users = [], flash }) {

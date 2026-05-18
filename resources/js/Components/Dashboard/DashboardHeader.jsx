@@ -274,3 +274,39 @@ export const SUPER_ADMIN_HEADER_NAV = [
         href: '/dashboard/super-admin/zones',
     },
 ]
+
+export const ADMIN_HEADER_NAV = [
+    { label: 'Dashboard', id: 'dashboard', href: '/dashboard/admin' },
+    { label: 'Accounts', id: 'accounts', href: '/dashboard/admin/users' },
+    { label: 'Agrivets', id: 'agrivets', href: '/dashboard/admin/agrivets' },
+    {
+        label: 'Products',
+        id: 'products',
+        href: '/dashboard/admin/products',
+        matchPaths: [
+            '/dashboard/admin/products',
+            '/dashboard/admin/categories',
+            '/dashboard/admin/sub-categories',
+        ],
+    },
+    {
+        label: 'Activity Logs',
+        id: 'activity-logs',
+        href: '/dashboard/admin/activity-logs',
+    },
+    {
+        label: 'Payment Methods',
+        id: 'payment-methods',
+        href: '/dashboard/admin/payment-methods',
+    },
+    {
+        label: 'Delivery Methods',
+        id: 'delivery-methods',
+        href: '/dashboard/admin/delivery-methods',
+    },
+    {
+        label: 'Zones',
+        id: 'zones',
+        href: '/dashboard/admin/zones',
+    },
+]
