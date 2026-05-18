@@ -145,6 +145,9 @@ Route::middleware(['auth', 'session.valid', 'user.type:super_admin'])->prefix('d
     Route::delete('/{id}', [ZoneController::class, 'destroy'])->name('destroy');
 });
 
+Route::get('/dashboard/owner-manager', [DashboardController::class, 'ownerManager'])
+    ->middleware(['auth', 'session.valid', 'user.type:owner_manager'])->name('dashboard.owner-manager');
+
 Route::get('/dashboard/admin', [DashboardController::class, 'admin'])
     ->middleware(['auth', 'session.valid', 'user.type:admin'])->name('dashboard.admin');
 
@@ -232,11 +235,11 @@ Route::middleware(['auth', 'session.valid', 'user.type:admin'])->prefix('dashboa
 });
 
 Route::get('/dashboard/vendor', [VendorController::class, 'index'])
-    ->middleware(['auth', 'session.valid', 'user.type:vendor|owner_manager'])
+    ->middleware(['auth', 'session.valid', 'user.type:vendor'])
     ->name('dashboard.vendor');
 
-// Vendor Management Routes (store owners who log in as vendor or owner_manager)
-Route::middleware(['auth', 'session.valid', 'user.type:vendor|owner_manager'])->prefix('dashboard/vendor')->name('dashboard.vendor.')->group(function () {
+// Vendor Management Routes
+Route::middleware(['auth', 'session.valid', 'user.type:vendor'])->prefix('dashboard/vendor')->name('dashboard.vendor.')->group(function () {
     // Store Management
     Route::get('/store', [VendorController::class, 'storeIndex'])->name('store.index');
     Route::post('/store', [VendorController::class, 'storeUpdate'])->name('store.update');

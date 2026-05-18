@@ -131,6 +131,140 @@ class DashboardController extends Controller
         ]);
     }
 
+    public function ownerManager()
+    {
+        $user = auth()->user();
+        $agrivet = $user->managedAgrivet;
+
+        if (!$agrivet) {
+            return Inertia::render('Dashboard/OwnerManagerDashboard', [
+                'agrivet' => null,
+                'shops'   => [],
+                'stats'   => [],
+            ]);
+        }
+
+        $shops = $agrivet->shops;
+        $shopIds = $shops->pluck('id')->toArray();
+
+        if (empty($shopIds)) {
+            return Inertia::render('Dashboard/OwnerManagerDashboard', [
+                'agrivet' => $agrivet,
+                'shops'   => [],
+                'stats'   => [],
+            ]);
+        }
+
+        $totalOrders = (int) DB::table('order_items')
+            ->whereIn('shop_id', $shopIds)
+            ->distinct('order_id')
+            ->count('order_id');
+
+        $itemsSold = (int) DB::table('order_items')
+            ->whereIn('shop_id', $shopIds)
+            ->where('item_status', 'delivered')
+            ->sum('quantity');
+
+        $totalRevenue = (float) DB::table('order_items')
+            ->whereIn('shop_id', $shopIds)
+            ->where('item_status', 'delivered')
+            ->selectRaw('COALESCE(SUM(quantity * price_at_purchase), 0) as total')
+            ->value('total');
+
+        $avgRating = $shops->avg('average_rating') ?? 0;
+
+        $storeStats = $shops->map(function ($shop) {
+            $orders = (int) DB::table('order_items')
+                ->where('shop_id', $shop->id)
+                ->distinct('order_id')
+                ->count('order_id');
+            $revenue = (float) DB::table('order_items')
+                ->where('shop_id', $shop->id)
+                ->where('item_status', 'delivered')
+                ->selectRaw('COALESCE(SUM(quantity * price_at_purchase), 0) as total')
+                ->value('total');
+            return [
+                'id'             => $shop->id,
+                'shop_name'      => $shop->shop_name,
+                'shop_status'    => $shop->shop_status,
+                'average_rating' => $shop->average_rating,
+                'orders'         => $orders,
+                'revenue'        => $revenue,
+            ];
+        })->values()->toArray();
+
+        $topProducts = DB::table('order_items')
+            ->join('items', 'order_items.item_id', '=', 'items.id')
+            ->whereIn('order_items.shop_id', $shopIds)
+            ->where('order_items.item_status', 'delivered')
+            ->select(
+                'items.item_name as name',
+                DB::raw('COALESCE(SUM(order_items.quantity), 0) as quantity'),
+                DB::raw('COALESCE(SUM(order_items.quantity * order_items.price_at_purchase), 0) as revenue'),
+            )
+            ->groupBy('items.id', 'items.item_name')
+            ->orderByDesc('quantity')
+            ->limit(10)
+            ->get()
+            ->map(fn($p) => [
+                'name'     => $p->name,
+                'quantity' => (int) $p->quantity,
+                'revenue'  => (float) $p->revenue,
+            ])
+            ->toArray();
+
+        $customerRows = DB::table('order_items')
+            ->join('orders', 'order_items.order_id', '=', 'orders.id')
+            ->whereIn('order_items.shop_id', $shopIds)
+            ->select('orders.user_id', DB::raw('COUNT(DISTINCT orders.id) as order_count'))
+            ->groupBy('orders.user_id')
+            ->get();
+
+        $totalCustomers = $customerRows->count();
+        $returningCustomers = $customerRows->filter(fn($c) => $c->order_count > 1)->count();
+        $newCustomers = $totalCustomers - $returningCustomers;
+
+        $topBuyers = DB::table('orders')
+            ->join('order_items', 'orders.id', '=', 'order_items.order_id')
+            ->join('users', 'orders.user_id', '=', 'users.id')
+            ->join('user_details', 'users.user_detail_id', '=', 'user_details.id')
+            ->whereIn('order_items.shop_id', $shopIds)
+            ->select(
+                'orders.user_id',
+                DB::raw("CONCAT(user_details.first_name, ' ', user_details.last_name) as name"),
+                DB::raw('COUNT(DISTINCT orders.id) as total_orders'),
+                DB::raw('COALESCE(SUM(order_items.quantity * order_items.price_at_purchase), 0) as total_spent'),
+            )
+            ->groupBy('orders.user_id', 'user_details.first_name', 'user_details.last_name')
+            ->orderByDesc('total_spent')
+            ->limit(10)
+            ->get()
+            ->map(fn($b) => [
+                'name'         => $b->name,
+                'total_orders' => (int) $b->total_orders,
+                'total_spent'  => (float) $b->total_spent,
+            ])
+            ->toArray();
+
+        return Inertia::render('Dashboard/OwnerManagerDashboard', [
+            'agrivet' => $agrivet,
+            'shops'   => $shops->values(),
+            'stats'   => [
+                'total_orders'        => $totalOrders,
+                'items_sold'          => $itemsSold,
+                'total_revenue'       => $totalRevenue,
+                'average_rating'      => round((float) $avgRating, 1),
+                'store_stats'         => $storeStats,
+                'top_products'        => $topProducts,
+                'new_customers'       => $newCustomers,
+                'returning_customers' => $returningCustomers,
+                'total_customers'     => $totalCustomers,
+                'top_buyers'          => $topBuyers,
+                'revenue_by_category' => [],
+            ],
+        ]);
+    }
+
     public function admin()
     {
         $pendingOrders = (int) DB::table('order_items')

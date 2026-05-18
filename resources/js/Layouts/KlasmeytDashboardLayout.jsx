@@ -11,6 +11,8 @@ function dashboardHomePath(userType) {
             return '/dashboard/admin'
         case 'vendor':
             return '/dashboard/vendor'
+        case 'owner_manager':
+            return '/dashboard/owner-manager'
         case 'veterinarian':
             return '/dashboard/veterinarian'
         default:

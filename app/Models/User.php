@@ -86,7 +86,7 @@ class User extends Authenticatable
             self::TYPE_SUPER_ADMIN => '/dashboard/super-admin',
             self::TYPE_ADMIN => '/dashboard/admin',
             self::TYPE_VENDOR => '/dashboard/vendor',
-            self::TYPE_OWNER_MANAGER => '/dashboard/vendor',
+            self::TYPE_OWNER_MANAGER => '/dashboard/owner-manager',
             self::TYPE_VETERINARIAN => '/dashboard/veterinarian',
             default => '/dashboard',
         };
