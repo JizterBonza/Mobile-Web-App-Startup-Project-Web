@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import { Head } from '@inertiajs/react'
 import {
     Activity,
     ArrowUpRight,
@@ -15,17 +14,11 @@ import {
     UserPlus,
     Users,
 } from 'lucide-react'
-import { DashboardHeader } from '../../Components/Dashboard/DashboardHeader'
-import { useDashboardSession } from '../../hooks/useDashboardSession'
-
-const NAV_ITEMS = [
-    { label: 'Dashboard', id: 'dashboard', href: '/dashboard/owner-manager' },
-    { label: 'Stores', id: 'stores', href: '/dashboard/owner-manager/stores' },
-    { label: 'Orders', id: 'orders', href: '/dashboard/owner-manager/orders' },
-]
+import OwnerManagerKlasmeytLayout, {
+    OwnerManagerNoAgrivetAlert,
+} from '../../Layouts/OwnerManagerKlasmeytLayout'
 
 export default function OwnerManagerDashboard({ auth, agrivet, shops = [], stats = {} }) {
-    useDashboardSession()
 
     const [timePeriod, setTimePeriod] = useState('month')
 
@@ -44,31 +37,10 @@ export default function OwnerManagerDashboard({ auth, agrivet, shops = [], stats
     const revenueByCategory = stats.revenue_by_category ?? []
 
     return (
-        <>
-            <Head title="Owner Manager Dashboard" />
-            <div className="klasmeyt-landing min-h-screen bg-[#F8F9FB]">
-                <DashboardHeader
-                    navigationItems={NAV_ITEMS}
-                    userName={auth.user.name}
-                    userEmail={auth.user.email}
-                    notificationCount={0}
-                />
+        <OwnerManagerKlasmeytLayout auth={auth} title="Owner Manager Dashboard">
+            {!agrivet && <OwnerManagerNoAgrivetAlert />}
 
-                <main className="w-full px-6 py-8">
-                    {!agrivet && (
-                        <div
-                            role="alert"
-                            className="mb-6 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900"
-                        >
-                            <p className="font-semibold">No Agrivet linked</p>
-                            <p className="mt-1 text-amber-800">
-                                Your account is not linked to an Agrivet business. Please contact an
-                                administrator.
-                            </p>
-                        </div>
-                    )}
-
-                    <div className="space-y-6">
+            <div className="space-y-6">
                         {/* Page Header with Time Period Filter */}
                         <div className="flex flex-wrap items-start justify-between gap-4">
                             <div>
@@ -549,9 +521,7 @@ export default function OwnerManagerDashboard({ auth, agrivet, shops = [], stats
                                 </div>
                             </div>
                         )}
-                    </div>
-                </main>
             </div>
-        </>
+        </OwnerManagerKlasmeytLayout>
     )
 }

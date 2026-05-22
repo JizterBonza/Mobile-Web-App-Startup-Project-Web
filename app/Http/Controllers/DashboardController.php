@@ -248,7 +248,7 @@ class DashboardController extends Controller
 
         return Inertia::render('Dashboard/OwnerManagerDashboard', [
             'agrivet' => $agrivet,
-            'shops'   => $shops->values(),
+            'shops'   => $shops,
             'stats'   => [
                 'total_orders'        => $totalOrders,
                 'items_sold'          => $itemsSold,
@@ -262,6 +262,36 @@ class DashboardController extends Controller
                 'top_buyers'          => $topBuyers,
                 'revenue_by_category' => [],
             ],
+        ]);
+    }
+
+    public function ownerManagerStores()
+    {
+        $user = auth()->user();
+        $agrivet = $user->managedAgrivet;
+
+        return Inertia::render('Dashboard/OwnerManagerStores', [
+            'agrivet' => $agrivet,
+            'shops'   => $agrivet ? $agrivet->shops : [],
+        ]);
+    }
+
+    public function ownerManagerOrders()
+    {
+        $user = auth()->user();
+        $agrivet = $user->managedAgrivet;
+        $orders = [];
+
+        if ($agrivet) {
+            $shopIds = $agrivet->shops()->pluck('shops.id')->all();
+            if (! empty($shopIds)) {
+                $orders = $this->buildOwnerManagerOrders($shopIds);
+            }
+        }
+
+        return Inertia::render('Dashboard/OwnerManagerOrders', [
+            'agrivet' => $agrivet,
+            'orders'  => $orders,
         ]);
     }
 
@@ -381,5 +411,204 @@ class DashboardController extends Controller
                 'notificationCount' => 0,
             ],
         ]);
+    }
+
+    /**
+     * Orders for owner/manager UI (all shops under the agrivet).
+     *
+     * @param  array<int>  $shopIds
+     * @return array<int, array<string, mixed>>
+     */
+    private function buildOwnerManagerOrders(array $shopIds): array
+    {
+        $orderIds = DB::table('order_items')
+            ->join('items', 'order_items.item_id', '=', 'items.id')
+            ->whereIn('items.shop_id', $shopIds)
+            ->distinct()
+            ->pluck('order_items.order_id');
+
+        if ($orderIds->isEmpty()) {
+            return [];
+        }
+
+        $orderShopAgg = DB::table('order_shops')
+            ->whereIn('shop_id', $shopIds)
+            ->whereIn('order_id', $orderIds)
+            ->select('order_id', DB::raw('MAX(order_status) as order_status'))
+            ->groupBy('order_id');
+
+        $orderRows = DB::table('orders')
+            ->whereIn('orders.id', $orderIds)
+            ->joinSub($orderShopAgg, 'os_agg', 'orders.id', '=', 'os_agg.order_id')
+            ->join('order_status', 'os_agg.order_status', '=', 'order_status.id')
+            ->join('users', 'orders.user_id', '=', 'users.id')
+            ->join('user_details', 'users.user_detail_id', '=', 'user_details.id')
+            ->leftJoin('order_details', 'orders.order_detail_id', '=', 'order_details.id')
+            ->leftJoin('addresses', 'order_details.address_id', '=', 'addresses.id')
+            ->select(
+                'orders.id',
+                'orders.ordered_at',
+                'order_status.stat_description as status_description',
+                'user_details.first_name',
+                'user_details.last_name',
+                'user_details.mobile_number',
+                'user_details.profile_image_url',
+                'user_details.avatar',
+                'addresses.street_address',
+                'addresses.barangay',
+                'addresses.city_municipality',
+                'addresses.province',
+                'addresses.contact_number as address_contact',
+            )
+            ->orderByDesc('orders.ordered_at')
+            ->get();
+
+        $itemsByOrder = DB::table('order_items')
+            ->join('items', 'order_items.item_id', '=', 'items.id')
+            ->whereIn('items.shop_id', $shopIds)
+            ->whereIn('order_items.order_id', $orderIds)
+            ->select(
+                'order_items.order_id',
+                'order_items.id',
+                'items.item_name',
+                'order_items.quantity',
+                'order_items.price_at_purchase',
+                'items.item_images',
+            )
+            ->orderBy('order_items.id')
+            ->get()
+            ->groupBy('order_id');
+
+        $ridersByOrder = DB::table('order_shops')
+            ->whereIn('shop_id', $shopIds)
+            ->whereIn('order_id', $orderIds)
+            ->whereNotNull('rider_id')
+            ->join('users', 'order_shops.rider_id', '=', 'users.id')
+            ->join('user_details', 'users.user_detail_id', '=', 'user_details.id')
+            ->select(
+                'order_shops.order_id',
+                'user_details.first_name as rider_first_name',
+                'user_details.last_name as rider_last_name',
+                'user_details.mobile_number as rider_phone',
+                'user_details.profile_image_url as rider_profile_image_url',
+                'user_details.avatar as rider_avatar',
+                'user_details.rider_vehicle_type',
+            )
+            ->get()
+            ->keyBy('order_id');
+
+        $proofByOrder = DB::table('proof_of_delivery')
+            ->whereIn('order_id', $orderIds)
+            ->select('order_id', 'image_path')
+            ->get()
+            ->keyBy('order_id');
+
+        return $orderRows->map(function ($row) use ($itemsByOrder, $ridersByOrder, $proofByOrder) {
+            $statusMeta = $this->mapOwnerManagerOrderStatus($row->status_description ?? '');
+            $products = ($itemsByOrder->get($row->id) ?? collect())->map(function ($item) {
+                $thumbnail = $this->firstItemImageUrl($item->item_images);
+
+                return [
+                    'id'        => (int) $item->id,
+                    'name'      => $item->item_name,
+                    'quantity'  => (int) $item->quantity,
+                    'price'     => (float) $item->price_at_purchase,
+                    'thumbnail' => $thumbnail,
+                ];
+            })->values()->all();
+
+            $rider = $ridersByOrder->get($row->id);
+            $riderDetails = null;
+            if ($rider) {
+                $riderDetails = [
+                    'name'            => trim(($rider->rider_first_name ?? '') . ' ' . ($rider->rider_last_name ?? '')),
+                    'phone'           => $rider->rider_phone ?? '',
+                    'vehicleType'     => $rider->rider_vehicle_type ?? '—',
+                    'plateNumber'     => '—',
+                    'profilePicture'  => $rider->rider_profile_image_url ?: $rider->rider_avatar,
+                ];
+            }
+
+            $proof = $proofByOrder->get($row->id);
+            $customerPhone = $row->address_contact ?: $row->mobile_number ?: '';
+
+            $payload = [
+                'orderNumber'             => 'ORD-' . $row->id,
+                'customerName'            => trim(($row->first_name ?? '') . ' ' . ($row->last_name ?? '')),
+                'customerPhone'           => $customerPhone,
+                'customerProfilePicture'  => $row->profile_image_url ?: $row->avatar,
+                'dateOfOrder'             => $row->ordered_at,
+                'products'                => $products,
+                'deliveryAddress'         => [
+                    'street'   => $row->street_address ?? '',
+                    'barangay' => $row->barangay ?? '',
+                    'city'     => $row->city_municipality ?? '',
+                    'province' => $row->province ?? '',
+                ],
+                'status'                  => $statusMeta['status'],
+            ];
+
+            if ($riderDetails) {
+                $payload['riderDetails'] = $riderDetails;
+            }
+
+            if ($statusMeta['status'] === 'completed') {
+                $payload['isSuccessful'] = $statusMeta['isSuccessful'];
+                $payload['completionDate'] = $row->ordered_at;
+                if ($statusMeta['isSuccessful'] && $proof?->image_path) {
+                    $payload['proofOfDelivery'] = $proof->image_path;
+                }
+            }
+
+            return $payload;
+        })->values()->all();
+    }
+
+    /**
+     * @return array{status: string, isSuccessful: bool|null}
+     */
+    private function mapOwnerManagerOrderStatus(string $description): array
+    {
+        $d = strtolower(trim($description));
+
+        if (str_contains($d, 'cancel')) {
+            return ['status' => 'completed', 'isSuccessful' => false];
+        }
+        if (str_contains($d, 'deliver')) {
+            return ['status' => 'completed', 'isSuccessful' => true];
+        }
+        if (str_contains($d, 'transit')) {
+            return ['status' => 'in-transit', 'isSuccessful' => null];
+        }
+        if (str_contains($d, 'pickup') || str_contains($d, 'delivery') || str_contains($d, 'drop off')) {
+            return ['status' => 'for-pickup', 'isSuccessful' => null];
+        }
+        if (str_contains($d, 'prepar')) {
+            return ['status' => 'preparing', 'isSuccessful' => null];
+        }
+
+        return ['status' => 'new', 'isSuccessful' => null];
+    }
+
+    private function firstItemImageUrl(mixed $itemImages): ?string
+    {
+        if ($itemImages === null || $itemImages === '') {
+            return null;
+        }
+
+        $decoded = is_string($itemImages) ? json_decode($itemImages, true) : $itemImages;
+        if (! is_array($decoded) || $decoded === []) {
+            return null;
+        }
+
+        $first = $decoded[0];
+        if (is_string($first)) {
+            return $first;
+        }
+        if (is_array($first)) {
+            return $first['url'] ?? $first['path'] ?? null;
+        }
+
+        return null;
     }
 }

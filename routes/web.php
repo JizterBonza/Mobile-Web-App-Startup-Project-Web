@@ -145,8 +145,11 @@ Route::middleware(['auth', 'session.valid', 'user.type:super_admin'])->prefix('d
     Route::delete('/{id}', [ZoneController::class, 'destroy'])->name('destroy');
 });
 
-Route::get('/dashboard/owner-manager', [DashboardController::class, 'ownerManager'])
-    ->middleware(['auth', 'session.valid', 'user.type:owner_manager'])->name('dashboard.owner-manager');
+Route::middleware(['auth', 'session.valid', 'user.type:owner_manager'])->prefix('dashboard/owner-manager')->name('dashboard.owner-manager.')->group(function () {
+    Route::get('/', [DashboardController::class, 'ownerManager'])->name('index');
+    Route::get('/stores', [DashboardController::class, 'ownerManagerStores'])->name('stores');
+    Route::get('/orders', [DashboardController::class, 'ownerManagerOrders'])->name('orders');
+});
 
 Route::get('/dashboard/admin', [DashboardController::class, 'admin'])
     ->middleware(['auth', 'session.valid', 'user.type:admin'])->name('dashboard.admin');
