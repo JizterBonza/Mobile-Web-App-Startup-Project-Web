@@ -1,4 +1,4 @@
-import { Link } from '@inertiajs/react'
+import { Link, router } from '@inertiajs/react'
 import { Plus, Star, Trash2 } from 'lucide-react'
 import OwnerManagerKlasmeytLayout, {
     OwnerManagerNoAgrivetAlert,
@@ -73,10 +73,33 @@ export default function OwnerManagerStores({ auth, agrivet, shops = [] }) {
                             const statusLabel = formatShopStatus(shop.shop_status)
                             const rating = parseFloat(shop.average_rating) || 0
 
+                            const storeInfoUrl = agrivet
+                                ? `/dashboard/owner-manager/stores/${shop.id}/store-information`
+                                : null
+
                             return (
                                 <div
                                     key={shop.id}
-                                    className="bg-white rounded-lg border border-[#E5E7EB] overflow-hidden hover:border-[#102059] transition-all hover:shadow-md text-left"
+                                    role={storeInfoUrl ? 'button' : undefined}
+                                    tabIndex={storeInfoUrl ? 0 : undefined}
+                                    onClick={
+                                        storeInfoUrl
+                                            ? () => router.visit(storeInfoUrl)
+                                            : undefined
+                                    }
+                                    onKeyDown={
+                                        storeInfoUrl
+                                            ? (e) => {
+                                                  if (e.key === 'Enter' || e.key === ' ') {
+                                                      e.preventDefault()
+                                                      router.visit(storeInfoUrl)
+                                                  }
+                                              }
+                                            : undefined
+                                    }
+                                    className={`bg-white rounded-lg border border-[#E5E7EB] overflow-hidden hover:border-[#102059] transition-all hover:shadow-md text-left ${
+                                        storeInfoUrl ? 'cursor-pointer' : ''
+                                    }`}
                                 >
                                     <div className="relative h-40 w-full overflow-hidden bg-[#F8F9FB]">
                                         <img
@@ -102,6 +125,7 @@ export default function OwnerManagerStores({ auth, agrivet, shops = [] }) {
                                             </h3>
                                             <button
                                                 type="button"
+                                                onClick={(e) => e.stopPropagation()}
                                                 className="p-1.5 text-[#E20E28] hover:bg-[#FEE2E2] rounded-lg transition-colors flex-shrink-0"
                                                 title="Remove store"
                                                 aria-label="Remove store"

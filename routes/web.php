@@ -148,6 +148,9 @@ Route::middleware(['auth', 'session.valid', 'user.type:super_admin'])->prefix('d
 Route::middleware(['auth', 'session.valid', 'user.type:owner_manager'])->prefix('dashboard/owner-manager')->name('dashboard.owner-manager.')->group(function () {
     Route::get('/', [DashboardController::class, 'ownerManager'])->name('index');
     Route::get('/stores', [DashboardController::class, 'ownerManagerStores'])->name('stores');
+    Route::get('/stores/{shopId}/store-information', [DashboardController::class, 'ownerManagerStoreInformation'])->name('stores.store-information');
+    Route::put('/stores/{shopId}', [DashboardController::class, 'ownerManagerUpdateShop'])->name('stores.update');
+    Route::post('/stores/{shopId}/cover-photo', [DashboardController::class, 'ownerManagerUpdateShopCoverPhoto'])->name('stores.cover-photo');
     Route::get('/orders', [DashboardController::class, 'ownerManagerOrders'])->name('orders');
 });
 

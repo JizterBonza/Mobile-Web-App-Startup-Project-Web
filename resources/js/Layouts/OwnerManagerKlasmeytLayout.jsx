@@ -27,6 +27,7 @@ export default function OwnerManagerKlasmeytLayout({
     title,
     children,
     notificationCount = 0,
+    mainClassName = 'w-full px-6 py-8',
 }) {
     useDashboardSession()
 
@@ -41,7 +42,7 @@ export default function OwnerManagerKlasmeytLayout({
                     userEmail={auth.user.email}
                     notificationCount={notificationCount}
                 />
-                <main className="w-full px-6 py-8">{children}</main>
+                <main className={`relative w-full min-w-0 ${mainClassName}`.trim()}>{children}</main>
             </div>
         </>
     )

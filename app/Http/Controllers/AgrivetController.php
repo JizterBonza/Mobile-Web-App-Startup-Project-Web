@@ -518,12 +518,7 @@ class AgrivetController extends Controller
 
             ActivityLog::log('updated', "Shop updated: {$shop->shop_name}", $shop, $oldShopValues, $shop->fresh()->toArray());
 
-            $currentUser = auth()->user();
-            $redirectRoute = $currentUser->user_type === 'admin'
-                ? 'dashboard.admin.agrivets.shops.store-information'
-                : 'dashboard.super-admin.agrivets.shops.store-information';
-
-            return redirect()->route($redirectRoute, [$id, $shopId])
+            return $this->redirectToStoreInformation($id, $shopId)
                 ->with('success', 'Shop updated successfully.');
         } catch (\Exception $e) {
             return redirect()->back()
@@ -549,12 +544,7 @@ class AgrivetController extends Controller
 
         ActivityLog::log('updated', "Shop cover photo updated: {$shop->shop_name}", $shop);
 
-        $currentUser = auth()->user();
-        $redirectRoute = $currentUser->user_type === 'admin'
-            ? 'dashboard.admin.agrivets.shops.store-information'
-            : 'dashboard.super-admin.agrivets.shops.store-information';
-
-        return redirect()->route($redirectRoute, [$id, $shopId])
+        return $this->redirectToStoreInformation($id, $shopId)
             ->with('success', 'Cover photo updated successfully.');
     }
 
@@ -963,5 +953,20 @@ class AgrivetController extends Controller
             return redirect()->back()
                 ->withErrors(['error' => 'Failed to add vendor. Please try again.']);
         }
+    }
+
+    private function redirectToStoreInformation($agrivetId, $shopId)
+    {
+        $userType = auth()->user()->user_type;
+
+        if ($userType === 'owner_manager') {
+            return redirect()->route('dashboard.owner-manager.stores.store-information', $shopId);
+        }
+
+        $route = $userType === 'admin'
+            ? 'dashboard.admin.agrivets.shops.store-information'
+            : 'dashboard.super-admin.agrivets.shops.store-information';
+
+        return redirect()->route($route, [$agrivetId, $shopId]);
     }
 }

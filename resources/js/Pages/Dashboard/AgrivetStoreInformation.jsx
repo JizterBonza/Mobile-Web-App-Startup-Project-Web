@@ -34,6 +34,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
+import OwnerManagerKlasmeytLayout from '../../Layouts/OwnerManagerKlasmeytLayout'
 import SuperAdminOrAdminLayout from '../../Layouts/SuperAdminOrAdminLayout'
 
 const tabOrder = ['about', 'vendors', 'products', 'insights']
@@ -99,11 +100,22 @@ function asTitleStatus(s) {
 }
 
 export default function AgrivetStoreInformation({ auth, agrivet, shop, vendors = [] }) {
-  const getBaseRoute = () =>
-    auth?.user?.user_type === 'admin' ? '/dashboard/admin/agrivets' : '/dashboard/super-admin/agrivets'
+  const isOwnerManager = auth?.user?.user_type === 'owner_manager'
+  const getBaseRoute = () => {
+    if (isOwnerManager) return '/dashboard/owner-manager'
+    return auth?.user?.user_type === 'admin' ? '/dashboard/admin/agrivets' : '/dashboard/super-admin/agrivets'
+  }
 
-  const backRoute = `${getBaseRoute()}/${agrivet.id}/shops`
-  const vendorsRoute = `${getBaseRoute()}/${agrivet.id}/shops/${shop.id}/vendors`
+  const shopBasePath = isOwnerManager
+    ? `${getBaseRoute()}/stores/${shop.id}`
+    : `${getBaseRoute()}/${agrivet.id}/shops/${shop.id}`
+
+  const backRoute = isOwnerManager ? `${getBaseRoute()}/stores` : `${getBaseRoute()}/${agrivet.id}/shops`
+  const vendorsRoute = isOwnerManager
+    ? shopBasePath
+    : `${getBaseRoute()}/${agrivet.id}/shops/${shop.id}/vendors`
+
+  const PageLayout = isOwnerManager ? OwnerManagerKlasmeytLayout : SuperAdminOrAdminLayout
 
   // Build a "store" object that matches the template fields/shape as closely as possible.
   const store = useMemo(() => {
@@ -271,7 +283,7 @@ export default function AgrivetStoreInformation({ auth, agrivet, shop, vendors =
   }
 
   const handleConfirmSaveStoreInfo = () => {
-    const updateUrl = `${getBaseRoute()}/${agrivet.id}/shops/${shop.id}`
+    const updateUrl = shopBasePath
     router.put(updateUrl, {
       shop_name: editStoreData.storeName,
       shop_address: editStoreData.street,
@@ -310,7 +322,7 @@ export default function AgrivetStoreInformation({ auth, agrivet, shop, vendors =
   }
 
   const handleConfirmSaveCoverPhoto = () => {
-    const coverPhotoUrl = `${getBaseRoute()}/${agrivet.id}/shops/${shop.id}/cover-photo`
+    const coverPhotoUrl = `${shopBasePath}/cover-photo`
     router.post(coverPhotoUrl, { cover_photo: coverPhotoFile }, {
       preserveScroll: true,
       preserveState: true,
@@ -402,8 +414,8 @@ export default function AgrivetStoreInformation({ auth, agrivet, shop, vendors =
   const [insightsPeriod, setInsightsPeriod] = useState('monthly')
 
   return (
-    <SuperAdminOrAdminLayout auth={auth} title={`${shop.shop_name} — Store Information`} mainClassName="p-0">
-      <div className="min-h-screen bg-[#F0F2F5]">
+    <PageLayout auth={auth} title={`${shop.shop_name} — Store Information`} mainClassName="p-0">
+      <div className="relative min-h-screen bg-[#F0F2F5]">
         <AnimatePresence>
           {showSuccessMessage && (
             <motion.div
@@ -448,12 +460,10 @@ export default function AgrivetStoreInformation({ auth, agrivet, shop, vendors =
             </motion.div>
           )}
         </AnimatePresence>
-
-        {/* Return Button (template positioning) */}
         <Link
           href={backRoute}
-          className="absolute top-6 left-6 z-10 p-3 bg-white border border-[#E5E7EB] rounded-lg hover:bg-[#F9FAFB] transition-all group"
-          title={`Back to ${agrivet.name}`}
+          className="absolute top-6 left-6 z-40 p-3 bg-white border border-[#E5E7EB] rounded-lg hover:bg-[#F9FAFB] transition-all group"
+          title={isOwnerManager ? 'Back to My Stores' : `Back to ${agrivet.name}`}
         >
           <ArrowLeft className="w-5 h-5 text-[#6B7280] group-hover:text-[#102059]" />
         </Link>
@@ -1598,7 +1608,7 @@ export default function AgrivetStoreInformation({ auth, agrivet, shop, vendors =
           </div>
         )}
       </div>
-    </SuperAdminOrAdminLayout>
+    </PageLayout>
   )
 }
 

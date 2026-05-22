@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 
@@ -274,6 +275,32 @@ class DashboardController extends Controller
             'agrivet' => $agrivet,
             'shops'   => $agrivet ? $agrivet->shops : [],
         ]);
+    }
+
+    public function ownerManagerStoreInformation($shopId)
+    {
+        $agrivet = auth()->user()->managedAgrivet;
+        if (! $agrivet) {
+            return redirect()->route('dashboard.owner-manager.stores');
+        }
+
+        return app(AgrivetController::class)->showStoreInformation($agrivet->id, $shopId);
+    }
+
+    public function ownerManagerUpdateShop(Request $request, $shopId)
+    {
+        $agrivet = auth()->user()->managedAgrivet;
+        abort_unless($agrivet, 404);
+
+        return app(AgrivetController::class)->updateShop($request, $agrivet->id, $shopId);
+    }
+
+    public function ownerManagerUpdateShopCoverPhoto(Request $request, $shopId)
+    {
+        $agrivet = auth()->user()->managedAgrivet;
+        abort_unless($agrivet, 404);
+
+        return app(AgrivetController::class)->updateShopCoverPhoto($request, $agrivet->id, $shopId);
     }
 
     public function ownerManagerOrders()
