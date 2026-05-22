@@ -35,6 +35,7 @@ export default function OwnerManagerKlasmeytLayout({
             <Head title={title} />
             <div className="klasmeyt-landing min-h-screen bg-[#F8F9FB]">
                 <DashboardHeader
+                    compactNav
                     navigationItems={OWNER_MANAGER_NAV}
                     userName={auth.user.name}
                     userEmail={auth.user.email}
