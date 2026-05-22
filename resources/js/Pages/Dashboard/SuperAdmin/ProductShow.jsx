@@ -11,7 +11,14 @@ import {
 } from 'lucide-react'
 import SuperAdminOrAdminLayout from '../../../Layouts/SuperAdminOrAdminLayout'
 
+function getProductsBaseRoute(userType) {
+    if (userType === 'admin') return '/dashboard/admin/products'
+    return '/dashboard/super-admin/products'
+}
+
 export default function ProductShow({ auth, product }) {
+    const productsBase = getProductsBaseRoute(auth?.user?.user_type)
+
     const photos        = product.images ?? []
     const primaryIndex  = product.primary_image_index ?? 0
     const [current, setCurrent] = useState(primaryIndex < photos.length ? primaryIndex : 0)
@@ -34,7 +41,7 @@ export default function ProductShow({ auth, product }) {
             {/* Back button */}
             <div className="mb-5">
                 <Link
-                    href="/dashboard/super-admin/products"
+                    href={productsBase}
                     className="inline-flex items-center gap-2 rounded-lg border border-[#E5E7EB] bg-white px-3 py-2 text-sm text-[#6B7280] transition-colors hover:bg-[#F9FAFB] hover:text-[#102059]"
                 >
                     <ArrowLeft className="h-4 w-4" />
@@ -172,7 +179,7 @@ export default function ProductShow({ auth, product }) {
                                 Edit Product
                             </Link>
                             {/* <Link
-                                href="/dashboard/super-admin/products"
+                                href={productsBase}
                                 className="inline-flex items-center justify-center rounded-lg border border-[#E5E7EB] px-5 py-2 text-sm font-medium text-[#374151] transition-colors hover:bg-[#F9FAFB]"
                             >
                                 All Products

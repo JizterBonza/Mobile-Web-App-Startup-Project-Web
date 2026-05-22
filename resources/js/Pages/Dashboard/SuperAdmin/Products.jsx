@@ -3,7 +3,26 @@ import { Link } from '@inertiajs/react'
 import { Package, Plus, Search, Star } from 'lucide-react'
 import SuperAdminOrAdminLayout from '../../../Layouts/SuperAdminOrAdminLayout'
 
+function getProductsBaseRoute(userType) {
+    if (userType === 'admin') return '/dashboard/admin/products'
+    return '/dashboard/super-admin/products'
+}
+
+function getCategoriesRoute(userType) {
+    if (userType === 'admin') return '/dashboard/admin/categories'
+    return '/dashboard/super-admin/categories'
+}
+
+function getSubCategoriesRoute(userType) {
+    if (userType === 'admin') return '/dashboard/admin/sub-categories'
+    return '/dashboard/super-admin/sub-categories'
+}
+
 export default function SuperAdminProducts({ auth, products = [], flash }) {
+    const productsBase = getProductsBaseRoute(auth?.user?.user_type)
+    const categoriesRoute = getCategoriesRoute(auth?.user?.user_type)
+    const subCategoriesRoute = getSubCategoriesRoute(auth?.user?.user_type)
+
     const [searchQuery, setSearchQuery]           = useState('')
     const [categoryFilter, setCategoryFilter]     = useState('All')
     const [statusFilter, setStatusFilter]         = useState('All')
@@ -90,7 +109,7 @@ export default function SuperAdminProducts({ auth, products = [], flash }) {
                     </p>
                     <div className="mt-4 flex flex-wrap gap-3">
                         <Link
-                            href="/dashboard/super-admin/products/create"
+                            href={`${productsBase}/create`}
                             className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#102059] px-5 py-2 text-sm font-medium text-white transition-colors hover:bg-[#244693]"
                             style={{ backgroundColor: '#102059', border: '1px solid #102059' }}
                         >
@@ -98,14 +117,14 @@ export default function SuperAdminProducts({ auth, products = [], flash }) {
                             Register Product
                         </Link>
                         <Link
-                            href="/dashboard/super-admin/categories"
+                            href={categoriesRoute}
                             className="inline-flex items-center justify-center gap-2 rounded-lg border border-[#102059] px-5 py-2 text-sm font-medium text-white transition-colors hover:bg-[#F0F7FF]"
                             style={{ backgroundColor: '#102059', border: '1px solid #102059' }}
                         >
                             Go to Categories
                         </Link>
                         <Link
-                            href="/dashboard/super-admin/sub-categories"
+                            href={subCategoriesRoute}
                             className="inline-flex items-center justify-center gap-2 rounded-lg border border-[#102059] px-5 py-2 text-sm font-medium text-white transition-colors hover:bg-[#F0F7FF]"
                             style={{ backgroundColor: '#102059', border: '1px solid #102059' }}
                         >
@@ -160,7 +179,7 @@ export default function SuperAdminProducts({ auth, products = [], flash }) {
                         {displayed.length > 0 ? displayed.map(product => {
                             const primarySrc = product.photos[product.primaryIndex] ?? product.photos[0]
                             return (
-                                <Link key={product.id} href={`/dashboard/super-admin/products/${product.id}`} className="block px-6 py-4 transition-colors hover:bg-[#F8F9FB] cursor-pointer">
+                                <Link key={product.id} href={`${productsBase}/${product.id}`} className="block px-6 py-4 transition-colors hover:bg-[#F8F9FB] cursor-pointer">
                                     <div className="flex items-center gap-4">
                                         {/* Thumbnail */}
                                         <div className="relative flex h-14 w-14 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg border border-[#E5E7EB] bg-[#F0F2F5]">
@@ -234,7 +253,7 @@ export default function SuperAdminProducts({ auth, products = [], flash }) {
                                 <Package className="mx-auto mb-3 h-10 w-10 text-[#E5E7EB]" />
                                 <p className="text-sm text-[#9CA3AF]">No products found in the catalog.</p>
                                 <Link
-                                    href="/dashboard/super-admin/products/create"
+                                    href={`${productsBase}/create`}
                                     className="mt-3 inline-flex items-center gap-1.5 text-sm font-medium text-[#102059] hover:underline"
                                 >
                                     <Plus className="h-4 w-4" /> Register the first product

@@ -3,7 +3,14 @@ import { useForm, router } from '@inertiajs/react'
 import { ArrowLeft, Check, X, CheckCircle, Upload, Star } from 'lucide-react'
 import SuperAdminOrAdminLayout from '../../../Layouts/SuperAdminOrAdminLayout'
 
+function getProductsBaseRoute(userType) {
+    if (userType === 'admin') return '/dashboard/admin/products'
+    return '/dashboard/super-admin/products'
+}
+
 export default function SuperAdminRegisterProduct({ auth, categories = [], subCategories = [], authUser }) {
+    const productsBase = getProductsBaseRoute(auth?.user?.user_type)
+
     const [currentStep, setCurrentStep] = useState(1)
     const [errorMessage, setErrorMessage] = useState(null)
     const [showSuccessModal, setShowSuccessModal] = useState(false)
@@ -106,7 +113,7 @@ export default function SuperAdminRegisterProduct({ auth, categories = [], subCa
             if (slot?.file) fd.append(`images[${i}]`, slot.file)
         })
 
-        form.post('/dashboard/super-admin/products', {
+        form.post(productsBase, {
             data: fd,
             preserveScroll: true,
             forceFormData: true,
@@ -129,7 +136,7 @@ export default function SuperAdminRegisterProduct({ auth, categories = [], subCa
             {/* Back button */}
             <button
                 type="button"
-                onClick={() => router.visit('/dashboard/super-admin/products')}
+                onClick={() => router.visit(productsBase)}
                 className="mb-6 inline-flex items-center gap-2 rounded-lg border border-[#E5E7EB] bg-white px-4 py-2 text-sm font-medium text-[#6B7280] transition-colors hover:bg-[#F9FAFB] hover:text-[#102059]"
             >
                 <ArrowLeft className="h-4 w-4" /> Back to Products
@@ -559,7 +566,7 @@ export default function SuperAdminRegisterProduct({ auth, categories = [], subCa
                                     </div>
                                     <div className="flex w-full gap-3">
                                         <button
-                                            onClick={() => router.visit('/dashboard/super-admin/products')}
+                                            onClick={() => router.visit(productsBase)}
                                             className="flex-1 rounded-lg bg-[#102059] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#244693]"
                                         >
                                             Back to Products

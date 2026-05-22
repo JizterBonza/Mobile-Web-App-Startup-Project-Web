@@ -136,7 +136,11 @@ class SuperAdminProductController extends Controller
             $catalog->toArray()
         );
 
-        return redirect()->route('dashboard.super-admin.products')
+        $redirectRoute = auth()->user()->user_type === 'admin'
+            ? 'dashboard.admin.products'
+            : 'dashboard.super-admin.products';
+
+        return redirect()->route($redirectRoute)
             ->with('success', 'Product registered in catalog successfully.');
     }
 }

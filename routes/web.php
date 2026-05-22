@@ -151,6 +151,22 @@ Route::get('/dashboard/owner-manager', [DashboardController::class, 'ownerManage
 Route::get('/dashboard/admin', [DashboardController::class, 'admin'])
     ->middleware(['auth', 'session.valid', 'user.type:admin'])->name('dashboard.admin');
 
+Route::get('/dashboard/admin/products/create', [SuperAdminProductController::class, 'create'])
+    ->middleware(['auth', 'session.valid', 'user.type:admin'])
+    ->name('dashboard.admin.products.create');
+
+Route::post('/dashboard/admin/products', [SuperAdminProductController::class, 'store'])
+    ->middleware(['auth', 'session.valid', 'user.type:admin'])
+    ->name('dashboard.admin.products.store');
+
+Route::get('/dashboard/admin/products', [SuperAdminProductController::class, 'index'])
+    ->middleware(['auth', 'session.valid', 'user.type:admin'])
+    ->name('dashboard.admin.products');
+
+Route::get('/dashboard/admin/products/{id}', [SuperAdminProductController::class, 'show'])
+    ->middleware(['auth', 'session.valid', 'user.type:admin'])
+    ->name('dashboard.admin.products.show');
+
 // Admin User Management Routes
 Route::middleware(['auth', 'session.valid', 'user.type:admin'])->prefix('dashboard/admin/users')->name('dashboard.admin.users.')->group(function () {
     Route::get('/', [UserController::class, 'index'])->name('index');

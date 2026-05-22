@@ -49,8 +49,15 @@ export default function SubCategories({ auth, subCategories = [], flash }) {
     if (auth.user.user_type === 'admin')       return '/dashboard/admin/sub-categories'
     return '/dashboard/sub-categories'
   }
-  const baseRoute    = getBaseRoute()
-  const isSuperAdmin = auth.user.user_type === 'super_admin'
+  const baseRoute = getBaseRoute()
+
+  const getProductsRoute = () => {
+    if (auth.user.user_type === 'super_admin') return '/dashboard/super-admin/products'
+    if (auth.user.user_type === 'admin') return '/dashboard/admin/products'
+    return '/dashboard/products'
+  }
+  const productsRoute = getProductsRoute()
+  const hasProductCatalog = ['super_admin', 'admin'].includes(auth.user.user_type)
 
   const handleAddSubCategory = (e) => {
     e.preventDefault()
@@ -107,10 +114,10 @@ export default function SubCategories({ auth, subCategories = [], flash }) {
   return (
     <SuperAdminOrAdminLayout auth={auth} title="Sub-Categories">
 
-      {/* Back button — Product Catalog (super admin only) */}
-      {isSuperAdmin && (
+      {/* Back button — Product Catalog */}
+      {hasProductCatalog && (
         <Link
-          href="/dashboard/super-admin/products"
+          href={productsRoute}
           className="mb-6 inline-flex items-center gap-2 rounded-lg border border-[#E5E7EB] bg-white px-4 py-2 text-sm font-medium text-[#6B7280] transition-colors hover:bg-[#F9FAFB] hover:text-[#102059]"
         >
           <ArrowLeft className="h-4 w-4" /> Back to Product Catalog
