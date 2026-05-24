@@ -7,6 +7,14 @@ import PinLocationMap from '../../Components/PinLocationMap'
 const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 const FULL_DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
 
+function shopCoverUrl(logoUrl) {
+  if (!logoUrl) return null
+  if (logoUrl.startsWith('http://') || logoUrl.startsWith('https://') || logoUrl.startsWith('/')) {
+    return logoUrl
+  }
+  return `/storage/${logoUrl}`
+}
+
 export default function AgrivetShops({ auth, agrivet, zones = [], shops = [], flash }) {
   // Zones with valid boundaries for map (polygons + labels)
   const zonesForMap = useMemo(
@@ -356,6 +364,7 @@ export default function AgrivetShops({ auth, agrivet, zones = [], shops = [], fl
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
               {shops.map((shop) => {
                 const r = ratingValue(shop)
+                const coverSrc = shopCoverUrl(shop.logo_url)
                 const statusActive = shop.shop_status === 'active'
                 const statusLabel = statusActive ? 'Active' : 'Inactive'
                 return (
@@ -380,9 +389,17 @@ export default function AgrivetShops({ auth, agrivet, zones = [], shops = [], fl
                   >
                     {/* Cover */}
                     <div className="relative h-40 w-full overflow-hidden bg-[#F8F9FB]">
-                      <div className="flex h-full w-full items-center justify-center">
-                        <Store className="h-14 w-14 text-[#E5E7EB]" aria-hidden />
-                      </div>
+                      {coverSrc ? (
+                        <img
+                          src={coverSrc}
+                          alt={`${shop.shop_name} storefront`}
+                          className="h-full w-full object-cover"
+                        />
+                      ) : (
+                        <div className="flex h-full w-full items-center justify-center">
+                          <Store className="h-14 w-14 text-[#E5E7EB]" aria-hidden />
+                        </div>
+                      )}
                       <span
                         className={`absolute right-3 top-3 inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold backdrop-blur-sm ${
                           statusActive
