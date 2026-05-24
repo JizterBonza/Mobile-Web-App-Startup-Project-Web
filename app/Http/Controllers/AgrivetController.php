@@ -866,14 +866,16 @@ class AgrivetController extends Controller
             }
             ActivityLog::log('created', "Vendor created and added to shop: {$vendor->userDetail->email} → {$shop->shop_name}", $vendor, null, $newVendorValues);
 
-            // Redirect based on current user's role
+            // Redirect to store information (vendors tab) based on current user's role
             $currentUser = auth()->user();
-            $redirectRoute = $currentUser->user_type === 'admin' 
-                ? 'dashboard.admin.agrivets.shops.vendors.index' 
-                : 'dashboard.super-admin.agrivets.shops.vendors.index';
+            $redirectRoute = $currentUser->user_type === 'admin'
+                ? 'dashboard.admin.agrivets.shops.store-information'
+                : 'dashboard.super-admin.agrivets.shops.store-information';
 
-            return redirect()->route($redirectRoute, [$id, $shopId])
-                ->with('success', 'Vendor created and added to shop successfully.');
+            $vendorName = trim("{$request->first_name} ".($request->middle_name ? $request->middle_name.' ' : '')."{$request->last_name}");
+
+            return redirect(route($redirectRoute, [$id, $shopId]).'?tab=vendors')
+                ->with('success', "{$vendorName} has been added to {$shop->shop_name} successfully.");
         } catch (\Exception $e) {
             DB::rollBack();
             return redirect()->back()

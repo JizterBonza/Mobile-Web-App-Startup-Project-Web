@@ -118,7 +118,7 @@ function formatReviewDate(dateStr) {
   })
 }
 
-export default function AgrivetStoreInformation({ auth, agrivet, shop, vendors = [], reviews = [], products = [] }) {
+export default function AgrivetStoreInformation({ auth, agrivet, shop, vendors = [], reviews = [], products = [], flash }) {
   const isOwnerManager = auth?.user?.user_type === 'owner_manager'
   const getBaseRoute = () => {
     if (isOwnerManager) return '/dashboard/owner-manager'
@@ -133,6 +133,11 @@ export default function AgrivetStoreInformation({ auth, agrivet, shop, vendors =
   const vendorsRoute = isOwnerManager
     ? shopBasePath
     : `${getBaseRoute()}/${agrivet.id}/shops/${shop.id}/vendors`
+  const usersPrefix =
+    auth?.user?.user_type === 'admin' ? '/dashboard/admin' : '/dashboard/super-admin'
+  const vendorRegistrationRoute = isOwnerManager
+    ? vendorsRoute
+    : `${usersPrefix}/users/vendor-registration?agrivet_id=${agrivet.id}&shop_id=${shop.id}`
 
   const PageLayout = isOwnerManager ? OwnerManagerKlasmeytLayout : SuperAdminOrAdminLayout
 
@@ -161,7 +166,13 @@ export default function AgrivetStoreInformation({ auth, agrivet, shop, vendors =
     }
   }, [shop])
 
-  const [activeTab, setActiveTab] = useState('about')
+  const [activeTab, setActiveTab] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const tab = new URLSearchParams(window.location.search).get('tab')
+      if (tab && tabOrder.includes(tab)) return tab
+    }
+    return 'about'
+  })
   const [direction, setDirection] = useState(1)
 
   const [starFilter, setStarFilter] = useState(null)
@@ -190,6 +201,13 @@ export default function AgrivetStoreInformation({ auth, agrivet, shop, vendors =
     setShowSuccessMessage(true)
     setTimeout(() => setShowSuccessMessage(false), 5000)
   }
+
+  useEffect(() => {
+    if (flash?.success) {
+      setActiveTab('vendors')
+      showSuccess('add', flash.success)
+    }
+  }, [flash?.success])
 
   // Edit Store Information modal state
   const [showEditStoreModal, setShowEditStoreModal] = useState(false)
@@ -400,26 +418,30 @@ export default function AgrivetStoreInformation({ auth, agrivet, shop, vendors =
                 </div>
                 <div className="flex-1">
                   <h3 className="font-bold text-sm">
-                    {successMessageType === 'reassign'
-                      ? 'Vendor Reassigned Successfully'
-                      : successMessageType === 'edit'
-                        ? 'Vendor Updated Successfully'
-                        : successMessageType === 'status'
-                          ? 'Store Status Updated'
-                          : successMessageType === 'storeEdit'
-                            ? 'Store Information Updated'
-                            : 'Vendor Status Updated'}
+                    {successMessageType === 'add'
+                      ? 'Vendor Added Successfully'
+                      : successMessageType === 'reassign'
+                        ? 'Vendor Reassigned Successfully'
+                        : successMessageType === 'edit'
+                          ? 'Vendor Updated Successfully'
+                          : successMessageType === 'status'
+                            ? 'Store Status Updated'
+                            : successMessageType === 'storeEdit'
+                              ? 'Store Information Updated'
+                              : 'Vendor Status Updated'}
                   </h3>
                   <p className="text-xs text-white/90 mt-0.5">
-                    {successMessageType === 'reassign'
-                      ? `${successVendorName} has been reassigned to ${store.storeName}`
-                      : successMessageType === 'edit'
-                        ? `${successVendorName}'s information has been updated`
-                        : successMessageType === 'status'
-                          ? `${successVendorName} is now ${store.status}`
-                          : successMessageType === 'storeEdit'
-                            ? `${successVendorName}'s information has been successfully updated`
-                            : `${successVendorName}'s status has been updated`}
+                    {successMessageType === 'add'
+                      ? successVendorName
+                      : successMessageType === 'reassign'
+                        ? `${successVendorName} has been reassigned to ${store.storeName}`
+                        : successMessageType === 'edit'
+                          ? `${successVendorName}'s information has been updated`
+                          : successMessageType === 'status'
+                            ? `${successVendorName} is now ${store.status}`
+                            : successMessageType === 'storeEdit'
+                              ? `${successVendorName}'s information has been successfully updated`
+                              : `${successVendorName}'s status has been updated`}
                   </p>
                 </div>
                 <button onClick={() => setShowSuccessMessage(false)} className="p-1.5 hover:bg-white/20 rounded transition-colors">
@@ -746,7 +768,7 @@ export default function AgrivetStoreInformation({ auth, agrivet, shop, vendors =
                           Reassign Vendor
                         </button>
                         <Link
-                          href={vendorsRoute}
+                          href={vendorRegistrationRoute}
                           className="flex items-center gap-2 px-4 py-2.5 bg-[#244693] text-sm font-semibold rounded-lg hover:bg-[#1a3570] transition-colors"
                           style={{ border:'1px solid #dee2e6', color: '#1f2d3d'}}
                         >
@@ -828,7 +850,7 @@ export default function AgrivetStoreInformation({ auth, agrivet, shop, vendors =
                         Add vendors to grant them access to manage this store's operations.
                       </p>
                       <Link
-                        href={vendorsRoute}
+                        href={vendorRegistrationRoute}
                         className="flex items-center gap-2 px-5 py-2.5 bg-[#244693] text-white text-sm font-semibold rounded-lg hover:bg-[#1a3570] transition-colors"
                       >
                         <UserPlus className="w-4 h-4" />
