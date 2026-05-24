@@ -68,7 +68,7 @@ export default function OwnerManagerDashboard({ auth, agrivet, shops = [], stats
                                                 ? 'bg-[#102059] text-white'
                                                 : 'bg-transparent text-[#6B7280] hover:bg-[#F9FAFB]'
                                         }`}
-                                        style={{ fontFamily: 'Inter Condensed, sans-serif' }}
+                                        style={{ fontFamily: 'Inter Condensed, sans-serif', borderRadius: '0.5rem' }}
                                     >
                                         {label}
                                     </button>

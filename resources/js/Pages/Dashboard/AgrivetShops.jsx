@@ -1,8 +1,11 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useForm, router } from '@inertiajs/react'
-import { ArrowLeft, Plus, Star, Store, Trash2, Pencil, Users } from 'lucide-react'
+import { ArrowLeft, Plus, Star, Store, Trash2, Upload } from 'lucide-react'
 import SuperAdminOrAdminLayout from '../../Layouts/SuperAdminOrAdminLayout'
 import PinLocationMap from '../../Components/PinLocationMap'
+
+const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+const FULL_DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
 
 export default function AgrivetShops({ auth, agrivet, zones = [], shops = [], flash }) {
   // Zones with valid boundaries for map (polygons + labels)
@@ -34,17 +37,25 @@ export default function AgrivetShops({ auth, agrivet, zones = [], shops = [], fl
   const [shopToRemove, setShopToRemove] = useState(null)
   const [flashSuccessDismissed, setFlashSuccessDismissed] = useState(false)
   const [flashErrorDismissed, setFlashErrorDismissed] = useState(false)
+  const [operatingDays, setOperatingDays] = useState([])
+  const [storeImagePreview, setStoreImagePreview] = useState(null)
+  const [permitImagePreview, setPermitImagePreview] = useState(null)
+  const [permitIsPdf, setPermitIsPdf] = useState(false)
 
   const addForm = useForm({
     shop_name: '',
-    shop_description: '',
-    shop_address: '',
+    street: '',
+    barangay: '',
     shop_city: '',
     shop_province: '',
     shop_postal_code: '',
     shop_lat: '',
     shop_long: '',
-    contact_number: '',
+    opening_time: '08:00',
+    closing_time: '18:00',
+    operating_days: '',
+    store_image: null,
+    permit_image: null,
     shop_status: 'active',
   })
 
@@ -88,12 +99,20 @@ export default function AgrivetShops({ auth, agrivet, zones = [], shops = [], fl
     }
   }, [showRemoveModal])
 
+  const resetAddFormState = () => {
+    addForm.reset()
+    setOperatingDays([])
+    setStoreImagePreview(null)
+    setPermitImagePreview(null)
+    setPermitIsPdf(false)
+  }
+
   // Modal close handlers with animation
   const closeAddModal = () => {
     setShowAddModalAnimation(false)
     setTimeout(() => {
       setShowAddModal(false)
-      addForm.reset()
+      resetAddFormState()
     }, 300)
   }
 
@@ -120,7 +139,7 @@ export default function AgrivetShops({ auth, agrivet, zones = [], shops = [], fl
       closeAddModal()
       closeEditModal()
       closeRemoveModal()
-      addForm.reset()
+      resetAddFormState()
       editForm.reset()
       setShopToRemove(null)
     }
@@ -140,12 +159,66 @@ export default function AgrivetShops({ auth, agrivet, zones = [], shops = [], fl
 
   const handleAddShop = (e) => {
     e.preventDefault()
+    if (operatingDays.length === 0) {
+      alert('Please select at least one operating day for your store.')
+      return
+    }
+    if (!addForm.data.store_image || !addForm.data.permit_image) {
+      alert('Please upload both store photo and business permit.')
+      return
+    }
+    if (!addForm.data.opening_time || !addForm.data.closing_time) {
+      alert('Please set both opening and closing times for your store.')
+      return
+    }
+
+    const daysSorted = [...operatingDays].sort((a, b) => FULL_DAYS.indexOf(a) - FULL_DAYS.indexOf(b))
+    addForm.transform((data) => ({
+      ...data,
+      operating_days: daysSorted.join(', '),
+    }))
     addForm.post(`${getBaseRoute()}/${agrivet.id}/shops`, {
+      forceFormData: true,
       preserveScroll: true,
+      onFinish: () => {
+        addForm.transform((data) => data)
+      },
       onSuccess: () => {
-        addForm.reset()
+        resetAddFormState()
       },
     })
+  }
+
+  const handleStoreImageUpload = (e) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      addForm.setData('store_image', file)
+      const reader = new FileReader()
+      reader.onloadend = () => setStoreImagePreview(reader.result)
+      reader.readAsDataURL(file)
+    }
+  }
+
+  const handlePermitImageUpload = (e) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      addForm.setData('permit_image', file)
+      const isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name)
+      setPermitIsPdf(isPdf)
+      if (isPdf) {
+        setPermitImagePreview(null)
+        return
+      }
+      const reader = new FileReader()
+      reader.onloadend = () => setPermitImagePreview(reader.result)
+      reader.readAsDataURL(file)
+    }
+  }
+
+  const toggleDay = (fullDay) => {
+    setOperatingDays((prev) =>
+      prev.includes(fullDay) ? prev.filter((d) => d !== fullDay) : [...prev, fullDay],
+    )
   }
 
   const handleEditShop = (shop) => {
@@ -404,10 +477,12 @@ export default function AgrivetShops({ auth, agrivet, zones = [], shops = [], fl
                           {shop.contact_number || '—'}
                         </div>
                         <div>
-                          <span className="font-semibold text-[#102059]">Days:</span> —
+                          <span className="font-semibold text-[#102059]">Days:</span>{' '}
+                          {shop.operating_days || '—'}
                         </div>
                         <div>
-                          <span className="font-semibold text-[#102059]">Hours:</span> —
+                          <span className="font-semibold text-[#102059]">Hours:</span>{' '}
+                          {shop.operating_hours || '—'}
                         </div>
                       </div>
                     </div>
@@ -465,7 +540,7 @@ export default function AgrivetShops({ auth, agrivet, zones = [], shops = [], fl
             <div className="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
               <div className="modal-content">
                 <div className="modal-header">
-                  <h4 className="modal-title">Add New Shop</h4>
+                  <h4 className="modal-title">Add New Store</h4>
                   <button
                     type="button"
                     className="close"
@@ -476,10 +551,14 @@ export default function AgrivetShops({ auth, agrivet, zones = [], shops = [], fl
                 </div>
                 <form onSubmit={handleAddShop}>
                   <div className="modal-body">
+                    <p className="text-muted small mb-4">
+                      Enter the same store details used when registering a new agrivet branch.
+                    </p>
+
                     <div className="row">
-                      <div className="col-md-6">
+                      <div className="col-md-8">
                         <div className="form-group">
-                          <label>Shop Name <span className="text-danger">*</span></label>
+                          <label>Store Name <span className="text-danger">*</span></label>
                           <input
                             type="text"
                             className={`form-control ${addForm.errors.shop_name ? 'is-invalid' : ''}`}
@@ -492,7 +571,7 @@ export default function AgrivetShops({ auth, agrivet, zones = [], shops = [], fl
                           )}
                         </div>
                       </div>
-                      <div className="col-md-6">
+                      <div className="col-md-4">
                         <div className="form-group">
                           <label>Status <span className="text-danger">*</span></label>
                           <select
@@ -510,140 +589,59 @@ export default function AgrivetShops({ auth, agrivet, zones = [], shops = [], fl
                         </div>
                       </div>
                     </div>
+
                     <div className="row">
                       <div className="col-md-12">
                         <div className="form-group">
-                          <label>Description</label>
-                          <textarea
-                            className={`form-control ${addForm.errors.shop_description ? 'is-invalid' : ''}`}
-                            value={addForm.data.shop_description}
-                            onChange={(e) => addForm.setData('shop_description', e.target.value)}
-                            rows="2"
-                          />
-                          {addForm.errors.shop_description && (
-                            <div className="invalid-feedback">{addForm.errors.shop_description}</div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                    <div className="row">
-                      <div className="col-md-12">
-                        <div className="form-group">
-                          <label>Pin Location</label>
+                          <label>Pin location <span className="text-muted">(optional)</span></label>
                           <PinLocationMap
-                            initialLat={addForm.data.shop_lat ? parseFloat(addForm.data.shop_lat) : undefined}
-                            initialLng={addForm.data.shop_long ? parseFloat(addForm.data.shop_long) : undefined}
-                            initialAddress={addForm.data.shop_address}
-                            initialCity={addForm.data.shop_city}
-                            initialProvince={addForm.data.shop_province}
-                            initialPostalCode={addForm.data.shop_postal_code}
-                            onLocationSelect={(loc) => {
-                              addForm.setData({
-                                shop_address: loc.address ?? '',
-                                shop_city: loc.city ?? '',
-                                shop_province: loc.province ?? '',
-                                shop_postal_code: loc.postal_code ?? '',
-                                shop_lat: loc.latitude,
-                                shop_long: loc.longitude,
-                              })
-                            }}
+                            height={320}
                             zones={zonesForMap}
                             shopLocations={shopsForMap}
-                            height={320}
-                            error={addForm.errors.shop_address}
+                            initialLat={addForm.data.shop_lat}
+                            initialLng={addForm.data.shop_long}
+                            onLocationSelect={(loc) => {
+                              addForm.setData('shop_lat', loc.latitude != null ? String(loc.latitude) : '')
+                              addForm.setData('shop_long', loc.longitude != null ? String(loc.longitude) : '')
+                              if (loc.city) addForm.setData('shop_city', loc.city)
+                              if (loc.province) addForm.setData('shop_province', loc.province)
+                              if (loc.postal_code) addForm.setData('shop_postal_code', loc.postal_code)
+                              if (loc.address) addForm.setData('street', loc.address)
+                            }}
                           />
                         </div>
                       </div>
                     </div>
-                    <div className="row">
-                      <div className="col-md-12">
-                        <div className="form-group">
-                          <label>Address</label>
-                          <input
-                            type="text"
-                            className={`form-control ${addForm.errors.shop_address ? 'is-invalid' : ''}`}
-                            value={addForm.data.shop_address}
-                            onChange={(e) => addForm.setData('shop_address', e.target.value)}
-                            placeholder="Enter address"
-                          />
-                          {addForm.errors.shop_address && (
-                            <div className="invalid-feedback">{addForm.errors.shop_address}</div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                    <div className="row">
-                      <div className="col-md-4">
-                        <div className="form-group">
-                          <label>City</label>
-                          <input
-                            type="text"
-                            className={`form-control ${addForm.errors.shop_city ? 'is-invalid' : ''}`}
-                            value={addForm.data.shop_city}
-                            onChange={(e) => addForm.setData('shop_city', e.target.value)}
-                            placeholder="Enter city"
-                          />
-                          {addForm.errors.shop_city && (
-                            <div className="invalid-feedback">{addForm.errors.shop_city}</div>
-                          )}
-                        </div>
-                      </div>
-                      <div className="col-md-4">
-                        <div className="form-group">
-                          <label>Province</label>
-                          <input
-                            type="text"
-                            className={`form-control ${addForm.errors.shop_province ? 'is-invalid' : ''}`}
-                            value={addForm.data.shop_province}
-                            onChange={(e) => addForm.setData('shop_province', e.target.value)}
-                            placeholder="Enter province"
-                          />
-                          {addForm.errors.shop_province && (
-                            <div className="invalid-feedback">{addForm.errors.shop_province}</div>
-                          )}
-                        </div>
-                      </div>
-                      <div className="col-md-4">
-                        <div className="form-group">
-                          <label>Postal Code</label>
-                          <input
-                            type="text"
-                            className={`form-control ${addForm.errors.shop_postal_code ? 'is-invalid' : ''}`}
-                            value={addForm.data.shop_postal_code}
-                            onChange={(e) => addForm.setData('shop_postal_code', e.target.value)}
-                            placeholder="Enter postal code"
-                          />
-                          {addForm.errors.shop_postal_code && (
-                            <div className="invalid-feedback">{addForm.errors.shop_postal_code}</div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
+
                     <div className="row">
                       <div className="col-md-6">
                         <div className="form-group">
-                          <label>Latitude</label>
+                          <label>Latitude <span className="text-muted">(optional)</span></label>
                           <input
-                            type="text"
+                            type="number"
+                            step="any"
+                            inputMode="decimal"
+                            placeholder="e.g. 14.5995"
                             className={`form-control ${addForm.errors.shop_lat ? 'is-invalid' : ''}`}
                             value={addForm.data.shop_lat}
                             onChange={(e) => addForm.setData('shop_lat', e.target.value)}
-                            placeholder="Auto-filled"
                           />
                           {addForm.errors.shop_lat && (
                             <div className="invalid-feedback">{addForm.errors.shop_lat}</div>
                           )}
                         </div>
                       </div>
-                      <div className="col-md-3">
+                      <div className="col-md-6">
                         <div className="form-group">
-                          <label>Longitude</label>
+                          <label>Longitude <span className="text-muted">(optional)</span></label>
                           <input
-                            type="text"
+                            type="number"
+                            step="any"
+                            inputMode="decimal"
+                            placeholder="e.g. 120.9842"
                             className={`form-control ${addForm.errors.shop_long ? 'is-invalid' : ''}`}
                             value={addForm.data.shop_long}
                             onChange={(e) => addForm.setData('shop_long', e.target.value)}
-                            placeholder="Auto-filled"
                           />
                           {addForm.errors.shop_long && (
                             <div className="invalid-feedback">{addForm.errors.shop_long}</div>
@@ -651,21 +649,232 @@ export default function AgrivetShops({ auth, agrivet, zones = [], shops = [], fl
                         </div>
                       </div>
                     </div>
+
                     <div className="row">
                       <div className="col-md-12">
                         <div className="form-group">
-                          <label>Contact Number</label>
+                          <label>Street <span className="text-danger">*</span></label>
                           <input
                             type="text"
-                            className={`form-control ${addForm.errors.contact_number ? 'is-invalid' : ''}`}
-                            value={addForm.data.contact_number}
-                            onChange={(e) => addForm.setData('contact_number', e.target.value)}
+                            className={`form-control ${addForm.errors.street ? 'is-invalid' : ''}`}
+                            value={addForm.data.street}
+                            onChange={(e) => addForm.setData('street', e.target.value)}
+                            required
                           />
-                          {addForm.errors.contact_number && (
-                            <div className="invalid-feedback">{addForm.errors.contact_number}</div>
+                          {addForm.errors.street && (
+                            <div className="invalid-feedback">{addForm.errors.street}</div>
                           )}
                         </div>
                       </div>
+                    </div>
+
+                    <div className="row">
+                      <div className="col-md-12">
+                        <div className="form-group">
+                          <label>Barangay <span className="text-danger">*</span></label>
+                          <input
+                            type="text"
+                            className={`form-control ${addForm.errors.barangay ? 'is-invalid' : ''}`}
+                            value={addForm.data.barangay}
+                            onChange={(e) => addForm.setData('barangay', e.target.value)}
+                            required
+                          />
+                          {addForm.errors.barangay && (
+                            <div className="invalid-feedback">{addForm.errors.barangay}</div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="row">
+                      <div className="col-md-6">
+                        <div className="form-group">
+                          <label>City/Municipality <span className="text-danger">*</span></label>
+                          <input
+                            type="text"
+                            className={`form-control ${addForm.errors.shop_city ? 'is-invalid' : ''}`}
+                            value={addForm.data.shop_city}
+                            onChange={(e) => addForm.setData('shop_city', e.target.value)}
+                            required
+                          />
+                          {addForm.errors.shop_city && (
+                            <div className="invalid-feedback">{addForm.errors.shop_city}</div>
+                          )}
+                        </div>
+                      </div>
+                      <div className="col-md-6">
+                        <div className="form-group">
+                          <label>Province <span className="text-danger">*</span></label>
+                          <input
+                            type="text"
+                            className={`form-control ${addForm.errors.shop_province ? 'is-invalid' : ''}`}
+                            value={addForm.data.shop_province}
+                            onChange={(e) => addForm.setData('shop_province', e.target.value)}
+                            required
+                          />
+                          {addForm.errors.shop_province && (
+                            <div className="invalid-feedback">{addForm.errors.shop_province}</div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="row">
+                      <div className="col-md-6">
+                        <div className="form-group">
+                          <label>Zip Code <span className="text-danger">*</span></label>
+                          <input
+                            type="text"
+                            className={`form-control ${addForm.errors.shop_postal_code ? 'is-invalid' : ''}`}
+                            value={addForm.data.shop_postal_code}
+                            onChange={(e) => addForm.setData('shop_postal_code', e.target.value)}
+                            required
+                          />
+                          {addForm.errors.shop_postal_code && (
+                            <div className="invalid-feedback">{addForm.errors.shop_postal_code}</div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="form-group">
+                      <label>Operating Days <span className="text-danger">*</span></label>
+                      <div className="rounded border bg-light p-3">
+                        <div className="d-flex flex-wrap" style={{ gap: '0.5rem' }}>
+                          {DAY_LABELS.map((day, index) => {
+                            const fullDay = FULL_DAYS[index]
+                            const isSelected = operatingDays.includes(fullDay)
+                            return (
+                              <button
+                                key={day}
+                                type="button"
+                                onClick={() => toggleDay(fullDay)}
+                                className={`btn btn-sm flex-fill ${isSelected ? 'btn-primary' : 'btn-outline-secondary'}`}
+                                style={{ minWidth: '3rem' }}
+                              >
+                                {day}
+                              </button>
+                            )
+                          })}
+                        </div>
+                      </div>
+                      {addForm.errors.operating_days && (
+                        <div className="text-danger small mt-1">{addForm.errors.operating_days}</div>
+                      )}
+                    </div>
+
+                    <div className="row">
+                      <div className="col-md-6">
+                        <div className="form-group">
+                          <label>Opening <span className="text-danger">*</span></label>
+                          <input
+                            type="time"
+                            className={`form-control ${addForm.errors.opening_time ? 'is-invalid' : ''}`}
+                            value={addForm.data.opening_time}
+                            onChange={(e) => addForm.setData('opening_time', e.target.value)}
+                            required
+                          />
+                          {addForm.errors.opening_time && (
+                            <div className="invalid-feedback">{addForm.errors.opening_time}</div>
+                          )}
+                        </div>
+                      </div>
+                      <div className="col-md-6">
+                        <div className="form-group">
+                          <label>Closing <span className="text-danger">*</span></label>
+                          <input
+                            type="time"
+                            className={`form-control ${addForm.errors.closing_time ? 'is-invalid' : ''}`}
+                            value={addForm.data.closing_time}
+                            onChange={(e) => addForm.setData('closing_time', e.target.value)}
+                            required
+                          />
+                          {addForm.errors.closing_time && (
+                            <div className="invalid-feedback">{addForm.errors.closing_time}</div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="form-group">
+                      <label>Store front photo <span className="text-danger">*</span></label>
+                      <div
+                        className="rounded border border-dashed bg-light p-4 text-center"
+                        style={{ cursor: 'pointer' }}
+                      >
+                        <input
+                          id="add_store_image"
+                          type="file"
+                          accept="image/*"
+                          className="d-none"
+                          onChange={handleStoreImageUpload}
+                        />
+                        <label htmlFor="add_store_image" className="mb-0 w-100" style={{ cursor: 'pointer' }}>
+                          {storeImagePreview ? (
+                            <div>
+                              <img
+                                src={storeImagePreview}
+                                alt="Store preview"
+                                className="img-fluid rounded mb-3"
+                                style={{ maxHeight: '16rem' }}
+                              />
+                              <p className="text-muted small mb-0">Click to change image</p>
+                            </div>
+                          ) : (
+                            <div>
+                              <Upload className="mx-auto mb-2 text-muted" size={40} />
+                              <p className="mb-1">Upload store photo</p>
+                              <p className="text-muted small mb-0">PNG, JPG up to 10MB</p>
+                            </div>
+                          )}
+                        </label>
+                      </div>
+                      {addForm.errors.store_image && (
+                        <div className="text-danger small mt-1">{addForm.errors.store_image}</div>
+                      )}
+                    </div>
+
+                    <div className="form-group mb-0">
+                      <label>Business permit <span className="text-danger">*</span></label>
+                      <div
+                        className="rounded border border-dashed bg-light p-4 text-center"
+                        style={{ cursor: 'pointer' }}
+                      >
+                        <input
+                          id="add_permit_image"
+                          type="file"
+                          accept="image/*,.pdf"
+                          className="d-none"
+                          onChange={handlePermitImageUpload}
+                        />
+                        <label htmlFor="add_permit_image" className="mb-0 w-100" style={{ cursor: 'pointer' }}>
+                          {permitIsPdf ? (
+                            <div>
+                              <p className="font-weight-bold mb-1">PDF selected</p>
+                              <p className="text-muted small mb-0">Click to change file</p>
+                            </div>
+                          ) : permitImagePreview ? (
+                            <div>
+                              <img
+                                src={permitImagePreview}
+                                alt="Permit preview"
+                                className="img-fluid rounded mb-3"
+                                style={{ maxHeight: '16rem' }}
+                              />
+                              <p className="text-muted small mb-0">Click to change file</p>
+                            </div>
+                          ) : (
+                            <div>
+                              <Upload className="mx-auto mb-2 text-muted" size={40} />
+                              <p className="mb-1">Upload permit</p>
+                              <p className="text-muted small mb-0">PNG, JPG, PDF up to 10MB</p>
+                            </div>
+                          )}
+                        </label>
+                      </div>
+                      {addForm.errors.permit_image && (
+                        <div className="text-danger small mt-1">{addForm.errors.permit_image}</div>
+                      )}
                     </div>
                   </div>
                   <div className="modal-footer">
@@ -677,7 +886,7 @@ export default function AgrivetShops({ auth, agrivet, zones = [], shops = [], fl
                       Cancel
                     </button>
                     <button type="submit" className="btn btn-primary" disabled={addForm.processing}>
-                      {addForm.processing ? 'Creating...' : 'Create Shop'}
+                      {addForm.processing ? 'Creating...' : 'Create Store'}
                     </button>
                   </div>
                 </form>

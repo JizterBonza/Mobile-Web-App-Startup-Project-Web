@@ -37,6 +37,7 @@ class Shop extends Model
         'total_reviews',
         'shop_status',
         'logo_url',
+        'permit_url',
         'operating_days',
         'operating_hours',
     ];

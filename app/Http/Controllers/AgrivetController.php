@@ -383,6 +383,9 @@ class AgrivetController extends Controller
                 'average_rating' => $shop->average_rating,
                 'total_reviews' => $shop->total_reviews,
                 'shop_status' => $shop->shop_status,
+                'operating_days' => $shop->operating_days,
+                'operating_hours' => $shop->operating_hours,
+                'logo_url' => $shop->logo_url,
                 'vendors_count' => $shop->vendors()->count(),
                 'created_at' => $shop->created_at->format('Y-m-d H:i:s'),
             ];
@@ -408,18 +411,22 @@ class AgrivetController extends Controller
     {
         $agrivet = Agrivet::findOrFail($id);
 
-        $request->validate([
+        $validated = $request->validate([
             'shop_name' => 'required|string|max:150',
-            'shop_description' => 'nullable|string',
-            'shop_address' => 'nullable|string|max:255',
-            'shop_city' => 'nullable|string|max:100',
-            'shop_postal_code' => 'nullable|string|max:20',
-            'shop_province' => 'nullable|string|max:100',
+            'street' => 'required|string|max:255',
+            'barangay' => 'required|string|max:255',
+            'shop_city' => 'required|string|max:100',
+            'shop_postal_code' => 'required|string|max:20',
+            'shop_province' => 'required|string|max:100',
+            'opening_time' => 'required|string|max:10',
+            'closing_time' => 'required|string|max:10',
+            'operating_days' => 'required|string|max:500',
             'shop_lat' => 'nullable|numeric',
             'shop_long' => 'nullable|numeric',
-            'contact_number' => 'nullable|string|max:20',
             'shop_status' => 'nullable|string|in:active,inactive',
             'zone_id' => 'nullable|exists:zones,id',
+            'store_image' => 'required|file|mimes:jpeg,jpg,png,webp|max:10240',
+            'permit_image' => 'required|file|mimes:jpeg,jpg,png,webp,pdf|max:10240',
         ]);
 
         // If shop has coordinates, set zone_id to the zone whose boundary contains this point
@@ -432,21 +439,29 @@ class AgrivetController extends Controller
         }
 
         try {
+            $storePath = $request->file('store_image')->store('shops/covers', 'public');
+            $permitPath = $request->file('permit_image')->store('shops/permits', 'public');
+            $operatingHours = $validated['opening_time'].' - '.$validated['closing_time'];
+
             $shop = Shop::create([
                 'agrivet_id' => $agrivet->id,
                 'zone_id' => $zoneId,
-                'shop_name' => $request->shop_name,
-                'shop_description' => $request->shop_description ?? null,
-                'shop_address' => $request->shop_address ?? null,
-                'shop_city' => $request->shop_city ?? null,
-                'shop_postal_code' => $request->shop_postal_code ?? null,
-                'shop_province' => $request->shop_province ?? null,
+                'shop_name' => $validated['shop_name'],
+                'shop_description' => null,
+                'shop_address' => $validated['street'].', '.$validated['barangay'],
+                'shop_city' => $validated['shop_city'],
+                'shop_postal_code' => $validated['shop_postal_code'],
+                'shop_province' => $validated['shop_province'],
                 'shop_lat' => $request->shop_lat ?? null,
                 'shop_long' => $request->shop_long ?? null,
-                'contact_number' => $request->contact_number ?? null,
+                'contact_number' => $agrivet->contact_number,
                 'average_rating' => 0.00,
                 'total_reviews' => 0,
-                'shop_status' => $request->shop_status ?? 'active',
+                'shop_status' => $validated['shop_status'] ?? 'active',
+                'logo_url' => $storePath,
+                'permit_url' => $permitPath,
+                'operating_days' => $validated['operating_days'],
+                'operating_hours' => $operatingHours,
             ]);
 
             ActivityLog::log('created', "Shop created: {$shop->shop_name} (Agrivet: {$agrivet->name})", $shop, null, $shop->toArray());
@@ -582,7 +597,15 @@ class AgrivetController extends Controller
     public function showStoreInformation($id, $shopId)
     {
         $agrivet = Agrivet::findOrFail($id);
-        $shop = Shop::where('agrivet_id', $agrivet->id)->with('zone')->findOrFail($shopId);
+        $shop = Shop::where('agrivet_id', $agrivet->id)
+            ->with([
+                'zone',
+                'ratingReviews' => function ($query) {
+                    $query->orderBy('created_at', 'desc')
+                        ->with(['user.userCredential', 'user.userDetail']);
+                },
+            ])
+            ->findOrFail($shopId);
 
         $vendors = $shop->vendors()
             ->where('user_type', 'vendor')
@@ -603,6 +626,84 @@ class AgrivetController extends Controller
                         'status' => $vendor->pivot->status ?? 'active',
                     ],
                     'created_at' => $vendor->created_at->format('Y-m-d H:i:s'),
+                ];
+            });
+
+        $reviews = $shop->ratingReviews->map(function ($review) {
+            $detail = $review->user->userDetail ?? null;
+            $firstName = $detail->first_name ?? '';
+            $lastName = $detail->last_name ?? '';
+            $name = trim("{$firstName} {$lastName}");
+            if ($name === '') {
+                $name = $review->user->userCredential->username ?? 'Customer';
+            }
+
+            $avatar = $detail->profile_image_url ?? $detail->avatar ?? null;
+            if ($avatar && ! str_starts_with($avatar, 'http')) {
+                $avatar = "/storage/{$avatar}";
+            }
+
+            return [
+                'id' => $review->id,
+                'customer_name' => $name,
+                'rating' => $review->rating,
+                'comment' => $review->review_text,
+                'created_at' => $review->created_at->format('Y-m-d H:i:s'),
+                'avatar' => $avatar,
+            ];
+        });
+
+        $products = DB::table('items')
+            ->leftJoin('category', 'items.category', '=', 'category.id')
+            ->leftJoin('sub_categories', 'items.sub_category_id', '=', 'sub_categories.id')
+            ->where('items.shop_id', $shop->id)
+            ->select(
+                'items.*',
+                'category.category_name',
+                'sub_categories.sub_category_name'
+            )
+            ->orderBy('items.created_at', 'desc')
+            ->get()
+            ->map(function ($item) {
+                $images = $item->item_images ? json_decode($item->item_images, true) : [];
+                if (! empty($images)) {
+                    $images = array_map(function ($image) {
+                        if (! is_string($image)) {
+                            return $image;
+                        }
+                        if (preg_match('/^https?:\/\//', $image)) {
+                            return $image;
+                        }
+                        if (str_starts_with($image, '/storage/')) {
+                            return $image;
+                        }
+                        if (str_contains($image, 'products/')) {
+                            return '/storage/'.$image;
+                        }
+
+                        return '/storage/products/'.basename($image);
+                    }, $images);
+                }
+
+                return [
+                    'id' => $item->id,
+                    'item_name' => $item->item_name,
+                    'item_description' => $item->item_description,
+                    'item_price' => $item->item_price,
+                    'item_quantity' => $item->item_quantity,
+                    'weight' => $item->weight,
+                    'metric' => $item->metric,
+                    'category' => $item->category,
+                    'category_name' => $item->category_name,
+                    'sub_category_id' => $item->sub_category_id,
+                    'sub_category_name' => $item->sub_category_name,
+                    'item_images' => $images,
+                    'item_status' => $item->item_status,
+                    'average_rating' => $item->average_rating,
+                    'total_reviews' => $item->total_reviews,
+                    'sold_count' => $item->sold_count,
+                    'created_at' => $item->created_at,
+                    'updated_at' => $item->updated_at,
                 ];
             });
 
@@ -632,11 +733,14 @@ class AgrivetController extends Controller
                 'total_reviews' => $shop->total_reviews,
                 'shop_status' => $shop->shop_status,
                 'logo_url' => $shop->logo_url,
+                'permit_url' => $shop->permit_url,
                 'operating_days' => $shop->operating_days,
                 'operating_hours' => $shop->operating_hours,
                 'created_at' => $shop->created_at->format('Y-m-d H:i:s'),
             ],
             'vendors' => $vendors,
+            'reviews' => $reviews,
+            'products' => $products,
         ]);
     }
 

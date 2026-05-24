@@ -99,7 +99,26 @@ function asTitleStatus(s) {
   return s.charAt(0).toUpperCase() + s.slice(1)
 }
 
-export default function AgrivetStoreInformation({ auth, agrivet, shop, vendors = [] }) {
+function reviewCustomerName(review) {
+  return review.customer_name || review.customerName || 'Customer'
+}
+
+function reviewInitials(review) {
+  const name = reviewCustomerName(review)
+  const parts = name.split(' ').filter(Boolean)
+  return (parts[0]?.[0] || '') + (parts[1]?.[0] || parts[0]?.[1] || '')
+}
+
+function formatReviewDate(dateStr) {
+  if (!dateStr) return ''
+  return new Date(dateStr).toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  })
+}
+
+export default function AgrivetStoreInformation({ auth, agrivet, shop, vendors = [], reviews = [], products = [] }) {
   const isOwnerManager = auth?.user?.user_type === 'owner_manager'
   const getBaseRoute = () => {
     if (isOwnerManager) return '/dashboard/owner-manager'
@@ -145,52 +164,13 @@ export default function AgrivetStoreInformation({ auth, agrivet, shop, vendors =
   const [activeTab, setActiveTab] = useState('about')
   const [direction, setDirection] = useState(1)
 
-  // Ratings mock (template parity)
   const [starFilter, setStarFilter] = useState(null)
-  const mockReviews = useMemo(
-    () => [
-      {
-        id: 1,
-        customerName: 'Juan Dela Cruz',
-        rating: 5,
-        date: 'March 10, 2026',
-        comment:
-          'Excellent service! Very knowledgeable staff and high-quality products. Will definitely come back.',
-        avatar:
-          'https://images.unsplash.com/photo-1668701065350-c7514f7c8166?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080',
-      },
-      {
-        id: 2,
-        customerName: 'Maria Santos',
-        rating: 5,
-        date: 'March 8, 2026',
-        comment: 'Great selection of gamefowl supplies. The staff is very helpful and accommodating.',
-        avatar:
-          'https://images.unsplash.com/photo-1609126385558-bc3fc5082b0a?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080',
-      },
-      {
-        id: 3,
-        customerName: 'Pedro Reyes',
-        rating: 4,
-        date: 'March 5, 2026',
-        comment: 'Good products and reasonable prices. The location is easy to find.',
-        avatar:
-          'https://images.unsplash.com/photo-1633177188754-980c2a6b6266?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080',
-      },
-    ],
-    []
-  )
-
-  const averageRating = useMemo(() => {
-    if (mockReviews.length === 0) return 0
-    const sum = mockReviews.reduce((acc, r) => acc + r.rating, 0)
-    return sum / mockReviews.length
-  }, [mockReviews])
+  const averageRating = parseFloat(shop.average_rating || 0)
 
   const filteredReviews = useMemo(() => {
-    if (!starFilter) return mockReviews
-    return mockReviews.filter((r) => r.rating === starFilter)
-  }, [mockReviews, starFilter])
+    if (!starFilter) return reviews
+    return reviews.filter((r) => r.rating === starFilter)
+  }, [reviews, starFilter])
 
   // Left / right column height sync (template behavior)
   const leftColumnRef = useRef(null)
@@ -339,7 +319,6 @@ export default function AgrivetStoreInformation({ auth, agrivet, shop, vendors =
     })
   }
 
-  // Products UI (template-like sample)
   const canAddListings = false
   const [productSearchQuery, setProductSearchQuery] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('All')
@@ -347,39 +326,29 @@ export default function AgrivetStoreInformation({ auth, agrivet, shop, vendors =
   const [productSortBy, setProductSortBy] = useState('name')
 
   const productListings = useMemo(
-    () => [
-      {
-        id: 1001,
-        productId: 1001,
-        productName: 'Premium Gamefowl Feed Pro',
-        brand: 'Champion Nutrition',
-        category: 'Feeds',
-        unit: '50kg',
-        price: 1250,
-        stock: 42,
-        reorderLevel: 10,
-        popularity: 245,
-        photos: ['https://images.unsplash.com/photo-1524594157360-4c8c2f0b0d5a?auto=format&fit=crop&w=800&q=60'],
-        primaryPhotoIndex: 0,
-        manualStatus: 'Active',
-      },
-      {
-        id: 1002,
-        productId: 1002,
-        productName: 'Electrolyte Power Plus',
-        brand: 'VitaBoost',
-        category: 'Supplements',
-        unit: '500g',
-        price: 320,
-        stock: 0,
-        reorderLevel: 12,
-        popularity: 189,
-        photos: ['https://images.unsplash.com/photo-1587300003388-59208cc962cb?auto=format&fit=crop&w=800&q=60'],
-        primaryPhotoIndex: 0,
-        manualStatus: 'Active',
-      },
-    ],
-    []
+    () =>
+      products.map((product) => {
+        const images = Array.isArray(product.item_images) ? product.item_images : []
+        const unit = [product.weight, product.metric].filter(Boolean).join(' ') || 'unit'
+        const isActive = (product.item_status || 'active').toLowerCase() === 'active'
+
+        return {
+          id: product.id,
+          productId: product.id,
+          productName: product.item_name || '',
+          brand: product.sub_category_name || product.category_name || '',
+          category: product.category_name || 'Uncategorized',
+          unit,
+          price: parseFloat(product.item_price) || 0,
+          stock: product.item_quantity ?? 0,
+          reorderLevel: 5,
+          popularity: product.sold_count ?? 0,
+          photos: images,
+          primaryPhotoIndex: 0,
+          manualStatus: isActive ? 'Active' : 'Inactive',
+        }
+      }),
+    [products]
   )
 
   const getProductStatus = (listing) => {
@@ -664,36 +633,38 @@ export default function AgrivetStoreInformation({ auth, agrivet, shop, vendors =
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-3 mb-4 pb-4 border-b border-[#E5E7EB]">
-                        <Filter className="w-4 h-4 text-[#65676B]" />
-                        <span className="text-xs text-[#65676B] mr-2">Filter by:</span>
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => setStarFilter(null)}
-                            className={`px-3 py-1 text-xs rounded-full border transition-colors ${
-                              starFilter === null
-                                ? 'bg-[#244693] text-white border-[#244693]'
-                                : 'bg-white text-[#65676B] border-[#E5E7EB] hover:border-[#244693]'
-                            }`}
-                          >
-                            All
-                          </button>
-                          {[5, 4, 3, 2, 1].map((star) => (
+                      {reviews.length > 0 && (
+                        <div className="flex items-center gap-3 mb-4 pb-4 border-b border-[#E5E7EB]">
+                          <Filter className="w-4 h-4 text-[#65676B]" />
+                          <span className="text-xs text-[#65676B] mr-2">Filter by:</span>
+                          <div className="flex items-center gap-2">
                             <button
-                              key={star}
-                              onClick={() => setStarFilter(star)}
-                              className={`px-3 py-1 text-xs rounded-full border transition-colors flex items-center gap-1 ${
-                                starFilter === star
+                              onClick={() => setStarFilter(null)}
+                              className={`px-3 py-1 text-xs rounded-full border transition-colors ${
+                                starFilter === null
                                   ? 'bg-[#244693] text-white border-[#244693]'
                                   : 'bg-white text-[#65676B] border-[#E5E7EB] hover:border-[#244693]'
                               }`}
                             >
-                              <Star className={`w-3 h-3 ${starFilter === star ? 'fill-white' : 'fill-[#D3A218]'}`} />
-                              {star}
+                              All
                             </button>
-                          ))}
+                            {[5, 4, 3, 2, 1].map((star) => (
+                              <button
+                                key={star}
+                                onClick={() => setStarFilter(star)}
+                                className={`px-3 py-1 text-xs rounded-full border transition-colors flex items-center gap-1 ${
+                                  starFilter === star
+                                    ? 'bg-[#244693] text-white border-[#244693]'
+                                    : 'bg-white text-[#65676B] border-[#E5E7EB] hover:border-[#244693]'
+                                }`}
+                              >
+                                <Star className={`w-3 h-3 ${starFilter === star ? 'fill-white' : 'fill-[#D3A218]'}`} />
+                                {star}
+                              </button>
+                            ))}
+                          </div>
                         </div>
-                      </div>
+                      )}
 
                       <div className="space-y-3 overflow-y-auto flex-1">
                         {filteredReviews.length > 0 ? (
@@ -705,11 +676,25 @@ export default function AgrivetStoreInformation({ auth, agrivet, shop, vendors =
                               <div className="flex items-start justify-between mb-2">
                                 <div className="flex items-center gap-3">
                                   <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full overflow-hidden border border-[#E5E7EB] flex-shrink-0">
-                                    <img src={review.avatar} alt={review.customerName} className="w-full h-full object-cover" />
+                                    {review.avatar ? (
+                                      <img
+                                        src={review.avatar}
+                                        alt={reviewCustomerName(review)}
+                                        className="w-full h-full object-cover"
+                                      />
+                                    ) : (
+                                      <div className="w-full h-full bg-[#244693] flex items-center justify-center">
+                                        <span className="text-white text-sm font-semibold">
+                                          {reviewInitials(review)}
+                                        </span>
+                                      </div>
+                                    )}
                                   </div>
                                   <div>
-                                    <p className="text-sm font-semibold text-[#050505]">{review.customerName}</p>
-                                    <p className="text-xs text-[#65676B]">{review.date}</p>
+                                    <p className="text-sm font-semibold text-[#050505]">{reviewCustomerName(review)}</p>
+                                    <p className="text-xs text-[#65676B]">
+                                      {formatReviewDate(review.created_at || review.date)}
+                                    </p>
                                   </div>
                                 </div>
                                 <div className="flex items-center gap-1">
@@ -725,13 +710,17 @@ export default function AgrivetStoreInformation({ auth, agrivet, shop, vendors =
                                   ))}
                                 </div>
                               </div>
-                              <p className="text-sm text-[#050505] leading-relaxed">{review.comment}</p>
+                              <p className="text-sm text-[#050505] leading-relaxed">
+                                {review.comment || review.review_text}
+                              </p>
                             </div>
                           ))
                         ) : (
                           <div className="text-center py-8">
                             <Star className="w-12 h-12 text-[#E5E7EB] mx-auto mb-2" />
-                            <p className="text-sm text-[#65676B]">No reviews found for this rating</p>
+                            <p className="text-sm text-[#65676B]">
+                              {starFilter ? 'No reviews found for this rating' : 'No reviews yet'}
+                            </p>
                           </div>
                         )}
                       </div>
@@ -801,6 +790,7 @@ export default function AgrivetStoreInformation({ auth, agrivet, shop, vendors =
                                     (v.pivot?.status || v.status) === 'active' ? 'bg-[#00C950]' : 'bg-[#D1D5DB]'
                                   }`}
                                   title="Toggle status (reference UI)"
+                                  style={{ borderRadius: '0.7rem' }}
                                 >
                                   <span
                                     className={`inline-block h-5 w-5 transform rounded-full bg-white transition-all duration-300 ${
@@ -942,8 +932,14 @@ export default function AgrivetStoreInformation({ auth, agrivet, shop, vendors =
                     <div className="flex items-center justify-center h-[500px]">
                       <div className="text-center">
                         <Package className="w-16 h-16 text-[#E5E7EB] mx-auto mb-4" />
-                        <h2 className="text-xl font-bold text-[#102059] mb-2">No Matching Products</h2>
-                        <p className="text-sm text-[#6B7280]">Try adjusting your filters or search query.</p>
+                        <h2 className="text-xl font-bold text-[#102059] mb-2">
+                          {productListings.length === 0 ? 'No Products Yet' : 'No Matching Products'}
+                        </h2>
+                        <p className="text-sm text-[#6B7280]">
+                          {productListings.length === 0
+                            ? 'This store has no product listings.'
+                            : 'Try adjusting your filters or search query.'}
+                        </p>
                       </div>
                     </div>
                   ) : (
@@ -956,7 +952,17 @@ export default function AgrivetStoreInformation({ auth, agrivet, shop, vendors =
                           onClick={() => showSuccess('storeEdit', listing.productName)}
                         >
                           <div className="aspect-square bg-[#F9FAFB] overflow-hidden relative">
-                            <img src={listing.photos[listing.primaryPhotoIndex]} alt={listing.productName} className="w-full h-full object-contain p-12" />
+                            {listing.photos?.length > 0 ? (
+                              <img
+                                src={listing.photos[listing.primaryPhotoIndex || 0]}
+                                alt={listing.productName}
+                                className="w-full h-full object-contain p-12"
+                              />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center">
+                                <Package className="w-12 h-12 text-[#E5E7EB]" />
+                              </div>
+                            )}
                             <div className="absolute top-2 left-2">
                               <span
                                 className={`text-[10px] font-semibold px-2 py-1 rounded-full ${
