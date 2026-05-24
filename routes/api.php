@@ -28,8 +28,6 @@ Route::middleware('auth:sanctum')->group(function () {
     });
     Route::put('profile/update', [UserController::class, 'updateMobile']);
     Route::put('profile/change-password', [UserController::class, 'updatePasswordMobile']);
-    Route::post('/payment/checkout', [PaymentController::class, 'checkout']);
-    Route::get('/payment/status/{orderId}', [PaymentController::class, 'status']);
     // add other protected routes here
 });
 
@@ -141,7 +139,6 @@ Route::get('activity-logs/{id}', [ActivityLogController::class, 'show']);
 Route::post('/payment/intent', [PaymentController::class,'createIntent']);
 Route::post('/payment/attach', [PaymentController::class,'attachPayment']);
 Route::get('/payment-success', [PaymentController::class, 'paymentSuccess']);
+Route::post('/payment/checkout', [PaymentController::class,'checkout']);
 Route::get('/payment/checkout-url/{orderId}', [PaymentController::class, 'getCheckoutUrlByOrderId']);
-Route::post('/payment/paymongo/webhook', [PaymentController::class, 'handlePaymongoWebhook']);
-// Legacy webhook alias; keep until clients migrate.
 Route::post('/payment/webhook', [PaymentController::class, 'handleWebhook']);
