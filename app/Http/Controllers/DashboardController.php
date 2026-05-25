@@ -311,6 +311,14 @@ class DashboardController extends Controller
         return app(AgrivetController::class)->reassignVendor($request, $agrivet->id, $shopId, $vendorId);
     }
 
+    public function ownerManagerStoreVendor(Request $request, $shopId)
+    {
+        $agrivet = auth()->user()->managedAgrivet;
+        abort_unless($agrivet, 404);
+
+        return app(AgrivetController::class)->storeVendor($request, $agrivet->id, $shopId);
+    }
+
     public function ownerManagerOrders()
     {
         $user = auth()->user();

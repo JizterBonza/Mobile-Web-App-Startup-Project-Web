@@ -875,13 +875,17 @@ class AgrivetController extends Controller
 
             // Redirect to store information (vendors tab) based on current user's role
             $currentUser = auth()->user();
-            $redirectRoute = $currentUser->user_type === 'admin'
-                ? 'dashboard.admin.agrivets.shops.store-information'
-                : 'dashboard.super-admin.agrivets.shops.store-information';
+            $redirectRoute = match ($currentUser->user_type) {
+                'admin' => 'dashboard.admin.agrivets.shops.store-information',
+                'owner_manager' => 'dashboard.owner-manager.stores.store-information',
+                default => 'dashboard.super-admin.agrivets.shops.store-information',
+            };
 
             $vendorName = trim("{$request->first_name} ".($request->middle_name ? $request->middle_name.' ' : '')."{$request->last_name}");
 
-            return redirect(route($redirectRoute, [$id, $shopId]).'?tab=vendors')
+            $redirectParams = $currentUser->user_type === 'owner_manager' ? [$shopId] : [$id, $shopId];
+
+            return redirect(route($redirectRoute, $redirectParams).'?tab=vendors')
                 ->with('success', "{$vendorName} has been added to {$shop->shop_name} successfully.");
         } catch (\Exception $e) {
             DB::rollBack();

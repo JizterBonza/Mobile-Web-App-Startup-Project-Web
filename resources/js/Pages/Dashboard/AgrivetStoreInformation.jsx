@@ -122,7 +122,7 @@ export default function AgrivetStoreInformation({ auth, agrivet, shop, vendors =
   const usersPrefix =
     auth?.user?.user_type === 'admin' ? '/dashboard/admin' : '/dashboard/super-admin'
   const vendorRegistrationRoute = isOwnerManager
-    ? vendorsRoute
+    ? `/dashboard/owner-manager/vendor-registration?agrivet_id=${agrivet.id}&shop_id=${shop.id}`
     : `${usersPrefix}/users/vendor-registration?agrivet_id=${agrivet.id}&shop_id=${shop.id}`
 
   const reassignVendorRoute = (vendorId) => (
