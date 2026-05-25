@@ -612,22 +612,28 @@ class AgrivetController extends Controller
             ->with(['userDetail', 'userCredential'])
             ->orderBy('created_at', 'desc')
             ->get()
-            ->map(function ($vendor) {
-                return [
-                    'id' => $vendor->id,
-                    'first_name' => $vendor->userDetail->first_name ?? '',
-                    'middle_name' => $vendor->userDetail->middle_name ?? '',
-                    'last_name' => $vendor->userDetail->last_name ?? '',
-                    'email' => $vendor->userDetail->email ?? '',
-                    'mobile_number' => $vendor->userDetail->mobile_number ?? '',
-                    'username' => $vendor->userCredential->username ?? '',
-                    'status' => $vendor->status,
-                    'pivot' => [
-                        'status' => $vendor->pivot->status ?? 'active',
-                    ],
-                    'created_at' => $vendor->created_at->format('Y-m-d H:i:s'),
-                ];
-            });
+            ->map(fn ($vendor) => $this->mapVendorForStore($vendor));
+
+        $reassignableVendors = Shop::where('agrivet_id', $agrivet->id)
+            ->where('id', '!=', $shop->id)
+            ->with(['vendors' => function ($query) {
+                $query->where('users.user_type', 'vendor')
+                    ->with(['userDetail', 'userCredential']);
+            }])
+            ->get()
+            ->flatMap(function ($otherShop) {
+                return $otherShop->vendors
+                    ->filter(fn ($vendor) => ($vendor->pivot->status ?? 'active') === 'active')
+                    ->map(function ($vendor) use ($otherShop) {
+                        return array_merge($this->mapVendorForStore($vendor), [
+                            'shop_id' => $otherShop->id,
+                            'shop_name' => $otherShop->shop_name,
+                        ]);
+                    });
+            })
+            ->sortBy(fn ($vendor) => strtolower($vendor['first_name'].' '.$vendor['last_name']))
+            ->values()
+            ->all();
 
         $reviews = $shop->ratingReviews->map(function ($review) {
             $detail = $review->user->userDetail ?? null;
@@ -739,6 +745,7 @@ class AgrivetController extends Controller
                 'created_at' => $shop->created_at->format('Y-m-d H:i:s'),
             ],
             'vendors' => $vendors,
+            'reassignableVendors' => $reassignableVendors,
             'reviews' => $reviews,
             'products' => $products,
         ]);
@@ -1059,6 +1066,92 @@ class AgrivetController extends Controller
             return redirect()->back()
                 ->withErrors(['error' => 'Failed to add vendor. Please try again.']);
         }
+    }
+
+    /**
+     * Reassign a vendor from another shop in the same agrivet to this shop.
+     */
+    public function reassignVendor(Request $request, $id, $shopId, $vendorId)
+    {
+        $request->validate([
+            'from_shop_id' => 'required|exists:shops,id',
+        ]);
+
+        $agrivet = Agrivet::findOrFail($id);
+        $targetShop = Shop::where('agrivet_id', $agrivet->id)->findOrFail($shopId);
+        $sourceShop = Shop::where('agrivet_id', $agrivet->id)->findOrFail($request->from_shop_id);
+
+        if ($sourceShop->id === $targetShop->id) {
+            return redirect()->back()
+                ->withErrors(['error' => 'Cannot reassign vendor to the same store.']);
+        }
+
+        $vendor = User::with('userDetail')->findOrFail($vendorId);
+
+        if ($vendor->user_type !== 'vendor') {
+            return redirect()->back()
+                ->withErrors(['error' => 'Selected user is not a vendor.']);
+        }
+
+        if (! $sourceShop->vendors()->where('users.id', $vendorId)->exists()) {
+            return redirect()->back()
+                ->withErrors(['error' => 'Vendor is not assigned to the source store.']);
+        }
+
+        if ($targetShop->vendors()->where('users.id', $vendorId)->exists()) {
+            return redirect()->back()
+                ->withErrors(['error' => 'Vendor is already assigned to this store.']);
+        }
+
+        try {
+            DB::beginTransaction();
+
+            $sourceShop->vendors()->detach($vendorId);
+
+            $targetShop->vendors()->attach($vendorId, [
+                'agrivet_id' => $agrivet->id,
+                'status' => 'active',
+            ]);
+
+            DB::commit();
+
+            $vendorName = trim(($vendor->userDetail->first_name ?? '').' '.($vendor->userDetail->last_name ?? ''));
+            if ($vendorName === '') {
+                $vendorName = $vendor->userDetail->email ?? "Vendor #{$vendorId}";
+            }
+
+            ActivityLog::log(
+                'reassigned',
+                "Vendor reassigned: {$vendorName} from {$sourceShop->shop_name} to {$targetShop->shop_name}",
+                $vendor
+            );
+
+            return $this->redirectToStoreInformation($id, $shopId)
+                ->with('success', "{$vendorName} has been reassigned to {$targetShop->shop_name} successfully.");
+        } catch (\Exception $e) {
+            DB::rollBack();
+
+            return redirect()->back()
+                ->withErrors(['error' => 'Failed to reassign vendor. Please try again.']);
+        }
+    }
+
+    private function mapVendorForStore($vendor): array
+    {
+        return [
+            'id' => $vendor->id,
+            'first_name' => $vendor->userDetail->first_name ?? '',
+            'middle_name' => $vendor->userDetail->middle_name ?? '',
+            'last_name' => $vendor->userDetail->last_name ?? '',
+            'email' => $vendor->userDetail->email ?? '',
+            'mobile_number' => $vendor->userDetail->mobile_number ?? '',
+            'username' => $vendor->userCredential->username ?? '',
+            'status' => $vendor->status,
+            'pivot' => [
+                'status' => $vendor->pivot->status ?? 'active',
+            ],
+            'created_at' => $vendor->created_at->format('Y-m-d H:i:s'),
+        ];
     }
 
     private function redirectToStoreInformation($agrivetId, $shopId)

@@ -104,7 +104,7 @@ function formatReviewDate(dateStr) {
   })
 }
 
-export default function AgrivetStoreInformation({ auth, agrivet, shop, vendors = [], reviews = [], products = [], flash }) {
+export default function AgrivetStoreInformation({ auth, agrivet, shop, vendors = [], reassignableVendors = [], reviews = [], products = [], flash }) {
   const isOwnerManager = auth?.user?.user_type === 'owner_manager'
   const getBaseRoute = () => {
     if (isOwnerManager) return '/dashboard/owner-manager'
@@ -124,6 +124,12 @@ export default function AgrivetStoreInformation({ auth, agrivet, shop, vendors =
   const vendorRegistrationRoute = isOwnerManager
     ? vendorsRoute
     : `${usersPrefix}/users/vendor-registration?agrivet_id=${agrivet.id}&shop_id=${shop.id}`
+
+  const reassignVendorRoute = (vendorId) => (
+    isOwnerManager
+      ? `${getBaseRoute()}/stores/${shop.id}/vendors/${vendorId}/reassign`
+      : `${getBaseRoute()}/${agrivet.id}/shops/${shop.id}/vendors/${vendorId}/reassign`
+  )
 
   const PageLayout = isOwnerManager ? OwnerManagerKlasmeytLayout : SuperAdminOrAdminLayout
 
@@ -191,7 +197,12 @@ export default function AgrivetStoreInformation({ auth, agrivet, shop, vendors =
   useEffect(() => {
     if (flash?.success) {
       setActiveTab('vendors')
-      showSuccess('add', flash.success)
+      if (flash.success.toLowerCase().includes('reassigned')) {
+        const vendorName = flash.success.split(' has been reassigned')[0]?.trim() || flash.success
+        showSuccess('reassign', vendorName)
+      } else {
+        showSuccess('add', flash.success)
+      }
     }
   }, [flash?.success])
 
@@ -219,8 +230,10 @@ export default function AgrivetStoreInformation({ auth, agrivet, shop, vendors =
   const [coverPhotoFile, setCoverPhotoFile] = useState(null)
   const [showCoverPhotoConfirmModal, setShowCoverPhotoConfirmModal] = useState(false)
 
-  // Vendors UI state (view-only here; full CRUD stays in `AgrivetVendors`)
+  // Vendors UI state
   const [showReassignModal, setShowReassignModal] = useState(false)
+  const [reassignSearchQuery, setReassignSearchQuery] = useState('')
+  const [reassigningVendorId, setReassigningVendorId] = useState(null)
   const [showVendorStatusConfirmModal, setShowVendorStatusConfirmModal] = useState(false)
   const [vendorToToggle, setVendorToToggle] = useState(null)
   const [showRemoveVendorConfirmModal, setShowRemoveVendorConfirmModal] = useState(false)
@@ -260,6 +273,37 @@ export default function AgrivetStoreInformation({ auth, agrivet, shop, vendors =
   const cancelStatusChange = () => {
     setShowVendorStatusConfirmModal(false)
     setVendorToToggle(null)
+  }
+
+  const closeReassignModal = () => {
+    setShowReassignModal(false)
+    setReassignSearchQuery('')
+    setReassigningVendorId(null)
+  }
+
+  const filteredReassignableVendors = useMemo(() => {
+    const query = reassignSearchQuery.trim().toLowerCase()
+    if (!query) return reassignableVendors
+
+    return reassignableVendors.filter((v) => {
+      const name = vendorDisplayName(v).toLowerCase()
+      const email = (v.email || '').toLowerCase()
+      const shopName = (v.shop_name || '').toLowerCase()
+      return name.includes(query) || email.includes(query) || shopName.includes(query)
+    })
+  }, [reassignableVendors, reassignSearchQuery])
+
+  const handleReassignVendor = (vendor) => {
+    setReassigningVendorId(vendor.id)
+    router.post(
+      reassignVendorRoute(vendor.id),
+      { from_shop_id: vendor.shop_id },
+      {
+        preserveScroll: true,
+        onSuccess: () => closeReassignModal(),
+        onFinish: () => setReassigningVendorId(null),
+      },
+    )
   }
 
   const handleSaveStoreInfo = () => {
@@ -1011,6 +1055,24 @@ export default function AgrivetStoreInformation({ auth, agrivet, shop, vendors =
               )}
 
               {activeTab === 'insights' && (
+                <div className="bg-white rounded-lg border border-[#E5E7EB] min-h-[600px]">
+                  <div className="border-b border-[#E5E7EB] p-6">
+                    <h2 className="text-xl font-bold text-[#102059]">Store Insights</h2>
+                    <p className="text-sm text-[#65676B] mt-1">Analytics for orders, customers, and revenue</p>
+                  </div>
+                  <div className="flex flex-col items-center justify-center py-16 px-6">
+                    <div className="w-16 h-16 bg-[#E3F2FD] rounded-full flex items-center justify-center mb-4">
+                      <TrendingUp className="w-8 h-8 text-[#244693]" />
+                    </div>
+                    <h3 className="text-lg font-bold text-[#102059] mb-2">No insights available yet</h3>
+                    <p className="text-sm text-[#65676B] text-center max-w-md">
+                      Store analytics will appear here once there is enough order and customer activity data.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {false && activeTab === 'insights_OLD' && (
                 <div className="space-y-6">
                   <div className="flex items-center justify-between mb-4">
                     <h2 className="text-xl font-bold text-[#102059]">Store Insights</h2>
@@ -1523,32 +1585,103 @@ export default function AgrivetStoreInformation({ auth, agrivet, shop, vendors =
           </div>
         )}
 
-        {/* Reassign Vendor Modal (reference UI) */}
+        {/* Reassign Vendor Modal */}
         {showReassignModal && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-lg p-6 w-[520px] max-w-[90%]">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-bold text-[#102059]">Reassign Vendor</h2>
-                <button className="p-2 text-[#65676B] hover:text-[#102059] transition-colors" onClick={() => setShowReassignModal(false)}>
-                  <X className="w-4 h-4" />
-                </button>
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={closeReassignModal}>
+            <div
+              className="bg-white rounded-lg w-[560px] max-w-[90%] max-h-[85vh] flex flex-col"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="p-6 border-b border-[#E5E7EB]">
+                <div className="flex items-center justify-between mb-2">
+                  <h2 className="text-xl font-bold text-[#102059]">Reassign Vendor</h2>
+                  <button
+                    className="p-2 text-[#65676B] hover:text-[#102059] transition-colors"
+                    onClick={closeReassignModal}
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+                <p className="text-sm text-[#65676B]">
+                  Move a vendor from another store under <span className="font-semibold text-[#102059]">{agrivet.name}</span> to{' '}
+                  <span className="font-semibold text-[#102059]">{store.storeName}</span>.
+                </p>
               </div>
-              <p className="text-sm text-[#65676B]">
-                This modal is shown for UI parity. Use the vendor management page to reassign vendors.
-              </p>
-              <div className="flex items-center justify-end mt-6 gap-2">
+
+              {reassignableVendors.length > 0 && (
+                <div className="px-6 pt-4">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#65676B]" />
+                    <input
+                      type="text"
+                      placeholder="Search by name, email, or store..."
+                      value={reassignSearchQuery}
+                      onChange={(e) => setReassignSearchQuery(e.target.value)}
+                      className="w-full pl-10 pr-4 py-2.5 border border-[#E5E7EB] rounded-lg text-sm text-[#102059] placeholder:text-[#65676B] focus:outline-none focus:ring-2 focus:ring-[#244693]/20 focus:border-[#244693]"
+                    />
+                  </div>
+                </div>
+              )}
+
+              <div className="flex-1 overflow-y-auto p-6">
+                {reassignableVendors.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-10 text-center">
+                    <div className="w-16 h-16 bg-[#F0F2F5] rounded-full flex items-center justify-center mb-4">
+                      <Users className="w-8 h-8 text-[#65676B]" />
+                    </div>
+                    <h3 className="text-base font-bold text-[#102059] mb-1">No Vendors Available</h3>
+                    <p className="text-sm text-[#65676B] max-w-sm">
+                      All vendors under this Agrivet are already assigned to this store, or no other stores have vendors yet.
+                    </p>
+                  </div>
+                ) : filteredReassignableVendors.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-10 text-center">
+                    <Search className="w-8 h-8 text-[#65676B] mb-3" />
+                    <p className="text-sm text-[#65676B]">No vendors match your search.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {filteredReassignableVendors.map((v) => (
+                      <div
+                        key={`${v.id}-${v.shop_id}`}
+                        className="border border-[#E5E7EB] rounded-lg p-4 hover:bg-[#F9FAFB] transition-colors"
+                      >
+                        <div className="flex items-center justify-between gap-4">
+                          <div className="flex items-center gap-3 min-w-0 flex-1">
+                            <div className="w-10 h-10 bg-[#102059] rounded-full flex items-center justify-center flex-shrink-0">
+                              <span className="text-xs font-bold text-white">{vendorInitials(v).toUpperCase()}</span>
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <h3 className="text-sm font-bold text-[#102059] truncate">{vendorDisplayName(v)}</h3>
+                              <p className="text-xs text-[#65676B] truncate">{v.email}</p>
+                              <p className="text-xs text-[#244693] font-medium mt-0.5 truncate">
+                                Currently at: {v.shop_name}
+                              </p>
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleReassignVendor(v)}
+                            disabled={reassigningVendorId === v.id}
+                            className="flex-shrink-0 px-4 py-2 bg-[#244693] text-white text-sm font-semibold rounded-lg hover:bg-[#1a3570] transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                          >
+                            {reassigningVendorId === v.id ? 'Reassigning...' : 'Reassign'}
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="p-6 border-t border-[#E5E7EB] flex justify-end">
                 <button
+                  type="button"
                   className="px-4 py-2.5 bg-white border border-[#E5E7EB] text-sm font-semibold rounded-lg hover:bg-[#F9FAFB]"
-                  onClick={() => setShowReassignModal(false)}
+                  onClick={closeReassignModal}
                 >
                   Close
                 </button>
-                <Link
-                  href={vendorsRoute}
-                  className="px-4 py-2.5 bg-[#244693] text-white text-sm font-semibold rounded-lg hover:bg-[#1a3570]"
-                >
-                  Open vendor management
-                </Link>
               </div>
             </div>
           </div>
