@@ -22,6 +22,7 @@ import {
 import { AnimatePresence, motion } from 'motion/react'
 import OwnerManagerKlasmeytLayout from '../../Layouts/OwnerManagerKlasmeytLayout'
 import SuperAdminOrAdminLayout from '../../Layouts/SuperAdminOrAdminLayout'
+import VendorKlasmeytLayout from '../../Layouts/VendorKlasmeytLayout'
 
 const tabOrder = ['about', 'vendors', 'products', 'insights']
 
@@ -106,35 +107,48 @@ function formatReviewDate(dateStr) {
 
 export default function AgrivetStoreInformation({ auth, agrivet, shop, vendors = [], reassignableVendors = [], reviews = [], products = [], flash }) {
   const isOwnerManager = auth?.user?.user_type === 'owner_manager'
+  const isVendor = auth?.user?.user_type === 'vendor'
+  const visibleTabs = isVendor ? tabOrder.filter((t) => t !== 'vendors') : tabOrder
+
   const getBaseRoute = () => {
     if (isOwnerManager) return '/dashboard/owner-manager'
+    if (isVendor) return '/dashboard/vendor'
     return auth?.user?.user_type === 'admin' ? '/dashboard/admin/agrivets' : '/dashboard/super-admin/agrivets'
   }
 
-  const shopBasePath = isOwnerManager
-    ? `${getBaseRoute()}/stores/${shop.id}`
-    : `${getBaseRoute()}/${agrivet.id}/shops/${shop.id}`
+  const PageLayout = isVendor
+    ? VendorKlasmeytLayout
+    : isOwnerManager
+      ? OwnerManagerKlasmeytLayout
+      : SuperAdminOrAdminLayout
 
-  const backRoute = isOwnerManager ? `${getBaseRoute()}/stores` : `${getBaseRoute()}/${agrivet.id}/shops`
+  const shopBasePath = shop
+    ? isOwnerManager
+      ? `${getBaseRoute()}/stores/${shop.id}`
+      : `${getBaseRoute()}/${agrivet?.id}/shops/${shop.id}`
+    : ''
+
+  const backRoute = isOwnerManager
+    ? `${getBaseRoute()}/stores`
+    : `${getBaseRoute()}/${agrivet?.id}/shops`
   const vendorsRoute = isOwnerManager
     ? shopBasePath
-    : `${getBaseRoute()}/${agrivet.id}/shops/${shop.id}/vendors`
+    : `${getBaseRoute()}/${agrivet?.id}/shops/${shop?.id}/vendors`
   const usersPrefix =
     auth?.user?.user_type === 'admin' ? '/dashboard/admin' : '/dashboard/super-admin'
   const vendorRegistrationRoute = isOwnerManager
-    ? `/dashboard/owner-manager/vendor-registration?agrivet_id=${agrivet.id}&shop_id=${shop.id}`
-    : `${usersPrefix}/users/vendor-registration?agrivet_id=${agrivet.id}&shop_id=${shop.id}`
+    ? `/dashboard/owner-manager/vendor-registration?agrivet_id=${agrivet?.id}&shop_id=${shop?.id}`
+    : `${usersPrefix}/users/vendor-registration?agrivet_id=${agrivet?.id}&shop_id=${shop?.id}`
 
   const reassignVendorRoute = (vendorId) => (
     isOwnerManager
-      ? `${getBaseRoute()}/stores/${shop.id}/vendors/${vendorId}/reassign`
-      : `${getBaseRoute()}/${agrivet.id}/shops/${shop.id}/vendors/${vendorId}/reassign`
+      ? `${getBaseRoute()}/stores/${shop?.id}/vendors/${vendorId}/reassign`
+      : `${getBaseRoute()}/${agrivet?.id}/shops/${shop?.id}/vendors/${vendorId}/reassign`
   )
-
-  const PageLayout = isOwnerManager ? OwnerManagerKlasmeytLayout : SuperAdminOrAdminLayout
 
   // Build a "store" object that matches the template fields/shape as closely as possible.
   const store = useMemo(() => {
+    if (!shop) return null
     const lat = shop.shop_lat != null ? Number(shop.shop_lat) : null
     const lng = shop.shop_long != null ? Number(shop.shop_long) : null
     return {
@@ -161,14 +175,14 @@ export default function AgrivetStoreInformation({ auth, agrivet, shop, vendors =
   const [activeTab, setActiveTab] = useState(() => {
     if (typeof window !== 'undefined') {
       const tab = new URLSearchParams(window.location.search).get('tab')
-      if (tab && tabOrder.includes(tab)) return tab
+      if (tab && visibleTabs.includes(tab)) return tab
     }
     return 'about'
   })
   const [direction, setDirection] = useState(1)
 
   const [starFilter, setStarFilter] = useState(null)
-  const averageRating = parseFloat(shop.average_rating || 0)
+  const averageRating = parseFloat(shop?.average_rating || 0)
 
   const filteredReviews = useMemo(() => {
     if (!starFilter) return reviews
@@ -196,7 +210,9 @@ export default function AgrivetStoreInformation({ auth, agrivet, shop, vendors =
 
   useEffect(() => {
     if (flash?.success) {
-      setActiveTab('vendors')
+      if (visibleTabs.includes('vendors')) {
+        setActiveTab('vendors')
+      }
       if (flash.success.toLowerCase().includes('reassigned')) {
         const vendorName = flash.success.split(' has been reassigned')[0]?.trim() || flash.success
         showSuccess('reassign', vendorName)
@@ -210,6 +226,19 @@ export default function AgrivetStoreInformation({ auth, agrivet, shop, vendors =
   const [showEditStoreModal, setShowEditStoreModal] = useState(false)
   const [showEditStoreConfirmModal, setShowEditStoreConfirmModal] = useState(false)
   const [editStoreData, setEditStoreData] = useState(() => {
+    if (!shop) {
+      return {
+        storeName: '',
+        street: '',
+        barangay: '',
+        city: '',
+        province: '',
+        zipCode: '',
+        operatingDays: [],
+        openingTime: '',
+        closingTime: '',
+      }
+    }
     const hoursParts = shop.operating_hours ? shop.operating_hours.split(' - ') : []
     return {
       storeName: shop.shop_name || '',
@@ -240,8 +269,8 @@ export default function AgrivetStoreInformation({ auth, agrivet, shop, vendors =
   const [vendorToRemove, setVendorToRemove] = useState(null)
 
   const handleTabChange = (newTab) => {
-    const currentIndex = tabOrder.indexOf(activeTab)
-    const newIndex = tabOrder.indexOf(newTab)
+    const currentIndex = visibleTabs.indexOf(activeTab)
+    const newIndex = visibleTabs.indexOf(newTab)
     setDirection(newIndex > currentIndex ? 1 : -1)
     setActiveTab(newTab)
   }
@@ -427,6 +456,22 @@ export default function AgrivetStoreInformation({ auth, agrivet, shop, vendors =
       })
   }, [productListings, productSearchQuery, categoryFilter, productStatusFilter, productSortBy])
 
+  if (!shop || !store) {
+    return (
+      <PageLayout auth={auth} title="My Store">
+        <div
+          role="alert"
+          className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900"
+        >
+          <p className="font-semibold">No shop assigned</p>
+          <p className="mt-1 text-amber-800">
+            Your vendor account is not linked to a store yet. Please contact an administrator.
+          </p>
+        </div>
+      </PageLayout>
+    )
+  }
+
   return (
     <PageLayout auth={auth} title={`${shop.shop_name} — Store Information`} mainClassName="p-0">
       <div className="relative min-h-screen bg-[#F0F2F5]">
@@ -478,13 +523,15 @@ export default function AgrivetStoreInformation({ auth, agrivet, shop, vendors =
             </motion.div>
           )}
         </AnimatePresence>
-        <Link
-          href={backRoute}
-          className="absolute top-6 left-6 z-40 p-3 bg-white border border-[#E5E7EB] rounded-lg hover:bg-[#F9FAFB] transition-all group"
-          title={isOwnerManager ? 'Back to My Stores' : `Back to ${agrivet.name}`}
-        >
-          <ArrowLeft className="w-5 h-5 text-[#6B7280] group-hover:text-[#102059]" />
-        </Link>
+        {!isVendor && (
+          <Link
+            href={backRoute}
+            className="absolute top-6 left-6 z-40 p-3 bg-white border border-[#E5E7EB] rounded-lg hover:bg-[#F9FAFB] transition-all group"
+            title={isOwnerManager ? 'Back to My Stores' : `Back to ${agrivet.name}`}
+          >
+            <ArrowLeft className="w-5 h-5 text-[#6B7280] group-hover:text-[#102059]" />
+          </Link>
+        )}
 
         {/* Cover Photo */}
         <div className="bg-white">
@@ -548,7 +595,7 @@ export default function AgrivetStoreInformation({ auth, agrivet, shop, vendors =
             <div className="px-0">
               <div className="flex gap-2 pt-1 justify-between items-center">
                 <div className="flex gap-2">
-                  {tabOrder.map((t) => (
+                  {visibleTabs.map((t) => (
                     <div
                       key={t}
                       className={`px-4 py-3 text-sm font-semibold ${

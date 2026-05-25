@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Link } from '@inertiajs/react'
-import AdminLayout from '../../../Layouts/AdminLayout'
+import VendorKlasmeytLayout from '../../../Layouts/VendorKlasmeytLayout'
 
 export default function Orders({ auth, orders = [], shop, flash }) {
   const [showSuccessAlert, setShowSuccessAlert] = useState(true)
@@ -29,7 +29,7 @@ export default function Orders({ auth, orders = [], shop, flash }) {
   }
 
   return (
-    <AdminLayout auth={auth} title="Orders">
+    <VendorKlasmeytLayout auth={auth} title="Orders">
       {flash?.success && showSuccessAlert && (
         <div className="alert alert-success alert-dismissible fade show" role="alert">
           <strong>Success!</strong> {flash.success}
@@ -104,6 +104,6 @@ export default function Orders({ auth, orders = [], shop, flash }) {
           </div>
         </div>
       </div>
-    </AdminLayout>
+    </VendorKlasmeytLayout>
   )
 }

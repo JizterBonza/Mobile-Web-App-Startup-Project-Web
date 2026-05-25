@@ -42,7 +42,9 @@ export function DashboardHeader({
     menuToggle = null,
     /** Shown next to the menu toggle when the sidebar is open (e.g. desktop collapse control). */
     sidebarHideToggle = null,
-    navigationItems,
+    navigationItems = [],
+    /** When false, only logo and account actions are shown (e.g. vendor dashboard). */
+    showNav = true,
     /** Narrower centered nav for dashboards with few links (e.g. owner/manager). */
     compactNav = false,
     notificationCount = 0,
@@ -57,11 +59,12 @@ export function DashboardHeader({
     const activeNavItemRef = useRef(null)
 
     const activeTab = useMemo(
-        () => getActiveNavId(url, navigationItems),
-        [url, navigationItems],
+        () => (showNav && navigationItems.length ? getActiveNavId(url, navigationItems) : null),
+        [url, navigationItems, showNav],
     )
 
     useEffect(() => {
+        if (!showNav || !navigationItems.length) return
         // When the header nav overflows, ensure the active pill stays visible.
         if (activeNavItemRef.current?.scrollIntoView) {
             activeNavItemRef.current.scrollIntoView({
@@ -70,7 +73,7 @@ export function DashboardHeader({
                 behavior: 'smooth',
             })
         }
-    }, [activeTab])
+    }, [activeTab, showNav, navigationItems.length])
 
     const initials = userInitials ?? initialsFromName(userName)
 
@@ -94,36 +97,38 @@ export function DashboardHeader({
                     </Link>
                 </div>
 
-                <nav
-                    className={`absolute left-1/2 hidden -translate-x-1/2 md:flex ${
-                        compactNav
-                            ? 'w-auto max-w-[min(22rem,calc(100vw-20rem))]'
-                            : 'w-[min(980px,calc(100vw-20rem))]'
-                    }`}
-                    style={{ paddingLeft: '0px', paddingRight: '0px' }}
-                >
-                    <div
-                        className={`flex items-center gap-0.5 overflow-x-auto rounded-full border border-[#E5E7EB] p-0.5 backdrop-blur-sm ${
-                            compactNav ? 'w-auto' : 'w-full'
+                {showNav && navigationItems.length > 0 && (
+                    <nav
+                        className={`absolute left-1/2 hidden -translate-x-1/2 md:flex ${
+                            compactNav
+                                ? 'w-auto max-w-[min(22rem,calc(100vw-20rem))]'
+                                : 'w-[min(980px,calc(100vw-20rem))]'
                         }`}
+                        style={{ paddingLeft: '0px', paddingRight: '0px' }}
                     >
-                        {navigationItems.map((item) => (
-                            <Link
-                                key={item.id}
-                                href={item.href}
-                                ref={activeTab === item.id ? activeNavItemRef : null}
-                                className={`whitespace-nowrap rounded-full px-4 py-2 text-sm font-medium transition-all ${
-                                    activeTab === item.id
-                                        ? 'bg-[#244693] text-white'
-                                        : 'bg-transparent text-[#4B5563] hover:text-[#102059]'
-                                }`}
-                                style={{ fontFamily: 'Inter Condensed, sans-serif', backgroundColor: activeTab === item.id ? '#244693' : 'transparent', color: activeTab === item.id ? 'white' : '#4B5563' }}
-                            >
-                                {item.label}
-                            </Link>
-                        ))}
-                    </div>
-                </nav>
+                        <div
+                            className={`flex items-center gap-0.5 overflow-x-auto rounded-full border border-[#E5E7EB] p-0.5 backdrop-blur-sm ${
+                                compactNav ? 'w-auto' : 'w-full'
+                            }`}
+                        >
+                            {navigationItems.map((item) => (
+                                <Link
+                                    key={item.id}
+                                    href={item.href}
+                                    ref={activeTab === item.id ? activeNavItemRef : null}
+                                    className={`whitespace-nowrap rounded-full px-4 py-2 text-sm font-medium transition-all ${
+                                        activeTab === item.id
+                                            ? 'bg-[#244693] text-white'
+                                            : 'bg-transparent text-[#4B5563] hover:text-[#102059]'
+                                    }`}
+                                    style={{ fontFamily: 'Inter Condensed, sans-serif', backgroundColor: activeTab === item.id ? '#244693' : 'transparent', color: activeTab === item.id ? 'white' : '#4B5563' }}
+                                >
+                                    {item.label}
+                                </Link>
+                            ))}
+                        </div>
+                    </nav>
+                )}
 
                 <div className="flex flex-shrink-0 items-center gap-2 sm:gap-3">
                     {/* <Link

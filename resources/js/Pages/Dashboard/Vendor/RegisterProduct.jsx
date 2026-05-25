@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useForm, router } from '@inertiajs/react'
-import AdminLayout from '../../../Layouts/AdminLayout'
+import VendorKlasmeytLayout from '../../../Layouts/VendorKlasmeytLayout'
 
 export default function RegisterProduct({ auth, shop, stockImages = [], categories = [], subCategories = [] }) {
   const [currentStep, setCurrentStep] = useState(1)
@@ -125,7 +125,7 @@ export default function RegisterProduct({ auth, shop, stockImages = [], categori
   const totalImages = imagePreviews.length + selectedStockImages.length
 
   return (
-    <AdminLayout auth={auth} title="Register Product">
+    <VendorKlasmeytLayout auth={auth} title="Register Product">
       {/* Back Button Row */}
       <div className="mb-3">
         <button
@@ -752,6 +752,6 @@ export default function RegisterProduct({ auth, shop, stockImages = [], categori
           </div>
         </>
       )}
-    </AdminLayout>
+    </VendorKlasmeytLayout>
   )
 }

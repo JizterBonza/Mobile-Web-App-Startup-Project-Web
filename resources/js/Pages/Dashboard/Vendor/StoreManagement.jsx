@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useForm } from '@inertiajs/react'
-import AdminLayout from '../../../Layouts/AdminLayout'
+import VendorKlasmeytLayout from '../../../Layouts/VendorKlasmeytLayout'
 import AddressAutocomplete from '../../../Components/AddressAutocomplete'
 
 export default function StoreManagement({ auth, shop, agrivet, flash }) {
@@ -56,7 +56,7 @@ export default function StoreManagement({ auth, shop, agrivet, flash }) {
   }
 
   return (
-    <AdminLayout auth={auth} title="Store Management">
+    <VendorKlasmeytLayout auth={auth} title="Store Management">
       {/* Flash Messages */}
       {flash?.success && showSuccessAlert && (
         <div className="alert alert-success alert-dismissible fade show" role="alert">
@@ -377,6 +377,6 @@ export default function StoreManagement({ auth, shop, agrivet, flash }) {
           </div>
         </>
       )}
-    </AdminLayout>
+    </VendorKlasmeytLayout>
   )
 }

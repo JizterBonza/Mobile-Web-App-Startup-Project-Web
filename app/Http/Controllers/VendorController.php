@@ -77,65 +77,24 @@ class VendorController extends Controller
     }
 
     /**
-     * Display the vendor dashboard.
+     * Vendor home: store information for the shop this vendor is assigned to.
      */
     public function index()
     {
         $shop = $this->getVendorShopWithAgrivet();
 
-        if (!$shop) {
-            return Inertia::render('Dashboard/VendorDashboard', [
-                'shop' => null,
+        if (! $shop || ! $shop->agrivet) {
+            return Inertia::render('Dashboard/AgrivetStoreInformation', [
                 'agrivet' => null,
-                'stats' => [
-                    'new_orders' => 0,
-                    'products' => 0,
-                    'pending_reviews' => 0,
-                    'total_revenue' => 0,
-                ],
+                'shop' => null,
+                'vendors' => [],
+                'reassignableVendors' => [],
+                'reviews' => [],
+                'products' => [],
             ]);
         }
 
-        $agrivet = $shop->agrivet;
-
-        // Get dashboard stats
-        $productsCount = DB::table('items')
-            ->where('shop_id', $shop->id)
-            ->count();
-
-        $newOrdersCount = DB::table('order_items')
-            ->join('items', 'order_items.item_id', '=', 'items.id')
-            ->where('items.shop_id', $shop->id)
-            ->where('order_items.item_status', 'ordered')
-            ->count();
-
-        $totalRevenue = DB::table('order_items')
-            ->join('items', 'order_items.item_id', '=', 'items.id')
-            ->where('items.shop_id', $shop->id)
-            ->where('order_items.item_status', 'delivered')
-            ->sum(DB::raw('order_items.quantity * order_items.price_at_purchase'));
-
-        return Inertia::render('Dashboard/VendorDashboard', [
-            'shop' => [
-                'id' => $shop->id,
-                'shop_name' => $shop->shop_name,
-                'shop_description' => $shop->shop_description,
-                'shop_address' => $shop->shop_address,
-                'average_rating' => $shop->average_rating,
-                'total_reviews' => $shop->total_reviews,
-                'shop_status' => $shop->shop_status,
-            ],
-            'agrivet' => $agrivet ? [
-                'id' => $agrivet->id,
-                'name' => $agrivet->name,
-            ] : null,
-            'stats' => [
-                'new_orders' => $newOrdersCount,
-                'products' => $productsCount,
-                'pending_reviews' => 0, // Can be implemented later
-                'total_revenue' => $totalRevenue ?? 0,
-            ],
-        ]);
+        return app(AgrivetController::class)->showStoreInformation($shop->agrivet->id, $shop->id);
     }
 
     /**

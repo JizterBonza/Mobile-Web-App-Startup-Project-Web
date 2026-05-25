@@ -596,6 +596,16 @@ class AgrivetController extends Controller
      */
     public function showStoreInformation($id, $shopId)
     {
+        $user = auth()->user();
+
+        if ($user->user_type === 'vendor') {
+            $ownsShop = $user->shops()
+                ->where('shops.id', $shopId)
+                ->where('shops.agrivet_id', $id)
+                ->exists();
+            abort_unless($ownsShop, 403);
+        }
+
         $agrivet = Agrivet::findOrFail($id);
         $shop = Shop::where('agrivet_id', $agrivet->id)
             ->with([
