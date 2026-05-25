@@ -6,13 +6,11 @@ import {
   Clock,
   Filter,
   Heart,
-  Info,
   MapPin,
   Package,
   Pencil,
   Plus,
   Search,
-  ShoppingCart,
   Star,
   Trash2,
   TrendingUp,
@@ -22,18 +20,6 @@ import {
   X,
 } from 'lucide-react'
 import { AnimatePresence, motion } from 'motion/react'
-import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Legend,
-  Line,
-  LineChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from 'recharts'
 import OwnerManagerKlasmeytLayout from '../../Layouts/OwnerManagerKlasmeytLayout'
 import SuperAdminOrAdminLayout from '../../Layouts/SuperAdminOrAdminLayout'
 
@@ -396,9 +382,6 @@ export default function AgrivetStoreInformation({ auth, agrivet, shop, vendors =
         return 0
       })
   }, [productListings, productSearchQuery, categoryFilter, productStatusFilter, productSortBy])
-
-  // Insights (template parity with recharts)
-  const [insightsPeriod, setInsightsPeriod] = useState('monthly')
 
   return (
     <PageLayout auth={auth} title={`${shop.shop_name} — Store Information`} mainClassName="p-0">
