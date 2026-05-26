@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { router } from "@inertiajs/react";
 import {
   Package,
   Clock,
@@ -18,7 +19,11 @@ import {
 } from "lucide-react";
 
 /** Order management UI — layout from StoreOwnerOrders.tsx (Klasmeyt template). */
-export default function OwnerManagerOrdersPanel({ orders: initialOrders = [] }) {
+export default function OwnerManagerOrdersPanel({
+  orders: initialOrders = [],
+  deliveryMethods = [],
+  preparingItemStatusId = null,
+}) {
   const [activeSection, setActiveSection] = useState('new')
   const [expandedOrders, setExpandedOrders] = useState(() => new Set())
   const [showDeclineModal, setShowDeclineModal] = useState(false)
@@ -26,6 +31,8 @@ export default function OwnerManagerOrdersPanel({ orders: initialOrders = [] }) 
   const [declineReason, setDeclineReason] = useState('')
   const [completedFilter, setCompletedFilter] = useState('all')
   const [orders, setOrders] = useState(initialOrders)
+  const [processingOrderId, setProcessingOrderId] = useState(null)
+  const [processingItemKey, setProcessingItemKey] = useState(null)
 
   useEffect(() => {
     setOrders(initialOrders)
@@ -50,6 +57,23 @@ export default function OwnerManagerOrdersPanel({ orders: initialOrders = [] }) 
     setExpandedOrders(newExpanded);
   };
 
+  const resolveDeliveryMethod = (order) => {
+    if (order.deliveryMethod?.name) {
+      return order.deliveryMethod;
+    }
+    if (order.deliveryMethodName) {
+      return { name: order.deliveryMethodName, info: order.deliveryMethod?.info ?? null };
+    }
+    const methodId = order.deliveryMethodId ?? order.delivery_method_id;
+    if (methodId != null && deliveryMethods.length > 0) {
+      const match = deliveryMethods.find((m) => Number(m.id) === Number(methodId));
+      if (match) {
+        return { id: match.id, name: match.name, info: match.info ?? null };
+      }
+    }
+    return null;
+  };
+
   const calculateOrderTotal = (products) => {
     return products.reduce((total, product) => {
       const discountedPrice = product.discount
@@ -66,34 +90,99 @@ export default function OwnerManagerOrdersPanel({ orders: initialOrders = [] }) 
   };
 
   const handleAcceptOrder = (order) => {
-    setOrders(prevOrders =>
-      prevOrders.map(o =>
-        o.orderNumber === order.orderNumber
-          ? { ...o, status: "preparing" }
-          : o
-      )
+    if (!order?.id || processingOrderId) {
+      return;
+    }
+
+    setProcessingOrderId(order.id);
+    router.patch(`/dashboard/owner-manager/orders/${order.id}/accept`, {}, {
+      preserveScroll: true,
+      onFinish: () => setProcessingOrderId(null),
+    });
+  };
+
+  const isItemPreparing = (product) => {
+    if (preparingItemStatusId == null || product?.itemStatusId == null) {
+      return false;
+    }
+    return Number(product.itemStatusId) === Number(preparingItemStatusId);
+  };
+
+  const orderAllItemsDonePreparing = (order) => {
+    if (order?.allItemsDonePreparing) {
+      return true;
+    }
+    if (!order?.products?.length) {
+      return false;
+    }
+    return order.products.every((product) => !isItemPreparing(product));
+  };
+
+  const handleDonePreparingItem = (order, product) => {
+    if (!order?.id || !product?.id || processingItemKey || processingOrderId) {
+      return;
+    }
+
+    const itemKey = `${order.id}-${product.id}`;
+    setProcessingItemKey(itemKey);
+    router.patch(
+      `/dashboard/owner-manager/orders/${order.id}/items/${product.id}/done-preparing`,
+      {},
+      {
+        preserveScroll: true,
+        onFinish: () => setProcessingItemKey(null),
+      }
     );
   };
 
-  const handleDeclineOrder = () => {
-    if (selectedOrder && declineReason.trim()) {
-      setOrders(prevOrders =>
-        prevOrders.map(o =>
-          o.orderNumber === selectedOrder.orderNumber
-            ? {
-                ...o,
-                status: "completed",
-                isSuccessful: false,
-                declineReason: declineReason.trim(),
-                completionDate: new Date().toISOString(),
-              }
-            : o
-        )
-      );
-      setShowDeclineModal(false);
-      setDeclineReason("");
-      setSelectedOrder(null);
+  const handleMarkOrderReady = (order) => {
+    if (!order?.id || processingOrderId || !orderAllItemsDonePreparing(order)) {
+      return;
     }
+
+    setProcessingOrderId(order.id);
+    router.patch(`/dashboard/owner-manager/orders/${order.id}/ready`, {}, {
+      preserveScroll: true,
+      onFinish: () => setProcessingOrderId(null),
+    });
+  };
+
+  const itemStatusBadgeClass = (product) => {
+    if (isItemPreparing(product)) {
+      return "bg-[#FEF3C7] text-[#92400E]";
+    }
+    const status = (product.itemStatus || "").toLowerCase();
+    if (status.includes("ready")) {
+      return "bg-[#DBEAFE] text-[#1E40AF]";
+    }
+    if (status.includes("deliver")) {
+      return "bg-[#E8F5E9] text-[#2E7D32]";
+    }
+    if (status.includes("cancel")) {
+      return "bg-[#FFEBEE] text-[#C62828]";
+    }
+    return "bg-[#F3F4F6] text-[#4B5563]";
+  };
+
+  const handleDeclineOrder = () => {
+    if (!selectedOrder?.id || !declineReason.trim() || processingOrderId) {
+      return;
+    }
+
+    setProcessingOrderId(selectedOrder.id);
+    router.patch(
+      `/dashboard/owner-manager/orders/${selectedOrder.id}/decline`,
+      { decline_reason: declineReason.trim() },
+      {
+        preserveScroll: true,
+        onFinish: () => {
+          setProcessingOrderId(null);
+          setShowDeclineModal(false);
+          setDeclineReason("");
+          setSelectedOrder(null);
+        },
+      }
+    );
   };
 
   const openDeclineModal = (order) => {
@@ -134,6 +223,7 @@ export default function OwnerManagerOrdersPanel({ orders: initialOrders = [] }) 
 
   const renderOrderCard = (order) => {
     const isExpanded = expandedOrders.has(order.orderNumber);
+    const deliveryMethod = resolveDeliveryMethod(order);
     const orderTotal = calculateOrderTotal(order.products);
     const originalTotal = calculateOriginalTotal(order.products);
     const hasDiscount = originalTotal > orderTotal;
@@ -228,6 +318,24 @@ export default function OwnerManagerOrdersPanel({ orders: initialOrders = [] }) 
               </div>
             </div>
 
+            {/* Delivery Method */}
+            <div>
+              <h4 className="text-xs font-bold text-[#102059] uppercase tracking-wider mb-2">
+                Delivery Method
+              </h4>
+              <div className="flex items-start gap-2 p-3 bg-[#F9FAFB] rounded-lg border border-[#E5E7EB]">
+                <Truck className="w-4 h-4 text-[#244693] mt-0.5 flex-shrink-0" />
+                <div>
+                  <p className="text-sm text-[#102059] font-medium">
+                    {deliveryMethod?.name ?? "Not specified"}
+                  </p>
+                  {deliveryMethod?.info && (
+                    <p className="text-xs text-[#6B7280] mt-1">{deliveryMethod.info}</p>
+                  )}
+                </div>
+              </div>
+            </div>
+
             {/* Products List */}
             <div>
               <h4 className="text-xs font-bold text-[#102059] uppercase tracking-wider mb-2">
@@ -239,45 +347,68 @@ export default function OwnerManagerOrdersPanel({ orders: initialOrders = [] }) 
                     ? product.price * (1 - product.discount / 100)
                     : product.price;
                   const itemTotal = discountedPrice * product.quantity;
+                  const itemKey = `${order.id}-${product.id}`;
+                  const showPreparingActions = order.status === "preparing";
+                  const itemIsPreparing = isItemPreparing(product);
 
                   return (
                     <div
                       key={product.id}
-                      className="flex items-center gap-3 p-3 bg-[#F9FAFB] rounded-lg border border-[#E5E7EB]"
+                      className="flex flex-col gap-3 p-3 bg-[#F9FAFB] rounded-lg border border-[#E5E7EB] sm:flex-row sm:items-center"
                     >
-                      {/* Product Thumbnail */}
-                      {product.thumbnail && (
-                        <div className="w-14 h-14 rounded-lg overflow-hidden flex-shrink-0 bg-white border border-[#E5E7EB]">
-                          <img 
-                            src={product.thumbnail} 
-                            alt={product.name}
-                            className="w-full h-full object-cover"
-                          />
-                        </div>
-                      )}
-                      
-                      {/* Product Details */}
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-[#102059] mb-1">{product.name}</p>
-                        <p className="text-xs text-[#6B7280]">
-                          ₱{(product.discount ? discountedPrice : product.price).toLocaleString("en-PH", { minimumFractionDigits: 2 })} × {product.quantity}
-                        </p>
-                      </div>
-                      
-                      {/* Price */}
-                      <div className="text-right">
-                        <p className="text-sm font-bold text-[#102059]">
-                          ₱{itemTotal.toLocaleString("en-PH", { minimumFractionDigits: 2 })}
-                        </p>
-                        {product.discount && (
-                          <div className="flex items-center gap-2 justify-end">
-                            <span className="text-xs text-[#6B7280] line-through">
-                              ₱{(product.price * product.quantity).toLocaleString("en-PH", { minimumFractionDigits: 2 })}
-                            </span>
-                            <span className="text-xs font-semibold text-[#E20E28]">
-                              -{product.discount}%
-                            </span>
+                      <div className="flex items-center gap-3 flex-1 min-w-0">
+                        {product.thumbnail && (
+                          <div className="w-14 h-14 rounded-lg overflow-hidden flex-shrink-0 bg-white border border-[#E5E7EB]">
+                            <img
+                              src={product.thumbnail}
+                              alt={product.name}
+                              className="w-full h-full object-cover"
+                            />
                           </div>
+                        )}
+
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-[#102059] mb-1">{product.name}</p>
+                          <p className="text-xs text-[#6B7280]">
+                            ₱{(product.discount ? discountedPrice : product.price).toLocaleString("en-PH", { minimumFractionDigits: 2 })} × {product.quantity}
+                          </p>
+                          {showPreparingActions && product.itemStatus && (
+                            <span
+                              className={`inline-flex mt-2 items-center px-2 py-0.5 rounded-full text-xs font-semibold ${itemStatusBadgeClass(product)}`}
+                            >
+                              {product.itemStatus}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="flex flex-col items-stretch sm:items-end gap-2 sm:flex-shrink-0">
+                        <div className="text-right">
+                          <p className="text-sm font-bold text-[#102059]">
+                            ₱{itemTotal.toLocaleString("en-PH", { minimumFractionDigits: 2 })}
+                          </p>
+                          {product.discount && (
+                            <div className="flex items-center gap-2 justify-end">
+                              <span className="text-xs text-[#6B7280] line-through">
+                                ₱{(product.price * product.quantity).toLocaleString("en-PH", { minimumFractionDigits: 2 })}
+                              </span>
+                              <span className="text-xs font-semibold text-[#E20E28]">
+                                -{product.discount}%
+                              </span>
+                            </div>
+                          )}
+                        </div>
+
+                        {showPreparingActions && itemIsPreparing && (
+                          <button
+                            type="button"
+                            onClick={() => handleDonePreparingItem(order, product)}
+                            disabled={processingItemKey === itemKey || processingOrderId != null}
+                            className="px-3 py-2 bg-[#D3A218] text-white rounded-lg font-semibold text-xs hover:bg-[#B8890F] transition-colors disabled:opacity-60 disabled:cursor-not-allowed whitespace-nowrap"
+                            style={{ fontFamily: "Inter Condensed, sans-serif" }}
+                          >
+                            {processingItemKey === itemKey ? "Updating…" : "Done Preparing"}
+                          </button>
                         )}
                       </div>
                     </div>
@@ -432,18 +563,50 @@ export default function OwnerManagerOrdersPanel({ orders: initialOrders = [] }) 
               <div className="flex items-center gap-3 pt-3 border-t border-[#E5E7EB]">
                 <button
                   onClick={() => handleAcceptOrder(order)}
-                  className="flex-1 px-4 py-2.5 bg-[#00C950] text-white rounded-lg font-semibold text-sm hover:bg-[#00B048] transition-colors"
+                  disabled={processingOrderId === order.id}
+                  className="flex-1 px-4 py-2.5 bg-[#00C950] text-white rounded-lg font-semibold text-sm hover:bg-[#00B048] transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                   style={{ fontFamily: "Inter Condensed, sans-serif" }}
                 >
-                  Accept Order
+                  {processingOrderId === order.id ? "Accepting…" : "Accept Order"}
                 </button>
                 <button
                   onClick={() => openDeclineModal(order)}
-                  className="flex-1 px-4 py-2.5 bg-[#E20E28] text-white rounded-lg font-semibold text-sm hover:bg-[#C00C22] transition-colors"
+                  disabled={processingOrderId != null}
+                  className="flex-1 px-4 py-2.5 bg-[#E20E28] text-white rounded-lg font-semibold text-sm hover:bg-[#C00C22] transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                   style={{ fontFamily: "Inter Condensed, sans-serif" }}
                 >
                   Decline Order
                 </button>
+              </div>
+            )}
+
+            {/* Mark ready (for preparing orders — enabled when all items are done preparing) */}
+            {order.status === "preparing" && (
+              <div className="pt-3 border-t border-[#E5E7EB] space-y-2">
+                <button
+                  type="button"
+                  onClick={() => handleMarkOrderReady(order)}
+                  disabled={
+                    processingOrderId === order.id ||
+                    !orderAllItemsDonePreparing(order)
+                  }
+                  className="w-full px-4 py-2.5 bg-[#244693] text-white rounded-lg font-semibold text-sm hover:bg-[#1a3570] transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                  style={{ fontFamily: "Inter Condensed, sans-serif" }}
+                  title={
+                    !orderAllItemsDonePreparing(order)
+                      ? "Mark every item as done preparing first"
+                      : undefined
+                  }
+                >
+                  {processingOrderId === order.id
+                    ? "Updating…"
+                    : order.readyButtonLabel || "Mark Order Ready"}
+                </button>
+                {!orderAllItemsDonePreparing(order) && (
+                  <p className="text-xs text-[#6B7280] text-center">
+                    Complete all items with &quot;Done Preparing&quot; to enable this button.
+                  </p>
+                )}
               </div>
             )}
           </div>
@@ -607,7 +770,7 @@ export default function OwnerManagerOrdersPanel({ orders: initialOrders = [] }) 
               </button>
               <button
                 onClick={handleDeclineOrder}
-                disabled={!declineReason.trim()}
+                disabled={!declineReason.trim() || processingOrderId != null}
                 className="flex-1 px-4 py-2.5 bg-[#E20E28] text-white rounded-lg font-semibold text-sm hover:bg-[#C00C22] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 style={{ fontFamily: "Inter Condensed, sans-serif" }}
               >

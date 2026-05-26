@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Inertia\Inertia;
 
 class DashboardController extends Controller
@@ -325,17 +326,248 @@ class DashboardController extends Controller
         $agrivet = $user->managedAgrivet;
         $orders = [];
 
+        $deliveryMethods = [];
+        $preparingItemStatusId = Schema::hasTable('order_item_status')
+            ? (int) (DB::table('order_item_status')->where('stat_description', 'Preparing')->value('id') ?? 0)
+            : 0;
+
         if ($agrivet) {
-            $shopIds = $agrivet->shops()->pluck('shops.id')->all();
+            $shopIds = $agrivet->shops()->pluck('id')->all();
             if (! empty($shopIds)) {
-                $orders = $this->buildOwnerManagerOrders($shopIds);
+                $orders = $this->buildOwnerManagerOrders($shopIds, $preparingItemStatusId);
+            }
+
+            if (Schema::hasTable('delivery_method')) {
+                $deliveryMethods = DB::table('delivery_method')
+                    ->where('status', true)
+                    ->orderBy('id')
+                    ->get(['id', 'description', 'info'])
+                    ->map(fn ($row) => [
+                        'id'   => (int) $row->id,
+                        'name' => $row->description,
+                        'info' => $row->info,
+                    ])
+                    ->values()
+                    ->all();
             }
         }
 
         return Inertia::render('Dashboard/OwnerManagerOrders', [
-            'agrivet' => $agrivet,
-            'orders'  => $orders,
+            'agrivet'               => $agrivet,
+            'orders'                => $orders,
+            'deliveryMethods'       => $deliveryMethods,
+            'preparingItemStatusId' => $preparingItemStatusId ?: null,
         ]);
+    }
+
+    public function ownerManagerAcceptOrder(int $orderId)
+    {
+        $shopIds = $this->ownerManagerShopIdsOrAbort();
+        $this->assertOwnerManagerOrderAccess($orderId, $shopIds);
+
+        $pendingStatusId = (int) DB::table('order_status')->where('stat_description', 'Pending')->value('id');
+        $preparingStatusId = (int) DB::table('order_status')->where('stat_description', 'Preparing')->value('id');
+
+        if (! $pendingStatusId || ! $preparingStatusId) {
+            return redirect()->route('dashboard.owner-manager.orders')
+                ->with('error', 'Order status configuration is missing.');
+        }
+
+        $orderShops = DB::table('order_shops')
+            ->where('order_id', $orderId)
+            ->whereIn('shop_id', $shopIds)
+            ->get();
+
+        if ($orderShops->isEmpty()) {
+            abort(404);
+        }
+
+        if ($orderShops->contains(fn ($row) => (int) $row->order_status !== $pendingStatusId)) {
+            return redirect()->route('dashboard.owner-manager.orders')
+                ->with('error', 'Only pending orders can be accepted.');
+        }
+
+        $now = now();
+
+        DB::table('order_shops')
+            ->where('order_id', $orderId)
+            ->whereIn('shop_id', $shopIds)
+            ->update(['order_status' => $preparingStatusId, 'updated_at' => $now]);
+
+        $preparingItemStatusId = DB::table('order_item_status')->where('stat_description', 'Preparing')->value('id');
+        if ($preparingItemStatusId) {
+            DB::table('order_items')
+                ->where('order_id', $orderId)
+                ->whereIn('shop_id', $shopIds)
+                ->update(['item_status' => (int) $preparingItemStatusId, 'updated_at' => $now]);
+        }
+
+        $this->logOwnerManagerOrderEvent(
+            $orderId,
+            'status_changed',
+            'Pending',
+            'Preparing',
+            'Order accepted by owner/manager.'
+        );
+
+        return redirect()->route('dashboard.owner-manager.orders')
+            ->with('success', 'Order accepted successfully.');
+    }
+
+    public function ownerManagerDeclineOrder(Request $request, int $orderId)
+    {
+        $shopIds = $this->ownerManagerShopIdsOrAbort();
+        $this->assertOwnerManagerOrderAccess($orderId, $shopIds);
+
+        $request->validate([
+            'decline_reason' => 'required|string|max:1000',
+        ]);
+
+        $pendingStatusId = (int) DB::table('order_status')->where('stat_description', 'Pending')->value('id');
+        $cancelledStatusId = (int) DB::table('order_status')->where('stat_description', 'Cancelled')->value('id');
+
+        if (! $pendingStatusId || ! $cancelledStatusId) {
+            return redirect()->route('dashboard.owner-manager.orders')
+                ->with('error', 'Order status configuration is missing.');
+        }
+
+        $orderShops = DB::table('order_shops')
+            ->where('order_id', $orderId)
+            ->whereIn('shop_id', $shopIds)
+            ->get();
+
+        if ($orderShops->isEmpty()) {
+            abort(404);
+        }
+
+        if ($orderShops->contains(fn ($row) => (int) $row->order_status !== $pendingStatusId)) {
+            return redirect()->route('dashboard.owner-manager.orders')
+                ->with('error', 'Only pending orders can be declined.');
+        }
+
+        $now = now();
+        $declineReason = trim($request->input('decline_reason'));
+
+        DB::table('order_shops')
+            ->where('order_id', $orderId)
+            ->whereIn('shop_id', $shopIds)
+            ->update(['order_status' => $cancelledStatusId, 'updated_at' => $now]);
+
+        $cancelledItemStatusId = DB::table('order_item_status')->where('stat_description', 'Cancelled')->value('id');
+        if ($cancelledItemStatusId) {
+            DB::table('order_items')
+                ->where('order_id', $orderId)
+                ->whereIn('shop_id', $shopIds)
+                ->update(['item_status' => (int) $cancelledItemStatusId, 'updated_at' => $now]);
+        }
+
+        $this->logOwnerManagerOrderEvent(
+            $orderId,
+            'cancelled',
+            'Pending',
+            'Cancelled',
+            $declineReason
+        );
+
+        return redirect()->route('dashboard.owner-manager.orders')
+            ->with('success', 'Order declined successfully.');
+    }
+
+    public function ownerManagerMarkOrderReady(int $orderId)
+    {
+        $shopIds = $this->ownerManagerShopIdsOrAbort();
+        $this->assertOwnerManagerOrderAccess($orderId, $shopIds);
+
+        $preparingStatusId = (int) DB::table('order_status')->where('stat_description', 'Preparing')->value('id');
+        $readyStatus = $this->resolveOwnerManagerReadyStatus($orderId);
+
+        if (! $preparingStatusId || ! $readyStatus) {
+            return redirect()->route('dashboard.owner-manager.orders')
+                ->with('error', 'Unable to mark this order as ready. Check delivery method configuration.');
+        }
+
+        $orderShops = DB::table('order_shops')
+            ->where('order_id', $orderId)
+            ->whereIn('shop_id', $shopIds)
+            ->get();
+
+        if ($orderShops->isEmpty()) {
+            abort(404);
+        }
+
+        if ($orderShops->contains(fn ($row) => (int) $row->order_status !== $preparingStatusId)) {
+            return redirect()->route('dashboard.owner-manager.orders')
+                ->with('error', 'Only orders being prepared can be marked as ready.');
+        }
+
+        $preparingItemStatusId = (int) DB::table('order_item_status')->where('stat_description', 'Preparing')->value('id');
+        $remainingPreparingItems = DB::table('order_items')
+            ->where('order_id', $orderId)
+            ->whereIn('shop_id', $shopIds)
+            ->where('item_status', $preparingItemStatusId)
+            ->count();
+
+        if ($remainingPreparingItems > 0) {
+            return redirect()->route('dashboard.owner-manager.orders')
+                ->with('error', 'Mark every item as done preparing before marking the order ready.');
+        }
+
+        $now = now();
+
+        DB::table('order_shops')
+            ->where('order_id', $orderId)
+            ->whereIn('shop_id', $shopIds)
+            ->update(['order_status' => $readyStatus['order_status_id'], 'updated_at' => $now]);
+
+        $this->logOwnerManagerOrderEvent(
+            $orderId,
+            'status_changed',
+            'Preparing',
+            $readyStatus['label'],
+            'Order marked as ready by owner/manager.'
+        );
+
+        return redirect()->route('dashboard.owner-manager.orders')
+            ->with('success', 'Order marked as ' . $readyStatus['label'] . '.');
+    }
+
+    public function ownerManagerDonePreparingItem(int $orderId, int $orderItemId)
+    {
+        $shopIds = $this->ownerManagerShopIdsOrAbort();
+        $this->assertOwnerManagerOrderAccess($orderId, $shopIds);
+
+        $preparingItemStatusId = (int) DB::table('order_item_status')->where('stat_description', 'Preparing')->value('id');
+        $readyStatus = $this->resolveOwnerManagerReadyStatus($orderId);
+
+        if (! $preparingItemStatusId || ! $readyStatus || ! $readyStatus['order_item_status_id']) {
+            return redirect()->route('dashboard.owner-manager.orders')
+                ->with('error', 'Unable to update item status. Check delivery method configuration.');
+        }
+
+        $orderItem = DB::table('order_items')
+            ->where('id', $orderItemId)
+            ->where('order_id', $orderId)
+            ->whereIn('shop_id', $shopIds)
+            ->first();
+
+        if (! $orderItem) {
+            abort(404);
+        }
+
+        if ((int) $orderItem->item_status !== $preparingItemStatusId) {
+            return redirect()->route('dashboard.owner-manager.orders')
+                ->with('error', 'Only items currently being prepared can be marked as done.');
+        }
+
+        DB::table('order_items')
+            ->where('id', $orderItemId)
+            ->update([
+                'item_status' => $readyStatus['order_item_status_id'],
+                'updated_at'  => now(),
+            ]);
+
+        return redirect()->route('dashboard.owner-manager.orders')
+            ->with('success', 'Item marked as done preparing.');
     }
 
     public function admin()
@@ -462,17 +694,32 @@ class DashboardController extends Controller
      * @param  array<int>  $shopIds
      * @return array<int, array<string, mixed>>
      */
-    private function buildOwnerManagerOrders(array $shopIds): array
+    private function buildOwnerManagerOrders(array $shopIds, int $preparingItemStatusId = 0): array
     {
-        $orderIds = DB::table('order_items')
-            ->join('items', 'order_items.item_id', '=', 'items.id')
-            ->whereIn('items.shop_id', $shopIds)
+        // Orders are tied to shops via order_shops and order_items.shop_id (not items.shop_id).
+        $orderIds = DB::table('order_shops')
+            ->whereIn('shop_id', $shopIds)
             ->distinct()
-            ->pluck('order_items.order_id');
+            ->pluck('order_id')
+            ->merge(
+                DB::table('order_items')
+                    ->whereIn('shop_id', $shopIds)
+                    ->distinct()
+                    ->pluck('order_id')
+            )
+            ->unique()
+            ->values();
 
         if ($orderIds->isEmpty()) {
             return [];
         }
+
+        $deliveryMethodNames = DB::table('delivery_method')
+            ->where('status', true)
+            ->pluck('description', 'id');
+        $deliveryMethodInfos = DB::table('delivery_method')
+            ->where('status', true)
+            ->pluck('info', 'id');
 
         $orderShopAgg = DB::table('order_shops')
             ->whereIn('shop_id', $shopIds)
@@ -482,15 +729,19 @@ class DashboardController extends Controller
 
         $orderRows = DB::table('orders')
             ->whereIn('orders.id', $orderIds)
-            ->joinSub($orderShopAgg, 'os_agg', 'orders.id', '=', 'os_agg.order_id')
-            ->join('order_status', 'os_agg.order_status', '=', 'order_status.id')
+            ->leftJoinSub($orderShopAgg, 'os_agg', 'orders.id', '=', 'os_agg.order_id')
+            ->leftJoin('order_status', 'os_agg.order_status', '=', 'order_status.id')
             ->join('users', 'orders.user_id', '=', 'users.id')
             ->join('user_details', 'users.user_detail_id', '=', 'user_details.id')
             ->leftJoin('order_details', 'orders.order_detail_id', '=', 'order_details.id')
+            ->leftJoin('delivery_method', 'order_details.delivery_method_id', '=', 'delivery_method.id')
             ->leftJoin('addresses', 'order_details.address_id', '=', 'addresses.id')
             ->select(
                 'orders.id',
                 'orders.ordered_at',
+                'order_details.delivery_method_id as order_delivery_method_id',
+                'delivery_method.description as delivery_method_name',
+                'delivery_method.info as delivery_method_info',
                 'order_status.stat_description as status_description',
                 'user_details.first_name',
                 'user_details.last_name',
@@ -506,9 +757,14 @@ class DashboardController extends Controller
             ->orderByDesc('orders.ordered_at')
             ->get();
 
+        if ($preparingItemStatusId === 0 && Schema::hasTable('order_item_status')) {
+            $preparingItemStatusId = (int) (DB::table('order_item_status')->where('stat_description', 'Preparing')->value('id') ?? 0);
+        }
+
         $itemsByOrder = DB::table('order_items')
             ->join('items', 'order_items.item_id', '=', 'items.id')
-            ->whereIn('items.shop_id', $shopIds)
+            ->leftJoin('order_item_status', 'order_items.item_status', '=', 'order_item_status.id')
+            ->whereIn('order_items.shop_id', $shopIds)
             ->whereIn('order_items.order_id', $orderIds)
             ->select(
                 'order_items.order_id',
@@ -516,6 +772,8 @@ class DashboardController extends Controller
                 'items.item_name',
                 'order_items.quantity',
                 'order_items.price_at_purchase',
+                'order_items.item_status as item_status_id',
+                'order_item_status.stat_description as item_status_description',
                 'items.item_images',
             )
             ->orderBy('order_items.id')
@@ -546,19 +804,44 @@ class DashboardController extends Controller
             ->get()
             ->keyBy('order_id');
 
-        return $orderRows->map(function ($row) use ($itemsByOrder, $ridersByOrder, $proofByOrder) {
+        $shopIdsByOrder = DB::table('order_shops')
+            ->whereIn('shop_id', $shopIds)
+            ->whereIn('order_id', $orderIds)
+            ->select('order_id', 'shop_id')
+            ->get()
+            ->groupBy('order_id')
+            ->map(fn ($rows) => $rows->pluck('shop_id')->map(fn ($id) => (int) $id)->values()->all());
+
+        $declineByOrder = collect();
+        if (Schema::hasTable('order_logs')) {
+            $declineByOrder = DB::table('order_logs')
+                ->whereIn('order_id', $orderIds)
+                ->where('event', 'cancelled')
+                ->orderByDesc('created_at')
+                ->get()
+                ->unique('order_id')
+                ->keyBy('order_id');
+        }
+
+        return $orderRows->map(function ($row) use ($itemsByOrder, $ridersByOrder, $proofByOrder, $shopIdsByOrder, $declineByOrder, $deliveryMethodNames, $deliveryMethodInfos, $preparingItemStatusId) {
             $statusMeta = $this->mapOwnerManagerOrderStatus($row->status_description ?? '');
             $products = ($itemsByOrder->get($row->id) ?? collect())->map(function ($item) {
                 $thumbnail = $this->firstItemImageUrl($item->item_images);
 
                 return [
-                    'id'        => (int) $item->id,
-                    'name'      => $item->item_name,
-                    'quantity'  => (int) $item->quantity,
-                    'price'     => (float) $item->price_at_purchase,
-                    'thumbnail' => $thumbnail,
+                    'id'                    => (int) $item->id,
+                    'name'                  => $item->item_name,
+                    'quantity'              => (int) $item->quantity,
+                    'price'                 => (float) $item->price_at_purchase,
+                    'thumbnail'             => $thumbnail,
+                    'itemStatusId'          => (int) $item->item_status_id,
+                    'itemStatus'            => $item->item_status_description ?? 'Unknown',
                 ];
             })->values()->all();
+
+            $allItemsDonePreparing = $preparingItemStatusId > 0
+                && count($products) > 0
+                && collect($products)->every(fn (array $product) => (int) $product['itemStatusId'] !== $preparingItemStatusId);
 
             $rider = $ridersByOrder->get($row->id);
             $riderDetails = null;
@@ -575,8 +858,18 @@ class DashboardController extends Controller
             $proof = $proofByOrder->get($row->id);
             $customerPhone = $row->address_contact ?: $row->mobile_number ?: '';
 
+            $deliveryMethodId = isset($row->order_delivery_method_id) && $row->order_delivery_method_id !== ''
+                ? (int) $row->order_delivery_method_id
+                : null;
+            $deliveryMethodName = $row->delivery_method_name
+                ?? ($deliveryMethodId ? ($deliveryMethodNames[$deliveryMethodId] ?? null) : null);
+            $deliveryMethodInfo = $row->delivery_method_info
+                ?? ($deliveryMethodId ? ($deliveryMethodInfos[$deliveryMethodId] ?? null) : null);
+
             $payload = [
+                'id'                      => (int) $row->id,
                 'orderNumber'             => 'ORD-' . $row->id,
+                'shopIds'                 => $shopIdsByOrder->get($row->id, []),
                 'customerName'            => trim(($row->first_name ?? '') . ' ' . ($row->last_name ?? '')),
                 'customerPhone'           => $customerPhone,
                 'customerProfilePicture'  => $row->profile_image_url ?: $row->avatar,
@@ -589,6 +882,15 @@ class DashboardController extends Controller
                     'province' => $row->province ?? '',
                 ],
                 'status'                  => $statusMeta['status'],
+                'deliveryMethodId'        => $deliveryMethodId,
+                'deliveryMethodName'      => $deliveryMethodName,
+                'deliveryMethod'          => $deliveryMethodId ? [
+                    'id'   => $deliveryMethodId,
+                    'name' => $deliveryMethodName ?? 'Unknown',
+                    'info' => $deliveryMethodInfo,
+                ] : null,
+                'readyButtonLabel'        => $this->readyButtonLabelForDeliveryMethod($deliveryMethodId),
+                'allItemsDonePreparing'   => $allItemsDonePreparing,
             ];
 
             if ($riderDetails) {
@@ -597,7 +899,11 @@ class DashboardController extends Controller
 
             if ($statusMeta['status'] === 'completed') {
                 $payload['isSuccessful'] = $statusMeta['isSuccessful'];
-                $payload['completionDate'] = $row->ordered_at;
+                $declineLog = $declineByOrder->get($row->id);
+                $payload['completionDate'] = $declineLog?->created_at ?? $row->ordered_at;
+                if ($statusMeta['isSuccessful'] === false && $declineLog?->notes) {
+                    $payload['declineReason'] = $declineLog->notes;
+                }
                 if ($statusMeta['isSuccessful'] && $proof?->image_path) {
                     $payload['proofOfDelivery'] = $proof->image_path;
                 }
@@ -617,20 +923,125 @@ class DashboardController extends Controller
         if (str_contains($d, 'cancel')) {
             return ['status' => 'completed', 'isSuccessful' => false];
         }
-        if (str_contains($d, 'deliver')) {
+        // Must run before "delivered" — "ready for delivery" contains "deliver"
+        if (str_contains($d, 'ready for')) {
+            return ['status' => 'for-pickup', 'isSuccessful' => null];
+        }
+        if (str_contains($d, 'delivered')) {
             return ['status' => 'completed', 'isSuccessful' => true];
         }
         if (str_contains($d, 'transit')) {
             return ['status' => 'in-transit', 'isSuccessful' => null];
         }
-        if (str_contains($d, 'pickup') || str_contains($d, 'delivery') || str_contains($d, 'drop off')) {
-            return ['status' => 'for-pickup', 'isSuccessful' => null];
-        }
         if (str_contains($d, 'prepar')) {
             return ['status' => 'preparing', 'isSuccessful' => null];
         }
+        if (str_contains($d, 'pending')) {
+            return ['status' => 'new', 'isSuccessful' => null];
+        }
 
         return ['status' => 'new', 'isSuccessful' => null];
+    }
+
+    /**
+     * @return array{order_status_id: int, order_item_status_id: int|null, label: string}|null
+     */
+    private function resolveOwnerManagerReadyStatus(int $orderId): ?array
+    {
+        $deliveryMethodId = DB::table('orders')
+            ->join('order_details', 'orders.order_detail_id', '=', 'order_details.id')
+            ->where('orders.id', $orderId)
+            ->value('order_details.delivery_method_id');
+
+        $deliveryMethodId = $deliveryMethodId !== null ? (int) $deliveryMethodId : null;
+
+        $statusByDeliveryMethod = [
+            1 => 'Ready for Delivery',
+            2 => 'Ready for Drop off',
+            3 => 'Ready for Pickup',
+        ];
+
+        if ($deliveryMethodId === null || ! isset($statusByDeliveryMethod[$deliveryMethodId])) {
+            return null;
+        }
+
+        $label = $statusByDeliveryMethod[$deliveryMethodId];
+        $orderStatusId = DB::table('order_status')->where('stat_description', $label)->value('id');
+
+        if (! $orderStatusId) {
+            return null;
+        }
+
+        $itemStatusId = DB::table('order_item_status')->where('stat_description', $label)->value('id');
+
+        return [
+            'order_status_id'      => (int) $orderStatusId,
+            'order_item_status_id' => $itemStatusId ? (int) $itemStatusId : null,
+            'label'                => $label,
+        ];
+    }
+
+    private function readyButtonLabelForDeliveryMethod(?int $deliveryMethodId): string
+    {
+        return match ($deliveryMethodId) {
+            1       => 'Mark Ready for Delivery',
+            2       => 'Mark Ready for Drop off',
+            3       => 'Mark Ready for Pickup',
+            default => 'Mark Order Ready',
+        };
+    }
+
+    private function ownerManagerShopIdsOrAbort(): array
+    {
+        $agrivet = auth()->user()->managedAgrivet;
+        abort_unless($agrivet, 404);
+
+        return $agrivet->shops()->pluck('id')->all();
+    }
+
+    /**
+     * @param  array<int>  $shopIds
+     */
+    private function assertOwnerManagerOrderAccess(int $orderId, array $shopIds): void
+    {
+        $accessible = DB::table('order_shops')
+            ->where('order_id', $orderId)
+            ->whereIn('shop_id', $shopIds)
+            ->exists();
+
+        if (! $accessible) {
+            $accessible = DB::table('order_items')
+                ->where('order_id', $orderId)
+                ->whereIn('shop_id', $shopIds)
+                ->exists();
+        }
+
+        abort_unless($accessible, 404);
+    }
+
+    private function logOwnerManagerOrderEvent(
+        int $orderId,
+        string $event,
+        ?string $fromStatus,
+        ?string $toStatus,
+        ?string $notes = null,
+    ): void {
+        if (! Schema::hasTable('order_logs')) {
+            return;
+        }
+
+        DB::table('order_logs')->insert([
+            'order_id'    => $orderId,
+            'event'       => $event,
+            'from_status' => $fromStatus,
+            'to_status'   => $toStatus,
+            'user_id'     => auth()->id(),
+            'notes'       => $notes,
+            'ip_address'  => request()->ip(),
+            'user_agent'  => request()->userAgent(),
+            'created_at'  => now(),
+            'updated_at'  => now(),
+        ]);
     }
 
     private function firstItemImageUrl(mixed $itemImages): ?string
