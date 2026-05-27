@@ -16,9 +16,12 @@ use App\Models\Promotion;
 use App\Models\ProductImage;
 use App\Models\Category;
 use App\Models\SubCategory;
+use App\Models\ProductCatalog;
+use App\Http\Controllers\Concerns\CreatesProductCatalogEntry;
 
 class VendorController extends Controller
 {
+    use CreatesProductCatalogEntry;
     /**
      * Get the vendor's Shop.
      */
@@ -322,21 +325,6 @@ class VendorController extends Controller
                 ->with('error', 'You are not associated with any Shop.');
         }
 
-        $agrivet = $shop->agrivet;
-        $stockImages = $agrivet ? ProductImage::where('agrivet_id', $agrivet->id)
-            ->where('status', 'active')
-            ->orderBy('category')
-            ->orderBy('name')
-            ->get()
-            ->map(function ($image) {
-                return [
-                    'id' => $image->id,
-                    'name' => $image->name,
-                    'image_url' => $image->image_url,
-                    'category' => $image->category,
-                ];
-            }) : collect([]);
-
         $categories = Category::where('status', 'active')
             ->orderBy('category_name')
             ->get()
@@ -362,10 +350,43 @@ class VendorController extends Controller
                 'id' => $shop->id,
                 'shop_name' => $shop->shop_name,
             ],
-            'stockImages' => $stockImages,
             'categories' => $categories,
             'subCategories' => $subCategories,
+            'authUser' => [
+                'name' => auth()->user()->name,
+                'role' => auth()->user()->user_type ?? 'Vendor',
+            ],
+            'layoutType' => 'vendor',
+            'submitUrl' => '/dashboard/vendor/product-catalog',
+            'backUrl' => '/dashboard/vendor?tab=products',
+            'requiresApproval' => true,
         ]);
+    }
+
+    /**
+     * Store a new product in the platform catalog (from Register Product flow).
+     */
+    public function productCatalogStore(Request $request)
+    {
+        $shop = $this->getVendorShop();
+
+        if (!$shop) {
+            return redirect()->back()
+                ->withErrors(['error' => 'You are not associated with any Shop.']);
+        }
+
+        $catalog = $this->createProductCatalogFromRequest($request, ProductCatalog::STATUS_PENDING);
+
+        ActivityLog::log(
+            'created',
+            "Product registration request submitted: {$request->product_name}",
+            $catalog,
+            null,
+            $catalog->toArray()
+        );
+
+        return redirect()->route('dashboard.vendor', ['tab' => 'products'])
+            ->with('success', 'Your product registration request has been submitted and is pending approval.');
     }
 
     /**

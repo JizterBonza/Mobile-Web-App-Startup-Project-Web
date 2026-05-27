@@ -1,757 +1,558 @@
 import { useState } from 'react'
 import { useForm, router } from '@inertiajs/react'
+import { ArrowLeft, Check, X, CheckCircle, Upload, Star, Clock } from 'lucide-react'
 import VendorKlasmeytLayout from '../../../Layouts/VendorKlasmeytLayout'
+import OwnerManagerKlasmeytLayout from '../../../Layouts/OwnerManagerKlasmeytLayout'
 
-export default function RegisterProduct({ auth, shop, stockImages = [], categories = [], subCategories = [] }) {
-  const [currentStep, setCurrentStep] = useState(1)
-  const [errorMessage, setErrorMessage] = useState(null)
-  const [showSuccessModal, setShowSuccessModal] = useState(false)
-  const [imagePreviews, setImagePreviews] = useState([])
-  const [imageSourceTab, setImageSourceTab] = useState('upload')
-  const [selectedStockImages, setSelectedStockImages] = useState([])
+export default function RegisterProduct({
+    auth,
+    categories = [],
+    subCategories = [],
+    authUser,
+    layoutType = 'vendor',
+    submitUrl = '/dashboard/vendor/product-catalog',
+    backUrl = '/dashboard/vendor?tab=products',
+    requiresApproval = true,
+}) {
+    const Layout = layoutType === 'owner_manager' ? OwnerManagerKlasmeytLayout : VendorKlasmeytLayout
+    const [currentStep, setCurrentStep] = useState(1)
+    const [errorMessage, setErrorMessage] = useState(null)
+    const [showSuccessModal, setShowSuccessModal] = useState(false)
 
-  const form = useForm({
-    item_name: '',
-    item_description: '',
-    item_price: '',
-    item_quantity: '',
-    weight: '',
-    metric: '',
-    category: '',
-    sub_category_id: '',
-    item_images: [],
-    stock_image_urls: [],
-    item_status: 'active',
-  })
+    const [uploadedPhotos, setUploadedPhotos] = useState([null, null, null, null, null])
+    const [primaryPhotoIndex, setPrimaryPhotoIndex] = useState(0)
 
-  const steps = [
-    { number: 1, title: 'Product Information' },
-    { number: 2, title: 'Images' },
-    { number: 3, title: 'Review & Confirm' },
-  ]
-
-  const handleImageChange = (e) => {
-    const files = Array.from(e.target.files)
-    if (files.length > 0) {
-      form.setData('item_images', files)
-      const previews = files.map(file => URL.createObjectURL(file))
-      setImagePreviews(previews)
-    }
-    e.target.value = ''
-  }
-
-  const removeImage = (index) => {
-    const newFiles = Array.from(form.data.item_images)
-    newFiles.splice(index, 1)
-    form.setData('item_images', newFiles)
-    const newPreviews = [...imagePreviews]
-    URL.revokeObjectURL(newPreviews[index])
-    newPreviews.splice(index, 1)
-    setImagePreviews(newPreviews)
-  }
-
-  const toggleStockImage = (imageUrl) => {
-    setSelectedStockImages(prev =>
-      prev.includes(imageUrl) ? prev.filter(url => url !== imageUrl) : [...prev, imageUrl]
-    )
-  }
-
-  const removeStockImage = (imageUrl) => {
-    setSelectedStockImages(prev => prev.filter(url => url !== imageUrl))
-  }
-
-  const nextStep = () => {
-    setErrorMessage(null)
-
-    if (currentStep === 1) {
-      if (!form.data.item_name || !form.data.item_price || !form.data.item_quantity) {
-        setErrorMessage('Please fill in all required fields: Product Name, Price, and Quantity.')
-        window.scrollTo({ top: 0, behavior: 'smooth' })
-        return
-      }
-    }
-
-    if (currentStep === 2) {
-      const hasUploadedImages = form.data.item_images && form.data.item_images.length > 0
-      const hasStockImages = selectedStockImages.length > 0
-      if (!hasUploadedImages && !hasStockImages) {
-        setErrorMessage('Please upload at least one product image.')
-        window.scrollTo({ top: 0, behavior: 'smooth' })
-        return
-      }
-    }
-
-    if (currentStep < 3) {
-      setCurrentStep(currentStep + 1)
-      window.scrollTo({ top: 0, behavior: 'smooth' })
-    }
-  }
-
-  const prevStep = () => {
-    if (currentStep > 1) {
-      setCurrentStep(currentStep - 1)
-      window.scrollTo({ top: 0, behavior: 'smooth' })
-    }
-  }
-
-  const handleSubmit = (e) => {
-    e.preventDefault()
-    if (currentStep !== 3) return
-
-    form.transform(data => ({
-      ...data,
-      stock_image_urls: selectedStockImages,
-    }))
-
-    form.post('/dashboard/vendor/products', {
-      preserveScroll: true,
-      forceFormData: true,
-      onSuccess: () => {
-        setShowSuccessModal(true)
-      },
+    const form = useForm({
+        brand:               '',
+        product_name:        '',
+        category_id:         '',
+        sub_category_id:     '',
+        weight:              '',
+        unit:                'kg',
+        description:         '',
+        images:              [],
+        primary_image_index: 0,
     })
-  }
 
-  const getCategoryName = (id) => {
-    const cat = categories.find(c => String(c.id) === String(id))
-    return cat ? cat.name : id
-  }
+    const steps = [
+        { number: 1, title: 'Product Information' },
+        { number: 2, title: 'Images' },
+        { number: 3, title: 'Review & Confirm' },
+    ]
 
-  const getSubCategoryName = (id) => {
-    const sub = subCategories.find(s => String(s.id) === String(id))
-    return sub ? sub.name : id
-  }
+    const unitTypes = ['kg', 'g', 'mg', 'L', 'mL', 'pieces', 'pack', 'box', 'bottle', 'bag']
 
-  const totalImages = imagePreviews.length + selectedStockImages.length
+    const handlePhotoUpload = (index, e) => {
+        const file = e.target.files?.[0]
+        if (!file) return
 
-  return (
-    <VendorKlasmeytLayout auth={auth} title="Register Product">
-      {/* Back Button Row */}
-      <div className="mb-3">
+        const reader = new FileReader()
+        reader.onloadend = () => {
+            const newPhotos = [...uploadedPhotos]
+            newPhotos[index] = { preview: reader.result, file }
+            setUploadedPhotos(newPhotos)
+
+            const files = newPhotos.map(p => p?.file ?? null)
+            form.setData('images', files)
+        }
+        reader.readAsDataURL(file)
+    }
+
+    const handlePrimaryChange = (index) => {
+        setPrimaryPhotoIndex(index)
+        form.setData('primary_image_index', index)
+    }
+
+    const nextStep = () => {
+        setErrorMessage(null)
+
+        if (currentStep === 1) {
+            if (!form.data.product_name || !form.data.description) {
+                setErrorMessage('Please fill in all required fields: Product Name and Description.')
+                window.scrollTo({ top: 0, behavior: 'smooth' })
+                return
+            }
+        }
+
+        if (currentStep === 2) {
+            const uploadedCount = uploadedPhotos.filter(p => p !== null).length
+            if (uploadedCount < 5) {
+                setErrorMessage(`Please upload all 5 product images. You have uploaded ${uploadedCount} out of 5.`)
+                window.scrollTo({ top: 0, behavior: 'smooth' })
+                return
+            }
+        }
+
+        setCurrentStep(s => s + 1)
+        window.scrollTo({ top: 0, behavior: 'smooth' })
+    }
+
+    const prevStep = () => {
+        setCurrentStep(s => s - 1)
+        window.scrollTo({ top: 0, behavior: 'smooth' })
+    }
+
+    const handleSubmit = (e) => {
+        e.preventDefault()
+        if (currentStep !== 3) return
+
+        const fd = new FormData()
+        fd.append('brand',               form.data.brand)
+        fd.append('product_name',        form.data.product_name)
+        fd.append('category_id',         form.data.category_id)
+        fd.append('sub_category_id',     form.data.sub_category_id)
+        fd.append('weight',              form.data.weight)
+        fd.append('unit',                form.data.unit)
+        fd.append('description',         form.data.description)
+        fd.append('primary_image_index', primaryPhotoIndex)
+
+        uploadedPhotos.forEach((slot, i) => {
+            if (slot?.file) fd.append(`images[${i}]`, slot.file)
+        })
+
+        form.post(submitUrl, {
+            data: fd,
+            preserveScroll: true,
+            forceFormData: true,
+            onSuccess: () => setShowSuccessModal(true),
+        })
+    }
+
+    const getCategoryName    = (id) => categories.find(c => String(c.id) === String(id))?.name ?? '—'
+    const getSubCategoryName = (id) => subCategories.find(s => String(s.id) === String(id))?.name ?? '—'
+
+    const inputClass = 'w-full px-4 py-2.5 border border-[#E5E7EB] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#102059] focus:border-transparent text-sm'
+    const labelClass = 'block text-xs text-[#6B7280] mb-2'
+    const stepCardClass = 'bg-white rounded-lg border border-[#E5E7EB] p-8'
+    const stepHeadingClass = 'text-sm font-semibold text-[#102059] mb-6 pb-4 border-b border-[#E5E7EB]'
+    const stepNavClass = 'flex justify-between gap-3 mt-8 pt-6 border-t border-[#E5E7EB]'
+    const btnPrimary = 'px-6 py-2.5 bg-[#102059] text-white rounded-lg hover:bg-[#244693] transition-colors text-sm font-medium'
+    const btnSecondary = 'px-6 py-2.5 bg-white border border-[#E5E7EB] text-[#6B7280] rounded-lg hover:bg-[#F9FAFB] transition-colors text-sm font-medium'
+
+    return (
+        <Layout auth={auth} title="Register Product">
+
         <button
-          type="button"
-          className="btn btn-secondary btn-sm"
-          onClick={() => router.visit('/dashboard/vendor/products')}
+            type="button"
+            onClick={() => router.visit(backUrl)}
+            className="mb-6 rounded-lg border border-[#E5E7EB] bg-white p-3 transition-all hover:bg-[#F9FAFB] group"
+            title="Back to Products"
         >
-          <i className="fas fa-arrow-left mr-1"></i> Back to Products
+            <ArrowLeft className="h-5 w-5 text-[#6B7280] group-hover:text-[#102059]" />
         </button>
-      </div>
 
-      <div className="row">
-        <div className="col-12">
-          {/* Page Header */}
-          <div className="mb-4">
-            <h4 className="mb-1" style={{ color: '#102059', fontWeight: 600 }}>Register New Product</h4>
-            <p className="text-muted mb-0" style={{ fontSize: '0.875rem' }}>
-              Add a new product to your store in 3 simple steps.
-            </p>
-          </div>
+            <div className="mx-auto max-w-6xl">
 
-          {/* Stepper */}
-          <div className="card mb-4" style={{ borderRadius: 8 }}>
-            <div className="card-body py-3">
-              <div className="d-flex align-items-center justify-content-between">
-                {steps.map((step, index) => (
-                  <div key={step.number} className="d-flex align-items-center flex-fill">
-                    <div className="d-flex align-items-center">
-                      <div
-                        style={{
-                          width: 36,
-                          height: 36,
-                          borderRadius: '50%',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          background: currentStep >= step.number ? '#102059' : '#E5E7EB',
-                          border: `2px solid ${currentStep >= step.number ? '#102059' : '#E5E7EB'}`,
-                          flexShrink: 0,
-                        }}
-                      >
-                        {currentStep > step.number ? (
-                          <i className="fas fa-check" style={{ color: '#fff', fontSize: 12 }}></i>
-                        ) : (
-                          <span style={{ color: currentStep === step.number ? '#fff' : '#9CA3AF', fontSize: 13, fontWeight: 600 }}>
-                            {step.number}
-                          </span>
-                        )}
-                      </div>
-                      <span
-                        className="ml-2 d-none d-md-inline"
-                        style={{
-                          fontSize: '0.8rem',
-                          fontWeight: 600,
-                          color: currentStep >= step.number ? '#102059' : '#9CA3AF',
-                          whiteSpace: 'nowrap',
-                        }}
-                      >
-                        {step.title}
-                      </span>
-                    </div>
-                    {index < steps.length - 1 && (
-                      <div
-                        className="flex-fill mx-3"
-                        style={{
-                          height: 2,
-                          background: currentStep > step.number ? '#102059' : '#E5E7EB',
-                          transition: 'background 0.3s',
-                        }}
-                      />
-                    )}
-                  </div>
-                ))}
-              </div>
+            <div className="mb-8">
+                <h1 className="mb-2 text-2xl font-semibold text-[#102059]">
+                    {requiresApproval ? 'Request Product Registration' : 'Register New Product'}
+                </h1>
+                <p className="text-sm text-[#6B7280]">
+                    {requiresApproval
+                        ? 'Submit a request to register a new product. Super Admin or Admin must approve before it appears in the catalog.'
+                        : 'Add a new product to the platform catalog.'}
+                </p>
             </div>
-          </div>
 
-          {/* Error Message */}
-          {errorMessage && (
-            <div className="alert alert-danger alert-dismissible" role="alert">
-              <button type="button" className="close" onClick={() => setErrorMessage(null)}>
-                <span>&times;</span>
-              </button>
-              <strong>Validation Error:</strong> {errorMessage}
-            </div>
-          )}
-
-          <form onSubmit={handleSubmit}>
-            {/* Step 1: Product Information */}
-            {currentStep === 1 && (
-              <div className="card" style={{ borderRadius: 8 }}>
-                <div className="card-header" style={{ background: '#fff', borderBottom: '1px solid #E5E7EB' }}>
-                  <h5 className="mb-0" style={{ color: '#102059', fontWeight: 600 }}>Step 1 — Product Information</h5>
-                </div>
-                <div className="card-body">
-                  <div className="form-group">
-                    <label style={{ fontSize: '0.8rem', color: '#6B7280' }}>
-                      Product Name <span className="text-danger">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      className={`form-control ${form.errors.item_name ? 'is-invalid' : ''}`}
-                      value={form.data.item_name}
-                      onChange={e => form.setData('item_name', e.target.value)}
-                      placeholder="Enter product name"
-                    />
-                    {form.errors.item_name && <div className="invalid-feedback">{form.errors.item_name}</div>}
-                  </div>
-
-                  <div className="form-group">
-                    <label style={{ fontSize: '0.8rem', color: '#6B7280' }}>Description</label>
-                    <textarea
-                      className={`form-control ${form.errors.item_description ? 'is-invalid' : ''}`}
-                      value={form.data.item_description}
-                      onChange={e => form.setData('item_description', e.target.value)}
-                      rows="4"
-                      maxLength={500}
-                      placeholder="Enter product description"
-                    />
-                    <small className="text-muted float-right">{form.data.item_description.length}/500</small>
-                    {form.errors.item_description && <div className="invalid-feedback">{form.errors.item_description}</div>}
-                  </div>
-
-                  <div className="row">
-                    <div className="col-md-6">
-                      <div className="form-group">
-                        <label style={{ fontSize: '0.8rem', color: '#6B7280' }}>
-                          Price <span className="text-danger">*</span>
-                        </label>
-                        <div className="input-group">
-                          <div className="input-group-prepend">
-                            <span className="input-group-text">$</span>
-                          </div>
-                          <input
-                            type="number"
-                            step="0.01"
-                            min="0"
-                            className={`form-control ${form.errors.item_price ? 'is-invalid' : ''}`}
-                            value={form.data.item_price}
-                            onChange={e => form.setData('item_price', e.target.value)}
-                            placeholder="0.00"
-                          />
-                          {form.errors.item_price && <div className="invalid-feedback">{form.errors.item_price}</div>}
-                        </div>
-                      </div>
-                    </div>
-                    <div className="col-md-6">
-                      <div className="form-group">
-                        <label style={{ fontSize: '0.8rem', color: '#6B7280' }}>
-                          Quantity <span className="text-danger">*</span>
-                        </label>
-                        <input
-                          type="number"
-                          min="0"
-                          className={`form-control ${form.errors.item_quantity ? 'is-invalid' : ''}`}
-                          value={form.data.item_quantity}
-                          onChange={e => form.setData('item_quantity', e.target.value)}
-                          placeholder="0"
-                        />
-                        {form.errors.item_quantity && <div className="invalid-feedback">{form.errors.item_quantity}</div>}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="row">
-                    <div className="col-md-6">
-                      <div className="form-group">
-                        <label style={{ fontSize: '0.8rem', color: '#6B7280' }}>Weight</label>
-                        <input
-                          type="number"
-                          step="0.01"
-                          min="0"
-                          className={`form-control ${form.errors.weight ? 'is-invalid' : ''}`}
-                          value={form.data.weight}
-                          onChange={e => form.setData('weight', e.target.value)}
-                          placeholder="e.g. 1.5"
-                        />
-                        {form.errors.weight && <div className="invalid-feedback">{form.errors.weight}</div>}
-                      </div>
-                    </div>
-                    <div className="col-md-6">
-                      <div className="form-group">
-                        <label style={{ fontSize: '0.8rem', color: '#6B7280' }}>Metric</label>
-                        <select
-                          className={`form-control ${form.errors.metric ? 'is-invalid' : ''}`}
-                          value={form.data.metric}
-                          onChange={e => form.setData('metric', e.target.value)}
-                        >
-                          <option value="">Select Metric</option>
-                          <option value="kg">kg</option>
-                          <option value="g">g</option>
-                          <option value="lb">lb</option>
-                          <option value="oz">oz</option>
-                          <option value="l">l</option>
-                          <option value="ml">ml</option>
-                          <option value="piece">piece</option>
-                          <option value="pack">pack</option>
-                          <option value="box">box</option>
-                        </select>
-                        {form.errors.metric && <div className="invalid-feedback">{form.errors.metric}</div>}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="row">
-                    <div className="col-md-6">
-                      <div className="form-group">
-                        <label style={{ fontSize: '0.8rem', color: '#6B7280' }}>Category</label>
-                        <select
-                          className={`form-control ${form.errors.category ? 'is-invalid' : ''}`}
-                          value={form.data.category}
-                          onChange={e => form.setData('category', e.target.value)}
-                        >
-                          <option value="">Select Category</option>
-                          {categories.map(cat => (
-                            <option key={cat.id} value={cat.id}>{cat.name}</option>
-                          ))}
-                        </select>
-                        {form.errors.category && <div className="invalid-feedback">{form.errors.category}</div>}
-                      </div>
-                    </div>
-                    <div className="col-md-6">
-                      <div className="form-group">
-                        <label style={{ fontSize: '0.8rem', color: '#6B7280' }}>Sub Category</label>
-                        <select
-                          className={`form-control ${form.errors.sub_category_id ? 'is-invalid' : ''}`}
-                          value={form.data.sub_category_id}
-                          onChange={e => form.setData('sub_category_id', e.target.value)}
-                        >
-                          <option value="">Select Sub Category</option>
-                          {subCategories.map(sub => (
-                            <option key={sub.id} value={sub.id}>{sub.name}</option>
-                          ))}
-                        </select>
-                        {form.errors.sub_category_id && <div className="invalid-feedback">{form.errors.sub_category_id}</div>}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="form-group">
-                    <label style={{ fontSize: '0.8rem', color: '#6B7280' }}>
-                      Status <span className="text-danger">*</span>
-                    </label>
-                    <select
-                      className={`form-control ${form.errors.item_status ? 'is-invalid' : ''}`}
-                      value={form.data.item_status}
-                      onChange={e => form.setData('item_status', e.target.value)}
-                    >
-                      <option value="active">Active</option>
-                      <option value="inactive">Inactive</option>
-                    </select>
-                    {form.errors.item_status && <div className="invalid-feedback">{form.errors.item_status}</div>}
-                  </div>
-                </div>
-                <div className="card-footer text-right" style={{ background: '#fff', borderTop: '1px solid #E5E7EB' }}>
-                  <button
-                    type="button"
-                    className="btn btn-primary"
-                    onClick={nextStep}
-                    style={{ background: '#102059', borderColor: '#102059' }}
-                  >
-                    Next: Images <i className="fas fa-arrow-right ml-1"></i>
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* Step 2: Images */}
-            {currentStep === 2 && (
-              <div className="card" style={{ borderRadius: 8 }}>
-                <div className="card-header" style={{ background: '#fff', borderBottom: '1px solid #E5E7EB' }}>
-                  <h5 className="mb-0" style={{ color: '#102059', fontWeight: 600 }}>Step 2 — Product Images</h5>
-                </div>
-                <div className="card-body">
-                  {/* Image Source Tabs */}
-                  <ul className="nav nav-tabs mb-3">
-                    <li className="nav-item">
-                      <a
-                        className={`nav-link ${imageSourceTab === 'upload' ? 'active' : ''}`}
-                        href="#"
-                        onClick={e => { e.preventDefault(); setImageSourceTab('upload') }}
-                      >
-                        <i className="fas fa-upload mr-1"></i> Upload New
-                      </a>
-                    </li>
-                    <li className="nav-item">
-                      <a
-                        className={`nav-link ${imageSourceTab === 'stock' ? 'active' : ''}`}
-                        href="#"
-                        onClick={e => { e.preventDefault(); setImageSourceTab('stock') }}
-                      >
-                        <i className="fas fa-images mr-1"></i> From Stock ({stockImages.length})
-                      </a>
-                    </li>
-                  </ul>
-
-                  {/* Upload Tab */}
-                  {imageSourceTab === 'upload' && (
-                    <div>
-                      <input
-                        type="file"
-                        className="form-control"
-                        onChange={handleImageChange}
-                        accept="image/*"
-                        multiple
-                      />
-                      <small className="form-text text-muted">
-                        Upload product images (JPEG, PNG, JPG, GIF — max 5MB each)
-                      </small>
-                      {imagePreviews.length > 0 && (
-                        <div className="mt-3">
-                          <label className="d-block font-weight-bold mb-2">Uploaded Images:</label>
-                          <div className="row">
-                            {imagePreviews.map((preview, index) => (
-                              <div key={index} className="col-md-3 mb-2 position-relative">
-                                <img
-                                  src={preview}
-                                  alt={`Preview ${index + 1}`}
-                                  className="img-thumbnail"
-                                  style={{ width: '100%', height: '100px', objectFit: 'cover' }}
-                                />
-                                <button
-                                  type="button"
-                                  className="btn btn-sm btn-danger position-absolute"
-                                  style={{ top: 5, right: 20 }}
-                                  onClick={() => removeImage(index)}
-                                >
-                                  <i className="fas fa-times"></i>
-                                </button>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Stock Tab */}
-                  {imageSourceTab === 'stock' && (
-                    <div>
-                      {stockImages.length === 0 ? (
-                        <div className="alert alert-info">
-                          <i className="fas fa-info-circle mr-2"></i>
-                          No stock images available.{' '}
-                          <a href="/dashboard/vendor/product-images" className="alert-link">
-                            Add some to your library first.
-                          </a>
-                        </div>
-                      ) : (
-                        <>
-                          <small className="form-text text-muted mb-2">
-                            Click images to select/deselect.
-                          </small>
-                          <div className="row" style={{ maxHeight: 280, overflowY: 'auto' }}>
-                            {stockImages.map(img => (
-                              <div key={img.id} className="col-md-3 mb-2">
-                                <div
-                                  className={`card h-100 ${selectedStockImages.includes(img.image_url) ? 'border-primary' : ''}`}
-                                  style={{ cursor: 'pointer', borderWidth: selectedStockImages.includes(img.image_url) ? 2 : 1 }}
-                                  onClick={() => toggleStockImage(img.image_url)}
-                                >
-                                  <div className="position-relative">
-                                    <img
-                                      src={img.image_url}
-                                      alt={img.name}
-                                      className="card-img-top"
-                                      style={{ height: 80, objectFit: 'cover' }}
-                                      onError={e => { e.target.src = '/images/placeholder.png' }}
-                                    />
-                                    {selectedStockImages.includes(img.image_url) && (
-                                      <div className="position-absolute" style={{ top: 5, right: 5 }}>
-                                        <span className="badge badge-primary">
-                                          <i className="fas fa-check"></i>
-                                        </span>
-                                      </div>
-                                    )}
-                                  </div>
-                                  <div className="card-body p-1">
-                                    <small className="text-truncate d-block" title={img.name}>{img.name}</small>
-                                  </div>
+            <div className="mb-8">
+                <div className="flex items-center justify-between">
+                    {steps.map((step, index) => (
+                        <div key={step.number} className="flex flex-1 items-center">
+                            <div className="flex items-center">
+                                <div className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full border-2 transition-all ${
+                                    currentStep > step.number || currentStep === step.number
+                                        ? 'border-[#102059] bg-[#102059]'
+                                        : 'border-[#E5E7EB] bg-white'
+                                }`}>
+                                    {currentStep > step.number
+                                        ? <Check className="h-5 w-5 text-white" />
+                                        : <span className={`text-sm font-semibold ${currentStep === step.number ? 'text-white' : 'text-[#9CA3AF]'}`}>{step.number}</span>
+                                    }
                                 </div>
-                              </div>
-                            ))}
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Selected Stock Images Summary */}
-                  {selectedStockImages.length > 0 && (
-                    <div className="mt-3">
-                      <label className="d-block font-weight-bold mb-2">
-                        Selected Stock Images ({selectedStockImages.length}):
-                      </label>
-                      <div className="row">
-                        {selectedStockImages.map((url, index) => (
-                          <div key={index} className="col-md-3 mb-2 position-relative">
-                            <img
-                              src={url}
-                              alt={`Stock ${index + 1}`}
-                              className="img-thumbnail"
-                              style={{ width: '100%', height: '100px', objectFit: 'cover' }}
-                              onError={e => { e.target.src = '/images/placeholder.png' }}
-                            />
-                            <button
-                              type="button"
-                              className="btn btn-sm btn-danger position-absolute"
-                              style={{ top: 5, right: 20 }}
-                              onClick={() => removeStockImage(url)}
-                            >
-                              <i className="fas fa-times"></i>
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Total count */}
-                  <div className="mt-2">
-                    <small className={totalImages > 0 ? 'text-success' : 'text-warning'}>
-                      <i className={`fas ${totalImages > 0 ? 'fa-check-circle' : 'fa-exclamation-circle'} mr-1`}></i>
-                      Total images selected: {totalImages}
-                      {totalImages === 0 && ' (at least 1 required)'}
-                    </small>
-                  </div>
+                                <div className="ml-3">
+                                    <p className={`text-sm font-semibold ${currentStep >= step.number ? 'text-[#102059]' : 'text-[#9CA3AF]'}`}>
+                                        {step.title}
+                                    </p>
+                                </div>
+                            </div>
+                            {index < steps.length - 1 && (
+                                <div className={`mx-4 h-0.5 flex-1 transition-all ${currentStep > step.number ? 'bg-[#102059]' : 'bg-[#E5E7EB]'}`} />
+                            )}
+                        </div>
+                    ))}
                 </div>
-                <div className="card-footer d-flex justify-content-between" style={{ background: '#fff', borderTop: '1px solid #E5E7EB' }}>
-                  <button type="button" className="btn btn-secondary" onClick={prevStep}>
-                    <i className="fas fa-arrow-left mr-1"></i> Back
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-primary"
-                    onClick={nextStep}
-                    style={{ background: '#102059', borderColor: '#102059' }}
-                  >
-                    Next: Review <i className="fas fa-arrow-right ml-1"></i>
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* Step 3: Review & Confirm */}
-            {currentStep === 3 && (
-              <div className="card" style={{ borderRadius: 8 }}>
-                <div className="card-header" style={{ background: '#fff', borderBottom: '1px solid #E5E7EB' }}>
-                  <h5 className="mb-0" style={{ color: '#102059', fontWeight: 600 }}>Step 3 — Review & Confirm</h5>
-                </div>
-                <div className="card-body">
-                  {/* Product Info Summary */}
-                  <div className="mb-4">
-                    <h6 className="text-uppercase text-muted mb-2" style={{ fontSize: '0.75rem', letterSpacing: '0.05em' }}>
-                      Product Information
-                    </h6>
-                    <div className="p-3 rounded" style={{ background: '#F9FAFB', border: '1px solid #E5E7EB' }}>
-                      <div className="row mb-2">
-                        <div className="col-5 text-muted" style={{ fontSize: '0.875rem' }}>Product Name:</div>
-                        <div className="col-7 font-weight-bold" style={{ fontSize: '0.875rem', color: '#102059' }}>
-                          {form.data.item_name || '—'}
-                        </div>
-                      </div>
-                      <div className="row mb-2">
-                        <div className="col-5 text-muted" style={{ fontSize: '0.875rem' }}>Price:</div>
-                        <div className="col-7 font-weight-bold" style={{ fontSize: '0.875rem', color: '#102059' }}>
-                          {form.data.item_price ? `$${parseFloat(form.data.item_price).toFixed(2)}` : '—'}
-                        </div>
-                      </div>
-                      <div className="row mb-2">
-                        <div className="col-5 text-muted" style={{ fontSize: '0.875rem' }}>Quantity:</div>
-                        <div className="col-7 font-weight-bold" style={{ fontSize: '0.875rem', color: '#102059' }}>
-                          {form.data.item_quantity || '—'}
-                        </div>
-                      </div>
-                      {(form.data.weight || form.data.metric) && (
-                        <div className="row mb-2">
-                          <div className="col-5 text-muted" style={{ fontSize: '0.875rem' }}>Weight:</div>
-                          <div className="col-7 font-weight-bold" style={{ fontSize: '0.875rem', color: '#102059' }}>
-                            {form.data.weight} {form.data.metric}
-                          </div>
-                        </div>
-                      )}
-                      {form.data.category && (
-                        <div className="row mb-2">
-                          <div className="col-5 text-muted" style={{ fontSize: '0.875rem' }}>Category:</div>
-                          <div className="col-7 font-weight-bold" style={{ fontSize: '0.875rem', color: '#102059' }}>
-                            {getCategoryName(form.data.category)}
-                          </div>
-                        </div>
-                      )}
-                      {form.data.sub_category_id && (
-                        <div className="row mb-2">
-                          <div className="col-5 text-muted" style={{ fontSize: '0.875rem' }}>Sub Category:</div>
-                          <div className="col-7 font-weight-bold" style={{ fontSize: '0.875rem', color: '#102059' }}>
-                            {getSubCategoryName(form.data.sub_category_id)}
-                          </div>
-                        </div>
-                      )}
-                      <div className="row mb-2">
-                        <div className="col-5 text-muted" style={{ fontSize: '0.875rem' }}>Status:</div>
-                        <div className="col-7">
-                          <span className={`badge ${form.data.item_status === 'active' ? 'badge-success' : 'badge-secondary'}`}>
-                            {form.data.item_status === 'active' ? 'Active' : 'Inactive'}
-                          </span>
-                        </div>
-                      </div>
-                      {form.data.item_description && (
-                        <div className="row">
-                          <div className="col-5 text-muted" style={{ fontSize: '0.875rem' }}>Description:</div>
-                          <div className="col-7" style={{ fontSize: '0.875rem', color: '#102059' }}>
-                            {form.data.item_description}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Images Summary */}
-                  <div className="mb-4">
-                    <h6 className="text-uppercase text-muted mb-2" style={{ fontSize: '0.75rem', letterSpacing: '0.05em' }}>
-                      Product Images ({totalImages})
-                    </h6>
-                    <div className="p-3 rounded" style={{ background: '#F9FAFB', border: '1px solid #E5E7EB' }}>
-                      <div className="row">
-                        {imagePreviews.map((preview, index) => (
-                          <div key={`up-${index}`} className="col-md-2 col-4 mb-2">
-                            <img
-                              src={preview}
-                              alt={`Upload ${index + 1}`}
-                              className="img-thumbnail"
-                              style={{ width: '100%', height: 70, objectFit: 'cover' }}
-                            />
-                          </div>
-                        ))}
-                        {selectedStockImages.map((url, index) => (
-                          <div key={`st-${index}`} className="col-md-2 col-4 mb-2">
-                            <img
-                              src={url}
-                              alt={`Stock ${index + 1}`}
-                              className="img-thumbnail"
-                              style={{ width: '100%', height: 70, objectFit: 'cover' }}
-                              onError={e => { e.target.src = '/images/placeholder.png' }}
-                            />
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Info note */}
-                  <div className="alert alert-info mb-0" style={{ background: '#F0F7FF', borderColor: 'rgba(16,32,89,0.2)', color: '#102059' }}>
-                    <i className="fas fa-info-circle mr-2"></i>
-                    <strong>Please review all information carefully.</strong> Once submitted, the product will be added to your store with the selected status.
-                  </div>
-                </div>
-                <div className="card-footer d-flex justify-content-between" style={{ background: '#fff', borderTop: '1px solid #E5E7EB' }}>
-                  <button type="button" className="btn btn-secondary" onClick={prevStep}>
-                    <i className="fas fa-arrow-left mr-1"></i> Back
-                  </button>
-                  <button
-                    type="submit"
-                    className="btn btn-primary"
-                    disabled={form.processing}
-                    style={{ background: '#102059', borderColor: '#102059' }}
-                  >
-                    {form.processing ? (
-                      <><i className="fas fa-spinner fa-spin mr-1"></i> Submitting...</>
-                    ) : (
-                      <><i className="fas fa-check mr-1"></i> Submit Product</>
-                    )}
-                  </button>
-                </div>
-              </div>
-            )}
-          </form>
-        </div>
-      </div>
-
-      {/* Success Modal */}
-      {showSuccessModal && (
-        <>
-          <div className="modal-backdrop fade show"></div>
-          <div className="modal fade show d-block" tabIndex="-1" style={{ zIndex: 1050 }}>
-            <div className="modal-dialog modal-dialog-centered">
-              <div className="modal-content">
-                <div className="modal-body text-center p-5">
-                  <div
-                    className="mx-auto mb-3 d-flex align-items-center justify-content-center"
-                    style={{ width: 64, height: 64, borderRadius: '50%', background: 'rgba(0,201,80,0.1)' }}
-                  >
-                    <i className="fas fa-check-circle" style={{ fontSize: 36, color: '#00C950' }}></i>
-                  </div>
-                  <h4 style={{ color: '#102059', fontWeight: 700 }}>Product Registered!</h4>
-                  <p className="text-muted mb-4">
-                    <strong>{form.data.item_name}</strong> has been successfully added to your store.
-                  </p>
-                  <div className="d-flex gap-2 justify-content-center">
-                    <button
-                      className="btn btn-primary"
-                      style={{ background: '#102059', borderColor: '#102059' }}
-                      onClick={() => router.visit('/dashboard/vendor/products')}
-                    >
-                      Back to Products
-                    </button>
-                    <button
-                      className="btn btn-outline-primary ml-2"
-                      style={{ color: '#102059', borderColor: '#102059' }}
-                      onClick={() => {
-                        setShowSuccessModal(false)
-                        setCurrentStep(1)
-                        setImagePreviews([])
-                        setSelectedStockImages([])
-                        setImageSourceTab('upload')
-                        form.reset()
-                      }}
-                    >
-                      Add Another
-                    </button>
-                  </div>
-                </div>
-              </div>
             </div>
-          </div>
-        </>
-      )}
-    </VendorKlasmeytLayout>
-  )
+
+            {errorMessage && (
+                <div className="mb-6 rounded-lg border border-[#E20E28] bg-[#FEE2E2] p-4">
+                    <div className="flex items-start gap-3">
+                        <X className="mt-0.5 h-5 w-5 flex-shrink-0 text-[#E20E28]" />
+                        <div className="flex-1">
+                            <p className="mb-1 text-sm font-semibold text-[#E20E28]">Validation Error</p>
+                            <p className="text-sm text-[#991B1B]">{errorMessage}</p>
+                        </div>
+                        <button type="button" onClick={() => setErrorMessage(null)} className="flex-shrink-0 text-[#E20E28] transition-colors hover:text-[#991B1B]">
+                            <X className="h-4 w-4" />
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            <form onSubmit={handleSubmit}>
+
+                {currentStep === 1 && (
+                    <div className={stepCardClass}>
+                        <h2 className={stepHeadingClass}>Product Information</h2>
+
+                        <div className="space-y-6">
+
+                            <div>
+                                <label className={labelClass}>Brand</label>
+                                <input
+                                    type="text"
+                                    className={inputClass}
+                                    value={form.data.brand}
+                                    onChange={e => form.setData('brand', e.target.value)}
+                                    placeholder="Enter brand name"
+                                />
+                            </div>
+
+                            <div>
+                                <label className={labelClass}>
+                                    Product Name <span className="text-[#E20E28]">*</span>
+                                </label>
+                                <input
+                                    type="text"
+                                    className={`${inputClass} ${form.errors.product_name ? 'border-[#E20E28]' : ''}`}
+                                    value={form.data.product_name}
+                                    onChange={e => form.setData('product_name', e.target.value)}
+                                    placeholder="Enter product name"
+                                />
+                                {form.errors.product_name && <p className="mt-1 text-xs text-[#E20E28]">{form.errors.product_name}</p>}
+                            </div>
+
+                            <div className="grid gap-4 md:grid-cols-2">
+                                <div>
+                                    <label className={labelClass}>Category</label>
+                                    <select
+                                        className={inputClass}
+                                        value={form.data.category_id}
+                                        onChange={e => form.setData('category_id', e.target.value)}
+                                    >
+                                        <option value="">Select Category</option>
+                                        {categories.map(c => (
+                                            <option key={c.id} value={c.id}>{c.name}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className={labelClass}>Sub Category</label>
+                                    <select
+                                        className={inputClass}
+                                        value={form.data.sub_category_id}
+                                        onChange={e => form.setData('sub_category_id', e.target.value)}
+                                    >
+                                        <option value="">Select Sub Category</option>
+                                        {subCategories.map(s => (
+                                            <option key={s.id} value={s.id}>{s.name}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div className="grid gap-4 md:grid-cols-2">
+                                <div>
+                                    <label className={labelClass}>Weight / Size</label>
+                                    <input
+                                        type="text"
+                                        className={inputClass}
+                                        value={form.data.weight}
+                                        onChange={e => form.setData('weight', e.target.value)}
+                                        placeholder="e.g. 50, 1, 500"
+                                    />
+                                </div>
+                                <div>
+                                    <label className={labelClass}>Unit Type</label>
+                                    <select
+                                        className={inputClass}
+                                        value={form.data.unit}
+                                        onChange={e => form.setData('unit', e.target.value)}
+                                    >
+                                        {unitTypes.map(u => <option key={u} value={u}>{u}</option>)}
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className={labelClass}>
+                                    Product Description <span className="text-[#E20E28]">*</span>
+                                </label>
+                                <textarea
+                                    className={`${inputClass} resize-none ${form.errors.description ? 'border-[#E20E28]' : ''}`}
+                                    value={form.data.description}
+                                    onChange={e => form.setData('description', e.target.value)}
+                                    rows={4}
+                                    maxLength={320}
+                                    placeholder="Enter product description (max 320 characters)"
+                                />
+                                <p className="mt-1 text-right text-xs text-[#6B7280]">{form.data.description.length}/320 characters</p>
+                                {form.errors.description && <p className="mt-1 text-xs text-[#E20E28]">{form.errors.description}</p>}
+                            </div>
+
+                            <div>
+                                <label className={labelClass}>Author</label>
+                                <input
+                                    type="text"
+                                    value={authUser ? `${authUser.name} (${authUser.role})` : ''}
+                                    readOnly
+                                    className={`${inputClass} cursor-not-allowed bg-[#F9FAFB] text-[#6B7280]`}
+                                />
+                            </div>
+                        </div>
+
+                        <div className={`${stepNavClass} justify-end`}>
+                            <button type="button" onClick={nextStep} className={btnPrimary}>
+                                Next: Images
+                            </button>
+                        </div>
+                    </div>
+                )}
+
+                {currentStep === 2 && (
+                    <div className={stepCardClass}>
+                        <h2 className={stepHeadingClass}>Product Images</h2>
+
+                        <div className="space-y-6">
+                            <p className="text-sm text-[#6B7280]">
+                                Upload 5 images of your product and select one to be the primary thumbnail.{' '}
+                                <span className="text-[#E20E28]">*</span>
+                            </p>
+
+                            <div className="grid grid-cols-5 gap-4">
+                                {[0, 1, 2, 3, 4].map(index => (
+                                    <div key={index} className="relative">
+                                        <label
+                                            htmlFor={`photo-${index}`}
+                                            className={`block aspect-square cursor-pointer overflow-hidden rounded-lg border-2 border-dashed transition-all ${
+                                                uploadedPhotos[index]
+                                                    ? 'border-[#102059] bg-[#F0F2F5]'
+                                                    : 'border-[#E5E7EB] hover:border-[#102059] hover:bg-[#F9FAFB]'
+                                            }`}
+                                        >
+                                            {uploadedPhotos[index] ? (
+                                                <img
+                                                    src={uploadedPhotos[index].preview}
+                                                    alt={`Product ${index + 1}`}
+                                                    className="h-full w-full object-cover"
+                                                />
+                                            ) : (
+                                                <div className="flex h-full flex-col items-center justify-center">
+                                                    <Upload className="mb-1 h-6 w-6 text-[#6B7280]" />
+                                                    <span className="px-1 text-center text-[10px] text-[#6B7280]">
+                                                        Upload<br />Photo {index + 1}
+                                                    </span>
+                                                </div>
+                                            )}
+                                            <input
+                                                id={`photo-${index}`}
+                                                type="file"
+                                                accept="image/*"
+                                                className="hidden"
+                                                onChange={e => handlePhotoUpload(index, e)}
+                                            />
+                                        </label>
+
+                                        {uploadedPhotos[index] && (
+                                            <button
+                                                type="button"
+                                                onClick={() => handlePrimaryChange(index)}
+                                                title="Set as primary thumbnail"
+                                                className={`absolute -top-2 -right-2 rounded-full p-1 shadow-md transition-all ${
+                                                    primaryPhotoIndex === index ? 'bg-[#D3A218]' : 'bg-[#6B7280] opacity-60 hover:opacity-100'
+                                                }`}
+                                            >
+                                                <Star
+                                                    className="h-3.5 w-3.5 text-white"
+                                                    fill={primaryPhotoIndex === index ? 'white' : 'none'}
+                                                />
+                                            </button>
+                                        )}
+
+                                        <div className="mt-2 text-center">
+                                            <span className="text-xs font-semibold text-[#6B7280]">
+                                                {uploadedPhotos[index] && primaryPhotoIndex === index
+                                                    ? <span className="text-[#D3A218]">Primary</span>
+                                                    : `Photo ${index + 1}`
+                                                }
+                                            </span>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+
+                            <div className="rounded-lg border border-[#102059]/20 bg-[#F0F7FF] p-4">
+                                <p className="text-xs text-[#102059]">
+                                    <strong>Tip:</strong> The primary thumbnail (marked with a gold star) will be displayed
+                                    as the main image in product listings. Click the star icon on any photo to set it as primary.
+                                </p>
+                            </div>
+                        </div>
+
+                        <div className={stepNavClass}>
+                            <button type="button" onClick={prevStep} className={btnSecondary}>Back</button>
+                            <button type="button" onClick={nextStep} className={btnPrimary}>Next: Review & Confirm</button>
+                        </div>
+                    </div>
+                )}
+
+                {currentStep === 3 && (
+                    <div className={stepCardClass}>
+                        <h2 className={stepHeadingClass}>Review & Confirm</h2>
+
+                        <div className="space-y-6">
+                            <div>
+                                <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-[#6B7280]">
+                                    Product Information
+                                </h3>
+                                <div className="space-y-3 rounded-lg bg-[#F9FAFB] p-4">
+                                    {[
+                                        { label: 'Product Name', value: form.data.product_name },
+                                        { label: 'Brand',        value: form.data.brand || '—' },
+                                        { label: 'Category',     value: form.data.category_id ? getCategoryName(form.data.category_id) : '—' },
+                                        { label: 'Sub Category', value: form.data.sub_category_id ? getSubCategoryName(form.data.sub_category_id) : '—' },
+                                        { label: 'Unit',         value: form.data.weight ? `${form.data.weight} ${form.data.unit}` : '—' },
+                                    ].map(row => (
+                                        <div key={row.label} className="flex justify-between">
+                                            <span className="text-sm text-[#6B7280]">{row.label}:</span>
+                                            <span className="text-sm font-semibold text-[#102059]">{row.value}</span>
+                                        </div>
+                                    ))}
+                                    <div className="border-t border-[#E5E7EB] pt-2">
+                                        <span className="mb-1 block text-sm text-[#6B7280]">Description:</span>
+                                        <p className="text-sm text-[#102059]">{form.data.description}</p>
+                                    </div>
+                                    {authUser && (
+                                        <div className="border-t border-[#E5E7EB] pt-2">
+                                            <div className="flex justify-between">
+                                                <span className="text-sm text-[#6B7280]">Author:</span>
+                                                <span className="text-sm font-semibold text-[#102059]">{authUser.name} ({authUser.role})</span>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+
+                            <div>
+                                <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-[#6B7280]">
+                                    Product Images
+                                </h3>
+                                <div className="rounded-lg bg-[#F9FAFB] p-4">
+                                    <div className="grid grid-cols-5 gap-3">
+                                        {uploadedPhotos.map((photo, index) => (
+                                            <div key={index} className="relative">
+                                                <div className="aspect-square overflow-hidden rounded-lg border-2 border-[#E5E7EB]">
+                                                    {photo && (
+                                                        <img src={photo.preview} alt={`Product ${index + 1}`} className="h-full w-full object-cover" />
+                                                    )}
+                                                </div>
+                                                {primaryPhotoIndex === index && photo && (
+                                                    <div className="absolute -top-1 -right-1 rounded-full bg-[#D3A218] p-0.5">
+                                                        <Star className="h-3 w-3 text-white" fill="white" />
+                                                    </div>
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div>
+                                    <p className="mt-3 text-xs text-[#6B7280]">Primary thumbnail: Photo {primaryPhotoIndex + 1}</p>
+                                </div>
+                            </div>
+
+                            <div className="rounded-lg border border-[#102059]/20 bg-[#F0F7FF] p-4">
+                                <p className="text-xs text-[#102059]">
+                                    <strong>Please review all information carefully.</strong>{' '}
+                                    {requiresApproval
+                                        ? 'Once submitted, your request will be reviewed by Super Admin or Admin. After approval, the product will appear in the registered catalog for stores to add.'
+                                        : 'Once submitted, this product will be added to the platform catalog and become available for vendors to add to their shop inventory.'}
+                                </p>
+                            </div>
+                        </div>
+
+                        <div className={stepNavClass}>
+                            <button type="button" onClick={prevStep} className={btnSecondary}>Back</button>
+                            <button type="submit" disabled={form.processing} className={`${btnPrimary} disabled:opacity-60`}>
+                                {form.processing ? 'Submitting…' : requiresApproval ? 'Submit Request' : 'Submit Product'}
+                            </button>
+                        </div>
+                    </div>
+                )}
+            </form>
+
+            </div>
+
+            {showSuccessModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+                        <div className="w-full max-w-md rounded-lg border border-[#E5E7EB] bg-white">
+                            <div className="p-8">
+                                <div className="flex flex-col items-center text-center">
+                                    <div className={`mb-4 flex h-16 w-16 items-center justify-center rounded-full ${requiresApproval ? 'bg-[#D3A218]/10' : 'bg-[#00C950]/10'}`}>
+                                        {requiresApproval
+                                            ? <Clock className="h-10 w-10 text-[#D3A218]" />
+                                            : <CheckCircle className="h-10 w-10 text-[#00C950]" />
+                                        }
+                                    </div>
+                                    <h3 className="mb-2 text-xl font-bold text-[#102059]">
+                                        {requiresApproval ? 'Request Submitted!' : 'Product Registered Successfully!'}
+                                    </h3>
+                                    <p className="mb-4 text-sm text-[#6B7280]">
+                                        {requiresApproval
+                                            ? 'Your product registration request has been sent for review. You will be able to add it to your store once it is approved.'
+                                            : 'Your product has been successfully added to the platform catalog.'}
+                                    </p>
+                                    <div className="mb-6 w-full rounded-lg border border-[#E5E7EB] bg-[#F8F9FB] p-4 text-left">
+                                        <div className="space-y-2">
+                                            <div className="flex justify-between text-sm">
+                                                <span className="text-[#6B7280]">Product:</span>
+                                                <span className="font-semibold text-[#102059]">{form.data.product_name}</span>
+                                            </div>
+                                            {form.data.brand && (
+                                                <div className="flex justify-between text-sm">
+                                                    <span className="text-[#6B7280]">Brand:</span>
+                                                    <span className="font-semibold text-[#102059]">{form.data.brand}</span>
+                                                </div>
+                                            )}
+                                            <div className="flex justify-between text-sm">
+                                                <span className="text-[#6B7280]">Status:</span>
+                                                <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${requiresApproval ? 'bg-[#D3A218]/10 text-[#D3A218]' : 'bg-[#00C950]/10 text-[#00C950]'}`}>
+                                                    {requiresApproval ? 'Pending Approval' : 'Active'}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="flex w-full gap-3">
+                                        <button
+                                            onClick={() => router.visit(backUrl)}
+                                            className="flex-1 rounded-lg bg-[#102059] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#244693]"
+                                        >
+                                            Back to Products
+                                        </button>
+                                        <button
+                                            onClick={() => {
+                                                setShowSuccessModal(false)
+                                                setCurrentStep(1)
+                                                setUploadedPhotos([null, null, null, null, null])
+                                                setPrimaryPhotoIndex(0)
+                                                form.reset()
+                                            }}
+                                            className="flex-1 rounded-lg border border-[#102059] px-4 py-2.5 text-sm font-semibold text-[#102059] transition-colors hover:bg-[#F0F7FF]"
+                                        >
+                                            Add Another
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                </div>
+            )}
+        </Layout>
+    )
 }

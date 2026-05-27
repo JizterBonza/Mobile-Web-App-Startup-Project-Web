@@ -6,9 +6,15 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Inertia\Inertia;
+use App\Http\Controllers\Concerns\CreatesProductCatalogEntry;
+use App\Models\ActivityLog;
+use App\Models\Category;
+use App\Models\ProductCatalog;
+use App\Models\SubCategory;
 
 class DashboardController extends Controller
 {
+    use CreatesProductCatalogEntry;
     public function superAdmin()
     {
         // User counts grouped by type and status
@@ -326,6 +332,81 @@ class DashboardController extends Controller
         abort_unless($agrivet, 404);
 
         return app(AgrivetController::class)->storeShopListing($request, $agrivet->id, $shopId);
+    }
+
+    public function ownerManagerProductsCreate($shopId)
+    {
+        $agrivet = auth()->user()->managedAgrivet;
+        abort_unless($agrivet, 404);
+
+        $shop = $agrivet->shops()->where('id', $shopId)->firstOrFail();
+
+        return Inertia::render('Dashboard/Vendor/RegisterProduct', array_merge(
+            $this->productCatalogFormProps(),
+            [
+                'shop' => [
+                    'id' => $shop->id,
+                    'shop_name' => $shop->shop_name,
+                ],
+                'authUser' => [
+                    'name' => auth()->user()->name,
+                    'role' => 'Owner / Manager',
+                ],
+                'layoutType' => 'owner_manager',
+                'submitUrl' => "/dashboard/owner-manager/stores/{$shopId}/product-catalog",
+                'backUrl' => "/dashboard/owner-manager/stores/{$shopId}/store-information?tab=products",
+                'requiresApproval' => true,
+            ]
+        ));
+    }
+
+    public function ownerManagerProductCatalogStore(Request $request, $shopId)
+    {
+        $agrivet = auth()->user()->managedAgrivet;
+        abort_unless($agrivet, 404);
+
+        $agrivet->shops()->where('id', $shopId)->firstOrFail();
+
+        $catalog = $this->createProductCatalogFromRequest($request, ProductCatalog::STATUS_PENDING);
+
+        ActivityLog::log(
+            'created',
+            "Product registration request submitted: {$request->product_name}",
+            $catalog,
+            null,
+            $catalog->toArray()
+        );
+
+        return redirect()
+            ->to(route('dashboard.owner-manager.stores.store-information', $shopId) . '?tab=products')
+            ->with('success', 'Your product registration request has been submitted and is pending approval.');
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function productCatalogFormProps(): array
+    {
+        $categories = Category::where('status', 'active')
+            ->orderBy('category_name')
+            ->get()
+            ->map(fn ($category) => [
+                'id' => $category->id,
+                'name' => $category->category_name,
+            ]);
+
+        $subCategories = SubCategory::where('sub_category_status', 'active')
+            ->orderBy('sub_category_name')
+            ->get()
+            ->map(fn ($subCategory) => [
+                'id' => $subCategory->id,
+                'name' => $subCategory->sub_category_name,
+            ]);
+
+        return [
+            'categories' => $categories,
+            'subCategories' => $subCategories,
+        ];
     }
 
     public function ownerManagerOrders()

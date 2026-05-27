@@ -12,6 +12,7 @@ use App\Http\Controllers\PaymentMethodController;
 use App\Http\Controllers\DeliveryMethodController;
 use App\Http\Controllers\ZoneController;
 use App\Http\Controllers\SuperAdminProductController;
+use App\Http\Controllers\ProductCatalogRequestController;
 use App\Http\Controllers\DashboardController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -58,6 +59,18 @@ Route::get('/dashboard/super-admin/products', [SuperAdminProductController::clas
 Route::get('/dashboard/super-admin/products/{id}', [SuperAdminProductController::class, 'show'])
     ->middleware(['auth', 'session.valid', 'user.type:super_admin'])
     ->name('dashboard.super-admin.products.show');
+
+Route::get('/dashboard/super-admin/product-requests', [ProductCatalogRequestController::class, 'index'])
+    ->middleware(['auth', 'session.valid', 'user.type:super_admin'])
+    ->name('dashboard.super-admin.product-requests');
+
+Route::post('/dashboard/super-admin/product-requests/{id}/approve', [ProductCatalogRequestController::class, 'approve'])
+    ->middleware(['auth', 'session.valid', 'user.type:super_admin'])
+    ->name('dashboard.super-admin.product-requests.approve');
+
+Route::post('/dashboard/super-admin/product-requests/{id}/reject', [ProductCatalogRequestController::class, 'reject'])
+    ->middleware(['auth', 'session.valid', 'user.type:super_admin'])
+    ->name('dashboard.super-admin.product-requests.reject');
 
 // User Management Routes
 Route::middleware(['auth', 'session.valid', 'user.type:super_admin'])->prefix('dashboard/super-admin/users')->name('dashboard.super-admin.users.')->group(function () {
@@ -153,6 +166,8 @@ Route::middleware(['auth', 'session.valid', 'user.type:owner_manager'])->prefix(
     Route::put('/stores/{shopId}', [DashboardController::class, 'ownerManagerUpdateShop'])->name('stores.update');
     Route::post('/stores/{shopId}/cover-photo', [DashboardController::class, 'ownerManagerUpdateShopCoverPhoto'])->name('stores.cover-photo');
     Route::post('/stores/{shopId}/listings', [DashboardController::class, 'ownerManagerStoreShopListing'])->name('stores.listings.store');
+    Route::get('/stores/{shopId}/products/create', [DashboardController::class, 'ownerManagerProductsCreate'])->name('stores.products.create');
+    Route::post('/stores/{shopId}/product-catalog', [DashboardController::class, 'ownerManagerProductCatalogStore'])->name('stores.product-catalog.store');
     Route::post('/stores/{shopId}/vendors/{vendorId}/reassign', [DashboardController::class, 'ownerManagerReassignVendor'])->name('stores.vendors.reassign');
     Route::get('/vendor-registration', [UserController::class, 'vendorRegistration'])->name('vendor-registration');
     Route::post('/stores/{shopId}/vendors', [DashboardController::class, 'ownerManagerStoreVendor'])->name('stores.vendors.store');
@@ -177,6 +192,18 @@ Route::post('/dashboard/admin/products', [SuperAdminProductController::class, 's
 Route::get('/dashboard/admin/products', [SuperAdminProductController::class, 'index'])
     ->middleware(['auth', 'session.valid', 'user.type:admin'])
     ->name('dashboard.admin.products');
+
+Route::get('/dashboard/admin/product-requests', [ProductCatalogRequestController::class, 'index'])
+    ->middleware(['auth', 'session.valid', 'user.type:admin'])
+    ->name('dashboard.admin.product-requests');
+
+Route::post('/dashboard/admin/product-requests/{id}/approve', [ProductCatalogRequestController::class, 'approve'])
+    ->middleware(['auth', 'session.valid', 'user.type:admin'])
+    ->name('dashboard.admin.product-requests.approve');
+
+Route::post('/dashboard/admin/product-requests/{id}/reject', [ProductCatalogRequestController::class, 'reject'])
+    ->middleware(['auth', 'session.valid', 'user.type:admin'])
+    ->name('dashboard.admin.product-requests.reject');
 
 Route::get('/dashboard/admin/products/{id}', [SuperAdminProductController::class, 'show'])
     ->middleware(['auth', 'session.valid', 'user.type:admin'])
@@ -283,6 +310,7 @@ Route::middleware(['auth', 'session.valid', 'user.type:vendor'])->prefix('dashbo
     // Products
     Route::get('/products', [VendorController::class, 'productsIndex'])->name('products.index');
     Route::get('/products/create', [VendorController::class, 'productsCreate'])->name('products.create');
+    Route::post('/product-catalog', [VendorController::class, 'productCatalogStore'])->name('product-catalog.store');
     Route::post('/products', [VendorController::class, 'productsStore'])->name('products.store');
     Route::put('/products/{id}', [VendorController::class, 'productsUpdate'])->name('products.update');
     Route::delete('/products/{id}', [VendorController::class, 'productsDestroy'])->name('products.destroy');

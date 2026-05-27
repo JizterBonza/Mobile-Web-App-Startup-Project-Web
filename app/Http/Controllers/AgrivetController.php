@@ -778,7 +778,7 @@ class AgrivetController extends Controller
             'reorder_level' => 'nullable|integer|min:0',
         ]);
 
-        $catalog = ProductCatalog::findOrFail($validated['product_catalog_id']);
+        $catalog = ProductCatalog::approved()->findOrFail($validated['product_catalog_id']);
 
         $alreadyListed = DB::table('items')
             ->where('shop_id', $shop->id)
@@ -1242,8 +1242,8 @@ class AgrivetController extends Controller
      */
     private function mapProductCatalogCollection(): array
     {
-        return ProductCatalog::with('category', 'subCategory')
-            ->where('status', 'active')
+        return ProductCatalog::approved()
+            ->with('category', 'subCategory')
             ->orderBy('product_name')
             ->get()
             ->map(fn ($p) => [

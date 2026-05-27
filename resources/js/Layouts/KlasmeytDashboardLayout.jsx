@@ -67,6 +67,7 @@ function SuperAdminNav({ productOpen, setProductOpen }) {
             {productOpen && (
                 <div className="mt-1 space-y-0.5 border-l border-white/10 ml-4 pl-2">
                     <SubNavLink href="/dashboard/super-admin/products">All Products</SubNavLink>
+                    <SubNavLink href="/dashboard/super-admin/product-requests">Product Requests</SubNavLink>
                     <SubNavLink href="/dashboard/super-admin/categories">Categories</SubNavLink>
                     <SubNavLink href="/dashboard/super-admin/sub-categories">Sub-Categories</SubNavLink>
                 </div>
@@ -111,6 +112,7 @@ function AdminNav({ productOpen, setProductOpen }) {
             {productOpen && (
                 <div className="mt-1 space-y-0.5 border-l border-white/10 ml-4 pl-2">
                     <SubNavLink href="/dashboard/admin/products">All Products</SubNavLink>
+                    <SubNavLink href="/dashboard/admin/product-requests">Product Requests</SubNavLink>
                     <SubNavLink href="/dashboard/admin/categories">Categories</SubNavLink>
                     <SubNavLink href="/dashboard/admin/sub-categories">Sub-Categories</SubNavLink>
                 </div>

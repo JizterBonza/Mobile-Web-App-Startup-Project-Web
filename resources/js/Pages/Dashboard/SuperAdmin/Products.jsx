@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from '@inertiajs/react'
-import { Package, Plus, Search, Star } from 'lucide-react'
+import { Clock, Package, Plus, Search, Star } from 'lucide-react'
 import SuperAdminOrAdminLayout from '../../../Layouts/SuperAdminOrAdminLayout'
 
 function getProductsBaseRoute(userType) {
@@ -18,7 +18,12 @@ function getSubCategoriesRoute(userType) {
     return '/dashboard/super-admin/sub-categories'
 }
 
-export default function SuperAdminProducts({ auth, products = [], flash }) {
+function getProductRequestsRoute(userType) {
+    if (userType === 'admin') return '/dashboard/admin/product-requests'
+    return '/dashboard/super-admin/product-requests'
+}
+
+export default function SuperAdminProducts({ auth, products = [], flash, pendingCount = 0 }) {
     const productsBase = getProductsBaseRoute(auth?.user?.user_type)
     const categoriesRoute = getCategoriesRoute(auth?.user?.user_type)
     const subCategoriesRoute = getSubCategoriesRoute(auth?.user?.user_type)
@@ -129,6 +134,18 @@ export default function SuperAdminProducts({ auth, products = [], flash }) {
                             style={{ backgroundColor: '#102059', border: '1px solid #102059' }}
                         >
                             Go to Sub-Categories
+                        </Link>
+                        <Link
+                            href={getProductRequestsRoute(auth?.user?.user_type)}
+                            className="inline-flex items-center justify-center gap-2 rounded-lg border-2 border-[#D3A218] px-5 py-2 text-sm font-semibold text-[#D3A218] transition-colors hover:bg-[#FFFBF0]"
+                        >
+                            <Clock className="h-4 w-4" />
+                            Product Requests
+                            {pendingCount > 0 && (
+                                <span className="rounded-full bg-[#D3A218] px-2 py-0.5 text-xs font-bold text-white">
+                                    {pendingCount}
+                                </span>
+                            )}
                         </Link>
                     </div>
                 </div>

@@ -517,12 +517,12 @@ export default function AgrivetStoreInformation({
   }
 
   const handleRegisterProduct = () => {
-    const params = new URLSearchParams()
-    if (agrivet?.id) params.append('agrivetId', String(agrivet.id))
-    if (shop?.id) params.append('storeId', String(shop.id))
-    const qs = params.toString()
     if (isVendor) {
-      router.visit(`/dashboard/vendor/products/create${qs ? `?${qs}` : ''}`)
+      router.visit('/dashboard/vendor/products/create')
+      return
+    }
+    if (isOwnerManager && shop?.id) {
+      router.visit(`/dashboard/owner-manager/stores/${shop.id}/products/create`)
       return
     }
     showSuccess('storeEdit', 'Register Product')

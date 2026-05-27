@@ -16,7 +16,8 @@ class SuperAdminProductController extends Controller
      */
     public function index()
     {
-        $products = ProductCatalog::with('category', 'subCategory', 'creator')
+        $products = ProductCatalog::listedInCatalog()
+            ->with('category', 'subCategory', 'creator')
             ->latest()
             ->get()
             ->map(fn($p) => [
@@ -35,7 +36,8 @@ class SuperAdminProductController extends Controller
             ]);
 
         return Inertia::render('Dashboard/SuperAdmin/Products', [
-            'products' => $products,
+            'products'       => $products,
+            'pendingCount'   => ProductCatalog::pending()->count(),
         ]);
     }
 
@@ -124,8 +126,10 @@ class SuperAdminProductController extends Controller
             'description'         => $request->description,
             'images'              => $imagePaths,
             'primary_image_index' => $request->primary_image_index ?? 0,
-            'status'              => 'active',
+            'status'              => ProductCatalog::STATUS_ACTIVE,
             'created_by'          => auth()->id(),
+            'reviewed_by'         => auth()->id(),
+            'reviewed_at'         => now(),
         ]);
 
         ActivityLog::log(

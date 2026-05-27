@@ -3,10 +3,15 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
-use App\Models\SubCategory;
+use Illuminate\Database\Eloquent\Builder;
 
 class ProductCatalog extends Model
 {
+    public const STATUS_PENDING  = 'pending';
+    public const STATUS_ACTIVE   = 'active';
+    public const STATUS_INACTIVE = 'inactive';
+    public const STATUS_REJECTED = 'rejected';
+
     protected $table = 'product_catalog';
 
     protected $fillable = [
@@ -21,11 +26,29 @@ class ProductCatalog extends Model
         'primary_image_index',
         'status',
         'created_by',
+        'reviewed_by',
+        'reviewed_at',
     ];
 
     protected $casts = [
-        'images' => 'array',
+        'images'      => 'array',
+        'reviewed_at' => 'datetime',
     ];
+
+    public function scopeApproved(Builder $query): Builder
+    {
+        return $query->where('status', self::STATUS_ACTIVE);
+    }
+
+    public function scopePending(Builder $query): Builder
+    {
+        return $query->where('status', self::STATUS_PENDING);
+    }
+
+    public function scopeListedInCatalog(Builder $query): Builder
+    {
+        return $query->whereIn('status', [self::STATUS_ACTIVE, self::STATUS_INACTIVE]);
+    }
 
     public function category()
     {
@@ -40,5 +63,10 @@ class ProductCatalog extends Model
     public function creator()
     {
         return $this->belongsTo(User::class, 'created_by');
+    }
+
+    public function reviewer()
+    {
+        return $this->belongsTo(User::class, 'reviewed_by');
     }
 }
