@@ -31,6 +31,8 @@ class UserDetail extends Model
         'shipping_address',
         'profile_image_url', 
         'avatar',
+        'provider',
+        'provider_id',
     ];
 
     /**

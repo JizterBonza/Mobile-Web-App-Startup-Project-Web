@@ -20,6 +20,7 @@ use Illuminate\Http\Request;
 
 Route::post('register', [MobileAuthController::class, 'register']);
 Route::post('login', [MobileAuthController::class, 'login']);
+Route::post('auth/google/token', [SocialAuthController::class, 'googleToken']);
 
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('logout', [MobileAuthController::class, 'logout']);
