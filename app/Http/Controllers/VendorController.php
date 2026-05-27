@@ -91,10 +91,26 @@ class VendorController extends Controller
                 'reassignableVendors' => [],
                 'reviews' => [],
                 'products' => [],
+                'product_catalog' => [],
             ]);
         }
 
         return app(AgrivetController::class)->showStoreInformation($shop->agrivet->id, $shop->id);
+    }
+
+    /**
+     * Add a shop listing from the product catalog (vendor's assigned shop).
+     */
+    public function storeShopListing(Request $request)
+    {
+        $shop = $this->getVendorShopWithAgrivet();
+
+        if (! $shop || ! $shop->agrivet) {
+            return redirect()->back()
+                ->withErrors(['error' => 'You are not associated with any shop.']);
+        }
+
+        return app(AgrivetController::class)->storeShopListing($request, $shop->agrivet->id, $shop->id);
     }
 
     /**

@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\ActivityLog;
 use App\Models\Agrivet;
+use App\Models\ProductCatalog;
 use App\Models\Shop;
 use App\Models\Zone;
 use App\Models\User;
@@ -758,7 +759,60 @@ class AgrivetController extends Controller
             'reassignableVendors' => $reassignableVendors,
             'reviews' => $reviews,
             'products' => $products,
+            'product_catalog' => $this->mapProductCatalogCollection(),
         ]);
+    }
+
+    /**
+     * Add a shop listing from a product catalog entry.
+     */
+    public function storeShopListing(Request $request, $id, $shopId)
+    {
+        $agrivet = Agrivet::findOrFail($id);
+        $shop = Shop::where('agrivet_id', $agrivet->id)->findOrFail($shopId);
+
+        $validated = $request->validate([
+            'product_catalog_id' => 'required|exists:product_catalog,id',
+            'item_price' => 'required|numeric|min:0',
+            'item_quantity' => 'required|integer|min:0',
+            'reorder_level' => 'nullable|integer|min:0',
+        ]);
+
+        $catalog = ProductCatalog::findOrFail($validated['product_catalog_id']);
+
+        $alreadyListed = DB::table('items')
+            ->where('shop_id', $shop->id)
+            ->where('item_name', $catalog->product_name)
+            ->exists();
+
+        if ($alreadyListed) {
+            return redirect()->back()
+                ->withErrors(['product_catalog_id' => 'This product is already listed in the store.']);
+        }
+
+        $images = $this->normalizeCatalogImagePaths($catalog->images ?? []);
+
+        DB::table('items')->insert([
+            'shop_id' => $shop->id,
+            'item_name' => $catalog->product_name,
+            'item_description' => $catalog->description,
+            'item_price' => $validated['item_price'],
+            'item_quantity' => $validated['item_quantity'],
+            'weight' => $catalog->weight,
+            'metric' => $catalog->unit,
+            'category' => $catalog->category_id,
+            'sub_category_id' => $catalog->sub_category_id,
+            'item_images' => ! empty($images) ? json_encode($images) : null,
+            'item_status' => 'active',
+            'average_rating' => 0.00,
+            'total_reviews' => 0,
+            'sold_count' => 0,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        return redirect()->back()
+            ->with('success', 'Product added to store successfully.');
     }
 
     /**
@@ -1181,5 +1235,54 @@ class AgrivetController extends Controller
             : 'dashboard.super-admin.agrivets.shops.store-information';
 
         return redirect()->route($route, [$agrivetId, $shopId]);
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private function mapProductCatalogCollection(): array
+    {
+        return ProductCatalog::with('category', 'subCategory')
+            ->where('status', 'active')
+            ->orderBy('product_name')
+            ->get()
+            ->map(fn ($p) => [
+                'id' => $p->id,
+                'brand' => $p->brand,
+                'product_name' => $p->product_name,
+                'category_id' => $p->category_id,
+                'category_name' => optional($p->category)->category_name,
+                'sub_category_id' => $p->sub_category_id,
+                'sub_category_name' => optional($p->subCategory)->sub_category_name,
+                'weight' => $p->weight,
+                'unit' => $p->unit,
+                'description' => $p->description,
+                'images' => $this->normalizeCatalogImagePaths($p->images ?? []),
+                'primary_image_index' => (int) ($p->primary_image_index ?? 0),
+                'status' => $p->status,
+            ])
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @param  list<mixed>  $images
+     * @return list<string>
+     */
+    private function normalizeCatalogImagePaths(array $images): array
+    {
+        return array_values(array_map(function ($image) {
+            if (! is_string($image)) {
+                return '';
+            }
+            if (preg_match('/^https?:\/\//', $image)) {
+                return $image;
+            }
+            if (str_starts_with($image, '/storage/')) {
+                return $image;
+            }
+
+            return '/storage/'.ltrim($image, '/');
+        }, array_filter($images, fn ($image) => is_string($image) && $image !== '')));
     }
 }

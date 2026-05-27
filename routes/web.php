@@ -152,6 +152,7 @@ Route::middleware(['auth', 'session.valid', 'user.type:owner_manager'])->prefix(
     Route::get('/stores/{shopId}/store-information', [DashboardController::class, 'ownerManagerStoreInformation'])->name('stores.store-information');
     Route::put('/stores/{shopId}', [DashboardController::class, 'ownerManagerUpdateShop'])->name('stores.update');
     Route::post('/stores/{shopId}/cover-photo', [DashboardController::class, 'ownerManagerUpdateShopCoverPhoto'])->name('stores.cover-photo');
+    Route::post('/stores/{shopId}/listings', [DashboardController::class, 'ownerManagerStoreShopListing'])->name('stores.listings.store');
     Route::post('/stores/{shopId}/vendors/{vendorId}/reassign', [DashboardController::class, 'ownerManagerReassignVendor'])->name('stores.vendors.reassign');
     Route::get('/vendor-registration', [UserController::class, 'vendorRegistration'])->name('vendor-registration');
     Route::post('/stores/{shopId}/vendors', [DashboardController::class, 'ownerManagerStoreVendor'])->name('stores.vendors.store');
@@ -268,6 +269,10 @@ Route::middleware(['auth', 'session.valid', 'user.type:admin'])->prefix('dashboa
 Route::get('/dashboard/vendor', [VendorController::class, 'index'])
     ->middleware(['auth', 'session.valid', 'user.type:vendor'])
     ->name('dashboard.vendor');
+
+Route::post('/dashboard/vendor/shop-listings', [VendorController::class, 'storeShopListing'])
+    ->middleware(['auth', 'session.valid', 'user.type:vendor'])
+    ->name('dashboard.vendor.shop-listings.store');
 
 // Vendor Management Routes
 Route::middleware(['auth', 'session.valid', 'user.type:vendor'])->prefix('dashboard/vendor')->name('dashboard.vendor.')->group(function () {

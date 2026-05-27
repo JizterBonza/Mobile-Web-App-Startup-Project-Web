@@ -105,7 +105,57 @@ function formatReviewDate(dateStr) {
   })
 }
 
-export default function AgrivetStoreInformation({ auth, agrivet, shop, vendors = [], reassignableVendors = [], reviews = [], products = [], flash }) {
+const PLACEHOLDER_PRODUCT_IMAGE =
+  'https://images.unsplash.com/photo-1516382799247-87df95d790b7?auto=format&fit=crop&w=400&q=60'
+
+function resolveCatalogImageUrl(image) {
+  if (!image || typeof image !== 'string') return PLACEHOLDER_PRODUCT_IMAGE
+  if (image.startsWith('http://') || image.startsWith('https://')) return image
+  if (image.startsWith('/storage/')) return image
+  return `/storage/${image.replace(/^\//, '')}`
+}
+
+function mapCatalogToRegisteredProduct(entry) {
+  const images = Array.isArray(entry.images) ? entry.images : []
+  const primaryIdx = entry.primary_image_index ?? 0
+  const photos = images.length > 0 ? images.map(resolveCatalogImageUrl) : [PLACEHOLDER_PRODUCT_IMAGE]
+  const image = photos[primaryIdx] || photos[0] || PLACEHOLDER_PRODUCT_IMAGE
+  const unit = [entry.weight, entry.unit].filter((v) => v != null && v !== '').join(' ') || 'unit'
+
+  return {
+    id: entry.id,
+    productId: entry.id,
+    productName: entry.product_name || '',
+    brand: entry.brand || '',
+    category: entry.category_name || 'Uncategorized',
+    unit,
+    description: entry.description || '',
+    image,
+    photos,
+    primaryPhotoIndex: primaryIdx,
+  }
+}
+
+function catalogProductMatchesSearch(product, query) {
+  const q = query.toLowerCase()
+  return (
+    product.productName.toLowerCase().includes(q) ||
+    product.category.toLowerCase().includes(q) ||
+    product.brand.toLowerCase().includes(q)
+  )
+}
+
+export default function AgrivetStoreInformation({
+  auth,
+  agrivet,
+  shop,
+  vendors = [],
+  reassignableVendors = [],
+  reviews = [],
+  products = [],
+  product_catalog = [],
+  flash,
+}) {
   const isOwnerManager = auth?.user?.user_type === 'owner_manager'
   const isVendor = auth?.user?.user_type === 'vendor'
   const visibleTabs = isVendor ? tabOrder.filter((t) => t !== 'vendors') : tabOrder
@@ -396,7 +446,88 @@ export default function AgrivetStoreInformation({ auth, agrivet, shop, vendors =
     })
   }
 
-  const canAddListings = false
+  const isAdmin = auth?.user?.user_type === 'admin'
+  const isSuperAdmin = auth?.user?.user_type === 'super_admin'
+  const canAddListings = !isAdmin && !isSuperAdmin
+
+  const [showAddProductModal, setShowAddProductModal] = useState(false)
+  const [showCreateBundleModal, setShowCreateBundleModal] = useState(false)
+  const [selectedCatalogProduct, setSelectedCatalogProduct] = useState(null)
+  const [listingFormData, setListingFormData] = useState({
+    price: '',
+    stock: '',
+    discount: '',
+    reorderLevel: '',
+  })
+  const [productAddSearchQuery, setProductAddSearchQuery] = useState('')
+  const [showProductAddSuggestions, setShowProductAddSuggestions] = useState(false)
+
+  const registeredProducts = useMemo(
+    () => product_catalog.map(mapCatalogToRegisteredProduct),
+    [product_catalog]
+  )
+
+  const filteredCatalogProducts = useMemo(() => {
+    if (!productAddSearchQuery.trim()) return registeredProducts
+    return registeredProducts.filter((p) => catalogProductMatchesSearch(p, productAddSearchQuery))
+  }, [registeredProducts, productAddSearchQuery])
+
+  const storeListingUrl = useMemo(() => {
+    if (!shop?.id) return null
+    if (isOwnerManager) return `${getBaseRoute()}/stores/${shop.id}/listings`
+    if (isVendor) return '/dashboard/vendor/shop-listings'
+    return null
+  }, [shop?.id, isOwnerManager, isVendor])
+
+  const closeAddProductModal = () => {
+    setShowAddProductModal(false)
+    setSelectedCatalogProduct(null)
+    setListingFormData({ price: '', stock: '', discount: '', reorderLevel: '' })
+    setProductAddSearchQuery('')
+    setShowProductAddSuggestions(false)
+  }
+
+  const handleSaveListing = () => {
+    if (
+      !selectedCatalogProduct ||
+      !listingFormData.price ||
+      !listingFormData.stock ||
+      !listingFormData.reorderLevel ||
+      !storeListingUrl
+    ) {
+      return
+    }
+
+    router.post(
+      storeListingUrl,
+      {
+        product_catalog_id: selectedCatalogProduct.id,
+        item_price: listingFormData.price,
+        item_quantity: listingFormData.stock,
+        reorder_level: listingFormData.reorderLevel,
+      },
+      {
+        preserveScroll: true,
+        onSuccess: () => {
+          closeAddProductModal()
+          showSuccess('storeEdit', selectedCatalogProduct.productName)
+        },
+      }
+    )
+  }
+
+  const handleRegisterProduct = () => {
+    const params = new URLSearchParams()
+    if (agrivet?.id) params.append('agrivetId', String(agrivet.id))
+    if (shop?.id) params.append('storeId', String(shop.id))
+    const qs = params.toString()
+    if (isVendor) {
+      router.visit(`/dashboard/vendor/products/create${qs ? `?${qs}` : ''}`)
+      return
+    }
+    showSuccess('storeEdit', 'Register Product')
+  }
+
   const [productSearchQuery, setProductSearchQuery] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('All')
   const [productStatusFilter, setProductStatusFilter] = useState('All')
@@ -427,6 +558,11 @@ export default function AgrivetStoreInformation({ auth, agrivet, shop, vendors =
       }),
     [products]
   )
+
+  const isCatalogProductListed = (catalogProduct) =>
+    productListings.some(
+      (listing) => listing.productName.toLowerCase() === catalogProduct.productName.toLowerCase()
+    )
 
   const getProductStatus = (listing) => {
     if ((listing.manualStatus || 'Active') === 'Inactive') return 'Inactive'
@@ -958,14 +1094,38 @@ export default function AgrivetStoreInformation({ auth, agrivet, shop, vendors =
                     <div>
                       <h2 className="text-lg font-bold text-[#102059] mb-1">Product Listings</h2>
                       <p className="text-sm text-[#6B7280]">
-                        {filteredListings.length} {filteredListings.length === 1 ? 'listing' : 'listings'}
+                        {filteredListings.length}{' '}
+                        {filteredListings.length === 1 ? 'listing' : 'listings'}
+                        {productListings.length !== filteredListings.length &&
+                          ` of ${productListings.length} total`}
                       </p>
                     </div>
                     {canAddListings && (
                       <div className="flex gap-3">
-                        <button className="flex items-center gap-2 px-4 py-2.5 bg-[#102059] text-white text-sm font-semibold rounded-lg hover:bg-[#244693] transition-colors">
+                        <button
+                          type="button"
+                          onClick={() => setShowAddProductModal(true)}
+                          className="flex items-center gap-2 px-4 py-2.5 bg-[#102059] text-white text-sm font-semibold rounded-lg hover:bg-[#244693] transition-colors"
+                        >
                           <Plus className="w-4 h-4" />
                           Add Product
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleRegisterProduct}
+                          className="flex items-center gap-2 px-4 py-2.5 bg-white border-2 border-[#102059] text-[#102059] text-sm font-semibold rounded-lg hover:bg-[#F8F9FB] transition-colors"
+                        >
+                          <Package className="w-4 h-4" />
+                          Register Product
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setShowCreateBundleModal(true)}
+                          className="flex items-center gap-2 px-4 py-2.5 border-2 border-[#D3A218] text-[#D3A218] text-sm font-semibold rounded-lg hover:bg-[#FFFBF0] transition-colors"
+                          style={{ color: '#D3A218'}}
+                        >
+                          <Package className="w-4 h-4" />
+                          Create Bundle
                         </button>
                       </div>
                     )}
@@ -1756,6 +1916,309 @@ export default function AgrivetStoreInformation({ auth, agrivet, shop, vendors =
                 </button>
                 <button className="px-4 py-2.5 bg-[#244693] text-white text-sm font-semibold rounded-lg hover:bg-[#1a3570]" onClick={confirmStatusChange}>
                   Confirm
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Add Product Modal */}
+        {showAddProductModal && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-lg border border-[#E5E7EB] w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+              <div className="flex items-center justify-between p-6 border-b border-[#E5E7EB]">
+                <div>
+                  <h2 className="text-xl font-bold text-[#102059]">Add Product to Store</h2>
+                  <p className="text-sm text-[#6B7280] mt-1">
+                    Choose from registered products and set listing details
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={closeAddProductModal}
+                  className="p-2 hover:bg-[#F9FAFB] rounded-lg transition-colors"
+                >
+                  <X className="w-5 h-5 text-[#6B7280]" />
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-6">
+                {!selectedCatalogProduct ? (
+                  <div>
+                    <h3 className="text-sm font-semibold text-[#102059] mb-4">Select a Product</h3>
+
+                    <div className="relative mb-6">
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-[#6B7280]" />
+                        <input
+                          type="text"
+                          value={productAddSearchQuery}
+                          onChange={(e) => setProductAddSearchQuery(e.target.value)}
+                          onFocus={() => setShowProductAddSuggestions(true)}
+                          onBlur={() => setTimeout(() => setShowProductAddSuggestions(false), 200)}
+                          placeholder="Search products by name or category..."
+                          className="w-full pl-10 pr-4 py-3 border border-[#E5E7EB] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#102059] focus:border-transparent text-sm"
+                        />
+                        {productAddSearchQuery && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setProductAddSearchQuery('')
+                              setShowProductAddSuggestions(false)
+                            }}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-[#6B7280] hover:text-[#102059]"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
+
+                      {showProductAddSuggestions && productAddSearchQuery.trim() && (
+                        <div className="absolute z-20 mt-2 w-full bg-white border border-[#E5E7EB] rounded-lg shadow-lg max-h-64 overflow-y-auto">
+                          {filteredCatalogProducts.length === 0 ? (
+                            <div className="px-4 py-8 text-center">
+                              <p className="text-sm text-[#6B7280]">No products found</p>
+                            </div>
+                          ) : (
+                            filteredCatalogProducts.map((product) => {
+                              const listed = isCatalogProductListed(product)
+                              return (
+                                <div
+                                  key={product.id}
+                                  onClick={() => {
+                                    if (listed) return
+                                    setSelectedCatalogProduct(product)
+                                    setProductAddSearchQuery('')
+                                    setShowProductAddSuggestions(false)
+                                  }}
+                                  className={`px-4 py-3 border-b border-[#E5E7EB] last:border-b-0 transition-colors ${
+                                    listed
+                                      ? 'opacity-50 cursor-not-allowed bg-[#F9FAFB]'
+                                      : 'cursor-pointer hover:bg-[#F9FAFB]'
+                                  }`}
+                                >
+                                  <div className="flex items-center gap-3">
+                                    <div className="w-12 h-12 bg-[#F9FAFB] rounded-lg overflow-hidden flex-shrink-0">
+                                      <img
+                                        src={product.image}
+                                        alt={product.productName}
+                                        className="w-full h-full object-cover"
+                                      />
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                      <h4 className="text-sm font-semibold text-[#102059] truncate">
+                                        {product.productName}
+                                      </h4>
+                                      <p className="text-xs text-[#6B7280] truncate">
+                                        {product.brand ? `${product.brand} • ` : ''}
+                                        {product.category}
+                                      </p>
+                                    </div>
+                                  </div>
+                                </div>
+                              )
+                            })
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    {registeredProducts.length === 0 ? (
+                      <div className="text-center py-12">
+                        <Package className="w-16 h-16 text-[#E5E7EB] mx-auto mb-4" />
+                        <h3 className="text-lg font-bold text-[#102059] mb-2">No Registered Products</h3>
+                        <p className="text-sm text-[#6B7280]">
+                          Please register products in the catalog first before creating listings.
+                        </p>
+                      </div>
+                    ) : filteredCatalogProducts.length === 0 ? (
+                      <div className="col-span-3 text-center py-12">
+                        <p className="text-sm text-[#6B7280]">No products found matching your search</p>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        {filteredCatalogProducts.map((product) => {
+                          const listed = isCatalogProductListed(product)
+                          return (
+                            <div
+                              key={product.id}
+                              onClick={() => !listed && setSelectedCatalogProduct(product)}
+                              className={`border rounded-lg p-4 transition-all ${
+                                listed
+                                  ? 'border-[#E5E7EB] bg-[#F9FAFB] opacity-50 cursor-not-allowed'
+                                  : 'border-[#E5E7EB] cursor-pointer hover:border-[#102059] hover:shadow-md'
+                              }`}
+                            >
+                              <div className="aspect-square bg-[#F9FAFB] rounded-lg mb-3 overflow-hidden">
+                                <img
+                                  src={product.image}
+                                  alt={product.productName}
+                                  className="w-full h-full object-cover"
+                                />
+                              </div>
+                              <h4 className="text-sm font-semibold text-[#102059] mb-1">{product.productName}</h4>
+                              <p className="text-xs text-[#6B7280]">{product.category}</p>
+                              {listed && (
+                                <p className="text-xs text-[#9CA3AF] mt-2">Already listed</p>
+                              )}
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedCatalogProduct(null)}
+                      className="flex items-center gap-2 text-sm text-[#244693] hover:text-[#102059] mb-4"
+                    >
+                      <ArrowLeft className="w-4 h-4" />
+                      Back to products
+                    </button>
+
+                    <div className="bg-[#F9FAFB] border border-[#E5E7EB] rounded-lg p-4 mb-6">
+                      <div className="flex gap-4">
+                        <div className="w-20 h-20 bg-white rounded-lg overflow-hidden flex-shrink-0">
+                          <img
+                            src={selectedCatalogProduct.image}
+                            alt={selectedCatalogProduct.productName}
+                            className="w-full h-full object-cover"
+                          />
+                        </div>
+                        <div>
+                          <h4 className="text-sm font-bold text-[#102059]">{selectedCatalogProduct.productName}</h4>
+                          <p className="text-xs text-[#6B7280] mt-1">
+                            {selectedCatalogProduct.brand
+                              ? `${selectedCatalogProduct.brand} • `
+                              : ''}
+                            {selectedCatalogProduct.category}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="space-y-4">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="text-xs font-semibold text-[#102059] uppercase tracking-wider block mb-2">
+                            Price (₱) *
+                          </label>
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={listingFormData.price}
+                            onChange={(e) =>
+                              setListingFormData({ ...listingFormData, price: e.target.value })
+                            }
+                            className="w-full px-4 py-2.5 border border-[#E5E7EB] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#102059] focus:border-transparent text-sm"
+                            placeholder="0.00"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs font-semibold text-[#102059] uppercase tracking-wider block mb-2">
+                            Stock Quantity *
+                          </label>
+                          <input
+                            type="number"
+                            min="0"
+                            value={listingFormData.stock}
+                            onChange={(e) =>
+                              setListingFormData({ ...listingFormData, stock: e.target.value })
+                            }
+                            className="w-full px-4 py-2.5 border border-[#E5E7EB] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#102059] focus:border-transparent text-sm"
+                            placeholder="0"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="text-xs font-semibold text-[#102059] uppercase tracking-wider block mb-2">
+                            Reorder Level *
+                          </label>
+                          <input
+                            type="number"
+                            min="0"
+                            value={listingFormData.reorderLevel}
+                            onChange={(e) =>
+                              setListingFormData({ ...listingFormData, reorderLevel: e.target.value })
+                            }
+                            className="w-full px-4 py-2.5 border border-[#E5E7EB] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#102059] focus:border-transparent text-sm"
+                            placeholder="0"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {selectedCatalogProduct && (
+                <div className="flex items-center justify-end gap-3 p-6 border-t border-[#E5E7EB]">
+                  <button
+                    type="button"
+                    onClick={closeAddProductModal}
+                    className="px-6 py-2.5 bg-white border border-[#E5E7EB] text-[#6B7280] rounded-lg hover:bg-[#F9FAFB] transition-colors text-sm font-medium"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSaveListing}
+                    disabled={
+                      !listingFormData.price ||
+                      !listingFormData.stock ||
+                      !listingFormData.reorderLevel ||
+                      !storeListingUrl
+                    }
+                    className="px-6 py-2.5 bg-[#102059] text-white rounded-lg hover:bg-[#244693] transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Add Product
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Create Bundle Modal */}
+        {showCreateBundleModal && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-lg border border-[#E5E7EB] w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+              <div className="flex items-center justify-between p-6 border-b border-[#E5E7EB]">
+                <div>
+                  <h2 className="text-xl font-bold text-[#102059]">Create Product Bundle</h2>
+                  <p className="text-sm text-[#6B7280] mt-1">
+                    Combine multiple products into a promotional bundle
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowCreateBundleModal(false)}
+                  className="p-2 hover:bg-[#F9FAFB] rounded-lg transition-colors"
+                >
+                  <X className="w-5 h-5 text-[#6B7280]" />
+                </button>
+              </div>
+              <div className="flex-1 overflow-y-auto p-6">
+                <div className="text-center py-12">
+                  <Package className="w-16 h-16 text-[#E5E7EB] mx-auto mb-4" />
+                  <h3 className="text-lg font-bold text-[#102059] mb-2">Create Bundle</h3>
+                  <p className="text-sm text-[#6B7280] max-w-md mx-auto">
+                    Bundle creation will be available once store listing APIs are connected.
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center justify-end gap-3 p-6 border-t border-[#E5E7EB]">
+                <button
+                  type="button"
+                  onClick={() => setShowCreateBundleModal(false)}
+                  className="px-6 py-2.5 bg-white border border-[#E5E7EB] text-[#6B7280] rounded-lg hover:bg-[#F9FAFB] transition-colors text-sm font-medium"
+                >
+                  Cancel
                 </button>
               </div>
             </div>
