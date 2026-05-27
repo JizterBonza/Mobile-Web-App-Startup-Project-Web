@@ -23,8 +23,10 @@ import { AnimatePresence, motion } from 'motion/react'
 import OwnerManagerKlasmeytLayout from '../../Layouts/OwnerManagerKlasmeytLayout'
 import SuperAdminOrAdminLayout from '../../Layouts/SuperAdminOrAdminLayout'
 import VendorKlasmeytLayout from '../../Layouts/VendorKlasmeytLayout'
+import OwnerManagerOrdersPanel from '../../Components/Dashboard/OwnerManagerOrdersPanel'
 
 const tabOrder = ['about', 'vendors', 'products', 'insights']
+const vendorTabOrder = ['about', 'products', 'orders']
 
 const DAY_ORDER = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
 
@@ -154,11 +156,15 @@ export default function AgrivetStoreInformation({
   reviews = [],
   products = [],
   product_catalog = [],
+  orders = [],
+  deliveryMethods = [],
+  preparingItemStatusId = null,
   flash,
 }) {
   const isOwnerManager = auth?.user?.user_type === 'owner_manager'
   const isVendor = auth?.user?.user_type === 'vendor'
-  const visibleTabs = isVendor ? tabOrder.filter((t) => t !== 'vendors') : tabOrder
+  const visibleTabs = isVendor ? vendorTabOrder : tabOrder
+  const vendorOrdersApiBasePath = shop?.id ? `/dashboard/vendor/stores/${shop.id}/orders` : ''
 
   const getBaseRoute = () => {
     if (isOwnerManager) return '/dashboard/owner-manager'
@@ -259,10 +265,15 @@ export default function AgrivetStoreInformation({
   }
 
   useEffect(() => {
-    if (flash?.success) {
-      if (visibleTabs.includes('vendors')) {
+    if (flash?.success || flash?.error) {
+      const message = (flash.success || flash.error || '').toLowerCase()
+      if (isVendor && visibleTabs.includes('orders') && message.includes('order')) {
+        setActiveTab('orders')
+      } else if (visibleTabs.includes('vendors') && flash?.success) {
         setActiveTab('vendors')
       }
+    }
+    if (flash?.success) {
       if (flash.success.toLowerCase().includes('reassigned')) {
         const vendorName = flash.success.split(' has been reassigned')[0]?.trim() || flash.success
         showSuccess('reassign', vendorName)
@@ -1258,6 +1269,27 @@ export default function AgrivetStoreInformation({
                       ))}
                     </div>
                   )}
+                </div>
+              )}
+
+              {activeTab === 'orders' && isVendor && (
+                <div className="space-y-4">
+                  {flash?.success && (
+                    <div className="rounded-lg border border-[#BBF7D0] bg-[#F0FDF4] px-4 py-3 text-sm text-[#166534]">
+                      {flash.success}
+                    </div>
+                  )}
+                  {flash?.error && (
+                    <div className="rounded-lg border border-[#FECACA] bg-[#FEF2F2] px-4 py-3 text-sm text-[#991B1B]">
+                      {flash.error}
+                    </div>
+                  )}
+                  <OwnerManagerOrdersPanel
+                    orders={orders}
+                    deliveryMethods={deliveryMethods}
+                    preparingItemStatusId={preparingItemStatusId}
+                    ordersApiBasePath={vendorOrdersApiBasePath}
+                  />
                 </div>
               )}
 

@@ -323,6 +323,12 @@ Route::middleware(['auth', 'session.valid', 'user.type:vendor'])->prefix('dashbo
     Route::get('/orders', [VendorController::class, 'ordersIndex'])->name('orders.index');
     Route::get('/orders/{orderId}/items', [VendorController::class, 'orderItemsIndex'])->name('orders.items.index');
     Route::put('/orders/{id}', [VendorController::class, 'ordersUpdate'])->name('orders.update');
+
+    // Store-scoped order management (vendor's assigned shop only)
+    Route::patch('/stores/{shopId}/orders/{orderId}/accept', [VendorController::class, 'storeOrderAccept'])->name('stores.orders.accept');
+    Route::patch('/stores/{shopId}/orders/{orderId}/decline', [VendorController::class, 'storeOrderDecline'])->name('stores.orders.decline');
+    Route::patch('/stores/{shopId}/orders/{orderId}/ready', [VendorController::class, 'storeOrderReady'])->name('stores.orders.ready');
+    Route::patch('/stores/{shopId}/orders/{orderId}/items/{orderItemId}/done-preparing', [VendorController::class, 'storeOrderDonePreparingItem'])->name('stores.orders.items.done-preparing');
     
     // Payouts
     Route::get('/payouts', [VendorController::class, 'payoutsIndex'])->name('payouts.index');

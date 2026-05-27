@@ -17,9 +17,11 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
+use App\Http\Controllers\Concerns\ManagesShopOrders;
 
 class AgrivetController extends Controller
 {
+    use ManagesShopOrders;
     /**
      * Display a listing of agrivets.
      */
@@ -724,6 +726,16 @@ class AgrivetController extends Controller
                 ];
             });
 
+        $orders = [];
+        $deliveryMethods = [];
+        $preparingItemStatusId = null;
+
+        if ($user->user_type === 'vendor') {
+            $preparingItemStatusId = $this->preparingItemStatusId() ?: null;
+            $orders = $this->buildShopOrders([(int) $shop->id], $preparingItemStatusId ?? 0);
+            $deliveryMethods = $this->activeDeliveryMethods();
+        }
+
         return Inertia::render('Dashboard/AgrivetStoreInformation', [
             'agrivet' => [
                 'id' => $agrivet->id,
@@ -760,6 +772,9 @@ class AgrivetController extends Controller
             'reviews' => $reviews,
             'products' => $products,
             'product_catalog' => $this->mapProductCatalogCollection(),
+            'orders' => $orders,
+            'deliveryMethods' => $deliveryMethods,
+            'preparingItemStatusId' => $preparingItemStatusId,
         ]);
     }
 

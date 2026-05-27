@@ -23,6 +23,7 @@ export default function OwnerManagerOrdersPanel({
   orders: initialOrders = [],
   deliveryMethods = [],
   preparingItemStatusId = null,
+  ordersApiBasePath = '/dashboard/owner-manager/orders',
 }) {
   const [activeSection, setActiveSection] = useState('new')
   const [expandedOrders, setExpandedOrders] = useState(() => new Set())
@@ -95,7 +96,7 @@ export default function OwnerManagerOrdersPanel({
     }
 
     setProcessingOrderId(order.id);
-    router.patch(`/dashboard/owner-manager/orders/${order.id}/accept`, {}, {
+    router.patch(`${ordersApiBasePath}/${order.id}/accept`, {}, {
       preserveScroll: true,
       onFinish: () => setProcessingOrderId(null),
     });
@@ -126,7 +127,7 @@ export default function OwnerManagerOrdersPanel({
     const itemKey = `${order.id}-${product.id}`;
     setProcessingItemKey(itemKey);
     router.patch(
-      `/dashboard/owner-manager/orders/${order.id}/items/${product.id}/done-preparing`,
+      `${ordersApiBasePath}/${order.id}/items/${product.id}/done-preparing`,
       {},
       {
         preserveScroll: true,
@@ -141,7 +142,7 @@ export default function OwnerManagerOrdersPanel({
     }
 
     setProcessingOrderId(order.id);
-    router.patch(`/dashboard/owner-manager/orders/${order.id}/ready`, {}, {
+    router.patch(`${ordersApiBasePath}/${order.id}/ready`, {}, {
       preserveScroll: true,
       onFinish: () => setProcessingOrderId(null),
     });
@@ -171,7 +172,7 @@ export default function OwnerManagerOrdersPanel({
 
     setProcessingOrderId(selectedOrder.id);
     router.patch(
-      `/dashboard/owner-manager/orders/${selectedOrder.id}/decline`,
+      `${ordersApiBasePath}/${selectedOrder.id}/decline`,
       { decline_reason: declineReason.trim() },
       {
         preserveScroll: true,
