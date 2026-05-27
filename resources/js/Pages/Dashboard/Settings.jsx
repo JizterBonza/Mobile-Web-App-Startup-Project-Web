@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useForm, Link } from '@inertiajs/react'
-import AdminLayout from '../../Layouts/AdminLayout'
+import SuperAdminOrAdminLayout from '../../Layouts/SuperAdminOrAdminLayout'
 
 export default function Settings({ auth, userData, flash }) {
   const [showCurrentPassword, setShowCurrentPassword] = useState(false)
@@ -47,7 +47,7 @@ export default function Settings({ auth, userData, flash }) {
   }
 
   return (
-    <AdminLayout auth={auth} title="Settings">
+    <SuperAdminOrAdminLayout auth={auth} title="Settings">
       {/* Success Alert */}
       {flash?.success && (
         <div className="alert alert-success alert-dismissible fade show">
@@ -67,8 +67,8 @@ export default function Settings({ auth, userData, flash }) {
       <div className="row">
         {/* Account Overview */}
         <div className="col-md-4">
-          <div className="card card-primary card-outline">
-            <div className="card-header">
+          <div className="card card-primary">
+            <div className="card-header" style={{ backgroundColor: '#102059', border: '1px solid #102059' }}>
               <h3 className="card-title">
                 <i className="fas fa-user-circle mr-2"></i> Account Overview
               </h3>
@@ -100,8 +100,8 @@ export default function Settings({ auth, userData, flash }) {
               </ul>
 
               <div className="mt-3">
-                <Link href="/profile" className="btn btn-outline-primary btn-block">
-                  <i className="fas fa-user-edit mr-2"></i> Edit Profile
+                <Link href="/profile" className="btn btn-outline-primary btn-block text-white" style={{ backgroundColor: '#102059', border: '1px solid #102059' }}>
+                  <i className="fas fa-user-edit mr-2 text-white"></i> Edit Profile
                 </Link>
               </div>
             </div>
@@ -135,7 +135,7 @@ export default function Settings({ auth, userData, flash }) {
         <div className="col-md-8">
           {/* Change Password Card */}
           <div className="card card-primary">
-            <div className="card-header">
+            <div className="card-header" style={{ backgroundColor: '#102059', border: '1px solid #102059' }}>
               <h3 className="card-title">
                 <i className="fas fa-key mr-2"></i> Change Password
               </h3>
@@ -236,7 +236,8 @@ export default function Settings({ auth, userData, flash }) {
               <div className="card-footer">
                 <button
                   type="submit"
-                  className="btn btn-primary"
+                  className="btn btn-primary text-white"
+                  style={{ backgroundColor: '#102059', border: '1px solid #102059' }}
                   disabled={processing}
                 >
                   {processing ? (
@@ -256,7 +257,7 @@ export default function Settings({ auth, userData, flash }) {
 
           {/* Security Tips Card */}
           <div className="card card-info">
-            <div className="card-header">
+            <div className="card-header" style={{ backgroundColor: '#102059', border: '1px solid #102059' }}>
               <h3 className="card-title">
                 <i className="fas fa-shield-alt mr-2"></i> Security Tips
               </h3>
@@ -320,7 +321,7 @@ export default function Settings({ auth, userData, flash }) {
           </div>
         </div>
       </div>
-    </AdminLayout>
+    </SuperAdminOrAdminLayout>
   )
 }
 

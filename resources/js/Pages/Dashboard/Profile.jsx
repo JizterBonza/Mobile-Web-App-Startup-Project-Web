@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useForm } from '@inertiajs/react'
-import AdminLayout from '../../Layouts/AdminLayout'
+import SuperAdminOrAdminLayout from '../../Layouts/SuperAdminOrAdminLayout'
 import AddressAutocomplete from '../../Components/AddressAutocomplete'
 
 export default function Profile({ auth, profileData, flash }) {
@@ -55,7 +55,7 @@ export default function Profile({ auth, profileData, flash }) {
   }
 
   return (
-    <AdminLayout auth={auth} title="My Profile">
+    <SuperAdminOrAdminLayout auth={auth} title="My Profile">
       {/* Success Alert */}
       {flash?.success && (
         <div className="alert alert-success alert-dismissible fade show">
@@ -388,7 +388,7 @@ export default function Profile({ auth, profileData, flash }) {
           </div>
         </div>
       </div>
-    </AdminLayout>
+    </SuperAdminOrAdminLayout>
   )
 }
 

@@ -24,13 +24,19 @@ class VendorController extends Controller
      */
     private function getVendorShop()
     {
-        $vendor = auth()->user();
+        $user = auth()->user();
+
+        if ($user->user_type === User::TYPE_OWNER_MANAGER && $user->agrivet_id) {
+            return Shop::where('agrivet_id', $user->agrivet_id)->orderBy('id')->first();
+        }
+
+        $vendor = $user;
         $vendor->load('shops');
-        
+
         if ($vendor->shops->isEmpty()) {
             return null;
         }
-        
+
         // Get the first active shop (vendors typically have one)
         return $vendor->shops->first();
     }
@@ -54,76 +60,41 @@ class VendorController extends Controller
      */
     private function getVendorShopWithAgrivet()
     {
-        $vendor = auth()->user();
+        $user = auth()->user();
+
+        if ($user->user_type === User::TYPE_OWNER_MANAGER && $user->agrivet_id) {
+            return Shop::with('agrivet')->where('agrivet_id', $user->agrivet_id)->orderBy('id')->first();
+        }
+
+        $vendor = $user;
         $vendor->load(['shops.agrivet']);
-        
+
         if ($vendor->shops->isEmpty()) {
             return null;
         }
-        
+
         return $vendor->shops->first();
     }
 
     /**
-     * Display the vendor dashboard.
+     * Vendor home: store information for the shop this vendor is assigned to.
      */
     public function index()
     {
         $shop = $this->getVendorShopWithAgrivet();
 
-        if (!$shop) {
-            return Inertia::render('Dashboard/VendorDashboard', [
-                'shop' => null,
+        if (! $shop || ! $shop->agrivet) {
+            return Inertia::render('Dashboard/AgrivetStoreInformation', [
                 'agrivet' => null,
-                'stats' => [
-                    'new_orders' => 0,
-                    'products' => 0,
-                    'pending_reviews' => 0,
-                    'total_revenue' => 0,
-                ],
+                'shop' => null,
+                'vendors' => [],
+                'reassignableVendors' => [],
+                'reviews' => [],
+                'products' => [],
             ]);
         }
 
-        $agrivet = $shop->agrivet;
-
-        // Get dashboard stats
-        $productsCount = DB::table('items')
-            ->where('shop_id', $shop->id)
-            ->count();
-
-        $newOrdersCount = DB::table('order_items')
-            ->join('items', 'order_items.item_id', '=', 'items.id')
-            ->where('items.shop_id', $shop->id)
-            ->where('order_items.item_status', 'ordered')
-            ->count();
-
-        $totalRevenue = DB::table('order_items')
-            ->join('items', 'order_items.item_id', '=', 'items.id')
-            ->where('items.shop_id', $shop->id)
-            ->where('order_items.item_status', 'delivered')
-            ->sum(DB::raw('order_items.quantity * order_items.price_at_purchase'));
-
-        return Inertia::render('Dashboard/VendorDashboard', [
-            'shop' => [
-                'id' => $shop->id,
-                'shop_name' => $shop->shop_name,
-                'shop_description' => $shop->shop_description,
-                'shop_address' => $shop->shop_address,
-                'average_rating' => $shop->average_rating,
-                'total_reviews' => $shop->total_reviews,
-                'shop_status' => $shop->shop_status,
-            ],
-            'agrivet' => $agrivet ? [
-                'id' => $agrivet->id,
-                'name' => $agrivet->name,
-            ] : null,
-            'stats' => [
-                'new_orders' => $newOrdersCount,
-                'products' => $productsCount,
-                'pending_reviews' => 0, // Can be implemented later
-                'total_revenue' => $totalRevenue ?? 0,
-            ],
-        ]);
+        return app(AgrivetController::class)->showStoreInformation($shop->agrivet->id, $shop->id);
     }
 
     /**
@@ -146,6 +117,7 @@ class VendorController extends Controller
                 'shop_name' => $shop->shop_name,
                 'shop_description' => $shop->shop_description,
                 'shop_address' => $shop->shop_address,
+                'shop_province' => $shop->shop_province,
                 'shop_lat' => $shop->shop_lat,
                 'shop_long' => $shop->shop_long,
                 'contact_number' => $shop->contact_number,
@@ -183,6 +155,7 @@ class VendorController extends Controller
             'shop_name' => 'required|string|max:150',
             'shop_description' => 'nullable|string',
             'shop_address' => 'nullable|string|max:255',
+            'shop_province' => 'nullable|string|max:100',
             'shop_lat' => 'nullable|numeric',
             'shop_long' => 'nullable|numeric',
             'contact_number' => 'nullable|string|max:20',
@@ -193,6 +166,7 @@ class VendorController extends Controller
             'shop_name' => $request->shop_name,
             'shop_description' => $request->shop_description,
             'shop_address' => $request->shop_address,
+            'shop_province' => $request->shop_province,
             'shop_lat' => $request->shop_lat,
             'shop_long' => $request->shop_long,
             'contact_number' => $request->contact_number,
@@ -310,6 +284,64 @@ class VendorController extends Controller
 
         return Inertia::render('Dashboard/Vendor/Products', [
             'products' => $products,
+            'shop' => [
+                'id' => $shop->id,
+                'shop_name' => $shop->shop_name,
+            ],
+            'stockImages' => $stockImages,
+            'categories' => $categories,
+            'subCategories' => $subCategories,
+        ]);
+    }
+
+    /**
+     * Show the form for creating a new product.
+     */
+    public function productsCreate()
+    {
+        $shop = $this->getVendorShopWithAgrivet();
+
+        if (!$shop) {
+            return redirect()->route('dashboard.vendor')
+                ->with('error', 'You are not associated with any Shop.');
+        }
+
+        $agrivet = $shop->agrivet;
+        $stockImages = $agrivet ? ProductImage::where('agrivet_id', $agrivet->id)
+            ->where('status', 'active')
+            ->orderBy('category')
+            ->orderBy('name')
+            ->get()
+            ->map(function ($image) {
+                return [
+                    'id' => $image->id,
+                    'name' => $image->name,
+                    'image_url' => $image->image_url,
+                    'category' => $image->category,
+                ];
+            }) : collect([]);
+
+        $categories = Category::where('status', 'active')
+            ->orderBy('category_name')
+            ->get()
+            ->map(function ($category) {
+                return [
+                    'id' => $category->id,
+                    'name' => $category->category_name,
+                ];
+            });
+
+        $subCategories = SubCategory::where('sub_category_status', 'active')
+            ->orderBy('sub_category_name')
+            ->get()
+            ->map(function ($subCategory) {
+                return [
+                    'id' => $subCategory->id,
+                    'name' => $subCategory->sub_category_name,
+                ];
+            });
+
+        return Inertia::render('Dashboard/Vendor/RegisterProduct', [
             'shop' => [
                 'id' => $shop->id,
                 'shop_name' => $shop->shop_name,

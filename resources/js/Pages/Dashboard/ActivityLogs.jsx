@@ -1,6 +1,25 @@
 import { useState } from 'react'
 import { router } from '@inertiajs/react'
-import AdminLayout from '../../Layouts/AdminLayout'
+import { Eye } from 'lucide-react'
+import SuperAdminOrAdminLayout from '../../Layouts/SuperAdminOrAdminLayout'
+
+function getInitials(name) {
+  if (!name || typeof name !== 'string') return '?'
+  const parts = name.trim().split(/\s+/).filter(Boolean)
+  if (parts.length >= 2) {
+    return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase()
+  }
+  return name.slice(0, 2).toUpperCase()
+}
+
+function actionBadgeClass(action) {
+  switch ((action || '').toLowerCase()) {
+    case 'created': return 'bg-[#DCFCE7] text-[#15803D]'
+    case 'updated': return 'bg-[#DBEAFE] text-[#1D4ED8]'
+    case 'deleted': return 'bg-[#FEE2E2] text-[#B91C1C]'
+    default: return 'bg-[#F3F4F6] text-[#6B7280]'
+  }
+}
 
 export default function ActivityLogs({ auth, activityLogs, filters = {} }) {
   const [action, setAction] = useState(filters.action ?? '')
@@ -27,6 +46,15 @@ export default function ActivityLogs({ auth, activityLogs, filters = {} }) {
     }, { preserveState: true })
   }
 
+  const clearFilters = () => {
+    setAction('')
+    setSubjectType('')
+    setFromDate('')
+    setToDate('')
+    setUserId('')
+    router.get(baseRoute, {}, { preserveState: false })
+  }
+
   const goToPage = (url) => {
     if (url) router.visit(url, { preserveState: true })
   }
@@ -50,173 +78,221 @@ export default function ActivityLogs({ auth, activityLogs, filters = {} }) {
   const logs = activityLogs?.data ?? []
   const hasFilters = action || subjectType || fromDate || toDate || userId
 
-  return (
-    <AdminLayout auth={auth} title="Activity Logs">
-      <div className="row">
-        <div className="col-12">
-          <div className="card card-outline card-primary mb-3">
-            <div className="card-header">
-              <h3 className="card-title">Filters</h3>
-              <div className="card-tools">
-                {hasFilters && (
-                  <button
-                    type="button"
-                    className="btn btn-tool"
-                    onClick={() => {
-                      setAction('')
-                      setSubjectType('')
-                      setFromDate('')
-                      setToDate('')
-                      setUserId('')
-                      router.get(baseRoute, {}, { preserveState: false })
-                    }}
-                    title="Clear filters"
-                  >
-                    <i className="fas fa-times"></i> Clear
-                  </button>
-                )}
-              </div>
-            </div>
-            <div className="card-body">
-              <form onSubmit={applyFilters} className="form-inline flex-wrap gap-2 align-items-end">
-                <div className="form-group mr-2 mb-2">
-                  <label className="mr-1">User ID</label>
-                  <input
-                    type="number"
-                    className="form-control form-control-sm"
-                    placeholder="User ID"
-                    value={userId}
-                    onChange={(e) => setUserId(e.target.value)}
-                    min="1"
-                  />
-                </div>
-                <div className="form-group mr-2 mb-2">
-                  <label className="mr-1">Action</label>
-                  <input
-                    type="text"
-                    className="form-control form-control-sm"
-                    placeholder="e.g. created, updated"
-                    value={action}
-                    onChange={(e) => setAction(e.target.value)}
-                  />
-                </div>
-                <div className="form-group mr-2 mb-2">
-                  <label className="mr-1">Subject type</label>
-                  <input
-                    type="text"
-                    className="form-control form-control-sm"
-                    placeholder="e.g. Category, User"
-                    value={subjectType}
-                    onChange={(e) => setSubjectType(e.target.value)}
-                  />
-                </div>
-                <div className="form-group mr-2 mb-2">
-                  <label className="mr-1">From date</label>
-                  <input
-                    type="date"
-                    className="form-control form-control-sm"
-                    value={fromDate}
-                    onChange={(e) => setFromDate(e.target.value)}
-                  />
-                </div>
-                <div className="form-group mr-2 mb-2">
-                  <label className="mr-1">To date</label>
-                  <input
-                    type="date"
-                    className="form-control form-control-sm"
-                    value={toDate}
-                    onChange={(e) => setToDate(e.target.value)}
-                  />
-                </div>
-                <div className="form-group mr-2 mb-2">
-                  <label className="mr-1">Per page</label>
-                  <select
-                    className="form-control form-control-sm"
-                    value={perPage}
-                    onChange={(e) => setPerPage(Number(e.target.value))}
-                  >
-                    <option value={10}>10</option>
-                    <option value={20}>20</option>
-                    <option value={50}>50</option>
-                    <option value={100}>100</option>
-                  </select>
-                </div>
-                <div className="form-group mb-2">
-                  <button type="submit" className="btn btn-primary btn-sm">
-                    <i className="fas fa-search"></i> Filter
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
+  const links = activityLogs?.links ?? []
+  const prevLink = links[0]
+  const nextLink = links[links.length - 1]
+  const currentPage = activityLogs?.current_page ?? 1
+  const lastPage = activityLogs?.last_page ?? 1
+  const total = activityLogs?.total ?? logs.length
+  const from = activityLogs?.from ?? (logs.length ? 1 : 0)
+  const to = activityLogs?.to ?? logs.length
 
-          <div className="card">
-            <div className="card-header">
-              <h3 className="card-title">Activity Logs</h3>
-            </div>
-            <div className="card-body table-responsive p-0">
-              {logs.length === 0 ? (
-                <div className="p-4 text-center text-muted">No activity logs found.</div>
-              ) : (
-                <table className="table table-hover table-striped text-nowrap mb-0">
-                  <thead>
-                    <tr>
-                      <th>ID</th>
-                      <th>Date</th>
-                      <th>User</th>
-                      <th>Action</th>
-                      <th>Subject</th>
-                      <th>Description</th>
-                      <th></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {logs.map((log) => (
-                      <tr key={log.id}>
-                        <td>{log.id}</td>
-                        <td>{log.created_at ? new Date(log.created_at).toLocaleString() : '—'}</td>
-                        <td>{userName(log)}</td>
-                        <td>
-                          <span className="badge badge-info">{log.action || '—'}</span>
-                        </td>
-                        <td>{subjectDisplay(log)}</td>
-                        <td className="text-break" style={{ maxWidth: 280 }}>
-                          {log.description || '—'}
-                        </td>
-                        <td>
-                          <button
-                            type="button"
-                            className="btn btn-sm btn-secondary"
-                            onClick={() => setDetailLog(log)}
-                            title="View details"
-                          >
-                            <i className="fas fa-eye"></i>
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+  const inputClass =
+    'rounded-lg border border-[#E5E7EB] bg-white px-3 py-2 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[#102059]'
+  const labelClass = 'block text-xs font-semibold text-[#6B7280] mb-1'
+
+  return (
+    <SuperAdminOrAdminLayout auth={auth} title="Activity Logs">
+      <div>
+        {/* Page header */}
+        <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h1 className="mb-2 text-2xl font-semibold text-[#102059]">Activity Logs</h1>
+            <p className="text-sm text-[#6B7280]">
+              Track all user actions and system events
+            </p>
+          </div>
+        </div>
+
+        {/* Filters panel */}
+        <div className="mb-6 rounded-lg border border-[#E5E7EB] bg-white px-6 py-4">
+          <form onSubmit={applyFilters}>
+            <div className="mb-3 flex items-center justify-between">
+              <span className="text-sm font-semibold text-[#102059]">Filters</span>
+              {hasFilters && (
+                <button
+                  type="button"
+                  onClick={clearFilters}
+                  className="text-xs font-semibold text-[#E20E28] hover:underline"
+                >
+                  Clear filters
+                </button>
               )}
             </div>
-            {activityLogs?.links?.length > 1 && (
-              <div className="card-footer clearfix">
-                <ul className="pagination pagination-sm m-0 float-right">
-                  {activityLogs.links.map((link, i) => (
-                    <li
-                      key={i}
-                      className={`page-item ${link.active ? 'active' : ''} ${!link.url ? 'disabled' : ''}`}
-                    >
-                      <button
-                        type="button"
-                        className="page-link"
-                        dangerouslySetInnerHTML={{ __html: link.label }}
-                        onClick={() => goToPage(link.url)}
-                        disabled={!link.url}
-                      />
-                    </li>
-                  ))}
-                </ul>
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
+              <div>
+                <label className={labelClass}>User ID</label>
+                <input
+                  type="number"
+                  className={inputClass + ' w-full'}
+                  placeholder="User ID"
+                  value={userId}
+                  onChange={(e) => setUserId(e.target.value)}
+                  min="1"
+                />
+              </div>
+              <div>
+                <label className={labelClass}>Action</label>
+                <input
+                  type="text"
+                  className={inputClass + ' w-full'}
+                  placeholder="e.g. created, updated"
+                  value={action}
+                  onChange={(e) => setAction(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className={labelClass}>Subject type</label>
+                <input
+                  type="text"
+                  className={inputClass + ' w-full'}
+                  placeholder="e.g. Category, User"
+                  value={subjectType}
+                  onChange={(e) => setSubjectType(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className={labelClass}>From date</label>
+                <input
+                  type="date"
+                  className={inputClass + ' w-full'}
+                  value={fromDate}
+                  onChange={(e) => setFromDate(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className={labelClass}>To date</label>
+                <input
+                  type="date"
+                  className={inputClass + ' w-full'}
+                  value={toDate}
+                  onChange={(e) => setToDate(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className={labelClass}>Per page</label>
+                <select
+                  className={inputClass + ' w-full'}
+                  value={perPage}
+                  onChange={(e) => setPerPage(Number(e.target.value))}
+                >
+                  <option value={10}>10</option>
+                  <option value={20}>20</option>
+                  <option value={50}>50</option>
+                  <option value={100}>100</option>
+                </select>
+              </div>
+            </div>
+            <div className="mt-3 flex justify-end">
+              <button
+                type="submit"
+                className="rounded-lg bg-[#244693] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#102059]"
+              >
+                Apply Filters
+              </button>
+            </div>
+          </form>
+        </div>
+
+        {/* Logs list */}
+        <div className="rounded-lg border border-[#E5E7EB] bg-white">
+          <div className="divide-y divide-[#E5E7EB]">
+            {logs.length > 0 ? (
+              logs.map((log) => {
+                const name = userName(log)
+                const subject = subjectDisplay(log)
+                const date = log.created_at
+                  ? new Date(log.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
+                  : '—'
+                const time = log.created_at
+                  ? new Date(log.created_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+                  : ''
+                return (
+                  <div key={log.id} className="px-6 py-4">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-[#E5E7EB] bg-[#102059]">
+                        <span className="text-sm font-bold text-white">{getInitials(name)}</span>
+                      </div>
+
+                      <div className="grid min-w-0 flex-1 grid-cols-1 gap-4 gap-y-2 lg:grid-cols-[1fr_120px_200px_auto] lg:items-center">
+                        <div className="min-w-0">
+                          <div className="text-sm font-bold text-[#102059]">{name}</div>
+                          <div className="text-sm text-[#6B7280]">{subject}</div>
+                          {log.description && (
+                            <div className="mt-0.5 truncate text-xs text-[#9CA3AF]">
+                              {log.description.length > 80 ? log.description.slice(0, 80) + '…' : log.description}
+                            </div>
+                          )}
+                          <div className="mt-1 text-xs text-[#9CA3AF] lg:hidden">{date} {time}</div>
+                        </div>
+
+                        <div className="flex items-center">
+                          <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold capitalize ${actionBadgeClass(log.action)}`}>
+                            {log.action || '—'}
+                          </span>
+                        </div>
+
+                        <div className="hidden items-center lg:flex">
+                          <div>
+                            <div className="text-xs font-semibold uppercase tracking-wider text-[#9CA3AF]">Date</div>
+                            <div className="mt-0.5 text-xs text-[#9CA3AF]">{date}</div>
+                            {time && <div className="text-xs text-[#9CA3AF]">{time}</div>}
+                          </div>
+                        </div>
+
+                        <div className="flex items-center justify-end">
+                          <button
+                            type="button"
+                            onClick={() => setDetailLog(log)}
+                            className="rounded-lg p-1.5 text-[#244693] transition-colors hover:bg-[#F3F4F6]"
+                            title="View details"
+                          >
+                            <Eye className="h-5 w-5" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })
+            ) : (
+              <div className="py-12 text-center">
+                <p className="text-sm text-[#9CA3AF]">No activity logs found.</p>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Results count + pagination */}
+        <div className="mt-4 rounded-lg border border-[#E5E7EB] bg-white px-6 py-3">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-xs text-[#6B7280]">
+              Showing{' '}
+              <span className="font-semibold text-[#102059]">
+                {total === 0 ? '0' : `${from}-${to}`}
+              </span>{' '}
+              of <span className="font-semibold text-[#102059]">{total}</span> logs
+            </p>
+
+            {lastPage > 1 && (
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  className="rounded-lg px-3 py-1.5 text-xs font-semibold text-[#65676B] transition-colors hover:bg-[#F0F2F5] hover:text-[#244693] disabled:cursor-not-allowed disabled:opacity-50"
+                  disabled={!prevLink?.url}
+                  onClick={() => goToPage(prevLink?.url)}
+                >
+                  Previous
+                </button>
+                <span className="text-xs text-[#6B7280]">Page {currentPage} of {lastPage}</span>
+                <button
+                  type="button"
+                  className="rounded-lg px-3 py-1.5 text-xs font-semibold text-[#244693] transition-colors hover:bg-[#F0F2F5] disabled:cursor-not-allowed disabled:opacity-50"
+                  disabled={!nextLink?.url}
+                  onClick={() => goToPage(nextLink?.url)}
+                >
+                  Next
+                </button>
               </div>
             )}
           </div>
@@ -299,6 +375,6 @@ export default function ActivityLogs({ auth, activityLogs, filters = {} }) {
           </div>
         </>
       )}
-    </AdminLayout>
+    </SuperAdminOrAdminLayout>
   )
 }

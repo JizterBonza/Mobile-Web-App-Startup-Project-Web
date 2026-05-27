@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useForm } from '@inertiajs/react'
-import AdminLayout from '../../../Layouts/AdminLayout'
+import VendorKlasmeytLayout from '../../../Layouts/VendorKlasmeytLayout'
 
 export default function Inventory({ auth, inventory = [], shop, flash }) {
   const [showEditModal, setShowEditModal] = useState(false)
@@ -77,7 +77,7 @@ export default function Inventory({ auth, inventory = [], shop, flash }) {
   }
 
   return (
-    <AdminLayout auth={auth} title="Inventory Management">
+    <VendorKlasmeytLayout auth={auth} title="Inventory Management">
       {/* Flash Messages */}
       {flash?.success && showSuccessAlert && (
         <div className="alert alert-success alert-dismissible fade show" role="alert">
@@ -204,7 +204,7 @@ export default function Inventory({ auth, inventory = [], shop, flash }) {
           </div>
         </>
       )}
-    </AdminLayout>
+    </VendorKlasmeytLayout>
   )
 }
 

@@ -13,21 +13,11 @@ class Agrivet extends Model
         'registered_business_name',
         'owner_name',
         'description',
-        'address',
-        'city',
-        'postal_code',
-        'latitude',
-        'longitude',
         'contact_number',
         'email',
         'permits',
         'logo_url',
         'status',
-    ];
-
-    protected $casts = [
-        'latitude' => 'decimal:7',
-        'longitude' => 'decimal:7',
     ];
 
     /**
@@ -38,6 +28,15 @@ class Agrivet extends Model
         return $this->belongsToMany(User::class, 'agrivet_vendor', 'agrivet_id', 'vendor_id')
             ->withPivot('status')
             ->withTimestamps();
+    }
+
+    /**
+     * Owner/manager login account for this agrivet (manages stores under the business).
+     */
+    public function ownerManager()
+    {
+        return $this->hasOne(User::class, 'agrivet_id')
+            ->where('user_type', User::TYPE_OWNER_MANAGER);
     }
 
     /**

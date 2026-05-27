@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useForm, router } from '@inertiajs/react'
-import AdminLayout from '../../../Layouts/AdminLayout'
+import VendorKlasmeytLayout from '../../../Layouts/VendorKlasmeytLayout'
 
 export default function Products({ auth, products = [], shop, flash, stockImages = [], categories = [], subCategories = [] }) {
   const [showAddModal, setShowAddModal] = useState(false)
@@ -407,7 +407,7 @@ export default function Products({ auth, products = [], shop, flash, stockImages
   }
 
   return (
-    <AdminLayout auth={auth} title="Products">
+    <VendorKlasmeytLayout auth={auth} title="Products">
       {/* Flash Messages */}
       {flash?.success && showSuccessAlert && (
         <div className="alert alert-success alert-dismissible fade show" role="alert">
@@ -444,12 +444,9 @@ export default function Products({ auth, products = [], shop, flash, stockImages
                 <button
                   type="button"
                   className="btn btn-primary btn-sm"
-                  onClick={() => {
-                    setShowAddModal(true)
-                    setShowAddModalAnimation(false)
-                  }}
+                  onClick={() => router.visit('/dashboard/vendor/products/create')}
                 >
-                  <i className="fas fa-plus"></i> Add Product
+                  <i className="fas fa-plus"></i> Register Product
                 </button>
               </div>
             </div>
@@ -1284,7 +1281,7 @@ export default function Products({ auth, products = [], shop, flash, stockImages
           </div>
         </>
       )}
-    </AdminLayout>
+    </VendorKlasmeytLayout>
   )
 }
 

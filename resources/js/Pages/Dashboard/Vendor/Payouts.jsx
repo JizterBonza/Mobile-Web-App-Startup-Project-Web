@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import AdminLayout from '../../../Layouts/AdminLayout'
+import VendorKlasmeytLayout from '../../../Layouts/VendorKlasmeytLayout'
 
 export default function Payouts({ auth, payouts = [], totalRevenue = 0, totalOrders = 0, shop, flash }) {
   const [showSuccessAlert, setShowSuccessAlert] = useState(true)
@@ -11,7 +11,7 @@ export default function Payouts({ auth, payouts = [], totalRevenue = 0, totalOrd
   }, [flash])
 
   return (
-    <AdminLayout auth={auth} title="Payouts">
+    <VendorKlasmeytLayout auth={auth} title="Payouts">
       {/* Flash Messages */}
       {flash?.success && showSuccessAlert && (
         <div className="alert alert-success alert-dismissible fade show" role="alert">
@@ -134,7 +134,7 @@ export default function Payouts({ auth, payouts = [], totalRevenue = 0, totalOrd
           </div>
         </div>
       </div>
-    </AdminLayout>
+    </VendorKlasmeytLayout>
   )
 }
 

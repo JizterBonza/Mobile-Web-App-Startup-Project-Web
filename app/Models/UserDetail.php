@@ -29,10 +29,26 @@ class UserDetail extends Model
         'email_confirmed',
         'mobile_number',
         'shipping_address',
-        'profile_image_url', 
+        'profile_image_url',
         'avatar',
         'provider',
         'provider_id',
+        'vet_license_number',
+        'vet_license_expiration',
+        'vet_issuing_authority',
+        'vet_service_area',
+        'vet_specialization',
+        'vet_clinic_name',
+        'vet_clinic_address',
+        'vet_license_front_path',
+        'vet_license_back_path',
+        'rider_license_number',
+        'rider_vehicle_type',
+        'rider_vehicle_brand',
+        'rider_vehicle_model',
+        'rider_license_front_path',
+        'rider_license_back_path',
+        'rider_vehicle_registration_path',
     ];
 
     /**
@@ -44,6 +60,7 @@ class UserDetail extends Model
     {
         return [
             'email_confirmed' => 'boolean',
+            'vet_license_expiration' => 'date',
             'created_at' => 'datetime',
             'updated_at' => 'datetime',
         ];

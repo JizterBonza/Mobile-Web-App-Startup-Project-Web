@@ -9,9 +9,12 @@ use App\Models\Zone;
 use App\Models\User;
 use App\Models\UserDetail;
 use App\Models\UserCredential;
+use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 
 class AgrivetController extends Controller
@@ -31,11 +34,6 @@ class AgrivetController extends Controller
                     'registered_business_name' => $agrivet->registered_business_name,
                     'owner_name' => $agrivet->owner_name,
                     'description' => $agrivet->description,
-                    'address' => $agrivet->address,
-                    'city' => $agrivet->city,
-                    'postal_code' => $agrivet->postal_code,
-                    'latitude' => $agrivet->latitude,
-                    'longitude' => $agrivet->longitude,
                     'contact_number' => $agrivet->contact_number,
                     'email' => $agrivet->email,
                     'permits' => $agrivet->permits,
@@ -53,6 +51,189 @@ class AgrivetController extends Controller
     }
 
     /**
+     * Multi-step "Add Agrivet" wizard (Klasmeyt template parity).
+     */
+    public function create()
+    {
+        $zones = Zone::where('status', true)->orderBy('name')->get()
+            ->map(fn ($z) => [
+                'id' => $z->id,
+                'name' => $z->name,
+                'boundary' => $z->boundary,
+            ]);
+
+        return Inertia::render('Dashboard/AddAgrivet', [
+            'zones' => $zones,
+        ]);
+    }
+
+    /**
+     * Persist wizard: agrivet + primary shop, with uploaded store/permit images.
+     */
+    public function storeSetupWizard(Request $request)
+    {
+        $validated = $request->validate([
+            'first_name' => 'required|string|max:100',
+            'middle_name' => 'nullable|string|max:100',
+            'last_name' => 'required|string|max:100',
+            'email' => 'required|email|max:255|unique:user_details,email',
+            'password' => 'required|string|min:6|confirmed',
+            'phone_number' => 'required|string|max:30',
+            'agrivet_name' => 'required|string|max:150',
+            'store_name' => 'required|string|max:150',
+            'street' => 'required|string|max:255',
+            'barangay' => 'required|string|max:255',
+            'city' => 'required|string|max:100',
+            'province' => 'required|string|max:100',
+            'zip_code' => 'required|string|max:20',
+            'opening_time' => 'required|string|max:10',
+            'closing_time' => 'required|string|max:10',
+            'operating_days' => 'required|string|max:500',
+            'shop_lat' => 'nullable|numeric',
+            'shop_long' => 'nullable|numeric',
+            'store_image' => 'required|file|mimes:jpeg,jpg,png,webp|max:10240',
+            'permit_image' => 'required|file|mimes:jpeg,jpg,png,webp,pdf|max:10240',
+        ]);
+
+        $currentUser = auth()->user();
+        $redirectRoute = $currentUser->user_type === 'admin'
+            ? 'dashboard.admin.agrivets.index'
+            : 'dashboard.super-admin.agrivets.index';
+
+        try {
+            DB::transaction(function () use ($request, $validated) {
+                $storePath = $request->file('store_image')->store('agrivets/wizard', 'public');
+                $permitPath = $request->file('permit_image')->store('agrivets/wizard', 'public');
+
+                $disk = Storage::disk('public');
+                $storePhotoPublicUrl = $disk->url($storePath);
+                $permitPublicUrl = $disk->url($permitPath);
+
+                $ownerParts = array_filter([
+                    $validated['first_name'],
+                    $validated['middle_name'] ?? null,
+                    $validated['last_name'],
+                ]);
+                $ownerName = implode(' ', $ownerParts);
+
+                $permitsPayload = json_encode([
+                    'permit_document_url' => $permitPublicUrl,
+                    'operating_days' => $validated['operating_days'],
+                    'operating_hours' => $validated['opening_time'].' - '.$validated['closing_time'],
+                ]);
+
+                $lat = $request->filled('shop_lat') ? (float) $request->shop_lat : null;
+                $lng = $request->filled('shop_long') ? (float) $request->shop_long : null;
+
+                $agrivet = Agrivet::create([
+                    'name' => $validated['agrivet_name'],
+                    'registered_business_name' => $validated['agrivet_name'],
+                    'owner_name' => $ownerName,
+                    'description' => null,
+                    'contact_number' => $validated['phone_number'],
+                    'email' => $validated['email'],
+                    'permits' => $permitsPayload,
+                    'logo_url' => mb_substr($storePhotoPublicUrl, 0, 255),
+                    'status' => 'active',
+                ]);
+
+                $zoneId = null;
+                if ($lat !== null && $lng !== null) {
+                    $zone = Zone::findZoneContainingPoint($lat, $lng);
+                    if ($zone) {
+                        $zoneId = $zone->id;
+                    }
+                }
+
+                $daysLabel = $validated['operating_days'];
+                $hoursLabel = $validated['opening_time'].' - '.$validated['closing_time'];
+
+                Shop::create([
+                    'agrivet_id' => $agrivet->id,
+                    'zone_id' => $zoneId,
+                    'shop_name' => $validated['store_name'],
+                    'shop_description' => "Operating days: {$daysLabel}. Hours: {$hoursLabel}",
+                    'shop_address' => $validated['street'].', '.$validated['barangay'],
+                    'shop_city' => $validated['city'],
+                    'shop_postal_code' => $validated['zip_code'],
+                    'shop_province' => $validated['province'],
+                    'shop_lat' => $lat,
+                    'shop_long' => $lng,
+                    'contact_number' => $validated['phone_number'],
+                    'average_rating' => 0.00,
+                    'total_reviews' => 0,
+                    'shop_status' => 'active',
+                ]);
+
+                $username = explode('@', $validated['email'])[0].'_'.time();
+
+                $ownerDetail = UserDetail::create([
+                    'first_name' => $validated['first_name'],
+                    'middle_name' => $validated['middle_name'] ?? null,
+                    'last_name' => $validated['last_name'],
+                    'email' => $validated['email'],
+                    'mobile_number' => $validated['phone_number'],
+                ]);
+
+                $ownerCredential = UserCredential::create([
+                    'username' => $username,
+                    'password_hash' => Hash::make($validated['password']),
+                ]);
+
+                $ownerManager = User::create([
+                    'user_detail_id' => $ownerDetail->id,
+                    'user_credential_id' => $ownerCredential->id,
+                    'status' => 'active',
+                    'user_type' => User::TYPE_OWNER_MANAGER,
+                    'agrivet_id' => $agrivet->id,
+                ]);
+
+                $ownerManager->load(['userDetail', 'userCredential']);
+                $ownerLogPayload = $ownerManager->toArray();
+                if (isset($ownerLogPayload['user_credential'])) {
+                    $ownerLogPayload['user_credential'] = array_diff_key($ownerLogPayload['user_credential'], ['password_hash' => 1]);
+                }
+                ActivityLog::log(
+                    'created',
+                    "Owner/manager login created for Agrivet {$agrivet->name}: {$validated['email']}",
+                    $ownerManager,
+                    null,
+                    $ownerLogPayload
+                );
+
+                ActivityLog::log('created', "Agrivet created (wizard): {$agrivet->name}", $agrivet, null, $agrivet->toArray());
+            });
+
+            return redirect()->route($redirectRoute)
+                ->with('success', 'Agrivet, primary store, and owner/manager login created successfully.');
+        } catch (\Throwable $e) {
+            Log::error('Agrivet setup wizard failed', [
+                'message' => $e->getMessage(),
+                'exception' => $e,
+            ]);
+
+            $msg = 'Failed to create agrivet. Please try again.';
+            $sql = $e instanceof QueryException ? $e->getMessage() : '';
+
+            if (config('app.debug')) {
+                $msg = $e->getMessage();
+            } elseif ($sql !== '') {
+                if (str_contains($sql, 'agrivet_id') && str_contains($sql, 'Unknown column')) {
+                    $msg = 'The database is missing the owner/manager column on users. Run: php artisan migrate';
+                } elseif (str_contains($sql, 'user_type') && (str_contains($sql, 'Data truncated') || str_contains($sql, 'truncated'))) {
+                    $msg = 'The database user_type column does not allow owner_manager yet. Run: php artisan migrate';
+                } elseif (str_contains($sql, 'foreign key constraint')) {
+                    $msg = 'Database constraint failed while saving (check migrations and related records). Details are in storage/logs/laravel.log.';
+                }
+            }
+
+            return redirect()->back()
+                ->withErrors(['error' => $msg])
+                ->withInput();
+        }
+    }
+
+    /**
      * Store a newly created agrivet.
      */
     public function store(Request $request)
@@ -62,11 +243,6 @@ class AgrivetController extends Controller
             'registered_business_name' => 'nullable|string|max:255',
             'owner_name' => 'nullable|string|max:255',
             'description' => 'nullable|string',
-            'address' => 'nullable|string',
-            'city' => 'nullable|string|max:100',
-            'postal_code' => 'nullable|string|max:10',
-            'latitude' => 'nullable|numeric|between:-90,90',
-            'longitude' => 'nullable|numeric|between:-180,180',
             'contact_number' => 'nullable|string|max:20',
             'email' => 'nullable|string|email|max:255',
             'permits' => 'nullable|string',
@@ -80,11 +256,6 @@ class AgrivetController extends Controller
                 'registered_business_name' => $request->registered_business_name ?? null,
                 'owner_name' => $request->owner_name ?? null,
                 'description' => $request->description ?? null,
-                'address' => $request->address ?? null,
-                'city' => $request->city ?? null,
-                'postal_code' => $request->postal_code ?? null,
-                'latitude' => $request->latitude ?? null,
-                'longitude' => $request->longitude ?? null,
                 'contact_number' => $request->contact_number ?? null,
                 'email' => $request->email ?? null,
                 'permits' => $request->permits ?? null,
@@ -122,11 +293,6 @@ class AgrivetController extends Controller
             'registered_business_name' => 'nullable|string|max:255',
             'owner_name' => 'nullable|string|max:255',
             'description' => 'nullable|string',
-            'address' => 'nullable|string',
-            'city' => 'nullable|string|max:100',
-            'postal_code' => 'nullable|string|max:10',
-            'latitude' => 'nullable|numeric|between:-90,90',
-            'longitude' => 'nullable|numeric|between:-180,180',
             'contact_number' => 'nullable|string|max:20',
             'email' => 'nullable|string|email|max:255',
             'permits' => 'nullable|string',
@@ -140,11 +306,6 @@ class AgrivetController extends Controller
                 'registered_business_name' => $request->registered_business_name ?? null,
                 'owner_name' => $request->owner_name ?? null,
                 'description' => $request->description ?? null,
-                'address' => $request->address ?? null,
-                'city' => $request->city ?? null,
-                'postal_code' => $request->postal_code ?? null,
-                'latitude' => $request->latitude ?? null,
-                'longitude' => $request->longitude ?? null,
                 'contact_number' => $request->contact_number ?? null,
                 'email' => $request->email ?? null,
                 'permits' => $request->permits ?? null,
@@ -215,12 +376,16 @@ class AgrivetController extends Controller
                 'shop_address' => $shop->shop_address,
                 'shop_city' => $shop->shop_city,
                 'shop_postal_code' => $shop->shop_postal_code,
+                'shop_province' => $shop->shop_province,
                 'shop_lat' => $shop->shop_lat,
                 'shop_long' => $shop->shop_long,
                 'contact_number' => $shop->contact_number,
                 'average_rating' => $shop->average_rating,
                 'total_reviews' => $shop->total_reviews,
                 'shop_status' => $shop->shop_status,
+                'operating_days' => $shop->operating_days,
+                'operating_hours' => $shop->operating_hours,
+                'logo_url' => $shop->logo_url,
                 'vendors_count' => $shop->vendors()->count(),
                 'created_at' => $shop->created_at->format('Y-m-d H:i:s'),
             ];
@@ -230,6 +395,9 @@ class AgrivetController extends Controller
             'agrivet' => [
                 'id' => $agrivet->id,
                 'name' => $agrivet->name,
+                'owner_name' => $agrivet->owner_name,
+                'email' => $agrivet->email,
+                'contact_number' => $agrivet->contact_number,
             ],
             'zones' => $zones->map(fn ($z) => ['id' => $z->id, 'name' => $z->name, 'boundary' => $z->boundary]),
             'shops' => $shops,
@@ -243,17 +411,22 @@ class AgrivetController extends Controller
     {
         $agrivet = Agrivet::findOrFail($id);
 
-        $request->validate([
+        $validated = $request->validate([
             'shop_name' => 'required|string|max:150',
-            'shop_description' => 'nullable|string',
-            'shop_address' => 'nullable|string|max:255',
-            'shop_city' => 'nullable|string|max:100',
-            'shop_postal_code' => 'nullable|string|max:20',
+            'street' => 'required|string|max:255',
+            'barangay' => 'required|string|max:255',
+            'shop_city' => 'required|string|max:100',
+            'shop_postal_code' => 'required|string|max:20',
+            'shop_province' => 'required|string|max:100',
+            'opening_time' => 'required|string|max:10',
+            'closing_time' => 'required|string|max:10',
+            'operating_days' => 'required|string|max:500',
             'shop_lat' => 'nullable|numeric',
             'shop_long' => 'nullable|numeric',
-            'contact_number' => 'nullable|string|max:20',
             'shop_status' => 'nullable|string|in:active,inactive',
             'zone_id' => 'nullable|exists:zones,id',
+            'store_image' => 'required|file|mimes:jpeg,jpg,png,webp|max:10240',
+            'permit_image' => 'required|file|mimes:jpeg,jpg,png,webp,pdf|max:10240',
         ]);
 
         // If shop has coordinates, set zone_id to the zone whose boundary contains this point
@@ -266,20 +439,29 @@ class AgrivetController extends Controller
         }
 
         try {
+            $storePath = $request->file('store_image')->store('shops/covers', 'public');
+            $permitPath = $request->file('permit_image')->store('shops/permits', 'public');
+            $operatingHours = $validated['opening_time'].' - '.$validated['closing_time'];
+
             $shop = Shop::create([
                 'agrivet_id' => $agrivet->id,
                 'zone_id' => $zoneId,
-                'shop_name' => $request->shop_name,
-                'shop_description' => $request->shop_description ?? null,
-                'shop_address' => $request->shop_address ?? null,
-                'shop_city' => $request->shop_city ?? null,
-                'shop_postal_code' => $request->shop_postal_code ?? null,
+                'shop_name' => $validated['shop_name'],
+                'shop_description' => null,
+                'shop_address' => $validated['street'].', '.$validated['barangay'],
+                'shop_city' => $validated['shop_city'],
+                'shop_postal_code' => $validated['shop_postal_code'],
+                'shop_province' => $validated['shop_province'],
                 'shop_lat' => $request->shop_lat ?? null,
                 'shop_long' => $request->shop_long ?? null,
-                'contact_number' => $request->contact_number ?? null,
+                'contact_number' => $agrivet->contact_number,
                 'average_rating' => 0.00,
                 'total_reviews' => 0,
-                'shop_status' => $request->shop_status ?? 'active',
+                'shop_status' => $validated['shop_status'] ?? 'active',
+                'logo_url' => $storePath,
+                'permit_url' => $permitPath,
+                'operating_days' => $validated['operating_days'],
+                'operating_hours' => $operatingHours,
             ]);
 
             ActivityLog::log('created', "Shop created: {$shop->shop_name} (Agrivet: {$agrivet->name})", $shop, null, $shop->toArray());
@@ -313,11 +495,14 @@ class AgrivetController extends Controller
             'shop_address' => 'nullable|string|max:255',
             'shop_city' => 'nullable|string|max:100',
             'shop_postal_code' => 'nullable|string|max:20',
+            'shop_province' => 'nullable|string|max:100',
             'shop_lat' => 'nullable|numeric',
             'shop_long' => 'nullable|numeric',
             'contact_number' => 'nullable|string|max:20',
             'shop_status' => 'nullable|string|in:active,inactive',
             'zone_id' => 'nullable|exists:zones,id',
+            'operating_days' => 'nullable|string|max:255',
+            'operating_hours' => 'nullable|string|max:100',
         ]);
 
         // If shop has coordinates, set zone_id to the zone whose boundary contains this point
@@ -336,27 +521,46 @@ class AgrivetController extends Controller
                 'shop_address' => $request->shop_address ?? null,
                 'shop_city' => $request->shop_city ?? null,
                 'shop_postal_code' => $request->shop_postal_code ?? null,
+                'shop_province' => $request->shop_province ?? null,
                 'shop_lat' => $request->shop_lat ?? null,
                 'shop_long' => $request->shop_long ?? null,
                 'contact_number' => $request->contact_number ?? null,
                 'shop_status' => $request->shop_status ?? $shop->shop_status,
                 'zone_id' => $zoneId,
+                'operating_days' => $request->operating_days ?? $shop->operating_days,
+                'operating_hours' => $request->operating_hours ?? $shop->operating_hours,
             ]);
 
             ActivityLog::log('updated', "Shop updated: {$shop->shop_name}", $shop, $oldShopValues, $shop->fresh()->toArray());
 
-            $currentUser = auth()->user();
-            $redirectRoute = $currentUser->user_type === 'admin' 
-                ? 'dashboard.admin.agrivets.shops.index' 
-                : 'dashboard.super-admin.agrivets.shops.index';
-
-            return redirect()->route($redirectRoute, $id)
+            return $this->redirectToStoreInformation($id, $shopId)
                 ->with('success', 'Shop updated successfully.');
         } catch (\Exception $e) {
             return redirect()->back()
                 ->withErrors(['error' => 'Failed to update shop. Please try again.'])
                 ->withInput();
         }
+    }
+
+    /**
+     * Update shop cover photo.
+     */
+    public function updateShopCoverPhoto(Request $request, $id, $shopId)
+    {
+        $agrivet = Agrivet::findOrFail($id);
+        $shop = Shop::where('agrivet_id', $agrivet->id)->findOrFail($shopId);
+
+        $request->validate([
+            'cover_photo' => 'required|image|mimes:jpeg,png,jpg,gif,webp|max:5120',
+        ]);
+
+        $path = $request->file('cover_photo')->store('shops/covers', 'public');
+        $shop->update(['logo_url' => $path]);
+
+        ActivityLog::log('updated', "Shop cover photo updated: {$shop->shop_name}", $shop);
+
+        return $this->redirectToStoreInformation($id, $shopId)
+            ->with('success', 'Cover photo updated successfully.');
     }
 
     /**
@@ -385,6 +589,176 @@ class AgrivetController extends Controller
             return redirect()->back()
                 ->withErrors(['error' => 'Failed to deactivate shop. Please try again.']);
         }
+    }
+
+    /**
+     * Store information hub (tabs: about, vendors, products, insights).
+     */
+    public function showStoreInformation($id, $shopId)
+    {
+        $user = auth()->user();
+
+        if ($user->user_type === 'vendor') {
+            $ownsShop = $user->shops()
+                ->where('shops.id', $shopId)
+                ->where('shops.agrivet_id', $id)
+                ->exists();
+            abort_unless($ownsShop, 403);
+        }
+
+        $agrivet = Agrivet::findOrFail($id);
+        $shop = Shop::where('agrivet_id', $agrivet->id)
+            ->with([
+                'zone',
+                'ratingReviews' => function ($query) {
+                    $query->orderBy('created_at', 'desc')
+                        ->with(['user.userCredential', 'user.userDetail']);
+                },
+            ])
+            ->findOrFail($shopId);
+
+        $vendors = $shop->vendors()
+            ->where('user_type', 'vendor')
+            ->with(['userDetail', 'userCredential'])
+            ->orderBy('created_at', 'desc')
+            ->get()
+            ->map(fn ($vendor) => $this->mapVendorForStore($vendor));
+
+        $reassignableVendors = Shop::where('agrivet_id', $agrivet->id)
+            ->where('id', '!=', $shop->id)
+            ->with(['vendors' => function ($query) {
+                $query->where('users.user_type', 'vendor')
+                    ->with(['userDetail', 'userCredential']);
+            }])
+            ->get()
+            ->flatMap(function ($otherShop) {
+                return $otherShop->vendors
+                    ->filter(fn ($vendor) => ($vendor->pivot->status ?? 'active') === 'active')
+                    ->map(function ($vendor) use ($otherShop) {
+                        return array_merge($this->mapVendorForStore($vendor), [
+                            'shop_id' => $otherShop->id,
+                            'shop_name' => $otherShop->shop_name,
+                        ]);
+                    });
+            })
+            ->sortBy(fn ($vendor) => strtolower($vendor['first_name'].' '.$vendor['last_name']))
+            ->values()
+            ->all();
+
+        $reviews = $shop->ratingReviews->map(function ($review) {
+            $detail = $review->user->userDetail ?? null;
+            $firstName = $detail->first_name ?? '';
+            $lastName = $detail->last_name ?? '';
+            $name = trim("{$firstName} {$lastName}");
+            if ($name === '') {
+                $name = $review->user->userCredential->username ?? 'Customer';
+            }
+
+            $avatar = $detail->profile_image_url ?? $detail->avatar ?? null;
+            if ($avatar && ! str_starts_with($avatar, 'http')) {
+                $avatar = "/storage/{$avatar}";
+            }
+
+            return [
+                'id' => $review->id,
+                'customer_name' => $name,
+                'rating' => $review->rating,
+                'comment' => $review->review_text,
+                'created_at' => $review->created_at->format('Y-m-d H:i:s'),
+                'avatar' => $avatar,
+            ];
+        });
+
+        $products = DB::table('items')
+            ->leftJoin('category', 'items.category', '=', 'category.id')
+            ->leftJoin('sub_categories', 'items.sub_category_id', '=', 'sub_categories.id')
+            ->where('items.shop_id', $shop->id)
+            ->select(
+                'items.*',
+                'category.category_name',
+                'sub_categories.sub_category_name'
+            )
+            ->orderBy('items.created_at', 'desc')
+            ->get()
+            ->map(function ($item) {
+                $images = $item->item_images ? json_decode($item->item_images, true) : [];
+                if (! empty($images)) {
+                    $images = array_map(function ($image) {
+                        if (! is_string($image)) {
+                            return $image;
+                        }
+                        if (preg_match('/^https?:\/\//', $image)) {
+                            return $image;
+                        }
+                        if (str_starts_with($image, '/storage/')) {
+                            return $image;
+                        }
+                        if (str_contains($image, 'products/')) {
+                            return '/storage/'.$image;
+                        }
+
+                        return '/storage/products/'.basename($image);
+                    }, $images);
+                }
+
+                return [
+                    'id' => $item->id,
+                    'item_name' => $item->item_name,
+                    'item_description' => $item->item_description,
+                    'item_price' => $item->item_price,
+                    'item_quantity' => $item->item_quantity,
+                    'weight' => $item->weight,
+                    'metric' => $item->metric,
+                    'category' => $item->category,
+                    'category_name' => $item->category_name,
+                    'sub_category_id' => $item->sub_category_id,
+                    'sub_category_name' => $item->sub_category_name,
+                    'item_images' => $images,
+                    'item_status' => $item->item_status,
+                    'average_rating' => $item->average_rating,
+                    'total_reviews' => $item->total_reviews,
+                    'sold_count' => $item->sold_count,
+                    'created_at' => $item->created_at,
+                    'updated_at' => $item->updated_at,
+                ];
+            });
+
+        return Inertia::render('Dashboard/AgrivetStoreInformation', [
+            'agrivet' => [
+                'id' => $agrivet->id,
+                'name' => $agrivet->name,
+                'owner_name' => $agrivet->owner_name,
+                'email' => $agrivet->email,
+                'contact_number' => $agrivet->contact_number,
+                'status' => $agrivet->status,
+            ],
+            'shop' => [
+                'id' => $shop->id,
+                'zone_id' => $shop->zone_id,
+                'zone_name' => $shop->zone?->name,
+                'shop_name' => $shop->shop_name,
+                'shop_description' => $shop->shop_description,
+                'shop_address' => $shop->shop_address,
+                'shop_city' => $shop->shop_city,
+                'shop_postal_code' => $shop->shop_postal_code,
+                'shop_province' => $shop->shop_province,
+                'shop_lat' => $shop->shop_lat,
+                'shop_long' => $shop->shop_long,
+                'contact_number' => $shop->contact_number,
+                'average_rating' => $shop->average_rating,
+                'total_reviews' => $shop->total_reviews,
+                'shop_status' => $shop->shop_status,
+                'logo_url' => $shop->logo_url,
+                'permit_url' => $shop->permit_url,
+                'operating_days' => $shop->operating_days,
+                'operating_hours' => $shop->operating_hours,
+                'created_at' => $shop->created_at->format('Y-m-d H:i:s'),
+            ],
+            'vendors' => $vendors,
+            'reassignableVendors' => $reassignableVendors,
+            'reviews' => $reviews,
+            'products' => $products,
+        ]);
     }
 
     /**
@@ -509,14 +883,20 @@ class AgrivetController extends Controller
             }
             ActivityLog::log('created', "Vendor created and added to shop: {$vendor->userDetail->email} → {$shop->shop_name}", $vendor, null, $newVendorValues);
 
-            // Redirect based on current user's role
+            // Redirect to store information (vendors tab) based on current user's role
             $currentUser = auth()->user();
-            $redirectRoute = $currentUser->user_type === 'admin' 
-                ? 'dashboard.admin.agrivets.shops.vendors.index' 
-                : 'dashboard.super-admin.agrivets.shops.vendors.index';
+            $redirectRoute = match ($currentUser->user_type) {
+                'admin' => 'dashboard.admin.agrivets.shops.store-information',
+                'owner_manager' => 'dashboard.owner-manager.stores.store-information',
+                default => 'dashboard.super-admin.agrivets.shops.store-information',
+            };
 
-            return redirect()->route($redirectRoute, [$id, $shopId])
-                ->with('success', 'Vendor created and added to shop successfully.');
+            $vendorName = trim("{$request->first_name} ".($request->middle_name ? $request->middle_name.' ' : '')."{$request->last_name}");
+
+            $redirectParams = $currentUser->user_type === 'owner_manager' ? [$shopId] : [$id, $shopId];
+
+            return redirect(route($redirectRoute, $redirectParams).'?tab=vendors')
+                ->with('success', "{$vendorName} has been added to {$shop->shop_name} successfully.");
         } catch (\Exception $e) {
             DB::rollBack();
             return redirect()->back()
@@ -700,5 +1080,106 @@ class AgrivetController extends Controller
             return redirect()->back()
                 ->withErrors(['error' => 'Failed to add vendor. Please try again.']);
         }
+    }
+
+    /**
+     * Reassign a vendor from another shop in the same agrivet to this shop.
+     */
+    public function reassignVendor(Request $request, $id, $shopId, $vendorId)
+    {
+        $request->validate([
+            'from_shop_id' => 'required|exists:shops,id',
+        ]);
+
+        $agrivet = Agrivet::findOrFail($id);
+        $targetShop = Shop::where('agrivet_id', $agrivet->id)->findOrFail($shopId);
+        $sourceShop = Shop::where('agrivet_id', $agrivet->id)->findOrFail($request->from_shop_id);
+
+        if ($sourceShop->id === $targetShop->id) {
+            return redirect()->back()
+                ->withErrors(['error' => 'Cannot reassign vendor to the same store.']);
+        }
+
+        $vendor = User::with('userDetail')->findOrFail($vendorId);
+
+        if ($vendor->user_type !== 'vendor') {
+            return redirect()->back()
+                ->withErrors(['error' => 'Selected user is not a vendor.']);
+        }
+
+        if (! $sourceShop->vendors()->where('users.id', $vendorId)->exists()) {
+            return redirect()->back()
+                ->withErrors(['error' => 'Vendor is not assigned to the source store.']);
+        }
+
+        if ($targetShop->vendors()->where('users.id', $vendorId)->exists()) {
+            return redirect()->back()
+                ->withErrors(['error' => 'Vendor is already assigned to this store.']);
+        }
+
+        try {
+            DB::beginTransaction();
+
+            $sourceShop->vendors()->detach($vendorId);
+
+            $targetShop->vendors()->attach($vendorId, [
+                'agrivet_id' => $agrivet->id,
+                'status' => 'active',
+            ]);
+
+            DB::commit();
+
+            $vendorName = trim(($vendor->userDetail->first_name ?? '').' '.($vendor->userDetail->last_name ?? ''));
+            if ($vendorName === '') {
+                $vendorName = $vendor->userDetail->email ?? "Vendor #{$vendorId}";
+            }
+
+            ActivityLog::log(
+                'reassigned',
+                "Vendor reassigned: {$vendorName} from {$sourceShop->shop_name} to {$targetShop->shop_name}",
+                $vendor
+            );
+
+            return $this->redirectToStoreInformation($id, $shopId)
+                ->with('success', "{$vendorName} has been reassigned to {$targetShop->shop_name} successfully.");
+        } catch (\Exception $e) {
+            DB::rollBack();
+
+            return redirect()->back()
+                ->withErrors(['error' => 'Failed to reassign vendor. Please try again.']);
+        }
+    }
+
+    private function mapVendorForStore($vendor): array
+    {
+        return [
+            'id' => $vendor->id,
+            'first_name' => $vendor->userDetail->first_name ?? '',
+            'middle_name' => $vendor->userDetail->middle_name ?? '',
+            'last_name' => $vendor->userDetail->last_name ?? '',
+            'email' => $vendor->userDetail->email ?? '',
+            'mobile_number' => $vendor->userDetail->mobile_number ?? '',
+            'username' => $vendor->userCredential->username ?? '',
+            'status' => $vendor->status,
+            'pivot' => [
+                'status' => $vendor->pivot->status ?? 'active',
+            ],
+            'created_at' => $vendor->created_at->format('Y-m-d H:i:s'),
+        ];
+    }
+
+    private function redirectToStoreInformation($agrivetId, $shopId)
+    {
+        $userType = auth()->user()->user_type;
+
+        if ($userType === 'owner_manager') {
+            return redirect()->route('dashboard.owner-manager.stores.store-information', $shopId);
+        }
+
+        $route = $userType === 'admin'
+            ? 'dashboard.admin.agrivets.shops.store-information'
+            : 'dashboard.super-admin.agrivets.shops.store-information';
+
+        return redirect()->route($route, [$agrivetId, $shopId]);
     }
 }

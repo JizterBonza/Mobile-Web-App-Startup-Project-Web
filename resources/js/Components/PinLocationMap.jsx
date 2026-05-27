@@ -8,8 +8,8 @@ import { useState, useEffect, useRef } from 'react'
  *
  * Props:
  * - initialLat, initialLng: Optional initial center / pin position
- * - initialAddress, initialCity, initialPostalCode: Optional display values
- * - onLocationSelect: Callback when a location is pinned: ({ address, city, postal_code, latitude, longitude })
+ * - initialAddress, initialCity, initialProvince, initialPostalCode: Optional display values
+ * - onLocationSelect: Callback when a location is pinned: ({ address, city, province, postal_code, latitude, longitude })
  * - apiKey: Optional; falls back to window.GOOGLE_MAPS_API_KEY
  * - height: Map container height (default: 320px)
  * - className: Extra CSS classes for the wrapper
@@ -128,11 +128,19 @@ function createShopLabelOverlay(map, position, shopName) {
 const DEFAULT_CENTER = { lat: 14.5995, lng: 120.9842 } // Manila area
 const DEFAULT_ZOOM = 14
 
+/** Avoid treating '' as 0 — empty form values must not become a fake pin at (0,0). */
+function parseCoord(value) {
+  if (value === '' || value == null) return null
+  const n = typeof value === 'number' ? value : parseFloat(String(value).trim())
+  return Number.isFinite(n) ? n : null
+}
+
 export default function PinLocationMap({
   initialLat,
   initialLng,
   initialAddress = '',
   initialCity = '',
+  initialProvince = '',
   initialPostalCode = '',
   onLocationSelect,
   apiKey,
@@ -153,6 +161,11 @@ export default function PinLocationMap({
   const [isGoogleLoaded, setIsGoogleLoaded] = useState(false)
   const [isGeocoding, setIsGeocoding] = useState(false)
   const [mapError, setMapError] = useState(null)
+
+  const onLocationSelectRef = useRef(onLocationSelect)
+  useEffect(() => {
+    onLocationSelectRef.current = onLocationSelect
+  }, [onLocationSelect])
 
   const getApiKey = () => apiKey || (typeof window !== 'undefined' && window.GOOGLE_MAPS_API_KEY) || ''
 
@@ -201,14 +214,78 @@ export default function PinLocationMap({
     }
   }, [apiKey])
 
-  // Initialize map and marker when Google is loaded
+  function reverseGeocode(lat, lng) {
+    if (!window.google?.maps?.Geocoder) return
+    setIsGeocoding(true)
+    setMapError(null)
+
+    const geocoder = new window.google.maps.Geocoder()
+    const latLng = { lat: Number(lat), lng: Number(lng) }
+
+    geocoder.geocode({ location: latLng }, (results, status) => {
+      setIsGeocoding(false)
+      if (status !== 'OK' || !results || results.length === 0) {
+        onLocationSelectRef.current?.({
+          address: '',
+          city: '',
+          province: '',
+          postal_code: '',
+          latitude: lat,
+          longitude: lng,
+        })
+        return
+      }
+
+      const r = results[0]
+      let city = ''
+      let province = ''
+      let postal_code = ''
+
+      if (r.address_components) {
+        for (const comp of r.address_components) {
+          if (comp.types.includes('locality')) {
+            city = comp.long_name || comp.short_name || ''
+          }
+          if (comp.types.includes('postal_code')) {
+            postal_code = comp.long_name || comp.short_name || ''
+          }
+          if (comp.types.includes('administrative_area_level_1')) {
+            province = comp.long_name || comp.short_name || ''
+          }
+          if (!city && comp.types.includes('administrative_area_level_2')) {
+            city = comp.long_name || comp.short_name || ''
+          }
+        }
+      }
+
+      const address = r.formatted_address || ''
+
+      onLocationSelectRef.current?.({
+        address,
+        city,
+        province,
+        postal_code,
+        latitude: lat,
+        longitude: lng,
+      })
+    })
+  }
+
+  function attachMarkerDragEnd(marker) {
+    marker.addListener('dragend', () => {
+      const pos = marker.getPosition()
+      if (pos) reverseGeocode(pos.lat(), pos.lng())
+    })
+  }
+
+  // Initialize map when Google is loaded (zones/shops redraw). Do not depend on lat/lng — see sync effect below.
   useEffect(() => {
     if (!isGoogleLoaded || !mapRef.current || !window.google?.maps) return
 
-    const hasInitial = initialLat != null && initialLng != null && !isNaN(initialLat) && !isNaN(initialLng)
-    const center = hasInitial
-      ? { lat: Number(initialLat), lng: Number(initialLng) }
-      : DEFAULT_CENTER
+    const latP = parseCoord(initialLat)
+    const lngP = parseCoord(initialLng)
+    const hasInitial = latP != null && lngP != null
+    const center = hasInitial ? { lat: latP, lng: lngP } : DEFAULT_CENTER
 
     const map = new window.google.maps.Map(mapRef.current, {
       center,
@@ -217,11 +294,11 @@ export default function PinLocationMap({
       streetViewControl: false,
       fullscreenControl: true,
       zoomControl: true,
+      gestureHandling: 'greedy',
     })
 
     mapInstanceRef.current = map
 
-    // Initial marker if we have coordinates
     if (hasInitial) {
       const marker = new window.google.maps.Marker({
         position: center,
@@ -230,16 +307,10 @@ export default function PinLocationMap({
         title: 'Pinned location',
       })
       markerRef.current = marker
-
-      marker.addListener('dragend', () => {
-        const pos = marker.getPosition()
-        if (pos && onLocationSelect) {
-          reverseGeocode(pos.lat(), pos.lng())
-        }
-      })
+      attachMarkerDragEnd(marker)
     }
 
-    // Click to place or move pin
+    // Click to place or move pin (polygon clickable:false so clicks reach the map)
     map.addListener('click', (e) => {
       const lat = e.latLng.lat()
       const lng = e.latLng.lng()
@@ -253,14 +324,9 @@ export default function PinLocationMap({
           title: 'Pinned location',
         })
         markerRef.current = marker
-        marker.addListener('dragend', () => {
-          const pos = marker.getPosition()
-          if (pos && onLocationSelect) reverseGeocode(pos.lat(), pos.lng())
-        })
+        attachMarkerDragEnd(marker)
       }
-      if (onLocationSelect) {
-        reverseGeocode(lat, lng)
-      }
+      reverseGeocode(lat, lng)
     })
 
     // Draw zone boundaries (polygons) and zone name labels
@@ -283,6 +349,7 @@ export default function PinLocationMap({
         strokeWeight: 2,
         fillColor: '#198754',
         fillOpacity: 0.15,
+        clickable: false,
         map,
       })
       polygons.push(polygon)
@@ -309,6 +376,7 @@ export default function PinLocationMap({
         const marker = new window.google.maps.Marker({
           position,
           map,
+          clickable: false,
           title: shop.shop_name ?? shop.name ?? 'Shop',
           icon: {
             path: window.google.maps.SymbolPath.CIRCLE,
@@ -342,59 +410,46 @@ export default function PinLocationMap({
       }
       mapInstanceRef.current = null
     }
-  }, [isGoogleLoaded, initialLat, initialLng, zoneBoundaries, zones, shopLocations])
+  }, [isGoogleLoaded, zoneBoundaries, zones, shopLocations])
 
-  function reverseGeocode(lat, lng) {
-    if (!window.google?.maps?.Geocoder) return
-    setIsGeocoding(true)
-    setMapError(null)
+  // Keep marker/center in sync when lat/lng are edited in the form (without remounting the whole map).
+  useEffect(() => {
+    if (!isGoogleLoaded || !window.google?.maps || !mapInstanceRef.current) return
 
-    const geocoder = new window.google.maps.Geocoder()
-    const latLng = { lat: Number(lat), lng: Number(lng) }
+    const lat = parseCoord(initialLat)
+    const lng = parseCoord(initialLng)
+    const map = mapInstanceRef.current
 
-    geocoder.geocode({ location: latLng }, (results, status) => {
-      setIsGeocoding(false)
-      if (status !== 'OK' || !results || results.length === 0) {
-        // Still pass coordinates; address fields may be empty
-        onLocationSelect?.({
-          address: '',
-          city: '',
-          postal_code: '',
-          latitude: lat,
-          longitude: lng,
-        })
-        return
+    const latEmpty = initialLat === '' || initialLat == null
+    const lngEmpty = initialLng === '' || initialLng == null
+    if (latEmpty && lngEmpty) {
+      if (markerRef.current) {
+        markerRef.current.setMap(null)
+        markerRef.current = null
       }
+      return
+    }
 
-      const r = results[0]
-      let city = ''
-      let postal_code = ''
+    // Incomplete pair (typing) — don't move or remove the pin yet
+    if (lat == null || lng == null) {
+      return
+    }
 
-      if (r.address_components) {
-        for (const comp of r.address_components) {
-          if (comp.types.includes('locality')) {
-            city = comp.long_name || comp.short_name || ''
-          }
-          if (comp.types.includes('postal_code')) {
-            postal_code = comp.long_name || comp.short_name || ''
-          }
-          if (!city && comp.types.includes('administrative_area_level_2')) {
-            city = comp.long_name || comp.short_name || ''
-          }
-        }
-      }
-
-      const address = r.formatted_address || ''
-
-      onLocationSelect?.({
-        address,
-        city,
-        postal_code,
-        latitude: lat,
-        longitude: lng,
+    const latLng = new window.google.maps.LatLng(lat, lng)
+    if (markerRef.current) {
+      markerRef.current.setPosition(latLng)
+    } else {
+      const marker = new window.google.maps.Marker({
+        position: latLng,
+        map,
+        draggable: true,
+        title: 'Pinned location',
       })
-    })
-  }
+      markerRef.current = marker
+      attachMarkerDragEnd(marker)
+    }
+    map.panTo(latLng)
+  }, [initialLat, initialLng, isGoogleLoaded])
 
   return (
     <div className={className}>

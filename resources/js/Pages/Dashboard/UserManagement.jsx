@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useForm, router } from '@inertiajs/react'
-import AdminLayout from '../../Layouts/AdminLayout'
+import SuperAdminOrAdminLayout from '../../Layouts/SuperAdminOrAdminLayout'
 
 export default function UserManagement({ auth, users = [], flash }) {
   const [showAddModal, setShowAddModal] = useState(false)
@@ -297,7 +297,7 @@ export default function UserManagement({ auth, users = [], flash }) {
   }
 
   return (
-    <AdminLayout auth={auth} title="User Management">
+    <SuperAdminOrAdminLayout auth={auth} title="User Management">
       {/* Flash Messages */}
       {flash?.success && (
         <div className="alert alert-success alert-dismissible fade show" role="alert">
@@ -826,6 +826,6 @@ export default function UserManagement({ auth, users = [], flash }) {
           </div>
         </>
       )}
-    </AdminLayout>
+    </SuperAdminOrAdminLayout>
   )
 }

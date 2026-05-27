@@ -29,12 +29,17 @@ class Shop extends Model
         'shop_address',
         'shop_city',
         'shop_postal_code',
+        'shop_province',
         'shop_lat',
         'shop_long',
         'contact_number',
         'average_rating',
         'total_reviews',
         'shop_status',
+        'logo_url',
+        'permit_url',
+        'operating_days',
+        'operating_hours',
     ];
 
     /**

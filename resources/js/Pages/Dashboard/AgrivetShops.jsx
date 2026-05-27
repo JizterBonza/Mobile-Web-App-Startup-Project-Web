@@ -1,7 +1,19 @@
 import { useState, useEffect, useMemo } from 'react'
-import { useForm, router, Link } from '@inertiajs/react'
-import AdminLayout from '../../Layouts/AdminLayout'
+import { useForm, router } from '@inertiajs/react'
+import { ArrowLeft, Plus, Star, Store, Trash2, Upload } from 'lucide-react'
+import SuperAdminOrAdminLayout from '../../Layouts/SuperAdminOrAdminLayout'
 import PinLocationMap from '../../Components/PinLocationMap'
+
+const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+const FULL_DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+
+function shopCoverUrl(logoUrl) {
+  if (!logoUrl) return null
+  if (logoUrl.startsWith('http://') || logoUrl.startsWith('https://') || logoUrl.startsWith('/')) {
+    return logoUrl
+  }
+  return `/storage/${logoUrl}`
+}
 
 export default function AgrivetShops({ auth, agrivet, zones = [], shops = [], flash }) {
   // Zones with valid boundaries for map (polygons + labels)
@@ -31,16 +43,27 @@ export default function AgrivetShops({ auth, agrivet, zones = [], shops = [], fl
   const [showRemoveModalAnimation, setShowRemoveModalAnimation] = useState(false)
   const [selectedShop, setSelectedShop] = useState(null)
   const [shopToRemove, setShopToRemove] = useState(null)
+  const [flashSuccessDismissed, setFlashSuccessDismissed] = useState(false)
+  const [flashErrorDismissed, setFlashErrorDismissed] = useState(false)
+  const [operatingDays, setOperatingDays] = useState([])
+  const [storeImagePreview, setStoreImagePreview] = useState(null)
+  const [permitImagePreview, setPermitImagePreview] = useState(null)
+  const [permitIsPdf, setPermitIsPdf] = useState(false)
 
   const addForm = useForm({
     shop_name: '',
-    shop_description: '',
-    shop_address: '',
+    street: '',
+    barangay: '',
     shop_city: '',
+    shop_province: '',
     shop_postal_code: '',
     shop_lat: '',
     shop_long: '',
-    contact_number: '',
+    opening_time: '08:00',
+    closing_time: '18:00',
+    operating_days: '',
+    store_image: null,
+    permit_image: null,
     shop_status: 'active',
   })
 
@@ -49,6 +72,7 @@ export default function AgrivetShops({ auth, agrivet, zones = [], shops = [], fl
     shop_description: '',
     shop_address: '',
     shop_city: '',
+    shop_province: '',
     shop_postal_code: '',
     shop_lat: '',
     shop_long: '',
@@ -83,12 +107,20 @@ export default function AgrivetShops({ auth, agrivet, zones = [], shops = [], fl
     }
   }, [showRemoveModal])
 
+  const resetAddFormState = () => {
+    addForm.reset()
+    setOperatingDays([])
+    setStoreImagePreview(null)
+    setPermitImagePreview(null)
+    setPermitIsPdf(false)
+  }
+
   // Modal close handlers with animation
   const closeAddModal = () => {
     setShowAddModalAnimation(false)
     setTimeout(() => {
       setShowAddModal(false)
-      addForm.reset()
+      resetAddFormState()
     }, 300)
   }
 
@@ -115,11 +147,16 @@ export default function AgrivetShops({ auth, agrivet, zones = [], shops = [], fl
       closeAddModal()
       closeEditModal()
       closeRemoveModal()
-      addForm.reset()
+      resetAddFormState()
       editForm.reset()
       setShopToRemove(null)
     }
   }, [flash])
+
+  useEffect(() => {
+    setFlashSuccessDismissed(false)
+    setFlashErrorDismissed(false)
+  }, [flash?.success, flash?.error])
 
   // Determine base route based on user type
   const getBaseRoute = () => {
@@ -130,12 +167,66 @@ export default function AgrivetShops({ auth, agrivet, zones = [], shops = [], fl
 
   const handleAddShop = (e) => {
     e.preventDefault()
+    if (operatingDays.length === 0) {
+      alert('Please select at least one operating day for your store.')
+      return
+    }
+    if (!addForm.data.store_image || !addForm.data.permit_image) {
+      alert('Please upload both store photo and business permit.')
+      return
+    }
+    if (!addForm.data.opening_time || !addForm.data.closing_time) {
+      alert('Please set both opening and closing times for your store.')
+      return
+    }
+
+    const daysSorted = [...operatingDays].sort((a, b) => FULL_DAYS.indexOf(a) - FULL_DAYS.indexOf(b))
+    addForm.transform((data) => ({
+      ...data,
+      operating_days: daysSorted.join(', '),
+    }))
     addForm.post(`${getBaseRoute()}/${agrivet.id}/shops`, {
+      forceFormData: true,
       preserveScroll: true,
+      onFinish: () => {
+        addForm.transform((data) => data)
+      },
       onSuccess: () => {
-        addForm.reset()
+        resetAddFormState()
       },
     })
+  }
+
+  const handleStoreImageUpload = (e) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      addForm.setData('store_image', file)
+      const reader = new FileReader()
+      reader.onloadend = () => setStoreImagePreview(reader.result)
+      reader.readAsDataURL(file)
+    }
+  }
+
+  const handlePermitImageUpload = (e) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      addForm.setData('permit_image', file)
+      const isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name)
+      setPermitIsPdf(isPdf)
+      if (isPdf) {
+        setPermitImagePreview(null)
+        return
+      }
+      const reader = new FileReader()
+      reader.onloadend = () => setPermitImagePreview(reader.result)
+      reader.readAsDataURL(file)
+    }
+  }
+
+  const toggleDay = (fullDay) => {
+    setOperatingDays((prev) =>
+      prev.includes(fullDay) ? prev.filter((d) => d !== fullDay) : [...prev, fullDay],
+    )
   }
 
   const handleEditShop = (shop) => {
@@ -145,6 +236,7 @@ export default function AgrivetShops({ auth, agrivet, zones = [], shops = [], fl
       shop_description: shop.shop_description || '',
       shop_address: shop.shop_address || '',
       shop_city: shop.shop_city || '',
+      shop_province: shop.shop_province || '',
       shop_postal_code: shop.shop_postal_code || '',
       shop_lat: shop.shop_lat || '',
       shop_long: shop.shop_long || '',
@@ -183,132 +275,277 @@ export default function AgrivetShops({ auth, agrivet, zones = [], shops = [], fl
     }
   }
 
-  const getStatusBadge = (status) => {
-    if (status === 'active') {
-      return <span className="badge badge-success">Active</span>
-    }
-    return <span className="badge badge-danger">Inactive</span>
+  const openRemoveStore = (e, shop) => {
+    e.stopPropagation()
+    handleRemoveShop(shop.id)
+  }
+
+  const ratingValue = (shop) => {
+    const n = parseFloat(shop.average_rating)
+    return Number.isFinite(n) ? n : 0
   }
 
   return (
-    <AdminLayout auth={auth} title={`Shops - ${agrivet.name}`}>
+    <SuperAdminOrAdminLayout auth={auth} title={`Shops - ${agrivet.name}`}>
       {/* Flash Messages */}
-      {flash?.success && (
+      {flash?.success && !flashSuccessDismissed && (
         <div className="alert alert-success alert-dismissible fade show" role="alert">
           <strong>Success!</strong> {flash.success}
-          <button type="button" className="close" data-dismiss="alert" aria-label="Close" onClick={() => router.reload({ only: ['flash'] })}>
+          <button
+            type="button"
+            className="close"
+            data-dismiss="alert"
+            aria-label="Close"
+            onClick={() => setFlashSuccessDismissed(true)}
+          >
             <span aria-hidden="true">&times;</span>
           </button>
         </div>
       )}
 
-      {flash?.error && (
+      {flash?.error && !flashErrorDismissed && (
         <div className="alert alert-danger alert-dismissible fade show" role="alert">
           <strong>Error!</strong> {flash.error}
-          <button type="button" className="close" data-dismiss="alert" aria-label="Close" onClick={() => router.reload({ only: ['flash'] })}>
+          <button
+            type="button"
+            className="close"
+            data-dismiss="alert"
+            aria-label="Close"
+            onClick={() => setFlashErrorDismissed(true)}
+          >
             <span aria-hidden="true">&times;</span>
           </button>
         </div>
       )}
 
-      <div className="row mb-3">
-        <div className="col-12">
-          <Link href={getBaseRoute()} className="btn btn-secondary btn-sm">
-            <i className="fas fa-arrow-left"></i> Back to Agrivets
-          </Link>
+      <div>
+        {/* Back + title */}
+        <div className="mb-6">
+          <button
+            type="button"
+            onClick={() => router.visit(getBaseRoute())}
+            className="group mb-4 rounded-lg border border-[#E5E7EB] bg-white p-3 transition-all hover:bg-[#F9FAFB]"
+            title="Back to Agrivets"
+          >
+            <ArrowLeft className="h-5 w-5 text-[#6B7280] transition-colors group-hover:text-[#102059]" />
+          </button>
+          <h1 className="text-2xl font-semibold text-[#102059]">{agrivet.name}</h1>
         </div>
-      </div>
 
-      <div className="row">
-        <div className="col-12">
-          <div className="card">
-            <div className="card-header">
-              <h3 className="card-title">Shops for {agrivet.name}</h3>
-              <div className="card-tools">
-                <button
-                  type="button"
-                  className="btn btn-primary btn-sm"
-                  onClick={() => {
-                    setShowAddModal(true)
-                    setShowAddModalAnimation(false)
-                  }}
-                >
-                  <i className="fas fa-plus"></i> Add Shop
-                </button>
-              </div>
+        {/* Account Information */}
+        <div className="mb-6 rounded-lg border border-[#E5E7EB] bg-white p-6">
+          <h2 className="mb-4 text-lg font-semibold text-[#102059]">Account Information</h2>
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+            <div>
+              <label className="text-xs font-semibold uppercase tracking-wider text-[#6B7280]">
+                Owner Name
+              </label>
+              <p className="mt-1 text-sm text-[#102059]">{agrivet.owner_name || 'N/A'}</p>
             </div>
-            <div className="card-body table-responsive p-0">
-              <table className="table table-hover text-nowrap">
-                <thead>
-                  <tr>
-                    <th>ID</th>
-                    <th>Shop Name</th>
-                    <th>Zone</th>
-                    <th>Address</th>
-                    <th>Contact</th>
-                    <th>Vendors</th>
-                    <th>Rating</th>
-                    <th>Status</th>
-                    <th>Created At</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {shops.length === 0 ? (
-                    <tr>
-                      <td colSpan="10" className="text-center">No shops found</td>
-                    </tr>
-                  ) : (
-                    shops.map((shop) => (
-                      <tr key={shop.id}>
-                        <td>{shop.id}</td>
-                        <td>{shop.shop_name}</td>
-                        <td>{shop.zone_name ? <span className="badge badge-secondary">{shop.zone_name}</span> : '-'}</td>
-                        <td>{shop.shop_address || '-'}</td>
-                        <td>{shop.contact_number || '-'}</td>
-                        <td>
-                          <span className="badge badge-info">{shop.vendors_count || 0} vendor(s)</span>
-                        </td>
-                        <td>
-                          <span className="badge badge-warning">
-                            <i className="fas fa-star mr-1"></i>
-                            {shop.average_rating || '0.00'} ({shop.total_reviews || 0})
-                          </span>
-                        </td>
-                        <td>{getStatusBadge(shop.shop_status)}</td>
-                        <td>{new Date(shop.created_at).toLocaleDateString()}</td>
-                        <td>
-                          <Link
-                            href={`${getBaseRoute()}/${agrivet.id}/shops/${shop.id}/vendors`}
-                            className="btn btn-sm btn-primary mr-1"
-                            title="View Vendors"
-                          >
-                            <i className="fas fa-users"></i>
-                          </Link>
-                          <button
-                            className="btn btn-sm btn-info mr-1"
-                            onClick={() => handleEditShop(shop)}
-                            title="Edit Shop"
-                          >
-                            <i className="fas fa-edit"></i>
-                          </button>
-                          {shop.shop_status === 'active' && (
-                            <button
-                              className="btn btn-sm btn-danger"
-                              onClick={() => handleRemoveShop(shop.id)}
-                              title="Deactivate Shop"
-                            >
-                              <i className="fas fa-trash"></i>
-                            </button>
-                          )}
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
+            <div>
+              <label className="text-xs font-semibold uppercase tracking-wider text-[#6B7280]">
+                Email Address
+              </label>
+              <p className="mt-1 text-sm text-[#102059]">{agrivet.email || 'N/A'}</p>
+            </div>
+            <div>
+              <label className="text-xs font-semibold uppercase tracking-wider text-[#6B7280]">
+                Phone Number
+              </label>
+              <p className="mt-1 text-sm text-[#102059]">{agrivet.contact_number || 'N/A'}</p>
             </div>
           </div>
+        </div>
+
+        {/* List of Stores */}
+        <div>
+          <h2 className="mb-4 text-lg font-semibold text-[#102059]">List of Stores</h2>
+          {shops.length > 0 ? (
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+              {shops.map((shop) => {
+                const r = ratingValue(shop)
+                const coverSrc = shopCoverUrl(shop.logo_url)
+                const statusActive = shop.shop_status === 'active'
+                const statusLabel = statusActive ? 'Active' : 'Inactive'
+                return (
+                  <div
+                    key={shop.id}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() =>
+                      router.visit(
+                        `${getBaseRoute()}/${agrivet.id}/shops/${shop.id}/store-information`
+                      )
+                    }
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault()
+                        router.visit(
+                          `${getBaseRoute()}/${agrivet.id}/shops/${shop.id}/store-information`
+                        )
+                      }
+                    }}
+                    className="cursor-pointer overflow-hidden rounded-lg border border-[#E5E7EB] bg-white text-left transition-all hover:border-[#102059] hover:shadow-md"
+                  >
+                    {/* Cover */}
+                    <div className="relative h-40 w-full overflow-hidden bg-[#F8F9FB]">
+                      {coverSrc ? (
+                        <img
+                          src={coverSrc}
+                          alt={`${shop.shop_name} storefront`}
+                          className="h-full w-full object-cover"
+                        />
+                      ) : (
+                        <div className="flex h-full w-full items-center justify-center">
+                          <Store className="h-14 w-14 text-[#E5E7EB]" aria-hidden />
+                        </div>
+                      )}
+                      <span
+                        className={`absolute right-3 top-3 inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold backdrop-blur-sm ${
+                          statusActive
+                            ? 'bg-[#E8F5E9]/90 text-[#2E7D32]'
+                            : 'bg-[#FFEBEE]/90 text-[#C62828]'
+                        }`}
+                      >
+                        {statusLabel}
+                      </span>
+                    </div>
+
+                    <div className="p-5">
+                      <div className="mb-3 flex items-start justify-between gap-2">
+                        <h3 className="flex-1 text-sm font-bold text-[#102059]">{shop.shop_name}</h3>
+                        <div className="flex shrink-0 items-center gap-0.5">
+                          {/* <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              router.visit(
+                                `${getBaseRoute()}/${agrivet.id}/shops/${shop.id}/store-information`
+                              )
+                            }}
+                            className="rounded-lg p-1.5 text-[#244693] transition-colors hover:bg-[#F3F4F6]"
+                            title="Store information — Vendors"
+                          >
+                            <Users className="h-4 w-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleEditShop(shop)
+                            }}
+                            className="rounded-lg p-1.5 text-[#244693] transition-colors hover:bg-[#F3F4F6]"
+                            title="Edit shop"
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </button> */}
+                          {shop.shop_status === 'active' && (
+                            <button
+                              type="button"
+                              onClick={(e) => openRemoveStore(e, shop)}
+                              className="rounded-lg p-1.5 text-[#E20E28] transition-colors hover:bg-[#FEE2E2]"
+                              title="Remove store"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="mb-3 flex items-center gap-1.5">
+                        <div className="flex items-center gap-0.5">
+                          {[1, 2, 3, 4, 5].map((star) => (
+                            <Star
+                              key={star}
+                              className={`h-3.5 w-3.5 ${
+                                star <= Math.floor(r)
+                                  ? 'fill-[#D3A218] text-[#D3A218]'
+                                  : star - 0.5 <= r
+                                    ? 'fill-[#D3A218] text-[#D3A218]'
+                                    : 'fill-[#E5E7EB] text-[#E5E7EB]'
+                              }`}
+                            />
+                          ))}
+                        </div>
+                        <span className="text-xs font-semibold text-[#102059]">{r.toFixed(1)}</span>
+                        {shop.total_reviews != null && (
+                          <span className="text-xs text-[#9CA3AF]">({shop.total_reviews} reviews)</span>
+                        )}
+                      </div>
+
+                      <div className="mb-3 space-y-0.5 text-xs text-[#6B7280]">
+                        <p>{shop.shop_address || '—'}</p>
+                        <p>
+                          {shop.shop_city || '—'}
+                          {shop.shop_province ? `, ${shop.shop_province}` : ''}
+                        </p>
+                        {shop.shop_postal_code ? <p>{shop.shop_postal_code}</p> : null}
+                      </div>
+
+                      <div className="my-3 border-t border-[#E5E7EB]" />
+
+                      <div className="space-y-1 text-xs text-[#6B7280]">
+                        <div>
+                          <span className="font-semibold text-[#102059]">Zone:</span>{' '}
+                          {shop.zone_name || '—'}
+                        </div>
+                        <div>
+                          <span className="font-semibold text-[#102059]">Contact:</span>{' '}
+                          {shop.contact_number || '—'}
+                        </div>
+                        <div>
+                          <span className="font-semibold text-[#102059]">Days:</span>{' '}
+                          {shop.operating_days || '—'}
+                        </div>
+                        <div>
+                          <span className="font-semibold text-[#102059]">Hours:</span>{' '}
+                          {shop.operating_hours || '—'}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+
+              <button
+                type="button"
+                className="group flex min-h-[280px] flex-col items-center justify-center rounded-lg border-2 border-dashed border-[#E5E7EB] bg-white p-5 transition-all hover:border-[#102059] hover:bg-[#F8F9FB]"
+                onClick={() => {
+                  setShowAddModal(true)
+                  setShowAddModalAnimation(false)
+                }}
+              >
+                <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-[#F8F9FB] transition-colors group-hover:bg-[#102059]">
+                  <Plus className="h-6 w-6 text-[#6B7280] transition-colors group-hover:text-white" />
+                </div>
+                <h3 className="mb-1 text-sm font-bold text-[#102059]">Add New Store</h3>
+                <p className="text-center text-xs text-[#6B7280]">
+                  Click to add a new branch or store location
+                </p>
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+              <button
+                type="button"
+                className="group flex min-h-[280px] flex-col items-center justify-center rounded-lg border-2 border-dashed border-[#E5E7EB] bg-white p-5 transition-all hover:border-[#102059] hover:bg-[#F8F9FB]"
+                onClick={() => {
+                  setShowAddModal(true)
+                  setShowAddModalAnimation(false)
+                }}
+              >
+                <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-[#F8F9FB] transition-colors group-hover:bg-[#102059]">
+                  <Plus className="h-6 w-6 text-[#6B7280] transition-colors group-hover:text-white" />
+                </div>
+                <h3 className="mb-1 text-sm font-bold text-[#102059]">Add First Store</h3>
+                <p className="text-center text-xs text-[#6B7280]">
+                  This agrivet has no stores yet.
+                  <br />
+                  Click to add the first store.
+                </p>
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -320,7 +557,7 @@ export default function AgrivetShops({ auth, agrivet, zones = [], shops = [], fl
             <div className="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
               <div className="modal-content">
                 <div className="modal-header">
-                  <h4 className="modal-title">Add New Shop</h4>
+                  <h4 className="modal-title">Add New Store</h4>
                   <button
                     type="button"
                     className="close"
@@ -331,10 +568,14 @@ export default function AgrivetShops({ auth, agrivet, zones = [], shops = [], fl
                 </div>
                 <form onSubmit={handleAddShop}>
                   <div className="modal-body">
+                    <p className="text-muted small mb-4">
+                      Enter the same store details used when registering a new agrivet branch.
+                    </p>
+
                     <div className="row">
-                      <div className="col-md-6">
+                      <div className="col-md-8">
                         <div className="form-group">
-                          <label>Shop Name <span className="text-danger">*</span></label>
+                          <label>Store Name <span className="text-danger">*</span></label>
                           <input
                             type="text"
                             className={`form-control ${addForm.errors.shop_name ? 'is-invalid' : ''}`}
@@ -347,7 +588,7 @@ export default function AgrivetShops({ auth, agrivet, zones = [], shops = [], fl
                           )}
                         </div>
                       </div>
-                      <div className="col-md-6">
+                      <div className="col-md-4">
                         <div className="form-group">
                           <label>Status <span className="text-danger">*</span></label>
                           <select
@@ -365,118 +606,59 @@ export default function AgrivetShops({ auth, agrivet, zones = [], shops = [], fl
                         </div>
                       </div>
                     </div>
+
                     <div className="row">
                       <div className="col-md-12">
                         <div className="form-group">
-                          <label>Description</label>
-                          <textarea
-                            className={`form-control ${addForm.errors.shop_description ? 'is-invalid' : ''}`}
-                            value={addForm.data.shop_description}
-                            onChange={(e) => addForm.setData('shop_description', e.target.value)}
-                            rows="2"
-                          />
-                          {addForm.errors.shop_description && (
-                            <div className="invalid-feedback">{addForm.errors.shop_description}</div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                    <div className="row">
-                      <div className="col-md-12">
-                        <div className="form-group">
-                          <label>Pin Location</label>
+                          <label>Pin location <span className="text-muted">(optional)</span></label>
                           <PinLocationMap
-                            initialLat={addForm.data.shop_lat ? parseFloat(addForm.data.shop_lat) : undefined}
-                            initialLng={addForm.data.shop_long ? parseFloat(addForm.data.shop_long) : undefined}
-                            initialAddress={addForm.data.shop_address}
-                            initialCity={addForm.data.shop_city}
-                            initialPostalCode={addForm.data.shop_postal_code}
-                            onLocationSelect={(loc) => {
-                              addForm.setData({
-                                shop_lat: loc.latitude,
-                                shop_long: loc.longitude,
-                              })
-                            }}
+                            height={320}
                             zones={zonesForMap}
                             shopLocations={shopsForMap}
-                            height={320}
-                            error={addForm.errors.shop_address}
+                            initialLat={addForm.data.shop_lat}
+                            initialLng={addForm.data.shop_long}
+                            onLocationSelect={(loc) => {
+                              addForm.setData('shop_lat', loc.latitude != null ? String(loc.latitude) : '')
+                              addForm.setData('shop_long', loc.longitude != null ? String(loc.longitude) : '')
+                              if (loc.city) addForm.setData('shop_city', loc.city)
+                              if (loc.province) addForm.setData('shop_province', loc.province)
+                              if (loc.postal_code) addForm.setData('shop_postal_code', loc.postal_code)
+                              if (loc.address) addForm.setData('street', loc.address)
+                            }}
                           />
                         </div>
                       </div>
                     </div>
+
                     <div className="row">
                       <div className="col-md-6">
                         <div className="form-group">
-                          <label>Address</label>
+                          <label>Latitude <span className="text-muted">(optional)</span></label>
                           <input
-                            type="text"
-                            className={`form-control ${addForm.errors.shop_address ? 'is-invalid' : ''}`}
-                            value={addForm.data.shop_address}
-                            onChange={(e) => addForm.setData('shop_address', e.target.value)}
-                            placeholder="Enter address"
-                          />
-                          {addForm.errors.shop_address && (
-                            <div className="invalid-feedback">{addForm.errors.shop_address}</div>
-                          )}
-                        </div>
-                      </div>
-                      <div className="col-md-3">
-                        <div className="form-group">
-                          <label>City</label>
-                          <input
-                            type="text"
-                            className={`form-control ${addForm.errors.shop_city ? 'is-invalid' : ''}`}
-                            value={addForm.data.shop_city}
-                            onChange={(e) => addForm.setData('shop_city', e.target.value)}
-                            placeholder="Enter city"
-                          />
-                          {addForm.errors.shop_city && (
-                            <div className="invalid-feedback">{addForm.errors.shop_city}</div>
-                          )}
-                        </div>
-                      </div>
-                      <div className="col-md-3">
-                        <div className="form-group">
-                          <label>Postal Code</label>
-                          <input
-                            type="text"
-                            className={`form-control ${addForm.errors.shop_postal_code ? 'is-invalid' : ''}`}
-                            value={addForm.data.shop_postal_code}
-                            onChange={(e) => addForm.setData('shop_postal_code', e.target.value)}
-                            placeholder="Enter postal code"
-                          />
-                          {addForm.errors.shop_postal_code && (
-                            <div className="invalid-feedback">{addForm.errors.shop_postal_code}</div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                    <div className="row">
-                      <div className="col-md-6">
-                        <div className="form-group">
-                          <label>Latitude</label>
-                          <input
-                            type="text"
+                            type="number"
+                            step="any"
+                            inputMode="decimal"
+                            placeholder="e.g. 14.5995"
                             className={`form-control ${addForm.errors.shop_lat ? 'is-invalid' : ''}`}
                             value={addForm.data.shop_lat}
                             onChange={(e) => addForm.setData('shop_lat', e.target.value)}
-                            placeholder="Auto-filled"
                           />
                           {addForm.errors.shop_lat && (
                             <div className="invalid-feedback">{addForm.errors.shop_lat}</div>
                           )}
                         </div>
                       </div>
-                      <div className="col-md-3">
+                      <div className="col-md-6">
                         <div className="form-group">
-                          <label>Longitude</label>
+                          <label>Longitude <span className="text-muted">(optional)</span></label>
                           <input
-                            type="text"
+                            type="number"
+                            step="any"
+                            inputMode="decimal"
+                            placeholder="e.g. 120.9842"
                             className={`form-control ${addForm.errors.shop_long ? 'is-invalid' : ''}`}
                             value={addForm.data.shop_long}
                             onChange={(e) => addForm.setData('shop_long', e.target.value)}
-                            placeholder="Auto-filled"
                           />
                           {addForm.errors.shop_long && (
                             <div className="invalid-feedback">{addForm.errors.shop_long}</div>
@@ -484,21 +666,232 @@ export default function AgrivetShops({ auth, agrivet, zones = [], shops = [], fl
                         </div>
                       </div>
                     </div>
+
                     <div className="row">
                       <div className="col-md-12">
                         <div className="form-group">
-                          <label>Contact Number</label>
+                          <label>Street <span className="text-danger">*</span></label>
                           <input
                             type="text"
-                            className={`form-control ${addForm.errors.contact_number ? 'is-invalid' : ''}`}
-                            value={addForm.data.contact_number}
-                            onChange={(e) => addForm.setData('contact_number', e.target.value)}
+                            className={`form-control ${addForm.errors.street ? 'is-invalid' : ''}`}
+                            value={addForm.data.street}
+                            onChange={(e) => addForm.setData('street', e.target.value)}
+                            required
                           />
-                          {addForm.errors.contact_number && (
-                            <div className="invalid-feedback">{addForm.errors.contact_number}</div>
+                          {addForm.errors.street && (
+                            <div className="invalid-feedback">{addForm.errors.street}</div>
                           )}
                         </div>
                       </div>
+                    </div>
+
+                    <div className="row">
+                      <div className="col-md-12">
+                        <div className="form-group">
+                          <label>Barangay <span className="text-danger">*</span></label>
+                          <input
+                            type="text"
+                            className={`form-control ${addForm.errors.barangay ? 'is-invalid' : ''}`}
+                            value={addForm.data.barangay}
+                            onChange={(e) => addForm.setData('barangay', e.target.value)}
+                            required
+                          />
+                          {addForm.errors.barangay && (
+                            <div className="invalid-feedback">{addForm.errors.barangay}</div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="row">
+                      <div className="col-md-6">
+                        <div className="form-group">
+                          <label>City/Municipality <span className="text-danger">*</span></label>
+                          <input
+                            type="text"
+                            className={`form-control ${addForm.errors.shop_city ? 'is-invalid' : ''}`}
+                            value={addForm.data.shop_city}
+                            onChange={(e) => addForm.setData('shop_city', e.target.value)}
+                            required
+                          />
+                          {addForm.errors.shop_city && (
+                            <div className="invalid-feedback">{addForm.errors.shop_city}</div>
+                          )}
+                        </div>
+                      </div>
+                      <div className="col-md-6">
+                        <div className="form-group">
+                          <label>Province <span className="text-danger">*</span></label>
+                          <input
+                            type="text"
+                            className={`form-control ${addForm.errors.shop_province ? 'is-invalid' : ''}`}
+                            value={addForm.data.shop_province}
+                            onChange={(e) => addForm.setData('shop_province', e.target.value)}
+                            required
+                          />
+                          {addForm.errors.shop_province && (
+                            <div className="invalid-feedback">{addForm.errors.shop_province}</div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="row">
+                      <div className="col-md-6">
+                        <div className="form-group">
+                          <label>Zip Code <span className="text-danger">*</span></label>
+                          <input
+                            type="text"
+                            className={`form-control ${addForm.errors.shop_postal_code ? 'is-invalid' : ''}`}
+                            value={addForm.data.shop_postal_code}
+                            onChange={(e) => addForm.setData('shop_postal_code', e.target.value)}
+                            required
+                          />
+                          {addForm.errors.shop_postal_code && (
+                            <div className="invalid-feedback">{addForm.errors.shop_postal_code}</div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="form-group">
+                      <label>Operating Days <span className="text-danger">*</span></label>
+                      <div className="rounded border bg-light p-3">
+                        <div className="d-flex flex-wrap" style={{ gap: '0.5rem' }}>
+                          {DAY_LABELS.map((day, index) => {
+                            const fullDay = FULL_DAYS[index]
+                            const isSelected = operatingDays.includes(fullDay)
+                            return (
+                              <button
+                                key={day}
+                                type="button"
+                                onClick={() => toggleDay(fullDay)}
+                                className={`btn btn-sm flex-fill ${isSelected ? 'btn-primary' : 'btn-outline-secondary'}`}
+                                style={{ minWidth: '3rem' }}
+                              >
+                                {day}
+                              </button>
+                            )
+                          })}
+                        </div>
+                      </div>
+                      {addForm.errors.operating_days && (
+                        <div className="text-danger small mt-1">{addForm.errors.operating_days}</div>
+                      )}
+                    </div>
+
+                    <div className="row">
+                      <div className="col-md-6">
+                        <div className="form-group">
+                          <label>Opening <span className="text-danger">*</span></label>
+                          <input
+                            type="time"
+                            className={`form-control ${addForm.errors.opening_time ? 'is-invalid' : ''}`}
+                            value={addForm.data.opening_time}
+                            onChange={(e) => addForm.setData('opening_time', e.target.value)}
+                            required
+                          />
+                          {addForm.errors.opening_time && (
+                            <div className="invalid-feedback">{addForm.errors.opening_time}</div>
+                          )}
+                        </div>
+                      </div>
+                      <div className="col-md-6">
+                        <div className="form-group">
+                          <label>Closing <span className="text-danger">*</span></label>
+                          <input
+                            type="time"
+                            className={`form-control ${addForm.errors.closing_time ? 'is-invalid' : ''}`}
+                            value={addForm.data.closing_time}
+                            onChange={(e) => addForm.setData('closing_time', e.target.value)}
+                            required
+                          />
+                          {addForm.errors.closing_time && (
+                            <div className="invalid-feedback">{addForm.errors.closing_time}</div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="form-group">
+                      <label>Store front photo <span className="text-danger">*</span></label>
+                      <div
+                        className="rounded border border-dashed bg-light p-4 text-center"
+                        style={{ cursor: 'pointer' }}
+                      >
+                        <input
+                          id="add_store_image"
+                          type="file"
+                          accept="image/*"
+                          className="d-none"
+                          onChange={handleStoreImageUpload}
+                        />
+                        <label htmlFor="add_store_image" className="mb-0 w-100" style={{ cursor: 'pointer' }}>
+                          {storeImagePreview ? (
+                            <div>
+                              <img
+                                src={storeImagePreview}
+                                alt="Store preview"
+                                className="img-fluid rounded mb-3"
+                                style={{ maxHeight: '16rem' }}
+                              />
+                              <p className="text-muted small mb-0">Click to change image</p>
+                            </div>
+                          ) : (
+                            <div>
+                              <Upload className="mx-auto mb-2 text-muted" size={40} />
+                              <p className="mb-1">Upload store photo</p>
+                              <p className="text-muted small mb-0">PNG, JPG up to 10MB</p>
+                            </div>
+                          )}
+                        </label>
+                      </div>
+                      {addForm.errors.store_image && (
+                        <div className="text-danger small mt-1">{addForm.errors.store_image}</div>
+                      )}
+                    </div>
+
+                    <div className="form-group mb-0">
+                      <label>Business permit <span className="text-danger">*</span></label>
+                      <div
+                        className="rounded border border-dashed bg-light p-4 text-center"
+                        style={{ cursor: 'pointer' }}
+                      >
+                        <input
+                          id="add_permit_image"
+                          type="file"
+                          accept="image/*,.pdf"
+                          className="d-none"
+                          onChange={handlePermitImageUpload}
+                        />
+                        <label htmlFor="add_permit_image" className="mb-0 w-100" style={{ cursor: 'pointer' }}>
+                          {permitIsPdf ? (
+                            <div>
+                              <p className="font-weight-bold mb-1">PDF selected</p>
+                              <p className="text-muted small mb-0">Click to change file</p>
+                            </div>
+                          ) : permitImagePreview ? (
+                            <div>
+                              <img
+                                src={permitImagePreview}
+                                alt="Permit preview"
+                                className="img-fluid rounded mb-3"
+                                style={{ maxHeight: '16rem' }}
+                              />
+                              <p className="text-muted small mb-0">Click to change file</p>
+                            </div>
+                          ) : (
+                            <div>
+                              <Upload className="mx-auto mb-2 text-muted" size={40} />
+                              <p className="mb-1">Upload permit</p>
+                              <p className="text-muted small mb-0">PNG, JPG, PDF up to 10MB</p>
+                            </div>
+                          )}
+                        </label>
+                      </div>
+                      {addForm.errors.permit_image && (
+                        <div className="text-danger small mt-1">{addForm.errors.permit_image}</div>
+                      )}
                     </div>
                   </div>
                   <div className="modal-footer">
@@ -510,7 +903,7 @@ export default function AgrivetShops({ auth, agrivet, zones = [], shops = [], fl
                       Cancel
                     </button>
                     <button type="submit" className="btn btn-primary" disabled={addForm.processing}>
-                      {addForm.processing ? 'Creating...' : 'Create Shop'}
+                      {addForm.processing ? 'Creating...' : 'Create Store'}
                     </button>
                   </div>
                 </form>
@@ -600,11 +993,13 @@ export default function AgrivetShops({ auth, agrivet, zones = [], shops = [], fl
                             shopLocations={shopsForMap}
                             initialAddress={editForm.data.shop_address}
                             initialCity={editForm.data.shop_city}
+                            initialProvince={editForm.data.shop_province}
                             initialPostalCode={editForm.data.shop_postal_code}
                             onLocationSelect={(loc) => {
                               editForm.setData({
                                 shop_address: loc.address,
                                 shop_city: loc.city ?? '',
+                                shop_province: loc.province ?? '',
                                 shop_postal_code: loc.postal_code ?? '',
                                 shop_lat: loc.latitude,
                                 shop_long: loc.longitude,
@@ -617,7 +1012,7 @@ export default function AgrivetShops({ auth, agrivet, zones = [], shops = [], fl
                       </div>
                     </div>
                     <div className="row">
-                      <div className="col-md-6">
+                      <div className="col-md-12">
                         <div className="form-group">
                           <label>Address</label>
                           <input
@@ -633,7 +1028,9 @@ export default function AgrivetShops({ auth, agrivet, zones = [], shops = [], fl
                           )}
                         </div>
                       </div>
-                      <div className="col-md-3">
+                    </div>
+                    <div className="row">
+                      <div className="col-md-4">
                         <div className="form-group">
                           <label>City</label>
                           <input
@@ -648,7 +1045,22 @@ export default function AgrivetShops({ auth, agrivet, zones = [], shops = [], fl
                           )}
                         </div>
                       </div>
-                      <div className="col-md-3">
+                      <div className="col-md-4">
+                        <div className="form-group">
+                          <label>Province</label>
+                          <input
+                            type="text"
+                            className={`form-control ${editForm.errors.shop_province ? 'is-invalid' : ''}`}
+                            value={editForm.data.shop_province}
+                            onChange={(e) => editForm.setData('shop_province', e.target.value)}
+                            placeholder="Auto-filled or enter province"
+                          />
+                          {editForm.errors.shop_province && (
+                            <div className="invalid-feedback">{editForm.errors.shop_province}</div>
+                          )}
+                        </div>
+                      </div>
+                      <div className="col-md-4">
                         <div className="form-group">
                           <label>Postal Code</label>
                           <input
@@ -808,6 +1220,6 @@ export default function AgrivetShops({ auth, agrivet, zones = [], shops = [], fl
           </div>
         </>
       )}
-    </AdminLayout>
+    </SuperAdminOrAdminLayout>
   )
 }

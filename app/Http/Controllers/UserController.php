@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\ActivityLog;
+use App\Models\Agrivet;
 use App\Models\User;
 use App\Models\UserDetail;
 use App\Models\UserCredential;
@@ -22,9 +23,9 @@ class UserController extends Controller
         $currentUser = auth()->user();
         $query = User::with(['userDetail', 'userCredential']);
 
-        // If current user is Admin, filter to show only Vendors, Veterinarians, and Riders
+        // If current user is Admin, filter to show only operational roles they manage
         if ($currentUser->user_type === 'admin') {
-            $query->whereIn('user_type', ['vendor', 'veterinarian', 'rider']);
+            $query->whereIn('user_type', ['vendor', 'veterinarian', 'rider', 'owner_manager']);
         }
 
         $users = $query->orderBy('created_at', 'desc')
@@ -45,9 +46,96 @@ class UserController extends Controller
                 ];
             });
 
-        return Inertia::render('Dashboard/UserManagement', [
+        return Inertia::render('Dashboard/Accounts', [
             'users' => $users,
         ]);
+    }
+
+    /**
+     * Show the dedicated add-admin wizard (super admin only).
+     */
+    public function createAdmin()
+    {
+        return Inertia::render('Dashboard/AddAdmin');
+    }
+
+    /**
+     * Show the dedicated add-super-admin wizard (super admin only).
+     */
+    public function createSuperAdmin()
+    {
+        return Inertia::render('Dashboard/AddSuperAdmin');
+    }
+
+    /**
+     * Multi-step vendor registration (Klasmeyt template parity): assign agrivet + shop, then create vendor via shop endpoint.
+     */
+    public function vendorRegistration()
+    {
+        $currentUser = auth()->user();
+
+        $agrivetsQuery = Agrivet::with(['shops' => function ($query) {
+            $query->orderBy('shop_name');
+        }]);
+
+        if ($currentUser->user_type === 'owner_manager') {
+            $managedAgrivet = $currentUser->managedAgrivet;
+            if (! $managedAgrivet) {
+                return Inertia::render('Dashboard/VendorRegistration', [
+                    'agrivets' => [],
+                ]);
+            }
+            $agrivetsQuery->where('id', $managedAgrivet->id);
+        }
+
+        $agrivets = $agrivetsQuery
+            ->orderBy('name')
+            ->get()
+            ->map(function ($agrivet) {
+                return [
+                    'id' => $agrivet->id,
+                    'name' => $agrivet->name,
+                    'shops' => $agrivet->shops->map(function ($shop) {
+                        return [
+                            'id' => $shop->id,
+                            'shop_name' => $shop->shop_name,
+                            'shop_city' => $shop->shop_city,
+                        ];
+                    }),
+                ];
+            });
+
+        return Inertia::render('Dashboard/VendorRegistration', [
+            'agrivets' => $agrivets,
+        ]);
+    }
+
+    /**
+     * Multi-step veterinarian registration (Klasmeyt template parity).
+     */
+    public function veterinarianRegistration()
+    {
+        return Inertia::render('Dashboard/VeterinarianRegistration');
+    }
+
+    /**
+     * Multi-step rider registration (Klasmeyt template parity).
+     */
+    public function riderRegistration()
+    {
+        return Inertia::render('Dashboard/RiderRegistration');
+    }
+
+    /**
+     * Placeholder for the template "Clear All Data" action (demo localStorage wipe).
+     * A full platform reset is environment-specific and is not executed here.
+     */
+    public function clearAllPlatformData()
+    {
+        return redirect()->back()->with(
+            'error',
+            'Bulk platform data reset is not enabled for this installation. Use database maintenance tools if you need a full reset.',
+        );
     }
 
     /**
@@ -58,13 +146,13 @@ class UserController extends Controller
         $currentUser = auth()->user();
         
         // Determine allowed user types based on current user's role
-        $allowedUserTypes = ['super_admin', 'admin', 'vendor', 'veterinarian', 'customer', 'rider'];
+        $allowedUserTypes = ['super_admin', 'admin', 'vendor', 'veterinarian', 'customer', 'rider', 'owner_manager'];
         if ($currentUser->user_type === 'admin') {
-            // Admin can only create Vendors, Veterinarians, and Riders
-            $allowedUserTypes = ['vendor', 'veterinarian', 'rider'];
+            // Admin can only create Vendors, Veterinarians, Riders, and Owner/Managers
+            $allowedUserTypes = ['vendor', 'veterinarian', 'rider', 'owner_manager'];
         }
 
-        $request->validate([
+        $rules = [
             'first_name' => 'required|string|max:100',
             'middle_name' => 'nullable|string|max:100',
             'last_name' => 'required|string|max:100',
@@ -74,7 +162,36 @@ class UserController extends Controller
             'username' => 'nullable|string|max:100|unique:user_credentials,username',
             'user_type' => ['required', 'string', 'in:' . implode(',', $allowedUserTypes)],
             'status' => 'nullable|string|in:active,inactive',
-        ]);
+        ];
+
+        if ($request->user_type === 'veterinarian') {
+            $rules = array_merge($rules, [
+                'vet_license_number' => 'required|string|max:100',
+                'vet_license_expiration' => 'required|date',
+                'vet_issuing_authority' => 'required|string|max:100',
+                'vet_service_area' => 'required|string|max:255',
+                'vet_specialization' => 'required|string|max:255',
+                'vet_clinic_name' => 'nullable|string|max:255',
+                'vet_clinic_address' => 'nullable|string',
+                'license_front' => 'required|file|image|max:5120',
+                'license_back' => 'required|file|image|max:5120',
+            ]);
+        }
+
+        if ($request->user_type === 'rider') {
+            $rules['mobile_number'] = 'required|string|max:20';
+            $rules = array_merge($rules, [
+                'rider_license_number' => 'required|string|max:100',
+                'rider_vehicle_type' => 'required|string|max:50',
+                'rider_vehicle_brand' => 'required|string|max:100',
+                'rider_vehicle_model' => 'required|string|max:100',
+                'driving_license_front' => 'required|file|image|max:5120',
+                'driving_license_back' => 'required|file|image|max:5120',
+                'vehicle_registration' => 'required|file|image|max:5120',
+            ]);
+        }
+
+        $request->validate($rules);
 
         try {
             DB::beginTransaction();
@@ -82,14 +199,37 @@ class UserController extends Controller
             // Generate username from email if not provided
             $username = $request->username ?? explode('@', $request->email)[0] . '_' . time();
 
+            $vetDetail = [];
+            if ($request->user_type === 'veterinarian') {
+                $vetDetail = [
+                    'vet_license_number' => $request->vet_license_number,
+                    'vet_license_expiration' => $request->vet_license_expiration,
+                    'vet_issuing_authority' => $request->vet_issuing_authority,
+                    'vet_service_area' => $request->vet_service_area,
+                    'vet_specialization' => $request->vet_specialization,
+                    'vet_clinic_name' => $request->vet_clinic_name,
+                    'vet_clinic_address' => $request->vet_clinic_address,
+                ];
+            }
+
+            $riderDetail = [];
+            if ($request->user_type === 'rider') {
+                $riderDetail = [
+                    'rider_license_number' => $request->rider_license_number,
+                    'rider_vehicle_type' => $request->rider_vehicle_type,
+                    'rider_vehicle_brand' => $request->rider_vehicle_brand,
+                    'rider_vehicle_model' => $request->rider_vehicle_model,
+                ];
+            }
+
             // Create UserDetail
-            $userDetail = UserDetail::create([
+            $userDetail = UserDetail::create(array_merge([
                 'first_name' => $request->first_name,
                 'middle_name' => $request->middle_name ?? null,
                 'last_name' => $request->last_name,
                 'email' => $request->email,
                 'mobile_number' => $request->mobile_number ?? null,
-            ]);
+            ], $vetDetail, $riderDetail));
 
             // Create UserCredential
             $userCredential = UserCredential::create([
@@ -104,6 +244,31 @@ class UserController extends Controller
                 'status' => $request->status ?? 'active',
                 'user_type' => $request->user_type,
             ]);
+
+            if ($request->user_type === 'veterinarian' && $request->hasFile('license_front') && $request->hasFile('license_back')) {
+                $frontPath = $request->file('license_front')->store("veterinarian-licenses/{$user->id}", 'public');
+                $backPath = $request->file('license_back')->store("veterinarian-licenses/{$user->id}", 'public');
+                $userDetail->update([
+                    'vet_license_front_path' => $frontPath,
+                    'vet_license_back_path' => $backPath,
+                ]);
+            }
+
+            if (
+                $request->user_type === 'rider'
+                && $request->hasFile('driving_license_front')
+                && $request->hasFile('driving_license_back')
+                && $request->hasFile('vehicle_registration')
+            ) {
+                $dlFront = $request->file('driving_license_front')->store("rider-documents/{$user->id}", 'public');
+                $dlBack = $request->file('driving_license_back')->store("rider-documents/{$user->id}", 'public');
+                $reg = $request->file('vehicle_registration')->store("rider-documents/{$user->id}", 'public');
+                $userDetail->update([
+                    'rider_license_front_path' => $dlFront,
+                    'rider_license_back_path' => $dlBack,
+                    'rider_vehicle_registration_path' => $reg,
+                ]);
+            }
 
             DB::commit();
 
@@ -147,10 +312,10 @@ class UserController extends Controller
         }
 
         // Determine allowed user types based on current user's role
-        $allowedUserTypes = ['super_admin', 'admin', 'vendor', 'veterinarian', 'customer', 'rider'];
+        $allowedUserTypes = ['super_admin', 'admin', 'vendor', 'veterinarian', 'customer', 'rider', 'owner_manager'];
         if ($currentUser->user_type === 'admin') {
-            // Admin can only update to Vendors, Veterinarians, and Riders
-            $allowedUserTypes = ['vendor', 'veterinarian', 'rider'];
+            // Admin can only update to Vendors, Veterinarians, Riders, and Owner/Managers
+            $allowedUserTypes = ['vendor', 'veterinarian', 'rider', 'owner_manager'];
         }
 
         $request->validate([
