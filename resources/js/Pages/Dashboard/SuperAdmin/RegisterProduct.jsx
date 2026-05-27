@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState } from 'react'
 import { useForm, router } from '@inertiajs/react'
 import { ArrowLeft, Check, X, CheckCircle, Upload, Star } from 'lucide-react'
 import SuperAdminOrAdminLayout from '../../../Layouts/SuperAdminOrAdminLayout'
@@ -18,7 +18,6 @@ export default function SuperAdminRegisterProduct({ auth, categories = [], subCa
     // Five fixed photo slots
     const [uploadedPhotos, setUploadedPhotos] = useState([null, null, null, null, null])
     const [primaryPhotoIndex, setPrimaryPhotoIndex] = useState(0)
-    const fileInputRefs = [useRef(), useRef(), useRef(), useRef(), useRef()]
 
     const form = useForm({
         brand:               '',
@@ -123,48 +122,55 @@ export default function SuperAdminRegisterProduct({ auth, categories = [], subCa
 
     const getCategoryName    = (id) => categories.find(c => String(c.id) === String(id))?.name ?? '—'
     const getSubCategoryName = (id) => subCategories.find(s => String(s.id) === String(id))?.name ?? '—'
-    const uploadedCount   = uploadedPhotos.filter(p => p !== null).length
 
     // ── Shared style tokens ─────────────────────────────────────────
     const inputClass = 'w-full px-4 py-2.5 border border-[#E5E7EB] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#102059] focus:border-transparent text-sm'
     const labelClass = 'block text-xs text-[#6B7280] mb-2'
-    const cardClass  = 'rounded-lg border border-[#E5E7EB] bg-white'
+    const stepCardClass = 'bg-white rounded-lg border border-[#E5E7EB] p-8'
+    const stepHeadingClass = 'text-sm font-semibold text-[#102059] mb-6 pb-4 border-b border-[#E5E7EB]'
+    const stepNavClass = 'flex justify-between gap-3 mt-8 pt-6 border-t border-[#E5E7EB]'
+    const btnPrimary = 'px-6 py-2.5 bg-[#102059] text-white rounded-lg hover:bg-[#244693] transition-colors text-sm font-medium'
+    const btnSecondary = 'px-6 py-2.5 bg-white border border-[#E5E7EB] text-[#6B7280] rounded-lg hover:bg-[#F9FAFB] transition-colors text-sm font-medium'
 
     return (
         <SuperAdminOrAdminLayout auth={auth} title="Register Product">
 
-            {/* Back button */}
-            <button
-                type="button"
-                onClick={() => router.visit(productsBase)}
-                className="mb-6 inline-flex items-center gap-2 rounded-lg border border-[#E5E7EB] bg-white px-4 py-2 text-sm font-medium text-[#6B7280] transition-colors hover:bg-[#F9FAFB] hover:text-[#102059]"
-            >
-                <ArrowLeft className="h-4 w-4" /> Back to Products
-            </button>
+        <button
+            type="button"
+            onClick={() => router.visit(productsBase)}
+            className="mb-6 rounded-lg border border-[#E5E7EB] bg-white p-3 transition-all hover:bg-[#F9FAFB] group"
+            title="Back to Products"
+        >
+            <ArrowLeft className="h-5 w-5 text-[#6B7280] group-hover:text-[#102059]" />
+        </button>
 
-            {/* Page header */}
-            <div className="mb-6">
-                <h1 className="mb-1 text-2xl font-semibold text-[#102059]">Register New Product</h1>
+            <div className="mx-auto max-w-6xl">
+
+            <div className="mb-8">
+                <h1 className="mb-2 text-2xl font-semibold text-[#102059]">Register New Product</h1>
                 <p className="text-sm text-[#6B7280]">Add a new product to the platform catalog.</p>
             </div>
 
-            {/* ── Stepper ── */}
-            <div className={`${cardClass} mb-6 p-4`}>
+            <div className="mb-8">
                 <div className="flex items-center justify-between">
                     {steps.map((step, index) => (
                         <div key={step.number} className="flex flex-1 items-center">
                             <div className="flex items-center">
                                 <div className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full border-2 transition-all ${
-                                    currentStep >= step.number ? 'border-[#102059] bg-[#102059]' : 'border-[#E5E7EB] bg-white'
+                                    currentStep > step.number || currentStep === step.number
+                                        ? 'border-[#102059] bg-[#102059]'
+                                        : 'border-[#E5E7EB] bg-white'
                                 }`}>
                                     {currentStep > step.number
                                         ? <Check className="h-5 w-5 text-white" />
                                         : <span className={`text-sm font-semibold ${currentStep === step.number ? 'text-white' : 'text-[#9CA3AF]'}`}>{step.number}</span>
                                     }
                                 </div>
-                                <span className={`ml-3 hidden text-sm font-semibold md:block ${currentStep >= step.number ? 'text-[#102059]' : 'text-[#9CA3AF]'}`}>
-                                    {step.title}
-                                </span>
+                                <div className="ml-3">
+                                    <p className={`text-sm font-semibold ${currentStep >= step.number ? 'text-[#102059]' : 'text-[#9CA3AF]'}`}>
+                                        {step.title}
+                                    </p>
+                                </div>
                             </div>
                             {index < steps.length - 1 && (
                                 <div className={`mx-4 h-0.5 flex-1 transition-all ${currentStep > step.number ? 'bg-[#102059]' : 'bg-[#E5E7EB]'}`} />
@@ -174,17 +180,18 @@ export default function SuperAdminRegisterProduct({ auth, categories = [], subCa
                 </div>
             </div>
 
-            {/* ── Error banner ── */}
             {errorMessage && (
-                <div className="mb-4 flex items-start gap-3 rounded-lg border border-[#E20E28] bg-[#FEE2E2] p-4">
-                    <X className="mt-0.5 h-5 w-5 flex-shrink-0 text-[#E20E28]" />
-                    <div className="flex-1">
-                        <p className="text-sm font-semibold text-[#E20E28]">Validation Error</p>
-                        <p className="text-sm text-[#991B1B]">{errorMessage}</p>
+                <div className="mb-6 rounded-lg border border-[#E20E28] bg-[#FEE2E2] p-4">
+                    <div className="flex items-start gap-3">
+                        <X className="mt-0.5 h-5 w-5 flex-shrink-0 text-[#E20E28]" />
+                        <div className="flex-1">
+                            <p className="mb-1 text-sm font-semibold text-[#E20E28]">Validation Error</p>
+                            <p className="text-sm text-[#991B1B]">{errorMessage}</p>
+                        </div>
+                        <button type="button" onClick={() => setErrorMessage(null)} className="flex-shrink-0 text-[#E20E28] transition-colors hover:text-[#991B1B]">
+                            <X className="h-4 w-4" />
+                        </button>
                     </div>
-                    <button type="button" onClick={() => setErrorMessage(null)} className="text-[#E20E28] hover:text-[#991B1B]">
-                        <X className="h-4 w-4" />
-                    </button>
                 </div>
             )}
 
@@ -194,12 +201,10 @@ export default function SuperAdminRegisterProduct({ auth, categories = [], subCa
                     STEP 1 — Product Information
                 ════════════════════════════════════════════════ */}
                 {currentStep === 1 && (
-                    <div className={cardClass}>
-                        <div className="border-b border-[#E5E7EB] px-8 py-4">
-                            <h2 className="text-sm font-semibold text-[#102059]">Product Information</h2>
-                        </div>
+                    <div className={stepCardClass}>
+                        <h2 className={stepHeadingClass}>Product Information</h2>
 
-                        <div className="space-y-6 px-8 py-6">
+                        <div className="space-y-6">
 
                             {/* Brand */}
                             <div>
@@ -311,12 +316,8 @@ export default function SuperAdminRegisterProduct({ auth, categories = [], subCa
                             </div>
                         </div>
 
-                        <div className="flex justify-end border-t border-[#E5E7EB] px-8 py-4">
-                            <button
-                                type="button"
-                                onClick={nextStep}
-                                className="rounded-lg bg-[#102059] px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-[#244693]"
-                            >
+                        <div className={`${stepNavClass} justify-end`}>
+                            <button type="button" onClick={nextStep} className={btnPrimary}>
                                 Next: Images
                             </button>
                         </div>
@@ -327,12 +328,10 @@ export default function SuperAdminRegisterProduct({ auth, categories = [], subCa
                     STEP 2 — Images
                 ════════════════════════════════════════════════ */}
                 {currentStep === 2 && (
-                    <div className={cardClass}>
-                        <div className="border-b border-[#E5E7EB] px-8 py-4">
-                            <h2 className="text-sm font-semibold text-[#102059]">Product Images</h2>
-                        </div>
+                    <div className={stepCardClass}>
+                        <h2 className={stepHeadingClass}>Product Images</h2>
 
-                        <div className="space-y-6 px-8 py-6">
+                        <div className="space-y-6">
                             <p className="text-sm text-[#6B7280]">
                                 Upload 5 images of your product and select one to be the primary thumbnail.{' '}
                                 <span className="text-[#E20E28]">*</span>
@@ -342,11 +341,9 @@ export default function SuperAdminRegisterProduct({ auth, categories = [], subCa
                             <div className="grid grid-cols-5 gap-4">
                                 {[0, 1, 2, 3, 4].map(index => (
                                     <div key={index} className="relative">
-                                        {/* Upload slot */}
-                                        <button
-                                            type="button"
-                                            onClick={() => fileInputRefs[index].current?.click()}
-                                            className={`flex aspect-square w-full flex-col items-center justify-center overflow-hidden rounded-lg border-2 border-dashed transition-all ${
+                                        <label
+                                            htmlFor={`photo-${index}`}
+                                            className={`block aspect-square cursor-pointer overflow-hidden rounded-lg border-2 border-dashed transition-all ${
                                                 uploadedPhotos[index]
                                                     ? 'border-[#102059] bg-[#F0F2F5]'
                                                     : 'border-[#E5E7EB] hover:border-[#102059] hover:bg-[#F9FAFB]'
@@ -359,31 +356,28 @@ export default function SuperAdminRegisterProduct({ auth, categories = [], subCa
                                                     className="h-full w-full object-cover"
                                                 />
                                             ) : (
-                                                <>
+                                                <div className="flex h-full flex-col items-center justify-center">
                                                     <Upload className="mb-1 h-6 w-6 text-[#6B7280]" />
-                                                    <span className="px-1 text-center text-[10px] leading-tight text-[#6B7280]">
+                                                    <span className="px-1 text-center text-[10px] text-[#6B7280]">
                                                         Upload<br />Photo {index + 1}
                                                     </span>
-                                                </>
+                                                </div>
                                             )}
-                                        </button>
+                                            <input
+                                                id={`photo-${index}`}
+                                                type="file"
+                                                accept="image/*"
+                                                className="hidden"
+                                                onChange={e => handlePhotoUpload(index, e)}
+                                            />
+                                        </label>
 
-                                        {/* Hidden file input */}
-                                        <input
-                                            ref={fileInputRefs[index]}
-                                            type="file"
-                                            accept="image/*"
-                                            className="hidden"
-                                            onChange={e => handlePhotoUpload(index, e)}
-                                        />
-
-                                        {/* Star — set primary */}
                                         {uploadedPhotos[index] && (
                                             <button
                                                 type="button"
                                                 onClick={() => handlePrimaryChange(index)}
                                                 title="Set as primary thumbnail"
-                                                className={`absolute -right-2 -top-2 rounded-full p-1 shadow-md transition-all ${
+                                                className={`absolute -top-2 -right-2 rounded-full p-1 shadow-md transition-all ${
                                                     primaryPhotoIndex === index ? 'bg-[#D3A218]' : 'bg-[#6B7280] opacity-60 hover:opacity-100'
                                                 }`}
                                             >
@@ -394,43 +388,29 @@ export default function SuperAdminRegisterProduct({ auth, categories = [], subCa
                                             </button>
                                         )}
 
-                                        {/* Label below slot */}
-                                        <p className="mt-2 text-center text-xs font-semibold text-[#6B7280]">
-                                            {uploadedPhotos[index] && primaryPhotoIndex === index
-                                                ? <span className="text-[#D3A218]">Primary</span>
-                                                : `Photo ${index + 1}`
-                                            }
-                                        </p>
+                                        <div className="mt-2 text-center">
+                                            <span className="text-xs font-semibold text-[#6B7280]">
+                                                {uploadedPhotos[index] && primaryPhotoIndex === index
+                                                    ? <span className="text-[#D3A218]">Primary</span>
+                                                    : `Photo ${index + 1}`
+                                                }
+                                            </span>
+                                        </div>
                                     </div>
                                 ))}
                             </div>
 
-                            {/* Tip */}
                             <div className="rounded-lg border border-[#102059]/20 bg-[#F0F7FF] p-4">
                                 <p className="text-xs text-[#102059]">
                                     <strong>Tip:</strong> The primary thumbnail (marked with a gold star) will be displayed
                                     as the main image in product listings. Click the star icon on any photo to set it as primary.
                                 </p>
                             </div>
-
-                            {/* Progress */}
-                            <p className={`text-xs font-medium ${uploadedCount === 5 ? 'text-[#00C950]' : 'text-[#F59E0B]'}`}>
-                                {uploadedCount === 5
-                                    ? '✓ All 5 photos uploaded'
-                                    : `${uploadedCount} / 5 photos uploaded`
-                                }
-                            </p>
                         </div>
 
-                        <div className="flex items-center justify-between border-t border-[#E5E7EB] px-8 py-4">
-                            <button type="button" onClick={prevStep}
-                                className="rounded-lg border border-[#E5E7EB] bg-white px-6 py-2.5 text-sm font-medium text-[#6B7280] transition-colors hover:bg-[#F9FAFB]">
-                                Back
-                            </button>
-                            <button type="button" onClick={nextStep}
-                                className="rounded-lg bg-[#102059] px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-[#244693]">
-                                Next: Review & Confirm
-                            </button>
+                        <div className={stepNavClass}>
+                            <button type="button" onClick={prevStep} className={btnSecondary}>Back</button>
+                            <button type="button" onClick={nextStep} className={btnPrimary}>Next: Review & Confirm</button>
                         </div>
                     </div>
                 )}
@@ -439,18 +419,14 @@ export default function SuperAdminRegisterProduct({ auth, categories = [], subCa
                     STEP 3 — Review & Confirm
                 ════════════════════════════════════════════════ */}
                 {currentStep === 3 && (
-                    <div className={cardClass}>
-                        <div className="border-b border-[#E5E7EB] px-8 py-4">
-                            <h2 className="text-sm font-semibold text-[#102059]">Review & Confirm</h2>
-                        </div>
+                    <div className={stepCardClass}>
+                        <h2 className={stepHeadingClass}>Review & Confirm</h2>
 
-                        <div className="space-y-6 px-8 py-6">
-
-                            {/* Product info summary */}
+                        <div className="space-y-6">
                             <div>
-                                <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-[#6B7280]">
+                                <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-[#6B7280]">
                                     Product Information
-                                </p>
+                                </h3>
                                 <div className="space-y-3 rounded-lg bg-[#F9FAFB] p-4">
                                     {[
                                         { label: 'Product Name', value: form.data.product_name },
@@ -459,31 +435,30 @@ export default function SuperAdminRegisterProduct({ auth, categories = [], subCa
                                         { label: 'Sub Category', value: form.data.sub_category_id ? getSubCategoryName(form.data.sub_category_id) : '—' },
                                         { label: 'Unit',         value: form.data.weight ? `${form.data.weight} ${form.data.unit}` : '—' },
                                     ].map(row => (
-                                        <div key={row.label} className="flex justify-between text-sm">
-                                            <span className="text-[#6B7280]">{row.label}:</span>
-                                            <span className="font-semibold text-[#102059]">{row.value}</span>
+                                        <div key={row.label} className="flex justify-between">
+                                            <span className="text-sm text-[#6B7280]">{row.label}:</span>
+                                            <span className="text-sm font-semibold text-[#102059]">{row.value}</span>
                                         </div>
                                     ))}
-                                    <div className="border-t border-[#E5E7EB] pt-3 text-sm">
-                                        <span className="block text-[#6B7280]">Description:</span>
-                                        <p className="mt-1 text-[#102059]">{form.data.description}</p>
+                                    <div className="border-t border-[#E5E7EB] pt-2">
+                                        <span className="mb-1 block text-sm text-[#6B7280]">Description:</span>
+                                        <p className="text-sm text-[#102059]">{form.data.description}</p>
                                     </div>
                                     {authUser && (
-                                        <div className="border-t border-[#E5E7EB] pt-3">
-                                            <div className="flex justify-between text-sm">
-                                                <span className="text-[#6B7280]">Author:</span>
-                                                <span className="font-semibold text-[#102059]">{authUser.name} ({authUser.role})</span>
+                                        <div className="border-t border-[#E5E7EB] pt-2">
+                                            <div className="flex justify-between">
+                                                <span className="text-sm text-[#6B7280]">Author:</span>
+                                                <span className="text-sm font-semibold text-[#102059]">{authUser.name} ({authUser.role})</span>
                                             </div>
                                         </div>
                                     )}
                                 </div>
                             </div>
 
-                            {/* Images summary */}
                             <div>
-                                <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-[#6B7280]">
+                                <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-[#6B7280]">
                                     Product Images
-                                </p>
+                                </h3>
                                 <div className="rounded-lg bg-[#F9FAFB] p-4">
                                     <div className="grid grid-cols-5 gap-3">
                                         {uploadedPhotos.map((photo, index) => (
@@ -494,7 +469,7 @@ export default function SuperAdminRegisterProduct({ auth, categories = [], subCa
                                                     )}
                                                 </div>
                                                 {primaryPhotoIndex === index && photo && (
-                                                    <div className="absolute -right-1 -top-1 rounded-full bg-[#D3A218] p-0.5">
+                                                    <div className="absolute -top-1 -right-1 rounded-full bg-[#D3A218] p-0.5">
                                                         <Star className="h-3 w-3 text-white" fill="white" />
                                                     </div>
                                                 )}
@@ -505,7 +480,6 @@ export default function SuperAdminRegisterProduct({ auth, categories = [], subCa
                                 </div>
                             </div>
 
-                            {/* Info note */}
                             <div className="rounded-lg border border-[#102059]/20 bg-[#F0F7FF] p-4">
                                 <p className="text-xs text-[#102059]">
                                     <strong>Please review all information carefully.</strong> Once submitted, this product will be
@@ -514,16 +488,9 @@ export default function SuperAdminRegisterProduct({ auth, categories = [], subCa
                             </div>
                         </div>
 
-                        <div className="flex items-center justify-between border-t border-[#E5E7EB] px-8 py-4">
-                            <button type="button" onClick={prevStep}
-                                className="rounded-lg border border-[#E5E7EB] bg-white px-6 py-2.5 text-sm font-medium text-[#6B7280] transition-colors hover:bg-[#F9FAFB]">
-                                Back
-                            </button>
-                            <button
-                                type="submit"
-                                disabled={form.processing}
-                                className="rounded-lg bg-[#102059] px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-[#244693] disabled:opacity-60"
-                            >
+                        <div className={stepNavClass}>
+                            <button type="button" onClick={prevStep} className={btnSecondary}>Back</button>
+                            <button type="submit" disabled={form.processing} className={`${btnPrimary} disabled:opacity-60`}>
                                 {form.processing ? 'Submitting…' : 'Submit Product'}
                             </button>
                         </div>
@@ -531,11 +498,11 @@ export default function SuperAdminRegisterProduct({ auth, categories = [], subCa
                 )}
             </form>
 
+            </div>
+
             {/* ── Success Modal ── */}
             {showSuccessModal && (
-                <>
-                    <div className="fixed inset-0 z-40 bg-black/50" />
-                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
                         <div className="w-full max-w-md rounded-lg border border-[#E5E7EB] bg-white">
                             <div className="p-8">
                                 <div className="flex flex-col items-center text-center">
@@ -587,8 +554,7 @@ export default function SuperAdminRegisterProduct({ auth, categories = [], subCa
                                 </div>
                             </div>
                         </div>
-                    </div>
-                </>
+                </div>
             )}
         </SuperAdminOrAdminLayout>
     )
