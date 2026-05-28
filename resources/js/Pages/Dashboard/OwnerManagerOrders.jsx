@@ -28,6 +28,7 @@ export default function OwnerManagerOrders({
                 orders={orders}
                 deliveryMethods={deliveryMethods}
                 preparingItemStatusId={preparingItemStatusId}
+                canPerformOrderActions={false}
             />
         </OwnerManagerKlasmeytLayout>
     )

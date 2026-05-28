@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { router } from "@inertiajs/react";
 import {
   Package,
@@ -24,6 +24,7 @@ export default function OwnerManagerOrdersPanel({
   deliveryMethods = [],
   preparingItemStatusId = null,
   ordersApiBasePath = '/dashboard/owner-manager/orders',
+  canPerformOrderActions = true,
 }) {
   const [activeSection, setActiveSection] = useState('new')
   const [expandedOrders, setExpandedOrders] = useState(() => new Set())
@@ -31,6 +32,10 @@ export default function OwnerManagerOrdersPanel({
   const [selectedOrder, setSelectedOrder] = useState(null)
   const [declineReason, setDeclineReason] = useState('')
   const [completedFilter, setCompletedFilter] = useState('all')
+  const [statusFilter, setStatusFilter] = useState('all')
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
+  const [userFilter, setUserFilter] = useState('all')
   const [orders, setOrders] = useState(initialOrders)
   const [processingOrderId, setProcessingOrderId] = useState(null)
   const [processingItemKey, setProcessingItemKey] = useState(null)
@@ -47,6 +52,83 @@ export default function OwnerManagerOrdersPanel({
     { id: "in-transit", label: "In Transit", icon: Truck, color: "#102059" },
     { id: "completed", label: "Completed", icon: CheckCircle, color: "#00C950" },
   ];
+
+  const statusFilterOptions = [
+    { value: 'all', label: 'All Statuses' },
+    ...sections.map((section) => ({ value: section.id, label: section.label })),
+  ];
+
+  const customerOptions = useMemo(() => {
+    const byId = new Map();
+    orders.forEach((order) => {
+      const id = order.customerId ?? order.customerName;
+      if (id == null || id === '') return;
+      const key = String(id);
+      if (!byId.has(key)) {
+        byId.set(key, {
+          value: key,
+          label: order.customerName || `Customer #${key}`,
+        });
+      }
+    });
+    return Array.from(byId.values()).sort((a, b) =>
+      a.label.localeCompare(b.label, undefined, { sensitivity: 'base' })
+    );
+  }, [orders]);
+
+  const hasActiveFilters =
+    statusFilter !== 'all' || dateFrom !== '' || dateTo !== '' || userFilter !== 'all';
+
+  const startOfDay = (dateString) => {
+    const date = new Date(`${dateString}T00:00:00`);
+    return Number.isNaN(date.getTime()) ? null : date;
+  };
+
+  const endOfDay = (dateString) => {
+    const date = new Date(`${dateString}T23:59:59.999`);
+    return Number.isNaN(date.getTime()) ? null : date;
+  };
+
+  const matchesDateFilters = (order) => {
+    const orderDate = new Date(order.dateOfOrder);
+    if (Number.isNaN(orderDate.getTime())) {
+      return !dateFrom && !dateTo;
+    }
+    if (dateFrom) {
+      const from = startOfDay(dateFrom);
+      if (from && orderDate < from) return false;
+    }
+    if (dateTo) {
+      const to = endOfDay(dateTo);
+      if (to && orderDate > to) return false;
+    }
+    return true;
+  };
+
+  const matchesUserFilter = (order) => {
+    if (userFilter === 'all') return true;
+    const orderUserKey = String(order.customerId ?? order.customerName ?? '');
+    return orderUserKey === userFilter;
+  };
+
+  const applyGlobalFilters = (orderList) =>
+    orderList.filter(
+      (order) => matchesUserFilter(order) && matchesDateFilters(order)
+    );
+
+  const clearFilters = () => {
+    setStatusFilter('all');
+    setDateFrom('');
+    setDateTo('');
+    setUserFilter('all');
+  };
+
+  const handleStatusFilterChange = (value) => {
+    setStatusFilter(value);
+    if (value !== 'all') {
+      setActiveSection(value);
+    }
+  };
 
   const toggleOrderExpand = (orderNumber) => {
     const newExpanded = new Set(expandedOrders);
@@ -148,6 +230,43 @@ export default function OwnerManagerOrdersPanel({
     });
   };
 
+  const orderStatusBadgeClass = (order) => {
+    const status = (order.statusDescription || order.status || "").toLowerCase();
+    if (status.includes("pending") || status === "new") {
+      return "bg-[#FEF3C7] text-[#92400E]";
+    }
+    if (status.includes("prepar")) {
+      return "bg-[#FEF3C7] text-[#92400E]";
+    }
+    if (status.includes("ready")) {
+      return "bg-[#DBEAFE] text-[#1E40AF]";
+    }
+    if (status.includes("transit")) {
+      return "bg-[#E8EAF6] text-[#102059]";
+    }
+    if (status.includes("deliver")) {
+      return "bg-[#E8F5E9] text-[#2E7D32]";
+    }
+    if (status.includes("cancel")) {
+      return "bg-[#FFEBEE] text-[#C62828]";
+    }
+    return "bg-[#F3F4F6] text-[#4B5563]";
+  };
+
+  const formatOrderStatusLabel = (order) => {
+    if (order.statusDescription) {
+      return order.statusDescription;
+    }
+    const labels = {
+      new: "Pending",
+      preparing: "Preparing",
+      "for-pickup": "Ready for Pickup",
+      "in-transit": "In Transit",
+      completed: order.isSuccessful === false ? "Cancelled" : "Delivered",
+    };
+    return labels[order.status] || order.status;
+  };
+
   const itemStatusBadgeClass = (product) => {
     if (isItemPreparing(product)) {
       return "bg-[#FEF3C7] text-[#92400E]";
@@ -192,7 +311,11 @@ export default function OwnerManagerOrdersPanel({
   };
 
   const getFilteredOrders = (status) => {
-    let filtered = orders.filter(order => order.status === status);
+    let filtered = applyGlobalFilters(orders).filter((order) => order.status === status);
+
+    if (statusFilter !== 'all' && statusFilter !== status) {
+      return [];
+    }
     
     if (status === "completed") {
       if (completedFilter === "successful") {
@@ -254,6 +377,13 @@ export default function OwnerManagerOrdersPanel({
                     }`}
                   >
                     {order.isSuccessful ? "Delivered" : "Cancelled"}
+                  </span>
+                )}
+                {!canPerformOrderActions && order.status !== "completed" && (
+                  <span
+                    className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${orderStatusBadgeClass(order)}`}
+                  >
+                    {formatOrderStatusLabel(order)}
                   </span>
                 )}
               </div>
@@ -349,7 +479,8 @@ export default function OwnerManagerOrdersPanel({
                     : product.price;
                   const itemTotal = discountedPrice * product.quantity;
                   const itemKey = `${order.id}-${product.id}`;
-                  const showPreparingActions = order.status === "preparing";
+                  const showPreparingActions = canPerformOrderActions && order.status === "preparing";
+                  const showItemStatus = !canPerformOrderActions || order.status === "preparing";
                   const itemIsPreparing = isItemPreparing(product);
 
                   return (
@@ -373,7 +504,7 @@ export default function OwnerManagerOrdersPanel({
                           <p className="text-xs text-[#6B7280]">
                             ₱{(product.discount ? discountedPrice : product.price).toLocaleString("en-PH", { minimumFractionDigits: 2 })} × {product.quantity}
                           </p>
-                          {showPreparingActions && product.itemStatus && (
+                          {showItemStatus && product.itemStatus && (
                             <span
                               className={`inline-flex mt-2 items-center px-2 py-0.5 rounded-full text-xs font-semibold ${itemStatusBadgeClass(product)}`}
                             >
@@ -559,8 +690,8 @@ export default function OwnerManagerOrdersPanel({
               </div>
             )}
 
-            {/* Action Buttons (for new orders only) */}
-            {order.status === "new" && (
+            {/* Action Buttons (for new orders only — vendors only) */}
+            {canPerformOrderActions && order.status === "new" && (
               <div className="flex items-center gap-3 pt-3 border-t border-[#E5E7EB]">
                 <button
                   onClick={() => handleAcceptOrder(order)}
@@ -581,8 +712,8 @@ export default function OwnerManagerOrdersPanel({
               </div>
             )}
 
-            {/* Mark ready (for preparing orders — enabled when all items are done preparing) */}
-            {order.status === "preparing" && (
+            {/* Mark ready (for preparing orders — vendors only) */}
+            {canPerformOrderActions && order.status === "preparing" && (
               <div className="pt-3 border-t border-[#E5E7EB] space-y-2">
                 <button
                   type="button"
@@ -628,6 +759,78 @@ export default function OwnerManagerOrdersPanel({
         </p>
       </div>
 
+      {/* Filters */}
+      <div className="bg-white rounded-lg border border-[#E5E7EB] p-4">
+        <div className="flex flex-wrap items-center gap-2 mb-4">
+          <Filter className="w-4 h-4 text-[#6B7280]" />
+          <span className="text-sm font-semibold text-[#102059]">Filter orders</span>
+          {hasActiveFilters && (
+            <button
+              type="button"
+              onClick={clearFilters}
+              className="ml-auto text-xs font-semibold text-[#244693] hover:text-[#102059] transition-colors"
+              style={{ fontFamily: "Inter Condensed, sans-serif" }}
+            >
+              Clear filters
+            </button>
+          )}
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div>
+            <label className="block text-xs text-[#6B7280] mb-1.5">Status</label>
+            <select
+              value={statusFilter}
+              onChange={(e) => handleStatusFilterChange(e.target.value)}
+              className="w-full text-sm border border-[#E5E7EB] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#102059] focus:border-transparent px-3 py-2 bg-white text-[#102059]"
+              style={{ fontFamily: "Inter Condensed, sans-serif" }}
+            >
+              {statusFilterOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs text-[#6B7280] mb-1.5">Date from</label>
+            <input
+              type="date"
+              value={dateFrom}
+              onChange={(e) => setDateFrom(e.target.value)}
+              className="w-full text-sm border border-[#E5E7EB] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#102059] focus:border-transparent px-3 py-2 bg-white text-[#102059]"
+              style={{ fontFamily: "Inter Condensed, sans-serif" }}
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-[#6B7280] mb-1.5">Date to</label>
+            <input
+              type="date"
+              value={dateTo}
+              onChange={(e) => setDateTo(e.target.value)}
+              min={dateFrom || undefined}
+              className="w-full text-sm border border-[#E5E7EB] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#102059] focus:border-transparent px-3 py-2 bg-white text-[#102059]"
+              style={{ fontFamily: "Inter Condensed, sans-serif" }}
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-[#6B7280] mb-1.5">Customer</label>
+            <select
+              value={userFilter}
+              onChange={(e) => setUserFilter(e.target.value)}
+              className="w-full text-sm border border-[#E5E7EB] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#102059] focus:border-transparent px-3 py-2 bg-white text-[#102059]"
+              style={{ fontFamily: "Inter Condensed, sans-serif" }}
+            >
+              <option value="all">All Customers</option>
+              {customerOptions.map((customer) => (
+                <option key={customer.value} value={customer.value}>
+                  {customer.label}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+      </div>
+
       {/* Section Navigation */}
       <div className="bg-white rounded-lg border border-[#E5E7EB] p-4">
         <div className="flex items-center gap-3 overflow-x-auto">
@@ -639,7 +842,10 @@ export default function OwnerManagerOrdersPanel({
             return (
               <button
                 key={section.id}
-                onClick={() => setActiveSection(section.id)}
+                onClick={() => {
+                  setActiveSection(section.id);
+                  setStatusFilter('all');
+                }}
                 className={`flex items-center gap-2 px-4 py-2.5 rounded-lg font-semibold text-sm whitespace-nowrap transition-all border ${
                   isActive
                     ? "border-[#102059] shadow-sm"
@@ -717,7 +923,11 @@ export default function OwnerManagerOrdersPanel({
         {getFilteredOrders(activeSection).length === 0 ? (
           <div className="bg-white rounded-lg border border-[#E5E7EB] p-12 text-center">
             <Package className="w-12 h-12 text-[#E5E7EB] mx-auto mb-3" />
-            <p className="text-sm text-[#6B7280]">No orders in this section</p>
+            <p className="text-sm text-[#6B7280]">
+              {hasActiveFilters
+                ? 'No orders match the selected filters'
+                : 'No orders in this section'}
+            </p>
           </div>
         ) : (
           getFilteredOrders(activeSection).map(renderOrderCard)
@@ -725,7 +935,7 @@ export default function OwnerManagerOrdersPanel({
       </div>
 
       {/* Decline Order Modal */}
-      {showDeclineModal && selectedOrder && (
+      {canPerformOrderActions && showDeclineModal && selectedOrder && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg max-w-md w-full p-6">
             <div className="flex items-center justify-between mb-4">

@@ -56,6 +56,7 @@ trait ManagesShopOrders
             ->leftJoin('addresses', 'order_details.address_id', '=', 'addresses.id')
             ->select(
                 'orders.id',
+                'orders.user_id',
                 'orders.ordered_at',
                 'order_details.delivery_method_id as order_delivery_method_id',
                 'delivery_method.description as delivery_method_name',
@@ -188,6 +189,7 @@ trait ManagesShopOrders
                 'id'                     => (int) $row->id,
                 'orderNumber'            => 'ORD-'.$row->id,
                 'shopIds'                => $shopIdsByOrder->get($row->id, []),
+                'customerId'             => (int) $row->user_id,
                 'customerName'           => trim(($row->first_name ?? '').' '.($row->last_name ?? '')),
                 'customerPhone'          => $customerPhone,
                 'customerProfilePicture' => $row->profile_image_url ?: $row->avatar,
@@ -200,6 +202,7 @@ trait ManagesShopOrders
                     'province' => $row->province ?? '',
                 ],
                 'status'                 => $statusMeta['status'],
+                'statusDescription'      => $row->status_description ?? null,
                 'deliveryMethodId'       => $deliveryMethodId,
                 'deliveryMethodName'     => $deliveryMethodName,
                 'deliveryMethod'         => $deliveryMethodId ? [
