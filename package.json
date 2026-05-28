@@ -10,6 +10,7 @@
         "@tailwindcss/vite": "^4.1.16",
         "autoprefixer": "^10.4.21",
         "axios": "^1.6.4",
+        "baseline-browser-mapping": "^2.10.29",
         "laravel-vite-plugin": "^1.0",
         "postcss": "^8.5.6",
         "tailwindcss": "^4.1.15",

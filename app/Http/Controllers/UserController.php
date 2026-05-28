@@ -72,9 +72,23 @@ class UserController extends Controller
      */
     public function vendorRegistration()
     {
-        $agrivets = Agrivet::with(['shops' => function ($query) {
+        $currentUser = auth()->user();
+
+        $agrivetsQuery = Agrivet::with(['shops' => function ($query) {
             $query->orderBy('shop_name');
-        }])
+        }]);
+
+        if ($currentUser->user_type === 'owner_manager') {
+            $managedAgrivet = $currentUser->managedAgrivet;
+            if (! $managedAgrivet) {
+                return Inertia::render('Dashboard/VendorRegistration', [
+                    'agrivets' => [],
+                ]);
+            }
+            $agrivetsQuery->where('id', $managedAgrivet->id);
+        }
+
+        $agrivets = $agrivetsQuery
             ->orderBy('name')
             ->get()
             ->map(function ($agrivet) {

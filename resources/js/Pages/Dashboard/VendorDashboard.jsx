@@ -1,5 +1,5 @@
 import { Link } from '@inertiajs/react'
-import KlasmeytDashboardLayout from '../../Layouts/KlasmeytDashboardLayout'
+import VendorKlasmeytLayout from '../../Layouts/VendorKlasmeytLayout'
 import { KlasmeytStatCard } from '../../Components/Dashboard/KlasmeytStatCard'
 import { useDashboardSession } from '../../hooks/useDashboardSession'
 
@@ -7,7 +7,7 @@ export default function VendorDashboard({ auth, shop, agrivet, stats = {} }) {
     const { sessionValid } = useDashboardSession()
 
     return (
-        <KlasmeytDashboardLayout auth={auth} title="Vendor Dashboard">
+        <VendorKlasmeytLayout auth={auth} title="Vendor Dashboard">
             {!shop && (
                 <div
                     role="alert"
@@ -94,7 +94,7 @@ export default function VendorDashboard({ auth, shop, agrivet, stats = {} }) {
                 <h2 className="text-xl font-semibold text-[#102059]">Welcome, {auth.user.name}</h2>
                 <p className="mt-3 text-sm leading-relaxed text-[#6B7280]">
                     You are signed in as <span className="font-semibold text-[#102059]">Vendor</span>. Manage
-                    listings, orders, and payouts from the sidebar.
+                    listings, orders, and payouts using the links below.
                 </p>
                 <div className="mt-6 flex flex-wrap gap-3">
                     <Link
@@ -119,6 +119,6 @@ export default function VendorDashboard({ auth, shop, agrivet, stats = {} }) {
                     </p>
                 )}
             </section>
-        </KlasmeytDashboardLayout>
+        </VendorKlasmeytLayout>
     )
 }

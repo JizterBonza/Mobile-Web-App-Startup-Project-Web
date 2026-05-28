@@ -31,6 +31,8 @@ class UserDetail extends Model
         'shipping_address',
         'profile_image_url',
         'avatar',
+        'provider',
+        'provider_id',
         'vet_license_number',
         'vet_license_expiration',
         'vet_issuing_authority',

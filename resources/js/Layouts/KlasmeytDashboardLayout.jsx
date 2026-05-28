@@ -11,6 +11,8 @@ function dashboardHomePath(userType) {
             return '/dashboard/admin'
         case 'vendor':
             return '/dashboard/vendor'
+        case 'owner_manager':
+            return '/dashboard/owner-manager'
         case 'veterinarian':
             return '/dashboard/veterinarian'
         default:
@@ -65,6 +67,7 @@ function SuperAdminNav({ productOpen, setProductOpen }) {
             {productOpen && (
                 <div className="mt-1 space-y-0.5 border-l border-white/10 ml-4 pl-2">
                     <SubNavLink href="/dashboard/super-admin/products">All Products</SubNavLink>
+                    <SubNavLink href="/dashboard/super-admin/product-requests">Product Requests</SubNavLink>
                     <SubNavLink href="/dashboard/super-admin/categories">Categories</SubNavLink>
                     <SubNavLink href="/dashboard/super-admin/sub-categories">Sub-Categories</SubNavLink>
                 </div>
@@ -103,11 +106,13 @@ function AdminNav({ productOpen, setProductOpen }) {
                 className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium text-white/90 transition-colors hover:bg-white/10"
             >
                 <i className="fas fa-box w-5 text-center text-white/70" />
-                <span className="flex-1">Product Management</span>
+                <span className="flex-1">Products</span>
                 <i className={`fas fa-chevron-${productOpen ? 'up' : 'down'} text-xs text-white/50`} />
             </button>
             {productOpen && (
                 <div className="mt-1 space-y-0.5 border-l border-white/10 ml-4 pl-2">
+                    <SubNavLink href="/dashboard/admin/products">All Products</SubNavLink>
+                    <SubNavLink href="/dashboard/admin/product-requests">Product Requests</SubNavLink>
                     <SubNavLink href="/dashboard/admin/categories">Categories</SubNavLink>
                     <SubNavLink href="/dashboard/admin/sub-categories">Sub-Categories</SubNavLink>
                 </div>

@@ -16,9 +16,14 @@ use App\Models\Promotion;
 use App\Models\ProductImage;
 use App\Models\Category;
 use App\Models\SubCategory;
+use App\Models\ProductCatalog;
+use App\Http\Controllers\Concerns\CreatesProductCatalogEntry;
+use App\Http\Controllers\Concerns\ManagesShopOrders;
 
 class VendorController extends Controller
 {
+    use CreatesProductCatalogEntry;
+    use ManagesShopOrders;
     /**
      * Get the vendor's Shop.
      */
@@ -77,65 +82,43 @@ class VendorController extends Controller
     }
 
     /**
-     * Display the vendor dashboard.
+     * Vendor home: store information for the shop this vendor is assigned to.
      */
     public function index()
     {
         $shop = $this->getVendorShopWithAgrivet();
 
-        if (!$shop) {
-            return Inertia::render('Dashboard/VendorDashboard', [
-                'shop' => null,
+        if (! $shop || ! $shop->agrivet) {
+            return Inertia::render('Dashboard/AgrivetStoreInformation', [
                 'agrivet' => null,
-                'stats' => [
-                    'new_orders' => 0,
-                    'products' => 0,
-                    'pending_reviews' => 0,
-                    'total_revenue' => 0,
-                ],
+                'shop' => null,
+                'vendors' => [],
+                'reassignableVendors' => [],
+                'reviews' => [],
+                'products' => [],
+                'product_catalog' => [],
+                'orders' => [],
+                'deliveryMethods' => [],
+                'preparingItemStatusId' => null,
             ]);
         }
 
-        $agrivet = $shop->agrivet;
+        return app(AgrivetController::class)->showStoreInformation($shop->agrivet->id, $shop->id);
+    }
 
-        // Get dashboard stats
-        $productsCount = DB::table('items')
-            ->where('shop_id', $shop->id)
-            ->count();
+    /**
+     * Add a shop listing from the product catalog (vendor's assigned shop).
+     */
+    public function storeShopListing(Request $request)
+    {
+        $shop = $this->getVendorShopWithAgrivet();
 
-        $newOrdersCount = DB::table('order_items')
-            ->join('items', 'order_items.item_id', '=', 'items.id')
-            ->where('items.shop_id', $shop->id)
-            ->where('order_items.item_status', 'ordered')
-            ->count();
+        if (! $shop || ! $shop->agrivet) {
+            return redirect()->back()
+                ->withErrors(['error' => 'You are not associated with any shop.']);
+        }
 
-        $totalRevenue = DB::table('order_items')
-            ->join('items', 'order_items.item_id', '=', 'items.id')
-            ->where('items.shop_id', $shop->id)
-            ->where('order_items.item_status', 'delivered')
-            ->sum(DB::raw('order_items.quantity * order_items.price_at_purchase'));
-
-        return Inertia::render('Dashboard/VendorDashboard', [
-            'shop' => [
-                'id' => $shop->id,
-                'shop_name' => $shop->shop_name,
-                'shop_description' => $shop->shop_description,
-                'shop_address' => $shop->shop_address,
-                'average_rating' => $shop->average_rating,
-                'total_reviews' => $shop->total_reviews,
-                'shop_status' => $shop->shop_status,
-            ],
-            'agrivet' => $agrivet ? [
-                'id' => $agrivet->id,
-                'name' => $agrivet->name,
-            ] : null,
-            'stats' => [
-                'new_orders' => $newOrdersCount,
-                'products' => $productsCount,
-                'pending_reviews' => 0, // Can be implemented later
-                'total_revenue' => $totalRevenue ?? 0,
-            ],
-        ]);
+        return app(AgrivetController::class)->storeShopListing($request, $shop->agrivet->id, $shop->id);
     }
 
     /**
@@ -333,6 +316,82 @@ class VendorController extends Controller
             'categories' => $categories,
             'subCategories' => $subCategories,
         ]);
+    }
+
+    /**
+     * Show the form for creating a new product.
+     */
+    public function productsCreate()
+    {
+        $shop = $this->getVendorShopWithAgrivet();
+
+        if (!$shop) {
+            return redirect()->route('dashboard.vendor')
+                ->with('error', 'You are not associated with any Shop.');
+        }
+
+        $categories = Category::where('status', 'active')
+            ->orderBy('category_name')
+            ->get()
+            ->map(function ($category) {
+                return [
+                    'id' => $category->id,
+                    'name' => $category->category_name,
+                ];
+            });
+
+        $subCategories = SubCategory::where('sub_category_status', 'active')
+            ->orderBy('sub_category_name')
+            ->get()
+            ->map(function ($subCategory) {
+                return [
+                    'id' => $subCategory->id,
+                    'name' => $subCategory->sub_category_name,
+                ];
+            });
+
+        return Inertia::render('Dashboard/Vendor/RegisterProduct', [
+            'shop' => [
+                'id' => $shop->id,
+                'shop_name' => $shop->shop_name,
+            ],
+            'categories' => $categories,
+            'subCategories' => $subCategories,
+            'authUser' => [
+                'name' => auth()->user()->name,
+                'role' => auth()->user()->user_type ?? 'Vendor',
+            ],
+            'layoutType' => 'vendor',
+            'submitUrl' => '/dashboard/vendor/product-catalog',
+            'backUrl' => '/dashboard/vendor?tab=products',
+            'requiresApproval' => true,
+        ]);
+    }
+
+    /**
+     * Store a new product in the platform catalog (from Register Product flow).
+     */
+    public function productCatalogStore(Request $request)
+    {
+        $shop = $this->getVendorShop();
+
+        if (!$shop) {
+            return redirect()->back()
+                ->withErrors(['error' => 'You are not associated with any Shop.']);
+        }
+
+        $catalog = $this->createProductCatalogFromRequest($request, ProductCatalog::STATUS_PENDING);
+
+        ActivityLog::log(
+            'created',
+            "Product registration request submitted: {$request->product_name}",
+            $catalog,
+            null,
+            $catalog->toArray()
+        );
+
+        return redirect()->route('dashboard.vendor', ['tab' => 'products'])
+            ->with('success', 'Your product registration request has been submitted and is pending approval.');
     }
 
     /**
@@ -1219,5 +1278,233 @@ class VendorController extends Controller
 
         return redirect()->route('dashboard.vendor.promotions.index')
             ->with('success', 'Promotion deleted successfully.');
+    }
+
+    /**
+     * @return array<int>
+     */
+    private function vendorOwnedShopIdsOrAbort(int $shopId): array
+    {
+        $ownsShop = auth()->user()
+            ->shops()
+            ->where('shops.id', $shopId)
+            ->exists();
+
+        abort_unless($ownsShop, 403);
+
+        return [(int) $shopId];
+    }
+
+    private function redirectToVendorStoreOrdersTab()
+    {
+        return redirect()->route('dashboard.vendor', ['tab' => 'orders']);
+    }
+
+    public function storeOrderAccept(int $shopId, int $orderId)
+    {
+        $shopIds = $this->vendorOwnedShopIdsOrAbort($shopId);
+        $this->assertShopOrderAccess($orderId, $shopIds);
+
+        $pendingStatusId = (int) DB::table('order_status')->where('stat_description', 'Pending')->value('id');
+        $preparingStatusId = (int) DB::table('order_status')->where('stat_description', 'Preparing')->value('id');
+
+        if (! $pendingStatusId || ! $preparingStatusId) {
+            return $this->redirectToVendorStoreOrdersTab()
+                ->with('error', 'Order status configuration is missing.');
+        }
+
+        $orderShops = DB::table('order_shops')
+            ->where('order_id', $orderId)
+            ->whereIn('shop_id', $shopIds)
+            ->get();
+
+        if ($orderShops->isEmpty()) {
+            abort(404);
+        }
+
+        if ($orderShops->contains(fn ($row) => (int) $row->order_status !== $pendingStatusId)) {
+            return $this->redirectToVendorStoreOrdersTab()
+                ->with('error', 'Only pending orders can be accepted.');
+        }
+
+        $now = now();
+
+        DB::table('order_shops')
+            ->where('order_id', $orderId)
+            ->whereIn('shop_id', $shopIds)
+            ->update(['order_status' => $preparingStatusId, 'updated_at' => $now]);
+
+        $preparingItemStatusId = DB::table('order_item_status')->where('stat_description', 'Preparing')->value('id');
+        if ($preparingItemStatusId) {
+            DB::table('order_items')
+                ->where('order_id', $orderId)
+                ->whereIn('shop_id', $shopIds)
+                ->update(['item_status' => (int) $preparingItemStatusId, 'updated_at' => $now]);
+        }
+
+        $this->logShopOrderEvent(
+            $orderId,
+            'status_changed',
+            'Pending',
+            'Preparing',
+            'Order accepted by vendor.'
+        );
+
+        return $this->redirectToVendorStoreOrdersTab()
+            ->with('success', 'Order accepted successfully.');
+    }
+
+    public function storeOrderDecline(Request $request, int $shopId, int $orderId)
+    {
+        $shopIds = $this->vendorOwnedShopIdsOrAbort($shopId);
+        $this->assertShopOrderAccess($orderId, $shopIds);
+
+        $request->validate([
+            'decline_reason' => 'required|string|max:1000',
+        ]);
+
+        $pendingStatusId = (int) DB::table('order_status')->where('stat_description', 'Pending')->value('id');
+        $cancelledStatusId = (int) DB::table('order_status')->where('stat_description', 'Cancelled')->value('id');
+
+        if (! $pendingStatusId || ! $cancelledStatusId) {
+            return $this->redirectToVendorStoreOrdersTab()
+                ->with('error', 'Order status configuration is missing.');
+        }
+
+        $orderShops = DB::table('order_shops')
+            ->where('order_id', $orderId)
+            ->whereIn('shop_id', $shopIds)
+            ->get();
+
+        if ($orderShops->isEmpty()) {
+            abort(404);
+        }
+
+        if ($orderShops->contains(fn ($row) => (int) $row->order_status !== $pendingStatusId)) {
+            return $this->redirectToVendorStoreOrdersTab()
+                ->with('error', 'Only pending orders can be declined.');
+        }
+
+        $now = now();
+        $declineReason = trim($request->input('decline_reason'));
+
+        DB::table('order_shops')
+            ->where('order_id', $orderId)
+            ->whereIn('shop_id', $shopIds)
+            ->update(['order_status' => $cancelledStatusId, 'updated_at' => $now]);
+
+        $cancelledItemStatusId = DB::table('order_item_status')->where('stat_description', 'Cancelled')->value('id');
+        if ($cancelledItemStatusId) {
+            DB::table('order_items')
+                ->where('order_id', $orderId)
+                ->whereIn('shop_id', $shopIds)
+                ->update(['item_status' => (int) $cancelledItemStatusId, 'updated_at' => $now]);
+        }
+
+        $this->logShopOrderEvent(
+            $orderId,
+            'cancelled',
+            'Pending',
+            'Cancelled',
+            $declineReason
+        );
+
+        return $this->redirectToVendorStoreOrdersTab()
+            ->with('success', 'Order declined successfully.');
+    }
+
+    public function storeOrderReady(int $shopId, int $orderId)
+    {
+        $shopIds = $this->vendorOwnedShopIdsOrAbort($shopId);
+        $this->assertShopOrderAccess($orderId, $shopIds);
+
+        $preparingStatusId = (int) DB::table('order_status')->where('stat_description', 'Preparing')->value('id');
+        $readyStatus = $this->resolveShopReadyStatus($orderId);
+
+        if (! $preparingStatusId || ! $readyStatus) {
+            return $this->redirectToVendorStoreOrdersTab()
+                ->with('error', 'Unable to mark this order as ready. Check delivery method configuration.');
+        }
+
+        $orderShops = DB::table('order_shops')
+            ->where('order_id', $orderId)
+            ->whereIn('shop_id', $shopIds)
+            ->get();
+
+        if ($orderShops->isEmpty()) {
+            abort(404);
+        }
+
+        if ($orderShops->contains(fn ($row) => (int) $row->order_status !== $preparingStatusId)) {
+            return $this->redirectToVendorStoreOrdersTab()
+                ->with('error', 'Only orders being prepared can be marked as ready.');
+        }
+
+        $preparingItemStatusId = (int) DB::table('order_item_status')->where('stat_description', 'Preparing')->value('id');
+        $remainingPreparingItems = DB::table('order_items')
+            ->where('order_id', $orderId)
+            ->whereIn('shop_id', $shopIds)
+            ->where('item_status', $preparingItemStatusId)
+            ->count();
+
+        if ($remainingPreparingItems > 0) {
+            return $this->redirectToVendorStoreOrdersTab()
+                ->with('error', 'Mark every item as done preparing before marking the order ready.');
+        }
+
+        DB::table('order_shops')
+            ->where('order_id', $orderId)
+            ->whereIn('shop_id', $shopIds)
+            ->update(['order_status' => $readyStatus['order_status_id'], 'updated_at' => now()]);
+
+        $this->logShopOrderEvent(
+            $orderId,
+            'status_changed',
+            'Preparing',
+            $readyStatus['label'],
+            'Order marked as ready by vendor.'
+        );
+
+        return $this->redirectToVendorStoreOrdersTab()
+            ->with('success', 'Order marked as '.$readyStatus['label'].'.');
+    }
+
+    public function storeOrderDonePreparingItem(int $shopId, int $orderId, int $orderItemId)
+    {
+        $shopIds = $this->vendorOwnedShopIdsOrAbort($shopId);
+        $this->assertShopOrderAccess($orderId, $shopIds);
+
+        $preparingItemStatusId = (int) DB::table('order_item_status')->where('stat_description', 'Preparing')->value('id');
+        $readyStatus = $this->resolveShopReadyStatus($orderId);
+
+        if (! $preparingItemStatusId || ! $readyStatus || ! $readyStatus['order_item_status_id']) {
+            return $this->redirectToVendorStoreOrdersTab()
+                ->with('error', 'Unable to update item status. Check delivery method configuration.');
+        }
+
+        $orderItem = DB::table('order_items')
+            ->where('id', $orderItemId)
+            ->where('order_id', $orderId)
+            ->whereIn('shop_id', $shopIds)
+            ->first();
+
+        if (! $orderItem) {
+            abort(404);
+        }
+
+        if ((int) $orderItem->item_status !== $preparingItemStatusId) {
+            return $this->redirectToVendorStoreOrdersTab()
+                ->with('error', 'Only items currently being prepared can be marked as done.');
+        }
+
+        DB::table('order_items')
+            ->where('id', $orderItemId)
+            ->update([
+                'item_status' => $readyStatus['order_item_status_id'],
+                'updated_at'  => now(),
+            ]);
+
+        return $this->redirectToVendorStoreOrdersTab()
+            ->with('success', 'Item marked as done preparing.');
     }
 }

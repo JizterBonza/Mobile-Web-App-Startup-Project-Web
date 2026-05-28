@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useForm, router } from '@inertiajs/react'
-import AdminLayout from '../../../Layouts/AdminLayout'
+import VendorKlasmeytLayout from '../../../Layouts/VendorKlasmeytLayout'
 
 export default function Promotions({ auth, promotions = [], products = [], promotionTypes = {}, shop, agrivet, flash }) {
   const [showAddModal, setShowAddModal] = useState(false)
@@ -419,7 +419,7 @@ export default function Promotions({ auth, promotions = [], products = [], promo
   }
 
   return (
-    <AdminLayout auth={auth} title="Promotions">
+    <VendorKlasmeytLayout auth={auth} title="Promotions">
       {/* Flash Messages */}
       {flash?.success && showSuccessAlert && (
         <div className="alert alert-success alert-dismissible fade show" role="alert">
@@ -959,7 +959,7 @@ export default function Promotions({ auth, promotions = [], products = [], promo
           </div>
         </>
       )}
-    </AdminLayout>
+    </VendorKlasmeytLayout>
   )
 }
 

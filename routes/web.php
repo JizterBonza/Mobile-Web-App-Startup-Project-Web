@@ -11,9 +11,11 @@ use App\Http\Controllers\ActivityLogController;
 use App\Http\Controllers\PaymentMethodController;
 use App\Http\Controllers\DeliveryMethodController;
 use App\Http\Controllers\ZoneController;
+use App\Http\Controllers\SuperAdminProductController;
+use App\Http\Controllers\ProductCatalogRequestController;
+use App\Http\Controllers\DashboardController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
-use App\Models\Item;
 
 Route::get('/', function () {
     return Inertia::render('Welcome');
@@ -39,36 +41,36 @@ Route::middleware(['auth', 'session.valid'])->group(function () {
 });
 
 // Protected Routes - User Type Specific Dashboards
-Route::get('/dashboard/super-admin', function () {
-    return Inertia::render('Dashboard/SuperAdminDashboard');
-})->middleware(['auth', 'session.valid', 'user.type:super_admin'])->name('dashboard.super-admin');
+Route::get('/dashboard/super-admin', [DashboardController::class, 'superAdmin'])
+    ->middleware(['auth', 'session.valid', 'user.type:super_admin'])->name('dashboard.super-admin');
 
-Route::get('/dashboard/super-admin/products', function () {
-    $products = Item::query()
-        ->with(['shop', 'categoryRelation'])
-        ->latest()
-        ->get()
-        ->map(function ($item) {
-            return [
-                'id' => $item->id,
-                'item_name' => $item->item_name,
-                'category' => $item->category,
-                'category_name' => optional($item->categoryRelation)->category_name,
-                'item_status' => $item->item_status,
-                'item_images' => $item->item_images,
-                'sold_count' => $item->sold_count,
-                'created_at' => $item->created_at,
-                'shop_name' => optional($item->shop)->shop_name,
-                // Optional fields (UI displays if present)
-                'weight' => $item->weight ?? null,
-                'metric' => $item->metric ?? null,
-            ];
-        });
+Route::get('/dashboard/super-admin/products/create', [SuperAdminProductController::class, 'create'])
+    ->middleware(['auth', 'session.valid', 'user.type:super_admin'])
+    ->name('dashboard.super-admin.products.create');
 
-    return Inertia::render('Dashboard/SuperAdmin/Products', [
-        'products' => $products,
-    ]);
-})->middleware(['auth', 'session.valid', 'user.type:super_admin'])->name('dashboard.super-admin.products');
+Route::post('/dashboard/super-admin/products', [SuperAdminProductController::class, 'store'])
+    ->middleware(['auth', 'session.valid', 'user.type:super_admin'])
+    ->name('dashboard.super-admin.products.store');
+
+Route::get('/dashboard/super-admin/products', [SuperAdminProductController::class, 'index'])
+    ->middleware(['auth', 'session.valid', 'user.type:super_admin'])
+    ->name('dashboard.super-admin.products');
+
+Route::get('/dashboard/super-admin/products/{id}', [SuperAdminProductController::class, 'show'])
+    ->middleware(['auth', 'session.valid', 'user.type:super_admin'])
+    ->name('dashboard.super-admin.products.show');
+
+Route::get('/dashboard/super-admin/product-requests', [ProductCatalogRequestController::class, 'index'])
+    ->middleware(['auth', 'session.valid', 'user.type:super_admin'])
+    ->name('dashboard.super-admin.product-requests');
+
+Route::post('/dashboard/super-admin/product-requests/{id}/approve', [ProductCatalogRequestController::class, 'approve'])
+    ->middleware(['auth', 'session.valid', 'user.type:super_admin'])
+    ->name('dashboard.super-admin.product-requests.approve');
+
+Route::post('/dashboard/super-admin/product-requests/{id}/reject', [ProductCatalogRequestController::class, 'reject'])
+    ->middleware(['auth', 'session.valid', 'user.type:super_admin'])
+    ->name('dashboard.super-admin.product-requests.reject');
 
 // User Management Routes
 Route::middleware(['auth', 'session.valid', 'user.type:super_admin'])->prefix('dashboard/super-admin/users')->name('dashboard.super-admin.users.')->group(function () {
@@ -97,14 +99,16 @@ Route::middleware(['auth', 'session.valid', 'user.type:super_admin'])->prefix('d
     Route::put('/{id}/shops/{shopId}', [AgrivetController::class, 'updateShop'])->name('shops.update');
     Route::delete('/{id}/shops/{shopId}', [AgrivetController::class, 'removeShop'])->name('shops.remove');
     Route::get('/{id}/shops/{shopId}/store-information', [AgrivetController::class, 'showStoreInformation'])->name('shops.store-information');
-    
+    Route::post('/{id}/shops/{shopId}/cover-photo', [AgrivetController::class, 'updateShopCoverPhoto'])->name('shops.cover-photo');
+
     // Shop Vendors Routes
     Route::get('/{id}/shops/{shopId}/vendors', [AgrivetController::class, 'showVendors'])->name('shops.vendors.index');
     Route::post('/{id}/shops/{shopId}/vendors', [AgrivetController::class, 'storeVendor'])->name('shops.vendors.store');
     Route::put('/{id}/shops/{shopId}/vendors/{vendorId}', [AgrivetController::class, 'updateVendor'])->name('shops.vendors.update');
     Route::delete('/{id}/shops/{shopId}/vendors/{vendorId}', [AgrivetController::class, 'removeVendor'])->name('shops.vendors.remove');
     Route::post('/{id}/shops/{shopId}/vendors/add-existing', [AgrivetController::class, 'addExistingVendor'])->name('shops.vendors.add-existing');
-    
+    Route::post('/{id}/shops/{shopId}/vendors/{vendorId}/reassign', [AgrivetController::class, 'reassignVendor'])->name('shops.vendors.reassign');
+
     Route::put('/{id}', [AgrivetController::class, 'update'])->name('update');
     Route::delete('/{id}', [AgrivetController::class, 'destroy'])->name('destroy');
 });
@@ -155,9 +159,55 @@ Route::middleware(['auth', 'session.valid', 'user.type:super_admin'])->prefix('d
     Route::delete('/{id}', [ZoneController::class, 'destroy'])->name('destroy');
 });
 
-Route::get('/dashboard/admin', function () {
-    return Inertia::render('Dashboard/AdminDashboard');
-})->middleware(['auth', 'session.valid', 'user.type:admin'])->name('dashboard.admin');
+Route::middleware(['auth', 'session.valid', 'user.type:owner_manager'])->prefix('dashboard/owner-manager')->name('dashboard.owner-manager.')->group(function () {
+    Route::get('/', [DashboardController::class, 'ownerManager'])->name('index');
+    Route::get('/stores', [DashboardController::class, 'ownerManagerStores'])->name('stores');
+    Route::get('/stores/{shopId}/store-information', [DashboardController::class, 'ownerManagerStoreInformation'])->name('stores.store-information');
+    Route::put('/stores/{shopId}', [DashboardController::class, 'ownerManagerUpdateShop'])->name('stores.update');
+    Route::post('/stores/{shopId}/cover-photo', [DashboardController::class, 'ownerManagerUpdateShopCoverPhoto'])->name('stores.cover-photo');
+    Route::post('/stores/{shopId}/listings', [DashboardController::class, 'ownerManagerStoreShopListing'])->name('stores.listings.store');
+    Route::get('/stores/{shopId}/products/create', [DashboardController::class, 'ownerManagerProductsCreate'])->name('stores.products.create');
+    Route::post('/stores/{shopId}/product-catalog', [DashboardController::class, 'ownerManagerProductCatalogStore'])->name('stores.product-catalog.store');
+    Route::post('/stores/{shopId}/vendors/{vendorId}/reassign', [DashboardController::class, 'ownerManagerReassignVendor'])->name('stores.vendors.reassign');
+    Route::get('/vendor-registration', [UserController::class, 'vendorRegistration'])->name('vendor-registration');
+    Route::post('/stores/{shopId}/vendors', [DashboardController::class, 'ownerManagerStoreVendor'])->name('stores.vendors.store');
+    Route::get('/orders', [DashboardController::class, 'ownerManagerOrders'])->name('orders');
+    Route::patch('/orders/{orderId}/accept', [DashboardController::class, 'ownerManagerAcceptOrder'])->name('orders.accept');
+    Route::patch('/orders/{orderId}/decline', [DashboardController::class, 'ownerManagerDeclineOrder'])->name('orders.decline');
+    Route::patch('/orders/{orderId}/ready', [DashboardController::class, 'ownerManagerMarkOrderReady'])->name('orders.ready');
+    Route::patch('/orders/{orderId}/items/{orderItemId}/done-preparing', [DashboardController::class, 'ownerManagerDonePreparingItem'])->name('orders.items.done-preparing');
+});
+
+Route::get('/dashboard/admin', [DashboardController::class, 'admin'])
+    ->middleware(['auth', 'session.valid', 'user.type:admin'])->name('dashboard.admin');
+
+Route::get('/dashboard/admin/products/create', [SuperAdminProductController::class, 'create'])
+    ->middleware(['auth', 'session.valid', 'user.type:admin'])
+    ->name('dashboard.admin.products.create');
+
+Route::post('/dashboard/admin/products', [SuperAdminProductController::class, 'store'])
+    ->middleware(['auth', 'session.valid', 'user.type:admin'])
+    ->name('dashboard.admin.products.store');
+
+Route::get('/dashboard/admin/products', [SuperAdminProductController::class, 'index'])
+    ->middleware(['auth', 'session.valid', 'user.type:admin'])
+    ->name('dashboard.admin.products');
+
+Route::get('/dashboard/admin/product-requests', [ProductCatalogRequestController::class, 'index'])
+    ->middleware(['auth', 'session.valid', 'user.type:admin'])
+    ->name('dashboard.admin.product-requests');
+
+Route::post('/dashboard/admin/product-requests/{id}/approve', [ProductCatalogRequestController::class, 'approve'])
+    ->middleware(['auth', 'session.valid', 'user.type:admin'])
+    ->name('dashboard.admin.product-requests.approve');
+
+Route::post('/dashboard/admin/product-requests/{id}/reject', [ProductCatalogRequestController::class, 'reject'])
+    ->middleware(['auth', 'session.valid', 'user.type:admin'])
+    ->name('dashboard.admin.product-requests.reject');
+
+Route::get('/dashboard/admin/products/{id}', [SuperAdminProductController::class, 'show'])
+    ->middleware(['auth', 'session.valid', 'user.type:admin'])
+    ->name('dashboard.admin.products.show');
 
 // Admin User Management Routes
 Route::middleware(['auth', 'session.valid', 'user.type:admin'])->prefix('dashboard/admin/users')->name('dashboard.admin.users.')->group(function () {
@@ -183,14 +233,16 @@ Route::middleware(['auth', 'session.valid', 'user.type:admin'])->prefix('dashboa
     Route::put('/{id}/shops/{shopId}', [AgrivetController::class, 'updateShop'])->name('shops.update');
     Route::delete('/{id}/shops/{shopId}', [AgrivetController::class, 'removeShop'])->name('shops.remove');
     Route::get('/{id}/shops/{shopId}/store-information', [AgrivetController::class, 'showStoreInformation'])->name('shops.store-information');
-    
+    Route::post('/{id}/shops/{shopId}/cover-photo', [AgrivetController::class, 'updateShopCoverPhoto'])->name('shops.cover-photo');
+
     // Shop Vendors Routes
     Route::get('/{id}/shops/{shopId}/vendors', [AgrivetController::class, 'showVendors'])->name('shops.vendors.index');
     Route::post('/{id}/shops/{shopId}/vendors', [AgrivetController::class, 'storeVendor'])->name('shops.vendors.store');
     Route::put('/{id}/shops/{shopId}/vendors/{vendorId}', [AgrivetController::class, 'updateVendor'])->name('shops.vendors.update');
     Route::delete('/{id}/shops/{shopId}/vendors/{vendorId}', [AgrivetController::class, 'removeVendor'])->name('shops.vendors.remove');
     Route::post('/{id}/shops/{shopId}/vendors/add-existing', [AgrivetController::class, 'addExistingVendor'])->name('shops.vendors.add-existing');
-    
+    Route::post('/{id}/shops/{shopId}/vendors/{vendorId}/reassign', [AgrivetController::class, 'reassignVendor'])->name('shops.vendors.reassign');
+
     Route::put('/{id}', [AgrivetController::class, 'update'])->name('update');
     Route::delete('/{id}', [AgrivetController::class, 'destroy'])->name('destroy');
 });
@@ -242,17 +294,23 @@ Route::middleware(['auth', 'session.valid', 'user.type:admin'])->prefix('dashboa
 });
 
 Route::get('/dashboard/vendor', [VendorController::class, 'index'])
-    ->middleware(['auth', 'session.valid', 'user.type:vendor|owner_manager'])
+    ->middleware(['auth', 'session.valid', 'user.type:vendor'])
     ->name('dashboard.vendor');
 
-// Vendor Management Routes (store owners who log in as vendor or owner_manager)
-Route::middleware(['auth', 'session.valid', 'user.type:vendor|owner_manager'])->prefix('dashboard/vendor')->name('dashboard.vendor.')->group(function () {
+Route::post('/dashboard/vendor/shop-listings', [VendorController::class, 'storeShopListing'])
+    ->middleware(['auth', 'session.valid', 'user.type:vendor'])
+    ->name('dashboard.vendor.shop-listings.store');
+
+// Vendor Management Routes
+Route::middleware(['auth', 'session.valid', 'user.type:vendor'])->prefix('dashboard/vendor')->name('dashboard.vendor.')->group(function () {
     // Store Management
     Route::get('/store', [VendorController::class, 'storeIndex'])->name('store.index');
     Route::post('/store', [VendorController::class, 'storeUpdate'])->name('store.update');
     
     // Products
     Route::get('/products', [VendorController::class, 'productsIndex'])->name('products.index');
+    Route::get('/products/create', [VendorController::class, 'productsCreate'])->name('products.create');
+    Route::post('/product-catalog', [VendorController::class, 'productCatalogStore'])->name('product-catalog.store');
     Route::post('/products', [VendorController::class, 'productsStore'])->name('products.store');
     Route::put('/products/{id}', [VendorController::class, 'productsUpdate'])->name('products.update');
     Route::delete('/products/{id}', [VendorController::class, 'productsDestroy'])->name('products.destroy');
@@ -265,6 +323,12 @@ Route::middleware(['auth', 'session.valid', 'user.type:vendor|owner_manager'])->
     Route::get('/orders', [VendorController::class, 'ordersIndex'])->name('orders.index');
     Route::get('/orders/{orderId}/items', [VendorController::class, 'orderItemsIndex'])->name('orders.items.index');
     Route::put('/orders/{id}', [VendorController::class, 'ordersUpdate'])->name('orders.update');
+
+    // Store-scoped order management (vendor's assigned shop only)
+    Route::patch('/stores/{shopId}/orders/{orderId}/accept', [VendorController::class, 'storeOrderAccept'])->name('stores.orders.accept');
+    Route::patch('/stores/{shopId}/orders/{orderId}/decline', [VendorController::class, 'storeOrderDecline'])->name('stores.orders.decline');
+    Route::patch('/stores/{shopId}/orders/{orderId}/ready', [VendorController::class, 'storeOrderReady'])->name('stores.orders.ready');
+    Route::patch('/stores/{shopId}/orders/{orderId}/items/{orderItemId}/done-preparing', [VendorController::class, 'storeOrderDonePreparingItem'])->name('stores.orders.items.done-preparing');
     
     // Payouts
     Route::get('/payouts', [VendorController::class, 'payoutsIndex'])->name('payouts.index');

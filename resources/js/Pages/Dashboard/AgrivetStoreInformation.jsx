@@ -1,18 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Link } from '@inertiajs/react'
+import { Link, router } from '@inertiajs/react'
 import {
   ArrowLeft,
   CheckCircle,
   Clock,
   Filter,
   Heart,
-  Info,
   MapPin,
   Package,
   Pencil,
   Plus,
   Search,
-  ShoppingCart,
   Star,
   Trash2,
   TrendingUp,
@@ -22,21 +20,57 @@ import {
   X,
 } from 'lucide-react'
 import { AnimatePresence, motion } from 'motion/react'
-import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Legend,
-  Line,
-  LineChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from 'recharts'
+import OwnerManagerKlasmeytLayout from '../../Layouts/OwnerManagerKlasmeytLayout'
 import SuperAdminOrAdminLayout from '../../Layouts/SuperAdminOrAdminLayout'
+import VendorKlasmeytLayout from '../../Layouts/VendorKlasmeytLayout'
+import OwnerManagerOrdersPanel from '../../Components/Dashboard/OwnerManagerOrdersPanel'
 
 const tabOrder = ['about', 'vendors', 'products', 'insights']
+const vendorTabOrder = ['about', 'products', 'orders']
+
+const DAY_ORDER = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+
+function formatOperatingDays(days) {
+  if (!days || days.length === 0) return ''
+  const sorted = [...days].sort((a, b) => DAY_ORDER.indexOf(a) - DAY_ORDER.indexOf(b))
+  const indices = sorted.map((d) => DAY_ORDER.indexOf(d))
+  const consecutive = indices.length > 1 && indices.every((v, i, arr) => i === 0 || v === arr[i - 1] + 1)
+  return consecutive ? `${sorted[0]} - ${sorted[sorted.length - 1]}` : sorted.join(', ')
+}
+
+function formatOperatingHours(opening, closing) {
+  if (!opening || !closing) return ''
+  const fmt = (t) => {
+    const [h, m] = t.split(':').map(Number)
+    const period = h >= 12 ? 'PM' : 'AM'
+    const display = h === 0 ? 12 : h > 12 ? h - 12 : h
+    return `${display}:${String(m).padStart(2, '0')} ${period}`
+  }
+  return `${fmt(opening)} - ${fmt(closing)}`
+}
+
+function parseOperatingDays(str) {
+  if (!str) return []
+  const rangeMatch = str.trim().match(/^(\w+)\s*-\s*(\w+)$/)
+  if (rangeMatch) {
+    const start = DAY_ORDER.indexOf(rangeMatch[1])
+    const end = DAY_ORDER.indexOf(rangeMatch[2])
+    if (start !== -1 && end !== -1 && start <= end) return DAY_ORDER.slice(start, end + 1)
+  }
+  return str.split(',').map((d) => d.trim()).filter((d) => DAY_ORDER.includes(d))
+}
+
+function parseTimeToInput(timeStr) {
+  if (!timeStr) return ''
+  const match = timeStr.trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i)
+  if (!match) return ''
+  let hours = parseInt(match[1])
+  const minutes = match[2]
+  const period = match[3].toUpperCase()
+  if (period === 'PM' && hours !== 12) hours += 12
+  if (period === 'AM' && hours === 12) hours = 0
+  return `${String(hours).padStart(2, '0')}:${minutes}`
+}
 
 function vendorDisplayName(v) {
   const mid = v.middle_name ? `${v.middle_name} ` : ''
@@ -54,15 +88,123 @@ function asTitleStatus(s) {
   return s.charAt(0).toUpperCase() + s.slice(1)
 }
 
-export default function AgrivetStoreInformation({ auth, agrivet, shop, vendors = [] }) {
-  const getBaseRoute = () =>
-    auth?.user?.user_type === 'admin' ? '/dashboard/admin/agrivets' : '/dashboard/super-admin/agrivets'
+function reviewCustomerName(review) {
+  return review.customer_name || review.customerName || 'Customer'
+}
 
-  const backRoute = `${getBaseRoute()}/${agrivet.id}/shops`
-  const vendorsRoute = `${getBaseRoute()}/${agrivet.id}/shops/${shop.id}/vendors`
+function reviewInitials(review) {
+  const name = reviewCustomerName(review)
+  const parts = name.split(' ').filter(Boolean)
+  return (parts[0]?.[0] || '') + (parts[1]?.[0] || parts[0]?.[1] || '')
+}
+
+function formatReviewDate(dateStr) {
+  if (!dateStr) return ''
+  return new Date(dateStr).toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  })
+}
+
+const PLACEHOLDER_PRODUCT_IMAGE =
+  'https://images.unsplash.com/photo-1516382799247-87df95d790b7?auto=format&fit=crop&w=400&q=60'
+
+function resolveCatalogImageUrl(image) {
+  if (!image || typeof image !== 'string') return PLACEHOLDER_PRODUCT_IMAGE
+  if (image.startsWith('http://') || image.startsWith('https://')) return image
+  if (image.startsWith('/storage/')) return image
+  return `/storage/${image.replace(/^\//, '')}`
+}
+
+function mapCatalogToRegisteredProduct(entry) {
+  const images = Array.isArray(entry.images) ? entry.images : []
+  const primaryIdx = entry.primary_image_index ?? 0
+  const photos = images.length > 0 ? images.map(resolveCatalogImageUrl) : [PLACEHOLDER_PRODUCT_IMAGE]
+  const image = photos[primaryIdx] || photos[0] || PLACEHOLDER_PRODUCT_IMAGE
+  const unit = [entry.weight, entry.unit].filter((v) => v != null && v !== '').join(' ') || 'unit'
+
+  return {
+    id: entry.id,
+    productId: entry.id,
+    productName: entry.product_name || '',
+    brand: entry.brand || '',
+    category: entry.category_name || 'Uncategorized',
+    unit,
+    description: entry.description || '',
+    image,
+    photos,
+    primaryPhotoIndex: primaryIdx,
+  }
+}
+
+function catalogProductMatchesSearch(product, query) {
+  const q = query.toLowerCase()
+  return (
+    product.productName.toLowerCase().includes(q) ||
+    product.category.toLowerCase().includes(q) ||
+    product.brand.toLowerCase().includes(q)
+  )
+}
+
+export default function AgrivetStoreInformation({
+  auth,
+  agrivet,
+  shop,
+  vendors = [],
+  reassignableVendors = [],
+  reviews = [],
+  products = [],
+  product_catalog = [],
+  orders = [],
+  deliveryMethods = [],
+  preparingItemStatusId = null,
+  flash,
+}) {
+  const isOwnerManager = auth?.user?.user_type === 'owner_manager'
+  const isVendor = auth?.user?.user_type === 'vendor'
+  const visibleTabs = isVendor ? vendorTabOrder : tabOrder
+  const vendorOrdersApiBasePath = shop?.id ? `/dashboard/vendor/stores/${shop.id}/orders` : ''
+
+  const getBaseRoute = () => {
+    if (isOwnerManager) return '/dashboard/owner-manager'
+    if (isVendor) return '/dashboard/vendor'
+    return auth?.user?.user_type === 'admin' ? '/dashboard/admin/agrivets' : '/dashboard/super-admin/agrivets'
+  }
+
+  const PageLayout = isVendor
+    ? VendorKlasmeytLayout
+    : isOwnerManager
+      ? OwnerManagerKlasmeytLayout
+      : SuperAdminOrAdminLayout
+
+  const shopBasePath = shop
+    ? isOwnerManager
+      ? `${getBaseRoute()}/stores/${shop.id}`
+      : `${getBaseRoute()}/${agrivet?.id}/shops/${shop.id}`
+    : ''
+
+  const backRoute = isOwnerManager
+    ? `${getBaseRoute()}/stores`
+    : `${getBaseRoute()}/${agrivet?.id}/shops`
+  const vendorsRoute = isOwnerManager
+    ? shopBasePath
+    : `${getBaseRoute()}/${agrivet?.id}/shops/${shop?.id}/vendors`
+  const usersPrefix =
+    auth?.user?.user_type === 'admin' ? '/dashboard/admin' : '/dashboard/super-admin'
+  const vendorRegistrationRoute = isOwnerManager
+    ? `/dashboard/owner-manager/vendor-registration?agrivet_id=${agrivet?.id}&shop_id=${shop?.id}`
+    : `${usersPrefix}/users/vendor-registration?agrivet_id=${agrivet?.id}&shop_id=${shop?.id}`
+
+  const reassignVendorRoute = (vendorId) => (
+    isOwnerManager
+      ? `${getBaseRoute()}/stores/${shop?.id}/vendors/${vendorId}/reassign`
+      : `${getBaseRoute()}/${agrivet?.id}/shops/${shop?.id}/vendors/${vendorId}/reassign`
+  )
 
   // Build a "store" object that matches the template fields/shape as closely as possible.
   const store = useMemo(() => {
+    if (!shop) return null
     const lat = shop.shop_lat != null ? Number(shop.shop_lat) : null
     const lng = shop.shop_long != null ? Number(shop.shop_long) : null
     return {
@@ -76,64 +218,32 @@ export default function AgrivetStoreInformation({ auth, agrivet, shop, vendors =
       zipCode: shop.shop_postal_code || '',
       latitude: Number.isFinite(lat) ? lat : 13.7565,
       longitude: Number.isFinite(lng) ? lng : 121.0583,
-      operatingDays: '—',
-      operatingHours: '—',
-      coverPhoto:
-        'https://images.unsplash.com/photo-1516382799247-87df95d790b7?auto=format&fit=crop&w=1600&q=60',
+      operatingDays: shop.operating_days || '—',
+      operatingHours: shop.operating_hours || '—',
+      coverPhoto: shop.logo_url
+        ? `/storage/${shop.logo_url}`
+        : 'https://images.unsplash.com/photo-1516382799247-87df95d790b7?auto=format&fit=crop&w=1600&q=60',
       permitPhoto:
         'https://images.unsplash.com/photo-1524995997946-a1c2e315a42f?auto=format&fit=crop&w=1200&q=60',
     }
   }, [shop])
 
-  const [activeTab, setActiveTab] = useState('about')
+  const [activeTab, setActiveTab] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const tab = new URLSearchParams(window.location.search).get('tab')
+      if (tab && visibleTabs.includes(tab)) return tab
+    }
+    return 'about'
+  })
   const [direction, setDirection] = useState(1)
 
-  // Ratings mock (template parity)
   const [starFilter, setStarFilter] = useState(null)
-  const mockReviews = useMemo(
-    () => [
-      {
-        id: 1,
-        customerName: 'Juan Dela Cruz',
-        rating: 5,
-        date: 'March 10, 2026',
-        comment:
-          'Excellent service! Very knowledgeable staff and high-quality products. Will definitely come back.',
-        avatar:
-          'https://images.unsplash.com/photo-1668701065350-c7514f7c8166?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080',
-      },
-      {
-        id: 2,
-        customerName: 'Maria Santos',
-        rating: 5,
-        date: 'March 8, 2026',
-        comment: 'Great selection of gamefowl supplies. The staff is very helpful and accommodating.',
-        avatar:
-          'https://images.unsplash.com/photo-1609126385558-bc3fc5082b0a?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080',
-      },
-      {
-        id: 3,
-        customerName: 'Pedro Reyes',
-        rating: 4,
-        date: 'March 5, 2026',
-        comment: 'Good products and reasonable prices. The location is easy to find.',
-        avatar:
-          'https://images.unsplash.com/photo-1633177188754-980c2a6b6266?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080',
-      },
-    ],
-    []
-  )
-
-  const averageRating = useMemo(() => {
-    if (mockReviews.length === 0) return 0
-    const sum = mockReviews.reduce((acc, r) => acc + r.rating, 0)
-    return sum / mockReviews.length
-  }, [mockReviews])
+  const averageRating = parseFloat(shop?.average_rating || 0)
 
   const filteredReviews = useMemo(() => {
-    if (!starFilter) return mockReviews
-    return mockReviews.filter((r) => r.rating === starFilter)
-  }, [mockReviews, starFilter])
+    if (!starFilter) return reviews
+    return reviews.filter((r) => r.rating === starFilter)
+  }, [reviews, starFilter])
 
   // Left / right column height sync (template behavior)
   const leftColumnRef = useRef(null)
@@ -154,16 +264,74 @@ export default function AgrivetStoreInformation({ auth, agrivet, shop, vendors =
     setTimeout(() => setShowSuccessMessage(false), 5000)
   }
 
-  // Vendors UI state (view-only here; full CRUD stays in `AgrivetVendors`)
+  useEffect(() => {
+    if (flash?.success || flash?.error) {
+      const message = (flash.success || flash.error || '').toLowerCase()
+      if (isVendor && visibleTabs.includes('orders') && message.includes('order')) {
+        setActiveTab('orders')
+      } else if (visibleTabs.includes('vendors') && flash?.success) {
+        setActiveTab('vendors')
+      }
+    }
+    if (flash?.success) {
+      if (flash.success.toLowerCase().includes('reassigned')) {
+        const vendorName = flash.success.split(' has been reassigned')[0]?.trim() || flash.success
+        showSuccess('reassign', vendorName)
+      } else {
+        showSuccess('add', flash.success)
+      }
+    }
+  }, [flash?.success])
+
+  // Edit Store Information modal state
+  const [showEditStoreModal, setShowEditStoreModal] = useState(false)
+  const [showEditStoreConfirmModal, setShowEditStoreConfirmModal] = useState(false)
+  const [editStoreData, setEditStoreData] = useState(() => {
+    if (!shop) {
+      return {
+        storeName: '',
+        street: '',
+        barangay: '',
+        city: '',
+        province: '',
+        zipCode: '',
+        operatingDays: [],
+        openingTime: '',
+        closingTime: '',
+      }
+    }
+    const hoursParts = shop.operating_hours ? shop.operating_hours.split(' - ') : []
+    return {
+      storeName: shop.shop_name || '',
+      street: shop.shop_address || '',
+      barangay: '',
+      city: shop.shop_city || '',
+      province: shop.shop_province || '',
+      zipCode: shop.shop_postal_code || '',
+      operatingDays: parseOperatingDays(shop.operating_days),
+      openingTime: hoursParts[0] ? parseTimeToInput(hoursParts[0]) : '',
+      closingTime: hoursParts[1] ? parseTimeToInput(hoursParts[1]) : '',
+    }
+  })
+
+  // Cover photo modal state
+  const [showEditCoverPhotoModal, setShowEditCoverPhotoModal] = useState(false)
+  const [coverPhotoPreview, setCoverPhotoPreview] = useState(null)
+  const [coverPhotoFile, setCoverPhotoFile] = useState(null)
+  const [showCoverPhotoConfirmModal, setShowCoverPhotoConfirmModal] = useState(false)
+
+  // Vendors UI state
   const [showReassignModal, setShowReassignModal] = useState(false)
+  const [reassignSearchQuery, setReassignSearchQuery] = useState('')
+  const [reassigningVendorId, setReassigningVendorId] = useState(null)
   const [showVendorStatusConfirmModal, setShowVendorStatusConfirmModal] = useState(false)
   const [vendorToToggle, setVendorToToggle] = useState(null)
   const [showRemoveVendorConfirmModal, setShowRemoveVendorConfirmModal] = useState(false)
   const [vendorToRemove, setVendorToRemove] = useState(null)
 
   const handleTabChange = (newTab) => {
-    const currentIndex = tabOrder.indexOf(activeTab)
-    const newIndex = tabOrder.indexOf(newTab)
+    const currentIndex = visibleTabs.indexOf(activeTab)
+    const newIndex = visibleTabs.indexOf(newTab)
     setDirection(newIndex > currentIndex ? 1 : -1)
     setActiveTab(newTab)
   }
@@ -197,48 +365,215 @@ export default function AgrivetStoreInformation({ auth, agrivet, shop, vendors =
     setVendorToToggle(null)
   }
 
-  // Products UI (template-like sample)
-  const canAddListings = false
+  const closeReassignModal = () => {
+    setShowReassignModal(false)
+    setReassignSearchQuery('')
+    setReassigningVendorId(null)
+  }
+
+  const filteredReassignableVendors = useMemo(() => {
+    const query = reassignSearchQuery.trim().toLowerCase()
+    if (!query) return reassignableVendors
+
+    return reassignableVendors.filter((v) => {
+      const name = vendorDisplayName(v).toLowerCase()
+      const email = (v.email || '').toLowerCase()
+      const shopName = (v.shop_name || '').toLowerCase()
+      return name.includes(query) || email.includes(query) || shopName.includes(query)
+    })
+  }, [reassignableVendors, reassignSearchQuery])
+
+  const handleReassignVendor = (vendor) => {
+    setReassigningVendorId(vendor.id)
+    router.post(
+      reassignVendorRoute(vendor.id),
+      { from_shop_id: vendor.shop_id },
+      {
+        preserveScroll: true,
+        onSuccess: () => closeReassignModal(),
+        onFinish: () => setReassigningVendorId(null),
+      },
+    )
+  }
+
+  const handleSaveStoreInfo = () => {
+    setShowEditStoreConfirmModal(true)
+  }
+
+  const handleConfirmSaveStoreInfo = () => {
+    const updateUrl = shopBasePath
+    router.put(updateUrl, {
+      shop_name: editStoreData.storeName,
+      shop_address: editStoreData.street,
+      shop_city: editStoreData.city,
+      shop_province: editStoreData.province,
+      shop_postal_code: editStoreData.zipCode,
+      operating_days: formatOperatingDays(editStoreData.operatingDays),
+      operating_hours: formatOperatingHours(editStoreData.openingTime, editStoreData.closingTime),
+    }, {
+      preserveScroll: true,
+      preserveState: true,
+      onSuccess: () => {
+        setShowEditStoreConfirmModal(false)
+        setShowEditStoreModal(false)
+        showSuccess('storeEdit', editStoreData.storeName)
+      },
+      onError: () => {
+        setShowEditStoreConfirmModal(false)
+      },
+    })
+  }
+
+  const handleCoverPhotoUpload = (e) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      setCoverPhotoFile(file)
+      const reader = new FileReader()
+      reader.onloadend = () => setCoverPhotoPreview(reader.result)
+      reader.readAsDataURL(file)
+    }
+  }
+
+  const handleSaveCoverPhoto = () => {
+    if (!coverPhotoFile) return
+    setShowCoverPhotoConfirmModal(true)
+  }
+
+  const handleConfirmSaveCoverPhoto = () => {
+    const coverPhotoUrl = `${shopBasePath}/cover-photo`
+    router.post(coverPhotoUrl, { cover_photo: coverPhotoFile }, {
+      preserveScroll: true,
+      preserveState: true,
+      onSuccess: () => {
+        setShowCoverPhotoConfirmModal(false)
+        setShowEditCoverPhotoModal(false)
+        setCoverPhotoPreview(null)
+        setCoverPhotoFile(null)
+        showSuccess('storeEdit', store.storeName)
+      },
+      onError: () => {
+        setShowCoverPhotoConfirmModal(false)
+      },
+    })
+  }
+
+  const isAdmin = auth?.user?.user_type === 'admin'
+  const isSuperAdmin = auth?.user?.user_type === 'super_admin'
+  const canAddListings = !isAdmin && !isSuperAdmin
+
+  const [showAddProductModal, setShowAddProductModal] = useState(false)
+  const [showCreateBundleModal, setShowCreateBundleModal] = useState(false)
+  const [selectedCatalogProduct, setSelectedCatalogProduct] = useState(null)
+  const [listingFormData, setListingFormData] = useState({
+    price: '',
+    stock: '',
+    discount: '',
+    reorderLevel: '',
+  })
+  const [productAddSearchQuery, setProductAddSearchQuery] = useState('')
+  const [showProductAddSuggestions, setShowProductAddSuggestions] = useState(false)
+
+  const registeredProducts = useMemo(
+    () => product_catalog.map(mapCatalogToRegisteredProduct),
+    [product_catalog]
+  )
+
+  const filteredCatalogProducts = useMemo(() => {
+    if (!productAddSearchQuery.trim()) return registeredProducts
+    return registeredProducts.filter((p) => catalogProductMatchesSearch(p, productAddSearchQuery))
+  }, [registeredProducts, productAddSearchQuery])
+
+  const storeListingUrl = useMemo(() => {
+    if (!shop?.id) return null
+    if (isOwnerManager) return `${getBaseRoute()}/stores/${shop.id}/listings`
+    if (isVendor) return '/dashboard/vendor/shop-listings'
+    return null
+  }, [shop?.id, isOwnerManager, isVendor])
+
+  const closeAddProductModal = () => {
+    setShowAddProductModal(false)
+    setSelectedCatalogProduct(null)
+    setListingFormData({ price: '', stock: '', discount: '', reorderLevel: '' })
+    setProductAddSearchQuery('')
+    setShowProductAddSuggestions(false)
+  }
+
+  const handleSaveListing = () => {
+    if (
+      !selectedCatalogProduct ||
+      !listingFormData.price ||
+      !listingFormData.stock ||
+      !listingFormData.reorderLevel ||
+      !storeListingUrl
+    ) {
+      return
+    }
+
+    router.post(
+      storeListingUrl,
+      {
+        product_catalog_id: selectedCatalogProduct.id,
+        item_price: listingFormData.price,
+        item_quantity: listingFormData.stock,
+        reorder_level: listingFormData.reorderLevel,
+      },
+      {
+        preserveScroll: true,
+        onSuccess: () => {
+          closeAddProductModal()
+          showSuccess('storeEdit', selectedCatalogProduct.productName)
+        },
+      }
+    )
+  }
+
+  const handleRegisterProduct = () => {
+    if (isVendor) {
+      router.visit('/dashboard/vendor/products/create')
+      return
+    }
+    if (isOwnerManager && shop?.id) {
+      router.visit(`/dashboard/owner-manager/stores/${shop.id}/products/create`)
+      return
+    }
+    showSuccess('storeEdit', 'Register Product')
+  }
+
   const [productSearchQuery, setProductSearchQuery] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('All')
   const [productStatusFilter, setProductStatusFilter] = useState('All')
   const [productSortBy, setProductSortBy] = useState('name')
 
   const productListings = useMemo(
-    () => [
-      {
-        id: 1001,
-        productId: 1001,
-        productName: 'Premium Gamefowl Feed Pro',
-        brand: 'Champion Nutrition',
-        category: 'Feeds',
-        unit: '50kg',
-        price: 1250,
-        stock: 42,
-        reorderLevel: 10,
-        popularity: 245,
-        photos: ['https://images.unsplash.com/photo-1524594157360-4c8c2f0b0d5a?auto=format&fit=crop&w=800&q=60'],
-        primaryPhotoIndex: 0,
-        manualStatus: 'Active',
-      },
-      {
-        id: 1002,
-        productId: 1002,
-        productName: 'Electrolyte Power Plus',
-        brand: 'VitaBoost',
-        category: 'Supplements',
-        unit: '500g',
-        price: 320,
-        stock: 0,
-        reorderLevel: 12,
-        popularity: 189,
-        photos: ['https://images.unsplash.com/photo-1587300003388-59208cc962cb?auto=format&fit=crop&w=800&q=60'],
-        primaryPhotoIndex: 0,
-        manualStatus: 'Active',
-      },
-    ],
-    []
+    () =>
+      products.map((product) => {
+        const images = Array.isArray(product.item_images) ? product.item_images : []
+        const unit = [product.weight, product.metric].filter(Boolean).join(' ') || 'unit'
+        const isActive = (product.item_status || 'active').toLowerCase() === 'active'
+
+        return {
+          id: product.id,
+          productId: product.id,
+          productName: product.item_name || '',
+          brand: product.sub_category_name || product.category_name || '',
+          category: product.category_name || 'Uncategorized',
+          unit,
+          price: parseFloat(product.item_price) || 0,
+          stock: product.item_quantity ?? 0,
+          reorderLevel: 5,
+          popularity: product.sold_count ?? 0,
+          photos: images,
+          primaryPhotoIndex: 0,
+          manualStatus: isActive ? 'Active' : 'Inactive',
+        }
+      }),
+    [products]
   )
+
+  const isCatalogProductListed = (catalogProduct) =>
+    productListings.some(
+      (listing) => listing.productName.toLowerCase() === catalogProduct.productName.toLowerCase()
+    )
 
   const getProductStatus = (listing) => {
     if ((listing.manualStatus || 'Active') === 'Inactive') return 'Inactive'
@@ -268,12 +603,25 @@ export default function AgrivetStoreInformation({ auth, agrivet, shop, vendors =
       })
   }, [productListings, productSearchQuery, categoryFilter, productStatusFilter, productSortBy])
 
-  // Insights (template parity with recharts)
-  const [insightsPeriod, setInsightsPeriod] = useState('monthly')
+  if (!shop || !store) {
+    return (
+      <PageLayout auth={auth} title="My Store">
+        <div
+          role="alert"
+          className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900"
+        >
+          <p className="font-semibold">No shop assigned</p>
+          <p className="mt-1 text-amber-800">
+            Your vendor account is not linked to a store yet. Please contact an administrator.
+          </p>
+        </div>
+      </PageLayout>
+    )
+  }
 
   return (
-    <SuperAdminOrAdminLayout auth={auth} title={`${shop.shop_name} — Store Information`} mainClassName="p-0">
-      <div className="min-h-screen bg-[#F0F2F5]">
+    <PageLayout auth={auth} title={`${shop.shop_name} — Store Information`} mainClassName="p-0">
+      <div className="relative min-h-screen bg-[#F0F2F5]">
         <AnimatePresence>
           {showSuccessMessage && (
             <motion.div
@@ -289,26 +637,30 @@ export default function AgrivetStoreInformation({ auth, agrivet, shop, vendors =
                 </div>
                 <div className="flex-1">
                   <h3 className="font-bold text-sm">
-                    {successMessageType === 'reassign'
-                      ? 'Vendor Reassigned Successfully'
-                      : successMessageType === 'edit'
-                        ? 'Vendor Updated Successfully'
-                        : successMessageType === 'status'
-                          ? 'Store Status Updated'
-                          : successMessageType === 'storeEdit'
-                            ? 'Store Information Updated'
-                            : 'Vendor Status Updated'}
+                    {successMessageType === 'add'
+                      ? 'Vendor Added Successfully'
+                      : successMessageType === 'reassign'
+                        ? 'Vendor Reassigned Successfully'
+                        : successMessageType === 'edit'
+                          ? 'Vendor Updated Successfully'
+                          : successMessageType === 'status'
+                            ? 'Store Status Updated'
+                            : successMessageType === 'storeEdit'
+                              ? 'Store Information Updated'
+                              : 'Vendor Status Updated'}
                   </h3>
                   <p className="text-xs text-white/90 mt-0.5">
-                    {successMessageType === 'reassign'
-                      ? `${successVendorName} has been reassigned to ${store.storeName}`
-                      : successMessageType === 'edit'
-                        ? `${successVendorName}'s information has been updated`
-                        : successMessageType === 'status'
-                          ? `${successVendorName} is now ${store.status}`
-                          : successMessageType === 'storeEdit'
-                            ? `${successVendorName}'s information has been successfully updated`
-                            : `${successVendorName}'s status has been updated`}
+                    {successMessageType === 'add'
+                      ? successVendorName
+                      : successMessageType === 'reassign'
+                        ? `${successVendorName} has been reassigned to ${store.storeName}`
+                        : successMessageType === 'edit'
+                          ? `${successVendorName}'s information has been updated`
+                          : successMessageType === 'status'
+                            ? `${successVendorName} is now ${store.status}`
+                            : successMessageType === 'storeEdit'
+                              ? `${successVendorName}'s information has been successfully updated`
+                              : `${successVendorName}'s status has been updated`}
                   </p>
                 </div>
                 <button onClick={() => setShowSuccessMessage(false)} className="p-1.5 hover:bg-white/20 rounded transition-colors">
@@ -318,15 +670,15 @@ export default function AgrivetStoreInformation({ auth, agrivet, shop, vendors =
             </motion.div>
           )}
         </AnimatePresence>
-
-        {/* Return Button (template positioning) */}
-        <Link
-          href={backRoute}
-          className="absolute top-6 left-6 z-10 p-3 bg-white border border-[#E5E7EB] rounded-lg hover:bg-[#F9FAFB] transition-all group"
-          title={`Back to ${agrivet.name}`}
-        >
-          <ArrowLeft className="w-5 h-5 text-[#6B7280] group-hover:text-[#102059]" />
-        </Link>
+        {!isVendor && (
+          <Link
+            href={backRoute}
+            className="absolute top-6 left-6 z-40 p-3 bg-white border border-[#E5E7EB] rounded-lg hover:bg-[#F9FAFB] transition-all group"
+            title={isOwnerManager ? 'Back to My Stores' : `Back to ${agrivet.name}`}
+          >
+            <ArrowLeft className="w-5 h-5 text-[#6B7280] group-hover:text-[#102059]" />
+          </Link>
+        )}
 
         {/* Cover Photo */}
         <div className="bg-white">
@@ -337,8 +689,8 @@ export default function AgrivetStoreInformation({ auth, agrivet, shop, vendors =
               </div>
               <button
                 className="absolute top-4 right-4 w-10 h-10 bg-white/90 hover:bg-white rounded-full flex items-center justify-center shadow-lg transition-all hover:scale-110"
-                onClick={() => showSuccess('storeEdit', store.storeName)}
-                title="Edit cover photo (reference UI)"
+                onClick={() => setShowEditCoverPhotoModal(true)}
+                title="Update cover photo"
               >
                 <Pencil className="w-5 h-5 text-[#244693]" />
               </button>
@@ -376,8 +728,7 @@ export default function AgrivetStoreInformation({ auth, agrivet, shop, vendors =
                   {activeTab === 'about' && (
                     <button
                       className="px-4 py-2 bg-[#244693] text-white text-sm font-semibold rounded-lg hover:bg-[#1a3570] transition-colors flex items-center gap-2"
-                      onClick={() => showSuccess('storeEdit', store.storeName)}
-                      title="Edit Info (reference UI)"
+                      onClick={() => setShowEditStoreModal(true)}
                     >
                       <Pencil className="w-4 h-4" />
                       Edit Info
@@ -391,7 +742,7 @@ export default function AgrivetStoreInformation({ auth, agrivet, shop, vendors =
             <div className="px-0">
               <div className="flex gap-2 pt-1 justify-between items-center">
                 <div className="flex gap-2">
-                  {tabOrder.map((t) => (
+                  {visibleTabs.map((t) => (
                     <div
                       key={t}
                       className={`px-4 py-3 text-sm font-semibold ${
@@ -525,36 +876,38 @@ export default function AgrivetStoreInformation({ auth, agrivet, shop, vendors =
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-3 mb-4 pb-4 border-b border-[#E5E7EB]">
-                        <Filter className="w-4 h-4 text-[#65676B]" />
-                        <span className="text-xs text-[#65676B] mr-2">Filter by:</span>
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => setStarFilter(null)}
-                            className={`px-3 py-1 text-xs rounded-full border transition-colors ${
-                              starFilter === null
-                                ? 'bg-[#244693] text-white border-[#244693]'
-                                : 'bg-white text-[#65676B] border-[#E5E7EB] hover:border-[#244693]'
-                            }`}
-                          >
-                            All
-                          </button>
-                          {[5, 4, 3, 2, 1].map((star) => (
+                      {reviews.length > 0 && (
+                        <div className="flex items-center gap-3 mb-4 pb-4 border-b border-[#E5E7EB]">
+                          <Filter className="w-4 h-4 text-[#65676B]" />
+                          <span className="text-xs text-[#65676B] mr-2">Filter by:</span>
+                          <div className="flex items-center gap-2">
                             <button
-                              key={star}
-                              onClick={() => setStarFilter(star)}
-                              className={`px-3 py-1 text-xs rounded-full border transition-colors flex items-center gap-1 ${
-                                starFilter === star
+                              onClick={() => setStarFilter(null)}
+                              className={`px-3 py-1 text-xs rounded-full border transition-colors ${
+                                starFilter === null
                                   ? 'bg-[#244693] text-white border-[#244693]'
                                   : 'bg-white text-[#65676B] border-[#E5E7EB] hover:border-[#244693]'
                               }`}
                             >
-                              <Star className={`w-3 h-3 ${starFilter === star ? 'fill-white' : 'fill-[#D3A218]'}`} />
-                              {star}
+                              All
                             </button>
-                          ))}
+                            {[5, 4, 3, 2, 1].map((star) => (
+                              <button
+                                key={star}
+                                onClick={() => setStarFilter(star)}
+                                className={`px-3 py-1 text-xs rounded-full border transition-colors flex items-center gap-1 ${
+                                  starFilter === star
+                                    ? 'bg-[#244693] text-white border-[#244693]'
+                                    : 'bg-white text-[#65676B] border-[#E5E7EB] hover:border-[#244693]'
+                                }`}
+                              >
+                                <Star className={`w-3 h-3 ${starFilter === star ? 'fill-white' : 'fill-[#D3A218]'}`} />
+                                {star}
+                              </button>
+                            ))}
+                          </div>
                         </div>
-                      </div>
+                      )}
 
                       <div className="space-y-3 overflow-y-auto flex-1">
                         {filteredReviews.length > 0 ? (
@@ -566,11 +919,25 @@ export default function AgrivetStoreInformation({ auth, agrivet, shop, vendors =
                               <div className="flex items-start justify-between mb-2">
                                 <div className="flex items-center gap-3">
                                   <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full overflow-hidden border border-[#E5E7EB] flex-shrink-0">
-                                    <img src={review.avatar} alt={review.customerName} className="w-full h-full object-cover" />
+                                    {review.avatar ? (
+                                      <img
+                                        src={review.avatar}
+                                        alt={reviewCustomerName(review)}
+                                        className="w-full h-full object-cover"
+                                      />
+                                    ) : (
+                                      <div className="w-full h-full bg-[#244693] flex items-center justify-center">
+                                        <span className="text-white text-sm font-semibold">
+                                          {reviewInitials(review)}
+                                        </span>
+                                      </div>
+                                    )}
                                   </div>
                                   <div>
-                                    <p className="text-sm font-semibold text-[#050505]">{review.customerName}</p>
-                                    <p className="text-xs text-[#65676B]">{review.date}</p>
+                                    <p className="text-sm font-semibold text-[#050505]">{reviewCustomerName(review)}</p>
+                                    <p className="text-xs text-[#65676B]">
+                                      {formatReviewDate(review.created_at || review.date)}
+                                    </p>
                                   </div>
                                 </div>
                                 <div className="flex items-center gap-1">
@@ -586,13 +953,17 @@ export default function AgrivetStoreInformation({ auth, agrivet, shop, vendors =
                                   ))}
                                 </div>
                               </div>
-                              <p className="text-sm text-[#050505] leading-relaxed">{review.comment}</p>
+                              <p className="text-sm text-[#050505] leading-relaxed">
+                                {review.comment || review.review_text}
+                              </p>
                             </div>
                           ))
                         ) : (
                           <div className="text-center py-8">
                             <Star className="w-12 h-12 text-[#E5E7EB] mx-auto mb-2" />
-                            <p className="text-sm text-[#65676B]">No reviews found for this rating</p>
+                            <p className="text-sm text-[#65676B]">
+                              {starFilter ? 'No reviews found for this rating' : 'No reviews yet'}
+                            </p>
                           </div>
                         )}
                       </div>
@@ -618,7 +989,7 @@ export default function AgrivetStoreInformation({ auth, agrivet, shop, vendors =
                           Reassign Vendor
                         </button>
                         <Link
-                          href={vendorsRoute}
+                          href={vendorRegistrationRoute}
                           className="flex items-center gap-2 px-4 py-2.5 bg-[#244693] text-sm font-semibold rounded-lg hover:bg-[#1a3570] transition-colors"
                           style={{ border:'1px solid #dee2e6', color: '#1f2d3d'}}
                         >
@@ -662,6 +1033,7 @@ export default function AgrivetStoreInformation({ auth, agrivet, shop, vendors =
                                     (v.pivot?.status || v.status) === 'active' ? 'bg-[#00C950]' : 'bg-[#D1D5DB]'
                                   }`}
                                   title="Toggle status (reference UI)"
+                                  style={{ borderRadius: '0.7rem' }}
                                 >
                                   <span
                                     className={`inline-block h-5 w-5 transform rounded-full bg-white transition-all duration-300 ${
@@ -699,7 +1071,7 @@ export default function AgrivetStoreInformation({ auth, agrivet, shop, vendors =
                         Add vendors to grant them access to manage this store's operations.
                       </p>
                       <Link
-                        href={vendorsRoute}
+                        href={vendorRegistrationRoute}
                         className="flex items-center gap-2 px-5 py-2.5 bg-[#244693] text-white text-sm font-semibold rounded-lg hover:bg-[#1a3570] transition-colors"
                       >
                         <UserPlus className="w-4 h-4" />
@@ -733,14 +1105,38 @@ export default function AgrivetStoreInformation({ auth, agrivet, shop, vendors =
                     <div>
                       <h2 className="text-lg font-bold text-[#102059] mb-1">Product Listings</h2>
                       <p className="text-sm text-[#6B7280]">
-                        {filteredListings.length} {filteredListings.length === 1 ? 'listing' : 'listings'}
+                        {filteredListings.length}{' '}
+                        {filteredListings.length === 1 ? 'listing' : 'listings'}
+                        {productListings.length !== filteredListings.length &&
+                          ` of ${productListings.length} total`}
                       </p>
                     </div>
                     {canAddListings && (
                       <div className="flex gap-3">
-                        <button className="flex items-center gap-2 px-4 py-2.5 bg-[#102059] text-white text-sm font-semibold rounded-lg hover:bg-[#244693] transition-colors">
+                        <button
+                          type="button"
+                          onClick={() => setShowAddProductModal(true)}
+                          className="flex items-center gap-2 px-4 py-2.5 bg-[#102059] text-white text-sm font-semibold rounded-lg hover:bg-[#244693] transition-colors"
+                        >
                           <Plus className="w-4 h-4" />
                           Add Product
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleRegisterProduct}
+                          className="flex items-center gap-2 px-4 py-2.5 bg-white border-2 border-[#102059] text-[#102059] text-sm font-semibold rounded-lg hover:bg-[#F8F9FB] transition-colors"
+                        >
+                          <Package className="w-4 h-4" />
+                          Register Product
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setShowCreateBundleModal(true)}
+                          className="flex items-center gap-2 px-4 py-2.5 border-2 border-[#D3A218] text-[#D3A218] text-sm font-semibold rounded-lg hover:bg-[#FFFBF0] transition-colors"
+                          style={{ color: '#D3A218'}}
+                        >
+                          <Package className="w-4 h-4" />
+                          Create Bundle
                         </button>
                       </div>
                     )}
@@ -803,8 +1199,14 @@ export default function AgrivetStoreInformation({ auth, agrivet, shop, vendors =
                     <div className="flex items-center justify-center h-[500px]">
                       <div className="text-center">
                         <Package className="w-16 h-16 text-[#E5E7EB] mx-auto mb-4" />
-                        <h2 className="text-xl font-bold text-[#102059] mb-2">No Matching Products</h2>
-                        <p className="text-sm text-[#6B7280]">Try adjusting your filters or search query.</p>
+                        <h2 className="text-xl font-bold text-[#102059] mb-2">
+                          {productListings.length === 0 ? 'No Products Yet' : 'No Matching Products'}
+                        </h2>
+                        <p className="text-sm text-[#6B7280]">
+                          {productListings.length === 0
+                            ? 'This store has no product listings.'
+                            : 'Try adjusting your filters or search query.'}
+                        </p>
                       </div>
                     </div>
                   ) : (
@@ -817,7 +1219,17 @@ export default function AgrivetStoreInformation({ auth, agrivet, shop, vendors =
                           onClick={() => showSuccess('storeEdit', listing.productName)}
                         >
                           <div className="aspect-square bg-[#F9FAFB] overflow-hidden relative">
-                            <img src={listing.photos[listing.primaryPhotoIndex]} alt={listing.productName} className="w-full h-full object-contain p-12" />
+                            {listing.photos?.length > 0 ? (
+                              <img
+                                src={listing.photos[listing.primaryPhotoIndex || 0]}
+                                alt={listing.productName}
+                                className="w-full h-full object-contain p-12"
+                              />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center">
+                                <Package className="w-12 h-12 text-[#E5E7EB]" />
+                              </div>
+                            )}
                             <div className="absolute top-2 left-2">
                               <span
                                 className={`text-[10px] font-semibold px-2 py-1 rounded-full ${
@@ -860,7 +1272,46 @@ export default function AgrivetStoreInformation({ auth, agrivet, shop, vendors =
                 </div>
               )}
 
+              {activeTab === 'orders' && isVendor && (
+                <div className="space-y-4">
+                  {flash?.success && (
+                    <div className="rounded-lg border border-[#BBF7D0] bg-[#F0FDF4] px-4 py-3 text-sm text-[#166534]">
+                      {flash.success}
+                    </div>
+                  )}
+                  {flash?.error && (
+                    <div className="rounded-lg border border-[#FECACA] bg-[#FEF2F2] px-4 py-3 text-sm text-[#991B1B]">
+                      {flash.error}
+                    </div>
+                  )}
+                  <OwnerManagerOrdersPanel
+                    orders={orders}
+                    deliveryMethods={deliveryMethods}
+                    preparingItemStatusId={preparingItemStatusId}
+                    ordersApiBasePath={vendorOrdersApiBasePath}
+                  />
+                </div>
+              )}
+
               {activeTab === 'insights' && (
+                <div className="bg-white rounded-lg border border-[#E5E7EB] min-h-[600px]">
+                  <div className="border-b border-[#E5E7EB] p-6">
+                    <h2 className="text-xl font-bold text-[#102059]">Store Insights</h2>
+                    <p className="text-sm text-[#65676B] mt-1">Analytics for orders, customers, and revenue</p>
+                  </div>
+                  <div className="flex flex-col items-center justify-center py-16 px-6">
+                    <div className="w-16 h-16 bg-[#E3F2FD] rounded-full flex items-center justify-center mb-4">
+                      <TrendingUp className="w-8 h-8 text-[#244693]" />
+                    </div>
+                    <h3 className="text-lg font-bold text-[#102059] mb-2">No insights available yet</h3>
+                    <p className="text-sm text-[#65676B] text-center max-w-md">
+                      Store analytics will appear here once there is enough order and customer activity data.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {false && activeTab === 'insights_OLD' && (
                 <div className="space-y-6">
                   <div className="flex items-center justify-between mb-4">
                     <h2 className="text-xl font-bold text-[#102059]">Store Insights</h2>
@@ -1096,32 +1547,380 @@ export default function AgrivetStoreInformation({ auth, agrivet, shop, vendors =
           </AnimatePresence>
         </div>
 
-        {/* Reassign Vendor Modal (reference UI) */}
-        {showReassignModal && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-lg p-6 w-[520px] max-w-[90%]">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-bold text-[#102059]">Reassign Vendor</h2>
-                <button className="p-2 text-[#65676B] hover:text-[#102059] transition-colors" onClick={() => setShowReassignModal(false)}>
+        {/* Edit Store Information Modal */}
+        {showEditStoreModal && (
+          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto">
+              <div className="sticky top-0 bg-white border-b border-[#E5E7EB] px-6 py-4 flex items-center justify-between">
+                <h3 className="text-xl font-bold text-[#102059]">Edit Store Information</h3>
+                <button
+                  className="w-8 h-8 bg-[#F0F2F5] hover:bg-[#E5E7EB] rounded-full flex items-center justify-center text-[#65676B] transition-colors"
+                  onClick={() => setShowEditStoreModal(false)}
+                >
                   <X className="w-4 h-4" />
                 </button>
               </div>
-              <p className="text-sm text-[#65676B]">
-                This modal is shown for UI parity. Use the vendor management page to reassign vendors.
+              <div className="p-6 space-y-6">
+                <div>
+                  <label className="block text-sm font-semibold text-[#102059] mb-2">Store Name</label>
+                  <input
+                    type="text"
+                    value={editStoreData.storeName}
+                    onChange={(e) => setEditStoreData({ ...editStoreData, storeName: e.target.value })}
+                    className="w-full px-4 py-2.5 border border-[#E5E7EB] rounded-lg text-sm text-[#102059] focus:outline-none focus:border-[#244693]"
+                    placeholder="Enter store name"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-semibold text-[#102059] mb-2">Street</label>
+                    <input
+                      type="text"
+                      value={editStoreData.street}
+                      onChange={(e) => setEditStoreData({ ...editStoreData, street: e.target.value })}
+                      className="w-full px-4 py-2.5 border border-[#E5E7EB] rounded-lg text-sm text-[#102059] focus:outline-none focus:border-[#244693]"
+                      placeholder="Street address"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-[#102059] mb-2">Barangay</label>
+                    <input
+                      type="text"
+                      value={editStoreData.barangay}
+                      onChange={(e) => setEditStoreData({ ...editStoreData, barangay: e.target.value })}
+                      className="w-full px-4 py-2.5 border border-[#E5E7EB] rounded-lg text-sm text-[#102059] focus:outline-none focus:border-[#244693]"
+                      placeholder="Barangay"
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-semibold text-[#102059] mb-2">City/Municipality</label>
+                    <input
+                      type="text"
+                      value={editStoreData.city}
+                      onChange={(e) => setEditStoreData({ ...editStoreData, city: e.target.value })}
+                      className="w-full px-4 py-2.5 border border-[#E5E7EB] rounded-lg text-sm text-[#102059] focus:outline-none focus:border-[#244693]"
+                      placeholder="City/Municipality"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-[#102059] mb-2">Province</label>
+                    <input
+                      type="text"
+                      value={editStoreData.province}
+                      onChange={(e) => setEditStoreData({ ...editStoreData, province: e.target.value })}
+                      className="w-full px-4 py-2.5 border border-[#E5E7EB] rounded-lg text-sm text-[#102059] focus:outline-none focus:border-[#244693]"
+                      placeholder="Province"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-[#102059] mb-2">
+                    Operating Days <span className="text-[#E20E28]">*</span>
+                  </label>
+                  <div className="grid grid-cols-7 gap-2">
+                    {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day, index) => {
+                      const fullDay = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'][index]
+                      const isSelected = editStoreData.operatingDays.includes(fullDay)
+                      return (
+                        <button
+                          key={day}
+                          type="button"
+                          onClick={() => {
+                            setEditStoreData({
+                              ...editStoreData,
+                              operatingDays: isSelected
+                                ? editStoreData.operatingDays.filter((d) => d !== fullDay)
+                                : [...editStoreData.operatingDays, fullDay],
+                            })
+                          }}
+                          className={`py-3 px-2 text-xs font-semibold rounded-lg border-2 transition-all ${
+                            isSelected
+                              ? 'bg-[#102059] border-[#102059] text-white'
+                              : 'bg-white border-[#E5E7EB] text-[#6B7280] hover:border-[#102059]'
+                          }`}
+                        >
+                          {day}
+                        </button>
+                      )
+                    })}
+                  </div>
+                  {editStoreData.operatingDays.length > 0 && (
+                    <div className="mt-3 pt-3 border-t border-[#E5E7EB]">
+                      <p className="text-xs text-[#102059]">
+                        <span className="font-semibold">Selected:</span>{' '}
+                        {editStoreData.operatingDays
+                          .slice()
+                          .sort((a, b) => {
+                            const order = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+                            return order.indexOf(a) - order.indexOf(b)
+                          })
+                          .join(', ')}
+                      </p>
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-[#102059] mb-2">
+                    Operating Hours <span className="text-[#E20E28]">*</span>
+                  </label>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs text-[#65676B] mb-2">Opening Time <span className="text-[#E20E28]">*</span></label>
+                      <input
+                        type="time"
+                        value={editStoreData.openingTime}
+                        onChange={(e) => setEditStoreData({ ...editStoreData, openingTime: e.target.value })}
+                        className="w-full px-4 py-2.5 border border-[#E5E7EB] rounded-lg text-sm text-[#102059] focus:outline-none focus:border-[#244693]"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-[#65676B] mb-2">Closing Time <span className="text-[#E20E28]">*</span></label>
+                      <input
+                        type="time"
+                        value={editStoreData.closingTime}
+                        onChange={(e) => setEditStoreData({ ...editStoreData, closingTime: e.target.value })}
+                        className="w-full px-4 py-2.5 border border-[#E5E7EB] rounded-lg text-sm text-[#102059] focus:outline-none focus:border-[#244693]"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="sticky bottom-0 bg-white border-t border-[#E5E7EB] px-6 py-4 flex items-center justify-end gap-3">
+                <button
+                  className="px-4 py-2.5 bg-white text-[#65676B] border border-[#E5E7EB] text-sm font-semibold rounded-lg hover:bg-[#F9FAFB] transition-colors"
+                  onClick={() => setShowEditStoreModal(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  className="px-4 py-2.5 bg-[#244693] text-white text-sm font-semibold rounded-lg hover:bg-[#1a3570] transition-colors"
+                  onClick={handleSaveStoreInfo}
+                >
+                  Save Changes
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Edit Store Information Confirm Modal */}
+        {showEditStoreConfirmModal && (
+          <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4">
+            <div className="bg-white rounded-xl max-w-md w-full p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-xl font-bold text-[#102059]">Save Changes</h3>
+                <button
+                  className="w-8 h-8 bg-[#F0F2F5] hover:bg-[#E5E7EB] rounded-full flex items-center justify-center text-[#65676B] transition-colors"
+                  onClick={() => setShowEditStoreConfirmModal(false)}
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+              <p className="text-sm text-[#65676B] leading-relaxed">
+                Are you sure you want to save changes to <span className="font-semibold text-[#102059]">{editStoreData.storeName}</span>?
               </p>
               <div className="flex items-center justify-end mt-6 gap-2">
                 <button
+                  className="px-4 py-2.5 bg-white border border-[#E5E7EB] text-sm font-semibold rounded-lg hover:bg-[#F9FAFB] transition-colors"
+                  onClick={() => setShowEditStoreConfirmModal(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  className="px-4 py-2.5 bg-[#244693] text-white text-sm font-semibold rounded-lg hover:bg-[#1a3570] transition-colors"
+                  onClick={handleConfirmSaveStoreInfo}
+                >
+                  Confirm
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Update Cover Photo Modal */}
+        {showEditCoverPhotoModal && (
+          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+              <div className="sticky top-0 bg-white border-b border-[#E5E7EB] px-6 py-4 flex items-center justify-between">
+                <h3 className="text-xl font-bold text-[#102059]">Update Cover Photo</h3>
+                <button
+                  className="w-8 h-8 bg-[#F0F2F5] hover:bg-[#E5E7EB] rounded-full flex items-center justify-center text-[#65676B] transition-colors"
+                  onClick={() => { setShowEditCoverPhotoModal(false); setCoverPhotoPreview(null) }}
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+              <div className="p-6 space-y-6">
+                <div>
+                  <label className="block text-sm font-semibold text-[#102059] mb-3">Upload New Cover Photo</label>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleCoverPhotoUpload}
+                    className="w-full px-4 py-2.5 border border-[#E5E7EB] rounded-lg text-sm text-[#102059] focus:outline-none focus:border-[#244693] file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-[#244693] file:text-white hover:file:bg-[#1a3570] file:cursor-pointer"
+                  />
+                </div>
+                {coverPhotoPreview && (
+                  <div>
+                    <label className="block text-sm font-semibold text-[#102059] mb-3">Preview</label>
+                    <div className="aspect-[4/1] rounded-lg overflow-hidden border border-[#E5E7EB]">
+                      <img src={coverPhotoPreview} alt="Cover Photo Preview" className="w-full h-full object-cover" />
+                    </div>
+                  </div>
+                )}
+              </div>
+              <div className="sticky bottom-0 bg-white border-t border-[#E5E7EB] px-6 py-4 flex items-center justify-end gap-3">
+                <button
+                  className="px-4 py-2.5 bg-white text-[#65676B] border border-[#E5E7EB] text-sm font-semibold rounded-lg hover:bg-[#F9FAFB] transition-colors"
+                  onClick={() => { setShowEditCoverPhotoModal(false); setCoverPhotoPreview(null) }}
+                >
+                  Cancel
+                </button>
+                <button
+                  className="px-4 py-2.5 bg-[#244693] text-white text-sm font-semibold rounded-lg hover:bg-[#1a3570] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  onClick={handleSaveCoverPhoto}
+                  disabled={!coverPhotoPreview}
+                >
+                  Save Changes
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Cover Photo Confirm Modal */}
+        {showCoverPhotoConfirmModal && (
+          <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4">
+            <div className="bg-white rounded-xl max-w-md w-full p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-xl font-bold text-[#102059]">Update Cover Photo</h3>
+                <button
+                  className="w-8 h-8 bg-[#F0F2F5] hover:bg-[#E5E7EB] rounded-full flex items-center justify-center text-[#65676B] transition-colors"
+                  onClick={() => setShowCoverPhotoConfirmModal(false)}
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+              <p className="text-sm text-[#65676B] leading-relaxed">
+                Are you sure you want to update the cover photo for <span className="font-semibold text-[#102059]">{store.storeName}</span>?
+              </p>
+              <div className="flex items-center justify-end mt-6 gap-2">
+                <button
+                  className="px-4 py-2.5 bg-white border border-[#E5E7EB] text-sm font-semibold rounded-lg hover:bg-[#F9FAFB] transition-colors"
+                  onClick={() => setShowCoverPhotoConfirmModal(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  className="px-4 py-2.5 bg-[#244693] text-white text-sm font-semibold rounded-lg hover:bg-[#1a3570] transition-colors"
+                  onClick={handleConfirmSaveCoverPhoto}
+                >
+                  Confirm
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Reassign Vendor Modal */}
+        {showReassignModal && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={closeReassignModal}>
+            <div
+              className="bg-white rounded-lg w-[560px] max-w-[90%] max-h-[85vh] flex flex-col"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="p-6 border-b border-[#E5E7EB]">
+                <div className="flex items-center justify-between mb-2">
+                  <h2 className="text-xl font-bold text-[#102059]">Reassign Vendor</h2>
+                  <button
+                    className="p-2 text-[#65676B] hover:text-[#102059] transition-colors"
+                    onClick={closeReassignModal}
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+                <p className="text-sm text-[#65676B]">
+                  Move a vendor from another store under <span className="font-semibold text-[#102059]">{agrivet.name}</span> to{' '}
+                  <span className="font-semibold text-[#102059]">{store.storeName}</span>.
+                </p>
+              </div>
+
+              {reassignableVendors.length > 0 && (
+                <div className="px-6 pt-4">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#65676B]" />
+                    <input
+                      type="text"
+                      placeholder="Search by name, email, or store..."
+                      value={reassignSearchQuery}
+                      onChange={(e) => setReassignSearchQuery(e.target.value)}
+                      className="w-full pl-10 pr-4 py-2.5 border border-[#E5E7EB] rounded-lg text-sm text-[#102059] placeholder:text-[#65676B] focus:outline-none focus:ring-2 focus:ring-[#244693]/20 focus:border-[#244693]"
+                    />
+                  </div>
+                </div>
+              )}
+
+              <div className="flex-1 overflow-y-auto p-6">
+                {reassignableVendors.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-10 text-center">
+                    <div className="w-16 h-16 bg-[#F0F2F5] rounded-full flex items-center justify-center mb-4">
+                      <Users className="w-8 h-8 text-[#65676B]" />
+                    </div>
+                    <h3 className="text-base font-bold text-[#102059] mb-1">No Vendors Available</h3>
+                    <p className="text-sm text-[#65676B] max-w-sm">
+                      All vendors under this Agrivet are already assigned to this store, or no other stores have vendors yet.
+                    </p>
+                  </div>
+                ) : filteredReassignableVendors.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-10 text-center">
+                    <Search className="w-8 h-8 text-[#65676B] mb-3" />
+                    <p className="text-sm text-[#65676B]">No vendors match your search.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {filteredReassignableVendors.map((v) => (
+                      <div
+                        key={`${v.id}-${v.shop_id}`}
+                        className="border border-[#E5E7EB] rounded-lg p-4 hover:bg-[#F9FAFB] transition-colors"
+                      >
+                        <div className="flex items-center justify-between gap-4">
+                          <div className="flex items-center gap-3 min-w-0 flex-1">
+                            <div className="w-10 h-10 bg-[#102059] rounded-full flex items-center justify-center flex-shrink-0">
+                              <span className="text-xs font-bold text-white">{vendorInitials(v).toUpperCase()}</span>
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <h3 className="text-sm font-bold text-[#102059] truncate">{vendorDisplayName(v)}</h3>
+                              <p className="text-xs text-[#65676B] truncate">{v.email}</p>
+                              <p className="text-xs text-[#244693] font-medium mt-0.5 truncate">
+                                Currently at: {v.shop_name}
+                              </p>
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleReassignVendor(v)}
+                            disabled={reassigningVendorId === v.id}
+                            className="flex-shrink-0 px-4 py-2 bg-[#244693] text-white text-sm font-semibold rounded-lg hover:bg-[#1a3570] transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                          >
+                            {reassigningVendorId === v.id ? 'Reassigning...' : 'Reassign'}
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="p-6 border-t border-[#E5E7EB] flex justify-end">
+                <button
+                  type="button"
                   className="px-4 py-2.5 bg-white border border-[#E5E7EB] text-sm font-semibold rounded-lg hover:bg-[#F9FAFB]"
-                  onClick={() => setShowReassignModal(false)}
+                  onClick={closeReassignModal}
                 >
                   Close
                 </button>
-                <Link
-                  href={vendorsRoute}
-                  className="px-4 py-2.5 bg-[#244693] text-white text-sm font-semibold rounded-lg hover:bg-[#1a3570]"
-                >
-                  Open vendor management
-                </Link>
               </div>
             </div>
           </div>
@@ -1149,6 +1948,309 @@ export default function AgrivetStoreInformation({ auth, agrivet, shop, vendors =
                 </button>
                 <button className="px-4 py-2.5 bg-[#244693] text-white text-sm font-semibold rounded-lg hover:bg-[#1a3570]" onClick={confirmStatusChange}>
                   Confirm
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Add Product Modal */}
+        {showAddProductModal && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-lg border border-[#E5E7EB] w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+              <div className="flex items-center justify-between p-6 border-b border-[#E5E7EB]">
+                <div>
+                  <h2 className="text-xl font-bold text-[#102059]">Add Product to Store</h2>
+                  <p className="text-sm text-[#6B7280] mt-1">
+                    Choose from registered products and set listing details
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={closeAddProductModal}
+                  className="p-2 hover:bg-[#F9FAFB] rounded-lg transition-colors"
+                >
+                  <X className="w-5 h-5 text-[#6B7280]" />
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-6">
+                {!selectedCatalogProduct ? (
+                  <div>
+                    <h3 className="text-sm font-semibold text-[#102059] mb-4">Select a Product</h3>
+
+                    <div className="relative mb-6">
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-[#6B7280]" />
+                        <input
+                          type="text"
+                          value={productAddSearchQuery}
+                          onChange={(e) => setProductAddSearchQuery(e.target.value)}
+                          onFocus={() => setShowProductAddSuggestions(true)}
+                          onBlur={() => setTimeout(() => setShowProductAddSuggestions(false), 200)}
+                          placeholder="Search products by name or category..."
+                          className="w-full pl-10 pr-4 py-3 border border-[#E5E7EB] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#102059] focus:border-transparent text-sm"
+                        />
+                        {productAddSearchQuery && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setProductAddSearchQuery('')
+                              setShowProductAddSuggestions(false)
+                            }}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-[#6B7280] hover:text-[#102059]"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
+
+                      {showProductAddSuggestions && productAddSearchQuery.trim() && (
+                        <div className="absolute z-20 mt-2 w-full bg-white border border-[#E5E7EB] rounded-lg shadow-lg max-h-64 overflow-y-auto">
+                          {filteredCatalogProducts.length === 0 ? (
+                            <div className="px-4 py-8 text-center">
+                              <p className="text-sm text-[#6B7280]">No products found</p>
+                            </div>
+                          ) : (
+                            filteredCatalogProducts.map((product) => {
+                              const listed = isCatalogProductListed(product)
+                              return (
+                                <div
+                                  key={product.id}
+                                  onClick={() => {
+                                    if (listed) return
+                                    setSelectedCatalogProduct(product)
+                                    setProductAddSearchQuery('')
+                                    setShowProductAddSuggestions(false)
+                                  }}
+                                  className={`px-4 py-3 border-b border-[#E5E7EB] last:border-b-0 transition-colors ${
+                                    listed
+                                      ? 'opacity-50 cursor-not-allowed bg-[#F9FAFB]'
+                                      : 'cursor-pointer hover:bg-[#F9FAFB]'
+                                  }`}
+                                >
+                                  <div className="flex items-center gap-3">
+                                    <div className="w-12 h-12 bg-[#F9FAFB] rounded-lg overflow-hidden flex-shrink-0">
+                                      <img
+                                        src={product.image}
+                                        alt={product.productName}
+                                        className="w-full h-full object-cover"
+                                      />
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                      <h4 className="text-sm font-semibold text-[#102059] truncate">
+                                        {product.productName}
+                                      </h4>
+                                      <p className="text-xs text-[#6B7280] truncate">
+                                        {product.brand ? `${product.brand} • ` : ''}
+                                        {product.category}
+                                      </p>
+                                    </div>
+                                  </div>
+                                </div>
+                              )
+                            })
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    {registeredProducts.length === 0 ? (
+                      <div className="text-center py-12">
+                        <Package className="w-16 h-16 text-[#E5E7EB] mx-auto mb-4" />
+                        <h3 className="text-lg font-bold text-[#102059] mb-2">No Registered Products</h3>
+                        <p className="text-sm text-[#6B7280]">
+                          Please register products in the catalog first before creating listings.
+                        </p>
+                      </div>
+                    ) : filteredCatalogProducts.length === 0 ? (
+                      <div className="col-span-3 text-center py-12">
+                        <p className="text-sm text-[#6B7280]">No products found matching your search</p>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        {filteredCatalogProducts.map((product) => {
+                          const listed = isCatalogProductListed(product)
+                          return (
+                            <div
+                              key={product.id}
+                              onClick={() => !listed && setSelectedCatalogProduct(product)}
+                              className={`border rounded-lg p-4 transition-all ${
+                                listed
+                                  ? 'border-[#E5E7EB] bg-[#F9FAFB] opacity-50 cursor-not-allowed'
+                                  : 'border-[#E5E7EB] cursor-pointer hover:border-[#102059] hover:shadow-md'
+                              }`}
+                            >
+                              <div className="aspect-square bg-[#F9FAFB] rounded-lg mb-3 overflow-hidden">
+                                <img
+                                  src={product.image}
+                                  alt={product.productName}
+                                  className="w-full h-full object-cover"
+                                />
+                              </div>
+                              <h4 className="text-sm font-semibold text-[#102059] mb-1">{product.productName}</h4>
+                              <p className="text-xs text-[#6B7280]">{product.category}</p>
+                              {listed && (
+                                <p className="text-xs text-[#9CA3AF] mt-2">Already listed</p>
+                              )}
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedCatalogProduct(null)}
+                      className="flex items-center gap-2 text-sm text-[#244693] hover:text-[#102059] mb-4"
+                    >
+                      <ArrowLeft className="w-4 h-4" />
+                      Back to products
+                    </button>
+
+                    <div className="bg-[#F9FAFB] border border-[#E5E7EB] rounded-lg p-4 mb-6">
+                      <div className="flex gap-4">
+                        <div className="w-20 h-20 bg-white rounded-lg overflow-hidden flex-shrink-0">
+                          <img
+                            src={selectedCatalogProduct.image}
+                            alt={selectedCatalogProduct.productName}
+                            className="w-full h-full object-cover"
+                          />
+                        </div>
+                        <div>
+                          <h4 className="text-sm font-bold text-[#102059]">{selectedCatalogProduct.productName}</h4>
+                          <p className="text-xs text-[#6B7280] mt-1">
+                            {selectedCatalogProduct.brand
+                              ? `${selectedCatalogProduct.brand} • `
+                              : ''}
+                            {selectedCatalogProduct.category}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="space-y-4">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="text-xs font-semibold text-[#102059] uppercase tracking-wider block mb-2">
+                            Price (₱) *
+                          </label>
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={listingFormData.price}
+                            onChange={(e) =>
+                              setListingFormData({ ...listingFormData, price: e.target.value })
+                            }
+                            className="w-full px-4 py-2.5 border border-[#E5E7EB] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#102059] focus:border-transparent text-sm"
+                            placeholder="0.00"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs font-semibold text-[#102059] uppercase tracking-wider block mb-2">
+                            Stock Quantity *
+                          </label>
+                          <input
+                            type="number"
+                            min="0"
+                            value={listingFormData.stock}
+                            onChange={(e) =>
+                              setListingFormData({ ...listingFormData, stock: e.target.value })
+                            }
+                            className="w-full px-4 py-2.5 border border-[#E5E7EB] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#102059] focus:border-transparent text-sm"
+                            placeholder="0"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="text-xs font-semibold text-[#102059] uppercase tracking-wider block mb-2">
+                            Reorder Level *
+                          </label>
+                          <input
+                            type="number"
+                            min="0"
+                            value={listingFormData.reorderLevel}
+                            onChange={(e) =>
+                              setListingFormData({ ...listingFormData, reorderLevel: e.target.value })
+                            }
+                            className="w-full px-4 py-2.5 border border-[#E5E7EB] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#102059] focus:border-transparent text-sm"
+                            placeholder="0"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {selectedCatalogProduct && (
+                <div className="flex items-center justify-end gap-3 p-6 border-t border-[#E5E7EB]">
+                  <button
+                    type="button"
+                    onClick={closeAddProductModal}
+                    className="px-6 py-2.5 bg-white border border-[#E5E7EB] text-[#6B7280] rounded-lg hover:bg-[#F9FAFB] transition-colors text-sm font-medium"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSaveListing}
+                    disabled={
+                      !listingFormData.price ||
+                      !listingFormData.stock ||
+                      !listingFormData.reorderLevel ||
+                      !storeListingUrl
+                    }
+                    className="px-6 py-2.5 bg-[#102059] text-white rounded-lg hover:bg-[#244693] transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Add Product
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Create Bundle Modal */}
+        {showCreateBundleModal && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-lg border border-[#E5E7EB] w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+              <div className="flex items-center justify-between p-6 border-b border-[#E5E7EB]">
+                <div>
+                  <h2 className="text-xl font-bold text-[#102059]">Create Product Bundle</h2>
+                  <p className="text-sm text-[#6B7280] mt-1">
+                    Combine multiple products into a promotional bundle
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowCreateBundleModal(false)}
+                  className="p-2 hover:bg-[#F9FAFB] rounded-lg transition-colors"
+                >
+                  <X className="w-5 h-5 text-[#6B7280]" />
+                </button>
+              </div>
+              <div className="flex-1 overflow-y-auto p-6">
+                <div className="text-center py-12">
+                  <Package className="w-16 h-16 text-[#E5E7EB] mx-auto mb-4" />
+                  <h3 className="text-lg font-bold text-[#102059] mb-2">Create Bundle</h3>
+                  <p className="text-sm text-[#6B7280] max-w-md mx-auto">
+                    Bundle creation will be available once store listing APIs are connected.
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center justify-end gap-3 p-6 border-t border-[#E5E7EB]">
+                <button
+                  type="button"
+                  onClick={() => setShowCreateBundleModal(false)}
+                  className="px-6 py-2.5 bg-white border border-[#E5E7EB] text-[#6B7280] rounded-lg hover:bg-[#F9FAFB] transition-colors text-sm font-medium"
+                >
+                  Cancel
                 </button>
               </div>
             </div>
@@ -1192,7 +2294,7 @@ export default function AgrivetStoreInformation({ auth, agrivet, shop, vendors =
           </div>
         )}
       </div>
-    </SuperAdminOrAdminLayout>
+    </PageLayout>
   )
 }
 

@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Head, useForm, router } from '@inertiajs/react'
 import { ArrowLeft, Check, X } from 'lucide-react'
+import AdminKlasmeytLayout from '../../Layouts/AdminKlasmeytLayout'
 import KlasmeytDashboardLayout from '../../Layouts/KlasmeytDashboardLayout'
+import OwnerManagerKlasmeytLayout from '../../Layouts/OwnerManagerKlasmeytLayout'
 import SuperAdminKlasmeytLayout from '../../Layouts/SuperAdminKlasmeytLayout'
 import { useDashboardSession } from '../../hooks/useDashboardSession'
 
@@ -9,11 +11,26 @@ const inputClass =
     'w-full px-4 py-3 border border-[#E5E7EB] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#244693] focus:border-transparent text-sm text-[#1F2937]'
 
 function VendorRegistrationShell({ auth, title, children }) {
-    if (auth?.user?.user_type === 'super_admin') {
+    const userType = auth?.user?.user_type
+    if (userType === 'super_admin') {
         return (
             <SuperAdminKlasmeytLayout auth={auth} title={title} notificationCount={0}>
                 {children}
             </SuperAdminKlasmeytLayout>
+        )
+    }
+    if (userType === 'admin') {
+        return (
+            <AdminKlasmeytLayout auth={auth} title={title} notificationCount={0}>
+                {children}
+            </AdminKlasmeytLayout>
+        )
+    }
+    if (userType === 'owner_manager') {
+        return (
+            <OwnerManagerKlasmeytLayout auth={auth} title={title} notificationCount={0}>
+                {children}
+            </OwnerManagerKlasmeytLayout>
         )
     }
     return <KlasmeytDashboardLayout auth={auth} title={title}>{children}</KlasmeytDashboardLayout>
@@ -22,11 +39,14 @@ function VendorRegistrationShell({ auth, title, children }) {
 export default function VendorRegistration({ auth, agrivets = [] }) {
     useDashboardSession()
 
-    const accountsUrl =
-        auth?.user?.user_type === 'admin' ? '/dashboard/admin/users' : '/dashboard/super-admin/users'
+    const userType = auth?.user?.user_type
 
     const apiPrefix =
-        auth?.user?.user_type === 'admin' ? '/dashboard/admin' : '/dashboard/super-admin'
+        userType === 'admin'
+            ? '/dashboard/admin'
+            : userType === 'owner_manager'
+              ? '/dashboard/owner-manager'
+              : '/dashboard/super-admin'
 
     const [currentStep, setCurrentStep] = useState(1)
     const [errorMessage, setErrorMessage] = useState(null)
@@ -67,6 +87,12 @@ export default function VendorRegistration({ auth, agrivets = [] }) {
         }
     }, [])
 
+    useEffect(() => {
+        if (userType === 'owner_manager' && agrivets.length === 1 && !agrivetId) {
+            setAgrivetId(String(agrivets[0].id))
+        }
+    }, [userType, agrivets, agrivetId])
+
     const selectedAgrivet = useMemo(
         () => agrivets.find((a) => String(a.id) === String(agrivetId)),
         [agrivets, agrivetId],
@@ -85,9 +111,22 @@ export default function VendorRegistration({ auth, agrivets = [] }) {
         : ''
 
     const storeUrl = useMemo(() => {
-        if (!agrivetId || !shopId) return ''
+        if (!shopId) return ''
+        if (userType === 'owner_manager') {
+            return `${apiPrefix}/stores/${shopId}/vendors`
+        }
+        if (!agrivetId) return ''
         return `${apiPrefix}/agrivets/${agrivetId}/shops/${shopId}/vendors`
-    }, [apiPrefix, agrivetId, shopId])
+    }, [apiPrefix, agrivetId, shopId, userType])
+
+    const backUrl = useMemo(() => {
+        if (userType === 'owner_manager') {
+            return shopId
+                ? `/dashboard/owner-manager/stores/${shopId}/store-information?tab=vendors`
+                : '/dashboard/owner-manager/stores'
+        }
+        return userType === 'admin' ? '/dashboard/admin/users' : '/dashboard/super-admin/users'
+    }, [userType, shopId])
 
     const handleSubmit = (e) => {
         e.preventDefault()
@@ -191,9 +230,9 @@ export default function VendorRegistration({ auth, agrivets = [] }) {
             <div className="min-h-screen bg-[#F8F9FB]">
                 <button
                     type="button"
-                    onClick={() => router.visit(accountsUrl)}
+                    onClick={() => router.visit(backUrl)}
                     className="absolute left-6 top-6 z-10 rounded-lg border border-[#E5E7EB] bg-white p-3 transition-all hover:bg-[#F9FAFB] group"
-                    title="Back to Accounts"
+                    title={userType === 'owner_manager' ? 'Back to Store' : 'Back to Accounts'}
                 >
                     <ArrowLeft className="h-5 w-5 text-[#6B7280] group-hover:text-[#102059]" />
                 </button>

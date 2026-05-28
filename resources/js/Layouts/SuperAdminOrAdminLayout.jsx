@@ -1,9 +1,6 @@
-import AdminLayout from './AdminLayout'
+import AdminKlasmeytLayout from './AdminKlasmeytLayout'
 import SuperAdminKlasmeytLayout from './SuperAdminKlasmeytLayout'
 
-/**
- * Super admins get the Klasmeyt dashboard shell; everyone else keeps AdminLTE.
- */
 export default function SuperAdminOrAdminLayout({
     children,
     auth,
@@ -23,5 +20,14 @@ export default function SuperAdminOrAdminLayout({
             </SuperAdminKlasmeytLayout>
         )
     }
-    return <AdminLayout auth={auth} title={title}>{children}</AdminLayout>
+    return (
+        <AdminKlasmeytLayout
+            auth={auth}
+            title={title}
+            notificationCount={notificationCount}
+            mainClassName={mainClassName}
+        >
+            {children}
+        </AdminKlasmeytLayout>
+    )
 }

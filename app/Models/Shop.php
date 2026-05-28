@@ -36,6 +36,10 @@ class Shop extends Model
         'average_rating',
         'total_reviews',
         'shop_status',
+        'logo_url',
+        'permit_url',
+        'operating_days',
+        'operating_hours',
     ];
 
     /**

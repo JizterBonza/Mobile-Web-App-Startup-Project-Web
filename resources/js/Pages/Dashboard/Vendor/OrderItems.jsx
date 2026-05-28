@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useForm, Link, router } from '@inertiajs/react'
-import AdminLayout from '../../../Layouts/AdminLayout'
+import VendorKlasmeytLayout from '../../../Layouts/VendorKlasmeytLayout'
 
 export default function OrderItems({ auth, order, orderItems = [], orderItemStatuses = [], flash }) {
   const [showStatusModal, setShowStatusModal] = useState(false)
@@ -148,7 +148,7 @@ export default function OrderItems({ auth, order, orderItems = [], orderItemStat
   }
 
   return (
-    <AdminLayout auth={auth} title={`Order #${order?.id} – Items`}>
+    <VendorKlasmeytLayout auth={auth} title={`Order #${order?.id} – Items`}>
       {flash?.success && showSuccessAlert && (
         <div className="alert alert-success alert-dismissible fade show" role="alert">
           <strong>Success!</strong> {flash.success}
@@ -313,6 +313,6 @@ export default function OrderItems({ auth, order, orderItems = [], orderItemStat
           </div>
         </>
       )}
-    </AdminLayout>
+    </VendorKlasmeytLayout>
   )
 }
