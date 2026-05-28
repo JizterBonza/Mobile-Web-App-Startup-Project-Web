@@ -8,6 +8,7 @@ use App\Models\UserDetail;
 use App\Models\UserCredential;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Laravel\Socialite\Facades\Socialite;
@@ -16,14 +17,31 @@ use Illuminate\Support\Str;
 class SocialAuthController extends Controller
 {
     /**
-     * Redirect to provider's OAuth page
+     * Redirect to provider's OAuth page.
+     *
+     * Mobile clients may pass a `redirect_uri` query param (e.g. `klasmeyt://auth`).
+     * When present, it is encrypted into the OAuth `state` parameter and used by
+     * the callback to deep-link back into the app with the issued token.
      */
-    public function redirect($provider)
+    public function redirect(Request $request, $provider)
     {
         $this->validateProvider($provider);
-        
+
+        $driver = Socialite::driver($provider)->stateless();
+
+        if ($redirectUri = $request->query('redirect_uri')) {
+            $this->validateMobileRedirectUri($redirectUri);
+
+            $state = Crypt::encryptString(json_encode([
+                'redirect_uri' => $redirectUri,
+                'nonce' => Str::random(16),
+            ]));
+
+            $driver = $driver->with(['state' => $state]);
+        }
+
         return response()->json([
-            'url' => Socialite::driver($provider)->stateless()->redirect()->getTargetUrl()
+            'url' => $driver->redirect()->getTargetUrl(),
         ]);
     }
 
@@ -33,6 +51,8 @@ class SocialAuthController extends Controller
     public function callback(Request $request, $provider)
     {
         $this->validateProvider($provider);
+
+        $mobileRedirectUri = $this->extractMobileRedirectUri($request);
 
         try {
             // TEMPORARY FIX for SSL issues in local development
@@ -45,43 +65,36 @@ class SocialAuthController extends Controller
             } else {
                 $socialUser = Socialite::driver($provider)->stateless()->user();
             }
-            
-            // Check if user already exists by email
+
             $userDetail = UserDetail::where('email', $socialUser->getEmail())->first();
 
             if (!$userDetail) {
-                // NEW USER - Auto-register from social login
                 DB::beginTransaction();
 
                 try {
-                    // Parse name from social provider
                     $nameParts = $this->parseName($socialUser->getName());
 
-                    // Create UserDetail
                     $userDetail = UserDetail::create([
                         'first_name' => $nameParts['first_name'],
                         'middle_name' => $nameParts['middle_name'],
                         'last_name' => $nameParts['last_name'],
                         'email' => $socialUser->getEmail(),
-                        'email_confirmed' => true, // Social login emails are verified
-                        'mobile_number' => null, // Can be collected later
-                        'shipping_address' => null, // Can be collected later
+                        'email_confirmed' => true,
+                        'mobile_number' => null,
+                        'shipping_address' => null,
                         'profile_image_url' => $socialUser->getAvatar(),
-                        'avatar' => $socialUser->getAvatar(), // Store in both fields
+                        'avatar' => $socialUser->getAvatar(),
+                        'provider' => $provider,
+                        'provider_id' => $socialUser->getId(),
                     ]);
 
-                    // Create UserCredential with social provider info
-                    // Username: generated from email or social ID
                     $username = $this->generateUsername($socialUser->getEmail(), $provider);
-                    
+
                     $userCredential = UserCredential::create([
                         'username' => $username,
-                        'password_hash' => Hash::make(Str::random(32)), // Random password
-                        'provider' => $provider, // Add this column to track social login
-                        'provider_id' => $socialUser->getId(), // Add this column
+                        'password_hash' => Hash::make(Str::random(32)),
                     ]);
 
-                    // Create User
                     $user = User::create([
                         'user_detail_id' => $userDetail->id,
                         'user_credential_id' => $userCredential->id,
@@ -89,68 +102,136 @@ class SocialAuthController extends Controller
                         'user_type' => 'customer',
                     ]);
 
-                    // Load relationships
                     $user->load(['userDetail', 'userCredential']);
 
                     DB::commit();
 
                     $isNewUser = true;
-
                 } catch (\Exception $e) {
                     DB::rollBack();
                     throw $e;
                 }
-
             } else {
-                // EXISTING USER - Find the user record
                 $user = User::where('user_detail_id', $userDetail->id)->first();
-                
+
                 if (!$user) {
-                    return response()->json([
-                        'success' => false,
-                        'message' => 'User data inconsistency detected',
-                    ], 500);
+                    return $this->failureResponse(
+                        $mobileRedirectUri,
+                        'User data inconsistency detected',
+                        'data_inconsistency',
+                        500
+                    );
                 }
 
-                // Update profile image if available
                 $userDetail->update([
                     'profile_image_url' => $socialUser->getAvatar() ?? $userDetail->profile_image_url,
                     'avatar' => $socialUser->getAvatar() ?? $userDetail->avatar,
                     'email_confirmed' => true,
-                ]);
-
-                // Update provider info in credentials
-                $userCredential = UserCredential::find($user->user_credential_id);
-                $userCredential->update([
                     'provider' => $provider,
                     'provider_id' => $socialUser->getId(),
                 ]);
 
-                // Load relationships
                 $user->load(['userDetail', 'userCredential']);
 
                 $isNewUser = false;
             }
 
-            // Generate token
             $token = $user->createToken('mobile-token')->plainTextToken;
+            $profileComplete = $this->isProfileComplete($userDetail);
 
-            // Return success response with token
+            if ($mobileRedirectUri) {
+                return redirect()->away($this->appendQuery($mobileRedirectUri, [
+                    'token' => $token,
+                    'is_new_user' => $isNewUser ? '1' : '0',
+                    'profile_complete' => $profileComplete ? '1' : '0',
+                ]));
+            }
+
             return response()->json([
                 'success' => true,
                 'token' => $token,
                 'user' => $user,
                 'is_new_user' => $isNewUser,
-                'profile_complete' => $this->isProfileComplete($userDetail),
+                'profile_complete' => $profileComplete,
             ]);
-
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to authenticate with ' . $provider,
-                'error' => $e->getMessage()
-            ], 401);
+            return $this->failureResponse(
+                $mobileRedirectUri,
+                'Failed to authenticate with ' . $provider,
+                $e->getMessage(),
+                401
+            );
         }
+    }
+
+    /**
+     * Decode `redirect_uri` from the encrypted OAuth `state` parameter, if any.
+     */
+    protected function extractMobileRedirectUri(Request $request): ?string
+    {
+        $state = $request->query('state');
+
+        if (!$state) {
+            return null;
+        }
+
+        try {
+            $payload = json_decode(Crypt::decryptString($state), true);
+        } catch (\Throwable $e) {
+            return null;
+        }
+
+        if (!is_array($payload) || empty($payload['redirect_uri'])) {
+            return null;
+        }
+
+        $candidate = (string) $payload['redirect_uri'];
+
+        return $this->isAllowedMobileRedirectUri($candidate) ? $candidate : null;
+    }
+
+    /**
+     * Whitelist of allowed mobile deep-link schemes.
+     */
+    protected function isAllowedMobileRedirectUri(string $uri): bool
+    {
+        return Str::startsWith($uri, 'klasmeyt://');
+    }
+
+    protected function validateMobileRedirectUri(string $uri): void
+    {
+        if (!$this->isAllowedMobileRedirectUri($uri)) {
+            abort(422, 'Invalid redirect_uri');
+        }
+    }
+
+    /**
+     * Append query parameters to a URI, preserving any existing query string.
+     */
+    protected function appendQuery(string $uri, array $params): string
+    {
+        $separator = str_contains($uri, '?') ? '&' : '?';
+
+        return $uri . $separator . http_build_query($params);
+    }
+
+    /**
+     * Build a failure response, redirecting to the mobile app when applicable.
+     */
+    protected function failureResponse(?string $mobileRedirectUri, string $message, string $error, int $status)
+    {
+        if ($mobileRedirectUri) {
+            return redirect()->away($this->appendQuery($mobileRedirectUri, [
+                'error' => $error,
+                'message' => $message,
+            ]));
+        }
+
+        return response()->json([
+            'success' => false,
+            'message' => $message,
+            'error' => $error,
+        ], $status);
     }
 
     /**
