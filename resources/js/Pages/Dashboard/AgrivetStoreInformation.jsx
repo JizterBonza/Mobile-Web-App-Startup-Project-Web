@@ -6,11 +6,13 @@ import {
   Clock,
   Filter,
   Heart,
+  Info,
   MapPin,
   Package,
   Pencil,
   Plus,
   Search,
+  ShoppingCart,
   Star,
   Trash2,
   TrendingUp,
@@ -19,6 +21,18 @@ import {
   Users,
   X,
 } from 'lucide-react'
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Legend,
+  Line,
+  LineChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts'
 import { AnimatePresence, motion } from 'motion/react'
 import OwnerManagerKlasmeytLayout from '../../Layouts/OwnerManagerKlasmeytLayout'
 import SuperAdminOrAdminLayout from '../../Layouts/SuperAdminOrAdminLayout'
@@ -107,6 +121,58 @@ function formatReviewDate(dateStr) {
   })
 }
 
+const EMPTY_PERIOD_INSIGHTS = {
+  newCustomers: 0,
+  returningCustomers: 0,
+  totalCustomers: 0,
+  retentionRate: null,
+  orderCount: 0,
+  productsSold: 0,
+  revenue: 0,
+  trends: {},
+  customerChart: [],
+  revenueChart: [],
+}
+
+function getPeriodInsights(storeInsights, period) {
+  return storeInsights?.[period] ?? EMPTY_PERIOD_INSIGHTS
+}
+
+function formatInsightNumber(value) {
+  if (value == null) return '0'
+  return Number(value).toLocaleString()
+}
+
+function formatInsightCurrency(amount) {
+  if (amount == null || amount === 0) return '₱0'
+  if (amount >= 1_000_000) return `₱${(amount / 1_000_000).toFixed(2)}M`
+  if (amount >= 1_000) return `₱${(amount / 1_000).toFixed(1)}K`
+  return `₱${Number(amount).toLocaleString()}`
+}
+
+function formatRetentionRate(value) {
+  if (value == null) return '—'
+  return `${value}%`
+}
+
+function InsightTrendBadge({ trend }) {
+  if (trend == null || trend === '') return null
+  return (
+    <div className="flex items-center gap-1 text-xs font-semibold text-[#00C950]">
+      <TrendingUp className="w-3.5 h-3.5" />
+      {`${Math.abs(Number(trend))}%`}
+    </div>
+  )
+}
+
+function InsightChartEmpty({ message = 'No data available for this period' }) {
+  return (
+    <div className="flex items-center justify-center h-[350px] text-sm text-[#65676B]">
+      {message}
+    </div>
+  )
+}
+
 const PLACEHOLDER_PRODUCT_IMAGE =
   'https://images.unsplash.com/photo-1516382799247-87df95d790b7?auto=format&fit=crop&w=400&q=60'
 
@@ -189,6 +255,7 @@ export default function AgrivetStoreInformation({
   orders = [],
   deliveryMethods = [],
   preparingItemStatusId = null,
+  storeInsights = null,
   flash,
 }) {
   const isOwnerManager = auth?.user?.user_type === 'owner_manager'
@@ -266,6 +333,12 @@ export default function AgrivetStoreInformation({
     return 'about'
   })
   const [direction, setDirection] = useState(1)
+  const [insightsPeriod, setInsightsPeriod] = useState('weekly')
+
+  const periodInsights = useMemo(
+    () => getPeriodInsights(storeInsights, insightsPeriod),
+    [storeInsights, insightsPeriod],
+  )
 
   const [starFilter, setStarFilter] = useState(null)
   const averageRating = parseFloat(shop?.average_rating || 0)
@@ -1584,24 +1657,6 @@ export default function AgrivetStoreInformation({
               )}
 
               {activeTab === 'insights' && (
-                <div className="bg-white rounded-lg border border-[#E5E7EB] min-h-[600px]">
-                  <div className="border-b border-[#E5E7EB] p-6">
-                    <h2 className="text-xl font-bold text-[#102059]">Store Insights</h2>
-                    <p className="text-sm text-[#65676B] mt-1">Analytics for orders, customers, and revenue</p>
-                  </div>
-                  <div className="flex flex-col items-center justify-center py-16 px-6">
-                    <div className="w-16 h-16 bg-[#E3F2FD] rounded-full flex items-center justify-center mb-4">
-                      <TrendingUp className="w-8 h-8 text-[#244693]" />
-                    </div>
-                    <h3 className="text-lg font-bold text-[#102059] mb-2">No insights available yet</h3>
-                    <p className="text-sm text-[#65676B] text-center max-w-md">
-                      Store analytics will appear here once there is enough order and customer activity data.
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              {false && activeTab === 'insights_OLD' && (
                 <div className="space-y-6">
                   <div className="flex items-center justify-between mb-4">
                     <h2 className="text-xl font-bold text-[#102059]">Store Insights</h2>
@@ -1609,9 +1664,12 @@ export default function AgrivetStoreInformation({
                       {['weekly', 'monthly', 'yearly'].map((p) => (
                         <button
                           key={p}
+                          type="button"
                           onClick={() => setInsightsPeriod(p)}
                           className={`px-3 py-1.5 text-xs font-semibold rounded-full transition-all ${
-                            insightsPeriod === p ? 'bg-white text-[#244693] shadow-sm' : 'text-[#65676B] hover:text-[#102059]'
+                            insightsPeriod === p
+                              ? 'bg-white text-[#244693] shadow-sm'
+                              : 'text-[#65676B] hover:text-[#102059]'
                           }`}
                         >
                           {p.charAt(0).toUpperCase() + p.slice(1)}
@@ -1628,66 +1686,151 @@ export default function AgrivetStoreInformation({
                       <h3 className="text-lg font-bold text-[#102059]">Customer Metrics</h3>
                     </div>
 
+                    <div className="grid grid-cols-4 gap-4">
+                      <div className="bg-white rounded-lg border border-[#E5E7EB] p-4 relative group">
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="w-10 h-10 bg-[#E3F2FD] rounded-full flex items-center justify-center">
+                            <UserPlus className="w-5 h-5 text-[#244693]" />
+                          </div>
+                          <InsightTrendBadge trend={periodInsights.trends?.newCustomers} />
+                        </div>
+                        <h3 className="text-2xl font-bold text-[#102059] mb-1">
+                          {formatInsightNumber(periodInsights.newCustomers)}
+                        </h3>
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm text-[#65676B]">New Customers</p>
+                          <div className="relative">
+                            <Info className="w-3.5 h-3.5 text-[#244693] cursor-help" />
+                            <div className="absolute left-0 bottom-full mb-2 w-64 bg-[#102059] text-white text-xs rounded-lg p-3 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-10 shadow-lg">
+                              <p className="font-semibold mb-1">Customer Acquisition</p>
+                              <p>
+                                Tracks first-time customers. Shows marketing effectiveness and brand reach. Growth
+                                indicates successful customer acquisition strategies.
+                              </p>
+                              <div className="absolute left-4 top-full w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-[#102059]" />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="bg-white rounded-lg border border-[#E5E7EB] p-4 relative group">
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="w-10 h-10 bg-[#FFF3E0] rounded-full flex items-center justify-center">
+                            <Users className="w-5 h-5 text-[#D3A218]" />
+                          </div>
+                          <InsightTrendBadge trend={periodInsights.trends?.returningCustomers} />
+                        </div>
+                        <h3 className="text-2xl font-bold text-[#102059] mb-1">
+                          {formatInsightNumber(periodInsights.returningCustomers)}
+                        </h3>
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm text-[#65676B]">Returning Customers</p>
+                          <div className="relative">
+                            <Info className="w-3.5 h-3.5 text-[#D3A218] cursor-help" />
+                            <div className="absolute left-0 bottom-full mb-2 w-64 bg-[#102059] text-white text-xs rounded-lg p-3 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-10 shadow-lg">
+                              <p className="font-semibold mb-1">Customer Loyalty</p>
+                              <p>
+                                Measures repeat business. Indicates product quality and customer satisfaction. High
+                                numbers mean lower acquisition costs and sustainable revenue.
+                              </p>
+                              <div className="absolute left-4 top-full w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-[#102059]" />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="bg-white rounded-lg border border-[#E5E7EB] p-4 relative group">
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="w-10 h-10 bg-[#F3E5F5] rounded-full flex items-center justify-center">
+                            <Users className="w-5 h-5 text-[#9C27B0]" />
+                          </div>
+                          <InsightTrendBadge trend={periodInsights.trends?.totalCustomers} />
+                        </div>
+                        <h3 className="text-2xl font-bold text-[#102059] mb-1">
+                          {formatInsightNumber(periodInsights.totalCustomers)}
+                        </h3>
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm text-[#65676B]">Total Customers</p>
+                          <div className="relative">
+                            <Info className="w-3.5 h-3.5 text-[#9C27B0] cursor-help" />
+                            <div className="absolute left-0 bottom-full mb-2 w-64 bg-[#102059] text-white text-xs rounded-lg p-3 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-10 shadow-lg">
+                              <p className="font-semibold mb-1">Market Reach</p>
+                              <p>
+                                Shows overall customer base size. Reflects brand presence and market penetration.
+                                Growth indicates expanding market share and business scale.
+                              </p>
+                              <div className="absolute left-4 top-full w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-[#102059]" />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="bg-white rounded-lg border border-[#E5E7EB] p-4 relative group">
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="w-10 h-10 bg-[#E8F5E9] rounded-full flex items-center justify-center">
+                            <CheckCircle className="w-5 h-5 text-[#00C950]" />
+                          </div>
+                          <InsightTrendBadge trend={periodInsights.trends?.retentionRate} />
+                        </div>
+                        <h3 className="text-2xl font-bold text-[#102059] mb-1">
+                          {formatRetentionRate(periodInsights.retentionRate)}
+                        </h3>
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm text-[#65676B]">Retention Rate</p>
+                          <div className="relative">
+                            <Info className="w-3.5 h-3.5 text-[#00C950] cursor-help" />
+                            <div className="absolute right-0 bottom-full mb-2 w-64 bg-[#102059] text-white text-xs rounded-lg p-3 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-10 shadow-lg">
+                              <p className="font-semibold mb-1">Business Sustainability</p>
+                              <p>
+                                Percentage of customers who return. Critical for long-term success. Higher rates mean
+                                stable revenue, reduced marketing costs, and strong customer relationships.
+                              </p>
+                              <div className="absolute right-4 top-full w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-[#102059]" />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
                     <div className="bg-white rounded-lg border border-[#E5E7EB] p-6">
                       <div className="flex items-center gap-2 mb-6 group relative">
                         <h3 className="text-lg font-bold text-[#102059]">Customer Analysis</h3>
                         <Info className="w-4 h-4 text-[#244693] cursor-help" />
+                        <div className="absolute left-0 top-full mt-2 w-80 bg-[#102059] text-white text-xs rounded-lg p-3 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-10 shadow-lg">
+                          <p className="font-semibold mb-1">Customer Acquisition vs Retention Insights</p>
+                          <p>
+                            This chart compares new and returning customers over time. Use it to balance marketing
+                            spend between acquiring new customers and retaining existing ones.
+                          </p>
+                          <div className="absolute left-4 -top-2 w-0 h-0 border-l-4 border-r-4 border-b-4 border-transparent border-b-[#102059]" />
+                        </div>
                       </div>
-                      <ResponsiveContainer width="100%" height={350}>
-                        <BarChart
-                          key={`customer-chart-${insightsPeriod}`}
-                          data={
-                            insightsPeriod === 'weekly'
-                              ? [
-                                  { name: 'Mon', new: 1, returning: 3 },
-                                  { name: 'Tue', new: 1, returning: 4 },
-                                  { name: 'Wed', new: 0, returning: 3 },
-                                  { name: 'Thu', new: 1, returning: 2 },
-                                  { name: 'Fri', new: 2, returning: 3 },
-                                  { name: 'Sat', new: 1, returning: 2 },
-                                  { name: 'Sun', new: 0, returning: 1 },
-                                ]
-                              : insightsPeriod === 'monthly'
-                                ? [
-                                    { name: 'Week 1', new: 5, returning: 15 },
-                                    { name: 'Week 2', new: 6, returning: 18 },
-                                    { name: 'Week 3', new: 7, returning: 20 },
-                                    { name: 'Week 4', new: 8, returning: 19 },
-                                    { name: 'Week 5', new: 2, returning: 3 },
-                                  ]
-                                : [
-                                    { name: 'Jan', new: 24, returning: 38 },
-                                    { name: 'Feb', new: 27, returning: 41 },
-                                    { name: 'Mar', new: 29, returning: 44 },
-                                    { name: 'Apr', new: 31, returning: 47 },
-                                    { name: 'May', new: 28, returning: 43 },
-                                    { name: 'Jun', new: 30, returning: 45 },
-                                    { name: 'Jul', new: 32, returning: 48 },
-                                    { name: 'Aug', new: 26, returning: 39 },
-                                    { name: 'Sep', new: 28, returning: 42 },
-                                    { name: 'Oct', new: 30, returning: 44 },
-                                    { name: 'Nov', new: 29, returning: 43 },
-                                    { name: 'Dec', new: 28, returning: 34 },
-                                  ]
-                          }
-                          margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
-                        >
-                          <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
-                          <XAxis dataKey="name" stroke="#65676B" style={{ fontSize: '12px' }} />
-                          <YAxis stroke="#65676B" style={{ fontSize: '12px' }} />
-                          <Tooltip
-                            contentStyle={{
-                              backgroundColor: 'white',
-                              border: '1px solid #E5E7EB',
-                              borderRadius: '8px',
-                              fontSize: '12px',
-                            }}
-                          />
-                          <Legend wrapperStyle={{ fontSize: '12px', paddingTop: '20px' }} />
-                          <Bar dataKey="new" fill="#244693" name="New Customers" radius={[4, 4, 0, 0]} />
-                          <Bar dataKey="returning" fill="#D3A218" name="Returning Customers" radius={[4, 4, 0, 0]} />
-                        </BarChart>
-                      </ResponsiveContainer>
+                      {periodInsights.customerChart.length === 0 ? (
+                        <InsightChartEmpty />
+                      ) : (
+                        <ResponsiveContainer width="100%" height={350}>
+                          <BarChart
+                            key={`customer-chart-${insightsPeriod}`}
+                            data={periodInsights.customerChart}
+                            margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+                          >
+                            <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
+                            <XAxis dataKey="name" stroke="#65676B" style={{ fontSize: '12px' }} />
+                            <YAxis stroke="#65676B" style={{ fontSize: '12px' }} />
+                            <Tooltip
+                              contentStyle={{
+                                backgroundColor: 'white',
+                                border: '1px solid #E5E7EB',
+                                borderRadius: '8px',
+                                fontSize: '12px',
+                              }}
+                            />
+                            <Legend wrapperStyle={{ fontSize: '12px', paddingTop: '20px' }} />
+                            <Bar dataKey="new" fill="#244693" name="New Customers" radius={[4, 4, 0, 0]} />
+                            <Bar dataKey="returning" fill="#D3A218" name="Returning Customers" radius={[4, 4, 0, 0]} />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      )}
                     </div>
                   </div>
 
@@ -1705,33 +1848,50 @@ export default function AgrivetStoreInformation({
                           <div className="w-10 h-10 bg-[#FFF3E0] rounded-full flex items-center justify-center">
                             <ShoppingCart className="w-5 h-5 text-[#D3A218]" />
                           </div>
-                          <div className="flex items-center gap-1 text-xs font-semibold text-[#00C950]">
-                            <TrendingUp className="w-3.5 h-3.5" />
-                            {insightsPeriod === 'weekly' ? '15%' : insightsPeriod === 'monthly' ? '28%' : '52%'}
-                          </div>
+                          <InsightTrendBadge trend={periodInsights.trends?.orderCount} />
                         </div>
                         <h3 className="text-2xl font-bold text-[#102059] mb-1">
-                          {insightsPeriod === 'weekly' ? '32' : insightsPeriod === 'monthly' ? '138' : '1,456'}
+                          {formatInsightNumber(periodInsights.orderCount)}
                         </h3>
                         <div className="flex items-center gap-2">
                           <p className="text-sm text-[#65676B]">Number of Orders</p>
+                          <div className="relative">
+                            <Info className="w-3.5 h-3.5 text-[#D3A218] cursor-help" />
+                            <div className="absolute left-0 bottom-full mb-2 w-64 bg-[#102059] text-white text-xs rounded-lg p-3 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-10 shadow-lg">
+                              <p className="font-semibold mb-1">Transaction Volume</p>
+                              <p>
+                                Total purchase transactions. Indicates business activity and customer engagement.
+                                Track trends to optimize inventory, staffing, and operations.
+                              </p>
+                              <div className="absolute left-4 top-full w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-[#102059]" />
+                            </div>
+                          </div>
                         </div>
                       </div>
+
                       <div className="bg-white rounded-lg border border-[#E5E7EB] p-4 relative group">
                         <div className="flex items-center justify-between mb-3">
                           <div className="w-10 h-10 bg-[#E3F2FD] rounded-full flex items-center justify-center">
                             <Package className="w-5 h-5 text-[#244693]" />
                           </div>
-                          <div className="flex items-center gap-1 text-xs font-semibold text-[#00C950]">
-                            <TrendingUp className="w-3.5 h-3.5" />
-                            {insightsPeriod === 'weekly' ? '18%' : insightsPeriod === 'monthly' ? '31%' : '58%'}
-                          </div>
+                          <InsightTrendBadge trend={periodInsights.trends?.productsSold} />
                         </div>
                         <h3 className="text-2xl font-bold text-[#102059] mb-1">
-                          {insightsPeriod === 'weekly' ? '124' : insightsPeriod === 'monthly' ? '538' : '5,847'}
+                          {formatInsightNumber(periodInsights.productsSold)}
                         </h3>
                         <div className="flex items-center gap-2">
                           <p className="text-sm text-[#65676B]">Products Sold</p>
+                          <div className="relative">
+                            <Info className="w-3.5 h-3.5 text-[#244693] cursor-help" />
+                            <div className="absolute left-0 bottom-full mb-2 w-64 bg-[#102059] text-white text-xs rounded-lg p-3 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-10 shadow-lg">
+                              <p className="font-semibold mb-1">Inventory Performance</p>
+                              <p>
+                                Total items moved. Shows product demand and inventory turnover. Use to identify
+                                best-sellers, plan restocking, and optimize product mix.
+                              </p>
+                              <div className="absolute left-4 top-full w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-[#102059]" />
+                            </div>
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -1745,90 +1905,101 @@ export default function AgrivetStoreInformation({
                       <h3 className="text-lg font-bold text-[#102059]">Financial Performance</h3>
                     </div>
 
+                    <div className="bg-white rounded-lg border border-[#E5E7EB] p-4 max-w-sm relative group">
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="w-10 h-10 bg-[#FFEBEE] rounded-full flex items-center justify-center">
+                          <TrendingUp className="w-5 h-5 text-[#E20E28]" />
+                        </div>
+                        <InsightTrendBadge trend={periodInsights.trends?.revenue} />
+                      </div>
+                      <h3 className="text-2xl font-bold text-[#102059] mb-1">
+                        {formatInsightCurrency(periodInsights.revenue)}
+                      </h3>
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm text-[#65676B]">Revenue Growth</p>
+                        <div className="relative">
+                          <Info className="w-3.5 h-3.5 text-[#E20E28] cursor-help" />
+                          <div className="absolute left-0 bottom-full mb-2 w-64 bg-[#102059] text-white text-xs rounded-lg p-3 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-10 shadow-lg">
+                            <p className="font-semibold mb-1">Financial Health</p>
+                            <p>
+                              Total income growth vs previous period. Key profitability indicator. Use to assess
+                              business viability, plan expansion, and make investment decisions.
+                            </p>
+                            <div className="absolute left-4 top-full w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-[#102059]" />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
                     <div className="bg-white rounded-lg border border-[#E5E7EB] p-6">
                       <div className="flex items-center gap-2 mb-6 group relative">
                         <h3 className="text-lg font-bold text-[#102059]">Revenue Trend</h3>
                         <Info className="w-4 h-4 text-[#244693] cursor-help" />
+                        <div className="absolute left-0 top-full mt-2 w-80 bg-[#102059] text-white text-xs rounded-lg p-3 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-10 shadow-lg">
+                          <p className="font-semibold mb-1">Financial & Order Performance Tracking</p>
+                          <p>
+                            This dual-axis chart shows revenue (blue, left axis) and order volume (gold, right axis)
+                            trends. Use it to identify peak sales periods, seasonal patterns, and growth opportunities.
+                          </p>
+                          <div className="absolute left-4 -top-2 w-0 h-0 border-l-4 border-r-4 border-b-4 border-transparent border-b-[#102059]" />
+                        </div>
                       </div>
-                      <ResponsiveContainer width="100%" height={350}>
-                        <LineChart
-                          key={`revenue-chart-${insightsPeriod}`}
-                          data={
-                            insightsPeriod === 'weekly'
-                              ? [
-                                  { name: 'Mon', revenue: 4800, orders: 4 },
-                                  { name: 'Tue', revenue: 6200, orders: 5 },
-                                  { name: 'Wed', revenue: 3900, orders: 3 },
-                                  { name: 'Thu', revenue: 5100, orders: 4 },
-                                  { name: 'Fri', revenue: 7500, orders: 6 },
-                                  { name: 'Sat', revenue: 6800, orders: 5 },
-                                  { name: 'Sun', revenue: 4100, orders: 5 },
-                                ]
-                              : insightsPeriod === 'monthly'
-                                ? [
-                                    { name: 'Week 1', revenue: 28500, orders: 27 },
-                                    { name: 'Week 2', revenue: 32400, orders: 33 },
-                                    { name: 'Week 3', revenue: 36800, orders: 37 },
-                                    { name: 'Week 4', revenue: 41200, orders: 35 },
-                                    { name: 'Week 5', revenue: 26300, orders: 6 },
-                                  ]
-                                : [
-                                    { name: 'Jan', revenue: 128000, orders: 118 },
-                                    { name: 'Feb', revenue: 135000, orders: 125 },
-                                    { name: 'Mar', revenue: 142000, orders: 132 },
-                                    { name: 'Apr', revenue: 148000, orders: 138 },
-                                    { name: 'May', revenue: 138000, orders: 128 },
-                                    { name: 'Jun', revenue: 145000, orders: 135 },
-                                    { name: 'Jul', revenue: 152000, orders: 142 },
-                                    { name: 'Aug', revenue: 132000, orders: 122 },
-                                    { name: 'Sep', revenue: 139000, orders: 129 },
-                                    { name: 'Oct', revenue: 147000, orders: 137 },
-                                    { name: 'Nov', revenue: 143000, orders: 133 },
-                                    { name: 'Dec', revenue: 126000, orders: 117 },
-                                  ]
-                          }
-                          margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
-                        >
-                          <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
-                          <XAxis dataKey="name" stroke="#65676B" style={{ fontSize: '12px' }} />
-                          <YAxis
-                            yAxisId="left"
-                            stroke="#244693"
-                            style={{ fontSize: '12px' }}
-                            tickFormatter={(value) => (value >= 1000 ? `₱${value / 1000}K` : `₱${value}`)}
-                          />
-                          <YAxis yAxisId="right" orientation="right" stroke="#D3A218" style={{ fontSize: '12px' }} />
-                          <Tooltip
-                            contentStyle={{
-                              backgroundColor: 'white',
-                              border: '1px solid #E5E7EB',
-                              borderRadius: '8px',
-                              fontSize: '12px',
-                            }}
-                          />
-                          <Legend wrapperStyle={{ fontSize: '12px', paddingTop: '20px' }} />
-                          <Line
-                            type="monotone"
-                            dataKey="revenue"
-                            stroke="#244693"
-                            strokeWidth={3}
-                            dot={{ fill: '#244693', r: 4 }}
-                            activeDot={{ r: 6 }}
-                            name="Revenue"
-                            yAxisId="left"
-                          />
-                          <Line
-                            type="monotone"
-                            dataKey="orders"
-                            stroke="#D3A218"
-                            strokeWidth={3}
-                            dot={{ fill: '#D3A218', r: 4 }}
-                            activeDot={{ r: 6 }}
-                            name="Orders"
-                            yAxisId="right"
-                          />
-                        </LineChart>
-                      </ResponsiveContainer>
+                      {periodInsights.revenueChart.length === 0 ? (
+                        <InsightChartEmpty />
+                      ) : (
+                        <ResponsiveContainer width="100%" height={350}>
+                          <LineChart
+                            key={`revenue-chart-${insightsPeriod}`}
+                            data={periodInsights.revenueChart}
+                            margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+                          >
+                            <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
+                            <XAxis dataKey="name" stroke="#65676B" style={{ fontSize: '12px' }} />
+                            <YAxis
+                              yAxisId="left"
+                              stroke="#244693"
+                              style={{ fontSize: '12px' }}
+                              tickFormatter={(value) => (value >= 1000 ? `₱${value / 1000}K` : `₱${value}`)}
+                            />
+                            <YAxis yAxisId="right" orientation="right" stroke="#D3A218" style={{ fontSize: '12px' }} />
+                            <Tooltip
+                              contentStyle={{
+                                backgroundColor: 'white',
+                                border: '1px solid #E5E7EB',
+                                borderRadius: '8px',
+                                fontSize: '12px',
+                              }}
+                              formatter={(value, name) => {
+                                if (name === 'Revenue') {
+                                  return [`₱${Number(value).toLocaleString()}`, 'Revenue']
+                                }
+                                return [value, 'Orders']
+                              }}
+                            />
+                            <Legend wrapperStyle={{ fontSize: '12px', paddingTop: '20px' }} />
+                            <Line
+                              type="monotone"
+                              dataKey="revenue"
+                              stroke="#244693"
+                              strokeWidth={3}
+                              dot={{ fill: '#244693', r: 4 }}
+                              activeDot={{ r: 6 }}
+                              name="Revenue"
+                              yAxisId="left"
+                            />
+                            <Line
+                              type="monotone"
+                              dataKey="orders"
+                              stroke="#D3A218"
+                              strokeWidth={3}
+                              dot={{ fill: '#D3A218', r: 4 }}
+                              activeDot={{ r: 6 }}
+                              name="Orders"
+                              yAxisId="right"
+                            />
+                          </LineChart>
+                        </ResponsiveContainer>
+                      )}
                     </div>
                   </div>
                 </div>
