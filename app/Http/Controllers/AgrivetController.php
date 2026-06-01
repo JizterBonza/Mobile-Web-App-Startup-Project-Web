@@ -831,6 +831,114 @@ class AgrivetController extends Controller
     }
 
     /**
+     * Update a shop listing (price, stock, status).
+     */
+    public function updateShopListing(Request $request, $id, $shopId, $itemId)
+    {
+        $agrivet = Agrivet::findOrFail($id);
+        $shop = Shop::where('agrivet_id', $agrivet->id)->findOrFail($shopId);
+
+        $item = DB::table('items')
+            ->where('id', $itemId)
+            ->where('shop_id', $shop->id)
+            ->first();
+
+        if (! $item) {
+            return redirect()->back()
+                ->withErrors(['error' => 'Listing not found.']);
+        }
+
+        $validated = $request->validate([
+            'item_price' => 'sometimes|numeric|min:0',
+            'item_quantity' => 'sometimes|integer|min:0',
+            'item_status' => 'sometimes|string|in:active,inactive',
+        ]);
+
+        $update = ['updated_at' => now()];
+
+        if (array_key_exists('item_price', $validated)) {
+            $update['item_price'] = $validated['item_price'];
+        }
+        if (array_key_exists('item_quantity', $validated)) {
+            $update['item_quantity'] = $validated['item_quantity'];
+        }
+        if (array_key_exists('item_status', $validated)) {
+            $update['item_status'] = $validated['item_status'];
+        }
+
+        DB::table('items')->where('id', $itemId)->update($update);
+
+        return redirect()->back()
+            ->with('success', 'Listing updated successfully.');
+    }
+
+    /**
+     * Create a product bundle listing from multiple catalog products.
+     */
+    public function storeShopBundle(Request $request, $id, $shopId)
+    {
+        $agrivet = Agrivet::findOrFail($id);
+        $shop = Shop::where('agrivet_id', $agrivet->id)->findOrFail($shopId);
+
+        $validated = $request->validate([
+            'bundle_name' => 'required|string|max:150',
+            'item_price' => 'required|numeric|min:0',
+            'item_quantity' => 'required|integer|min:0',
+            'reorder_level' => 'nullable|integer|min:0',
+            'description' => 'nullable|string|max:2000',
+            'product_catalog_ids' => 'required|array|min:1',
+            'product_catalog_ids.*' => 'integer|exists:product_catalog,id',
+        ]);
+
+        $alreadyListed = DB::table('items')
+            ->where('shop_id', $shop->id)
+            ->where('item_name', $validated['bundle_name'])
+            ->exists();
+
+        if ($alreadyListed) {
+            return redirect()->back()
+                ->withErrors(['bundle_name' => 'A bundle with this name already exists in the store.']);
+        }
+
+        $catalogProducts = ProductCatalog::approved()
+            ->whereIn('id', $validated['product_catalog_ids'])
+            ->get();
+
+        if ($catalogProducts->count() !== count($validated['product_catalog_ids'])) {
+            return redirect()->back()
+                ->withErrors(['product_catalog_ids' => 'One or more selected products are invalid.']);
+        }
+
+        $firstProduct = $catalogProducts->first();
+        $images = $this->normalizeCatalogImagePaths($firstProduct->images ?? []);
+        $bundleProductNames = $catalogProducts->pluck('product_name')->join(', ');
+        $description = $validated['description']
+            ?: "Bundle containing: {$bundleProductNames}";
+
+        DB::table('items')->insert([
+            'shop_id' => $shop->id,
+            'item_name' => $validated['bundle_name'],
+            'item_description' => $description,
+            'item_price' => $validated['item_price'],
+            'item_quantity' => $validated['item_quantity'],
+            'weight' => null,
+            'metric' => 'Bundle',
+            'category' => $firstProduct->category_id,
+            'sub_category_id' => $firstProduct->sub_category_id,
+            'item_images' => ! empty($images) ? json_encode($images) : null,
+            'item_status' => 'active',
+            'average_rating' => 0.00,
+            'total_reviews' => 0,
+            'sold_count' => 0,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        return redirect()->back()
+            ->with('success', 'Product bundle created successfully.');
+    }
+
+    /**
      * Display vendors for a specific shop.
      */
     public function showVendors($id, $shopId)

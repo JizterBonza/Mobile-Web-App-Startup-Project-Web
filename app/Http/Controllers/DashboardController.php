@@ -336,6 +336,22 @@ class DashboardController extends Controller
         return app(AgrivetController::class)->storeShopListing($request, $agrivet->id, $shopId);
     }
 
+    public function ownerManagerUpdateShopListing(Request $request, $shopId, $itemId)
+    {
+        $agrivet = auth()->user()->managedAgrivet;
+        abort_unless($agrivet, 404);
+
+        return app(AgrivetController::class)->updateShopListing($request, $agrivet->id, $shopId, $itemId);
+    }
+
+    public function ownerManagerStoreShopBundle(Request $request, $shopId)
+    {
+        $agrivet = auth()->user()->managedAgrivet;
+        abort_unless($agrivet, 404);
+
+        return app(AgrivetController::class)->storeShopBundle($request, $agrivet->id, $shopId);
+    }
+
     public function ownerManagerProductsCreate($shopId)
     {
         $agrivet = auth()->user()->managedAgrivet;

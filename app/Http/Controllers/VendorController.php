@@ -122,6 +122,36 @@ class VendorController extends Controller
     }
 
     /**
+     * Update a shop listing (vendor's assigned shop).
+     */
+    public function updateShopListing(Request $request, $itemId)
+    {
+        $shop = $this->getVendorShopWithAgrivet();
+
+        if (! $shop || ! $shop->agrivet) {
+            return redirect()->back()
+                ->withErrors(['error' => 'You are not associated with any shop.']);
+        }
+
+        return app(AgrivetController::class)->updateShopListing($request, $shop->agrivet->id, $shop->id, $itemId);
+    }
+
+    /**
+     * Create a product bundle listing (vendor's assigned shop).
+     */
+    public function storeShopBundle(Request $request)
+    {
+        $shop = $this->getVendorShopWithAgrivet();
+
+        if (! $shop || ! $shop->agrivet) {
+            return redirect()->back()
+                ->withErrors(['error' => 'You are not associated with any shop.']);
+        }
+
+        return app(AgrivetController::class)->storeShopBundle($request, $shop->agrivet->id, $shop->id);
+    }
+
+    /**
      * Display store management page.
      */
     public function storeIndex()

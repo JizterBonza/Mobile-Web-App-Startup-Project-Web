@@ -110,6 +110,9 @@ function formatReviewDate(dateStr) {
 const PLACEHOLDER_PRODUCT_IMAGE =
   'https://images.unsplash.com/photo-1516382799247-87df95d790b7?auto=format&fit=crop&w=400&q=60'
 
+const LISTING_IMAGE_FALLBACK =
+  "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='400' viewBox='0 0 400 400'%3E%3Crect width='400' height='400' fill='%23F3F4F6'/%3E%3Cg transform='translate(200,200)'%3E%3Crect x='-60' y='-70' width='120' height='120' rx='8' fill='%23D1D5DB' stroke='%239CA3AF' stroke-width='3'/%3E%3Cpath d='M -40,-50 L -40,-30 M 0,-50 L 0,-30 M 40,-50 L 40,-30' stroke='%239CA3AF' stroke-width='3' stroke-linecap='round'/%3E%3Crect x='-60' y='-70' width='120' height='25' rx='8' fill='%239CA3AF'/%3E%3C/g%3E%3C/svg%3E"
+
 function resolveCatalogImageUrl(image) {
   if (!image || typeof image !== 'string') return PLACEHOLDER_PRODUCT_IMAGE
   if (image.startsWith('http://') || image.startsWith('https://')) return image
@@ -145,6 +148,33 @@ function catalogProductMatchesSearch(product, query) {
     product.category.toLowerCase().includes(q) ||
     product.brand.toLowerCase().includes(q)
   )
+}
+
+function getListingImageSrc(listing) {
+  const idx = listing.primaryPhotoIndex || 0
+  const photo = listing.photos?.[idx] || listing.photos?.[0]
+  return photo ? resolveCatalogImageUrl(photo) : LISTING_IMAGE_FALLBACK
+}
+
+function getEffectiveDiscount(listing) {
+  if (!listing.discountPercent) return 0
+  if (listing.discountType === 'timed' && listing.discountExpiration) {
+    if (Date.now() > listing.discountExpiration) return 0
+  }
+  return listing.discountPercent
+}
+
+function getDiscountedPrice(listing) {
+  const discount = getEffectiveDiscount(listing)
+  if (discount === 0) return listing.price
+  return listing.price * (1 - discount / 100)
+}
+
+function getProductStatus(listing) {
+  if ((listing.manualStatus || 'Active') === 'Inactive') return 'Inactive'
+  if (listing.stock === 0) return 'Out'
+  if (listing.stock <= listing.reorderLevel) return 'Low'
+  return 'Active'
 }
 
 export default function AgrivetStoreInformation({
@@ -463,12 +493,36 @@ export default function AgrivetStoreInformation({
 
   const [showAddProductModal, setShowAddProductModal] = useState(false)
   const [showCreateBundleModal, setShowCreateBundleModal] = useState(false)
+  const [showBundleSuccessModal, setShowBundleSuccessModal] = useState(false)
+  const [showProductDetailModal, setShowProductDetailModal] = useState(false)
+  const [selectedListingDetail, setSelectedListingDetail] = useState(null)
+  const [isEditingListing, setIsEditingListing] = useState(false)
+  const [editListingFormData, setEditListingFormData] = useState({
+    price: '',
+    stock: '',
+    reorderLevel: '',
+  })
+  const [showDiscountModal, setShowDiscountModal] = useState(false)
+  const [discountFormData, setDiscountFormData] = useState({
+    discountPercent: '',
+    discountType: 'manual',
+    expirationHours: '',
+  })
+  const [listingDiscounts, setListingDiscounts] = useState({})
   const [selectedCatalogProduct, setSelectedCatalogProduct] = useState(null)
   const [listingFormData, setListingFormData] = useState({
     price: '',
     stock: '',
     discount: '',
     reorderLevel: '',
+  })
+  const [bundleFormData, setBundleFormData] = useState({
+    bundleName: '',
+    bundlePrice: '',
+    bundleStock: '',
+    bundleReorderLevel: '',
+    selectedProducts: [],
+    bundleDescription: '',
   })
   const [productAddSearchQuery, setProductAddSearchQuery] = useState('')
   const [showProductAddSuggestions, setShowProductAddSuggestions] = useState(false)
@@ -489,6 +543,39 @@ export default function AgrivetStoreInformation({
     if (isVendor) return '/dashboard/vendor/shop-listings'
     return null
   }, [shop?.id, isOwnerManager, isVendor])
+
+  const storeBundleUrl = useMemo(() => {
+    if (!shop?.id) return null
+    if (isOwnerManager) return `${getBaseRoute()}/stores/${shop.id}/bundles`
+    if (isVendor) return '/dashboard/vendor/shop-bundles'
+    return null
+  }, [shop?.id, isOwnerManager, isVendor])
+
+  const getListingItemUpdateUrl = (itemId) => {
+    if (!shop?.id || !itemId) return null
+    if (isOwnerManager) return `${getBaseRoute()}/stores/${shop.id}/listings/${itemId}`
+    if (isVendor) return `/dashboard/vendor/shop-listings/${itemId}`
+    return null
+  }
+
+  const listingDiscountsKey = shop?.id ? `agrivetListingDiscounts_${shop.id}` : null
+
+  useEffect(() => {
+    if (!listingDiscountsKey) return
+    try {
+      const raw = sessionStorage.getItem(listingDiscountsKey)
+      setListingDiscounts(raw ? JSON.parse(raw) : {})
+    } catch {
+      setListingDiscounts({})
+    }
+  }, [listingDiscountsKey])
+
+  const persistListingDiscounts = (next) => {
+    setListingDiscounts(next)
+    if (listingDiscountsKey) {
+      sessionStorage.setItem(listingDiscountsKey, JSON.stringify(next))
+    }
+  }
 
   const closeAddProductModal = () => {
     setShowAddProductModal(false)
@@ -527,6 +614,94 @@ export default function AgrivetStoreInformation({
     )
   }
 
+  const updateListingItem = (listingId, payload, onSuccess) => {
+    const url = getListingItemUpdateUrl(listingId)
+    if (!url) return
+    router.put(url, payload, {
+      preserveScroll: true,
+      onSuccess,
+    })
+  }
+
+  const handleProductStatusToggle = (listing) => {
+    const currentManualStatus = listing.manualStatus || 'Active'
+    const nextStatus = currentManualStatus === 'Active' ? 'Inactive' : 'Active'
+    updateListingItem(listing.id, {
+      item_status: nextStatus === 'Active' ? 'active' : 'inactive',
+    })
+  }
+
+  const handleOpenProductDetail = (listing) => {
+    setSelectedListingDetail(listing)
+    setEditListingFormData({
+      price: listing.price.toString(),
+      stock: listing.stock.toString(),
+      reorderLevel: listing.reorderLevel.toString(),
+    })
+    setIsEditingListing(false)
+    setShowProductDetailModal(true)
+  }
+
+  const handleSaveListingEdit = () => {
+    if (!selectedListingDetail) return
+    updateListingItem(
+      selectedListingDetail.id,
+      {
+        item_price: editListingFormData.price,
+        item_quantity: editListingFormData.stock,
+      },
+      () => {
+        setIsEditingListing(false)
+        setShowProductDetailModal(false)
+        setSelectedListingDetail(null)
+      }
+    )
+  }
+
+  const handleApplyDiscount = () => {
+    if (!selectedListingDetail) return
+
+    const discountPercent = discountFormData.discountPercent
+      ? parseFloat(discountFormData.discountPercent)
+      : 0
+    const expirationTime =
+      discountFormData.discountType === 'timed' && discountFormData.expirationHours
+        ? Date.now() + parseInt(discountFormData.expirationHours, 10) * 60 * 60 * 1000
+        : null
+
+    const discountPayload =
+      discountPercent > 0
+        ? {
+            discountPercent,
+            discountType: discountFormData.discountType,
+            discountExpiration: expirationTime,
+          }
+        : null
+
+    const next = { ...listingDiscounts }
+    if (discountPayload) {
+      next[selectedListingDetail.id] = discountPayload
+    } else {
+      delete next[selectedListingDetail.id]
+    }
+    persistListingDiscounts(next)
+
+    setSelectedListingDetail({
+      ...selectedListingDetail,
+      ...(discountPayload || {
+        discountPercent: undefined,
+        discountType: undefined,
+        discountExpiration: undefined,
+      }),
+    })
+    setShowDiscountModal(false)
+    setDiscountFormData({
+      discountPercent: '',
+      discountType: 'manual',
+      expirationHours: '',
+    })
+  }
+
   const handleRegisterProduct = () => {
     if (isVendor) {
       router.visit('/dashboard/vendor/products/create')
@@ -539,6 +714,69 @@ export default function AgrivetStoreInformation({
     showSuccess('storeEdit', 'Register Product')
   }
 
+  const closeCreateBundleModal = () => {
+    setShowCreateBundleModal(false)
+    setBundleFormData({
+      bundleName: '',
+      bundlePrice: '',
+      bundleStock: '',
+      bundleReorderLevel: '',
+      selectedProducts: [],
+      bundleDescription: '',
+    })
+  }
+
+  const toggleBundleProduct = (productId) => {
+    setBundleFormData((prev) => ({
+      ...prev,
+      selectedProducts: prev.selectedProducts.includes(productId)
+        ? prev.selectedProducts.filter((id) => id !== productId)
+        : [...prev.selectedProducts, productId],
+    }))
+  }
+
+  const handleCreateBundle = () => {
+    if (
+      !bundleFormData.bundleName ||
+      !bundleFormData.bundlePrice ||
+      !bundleFormData.bundleStock ||
+      !bundleFormData.bundleReorderLevel ||
+      bundleFormData.selectedProducts.length === 0
+    ) {
+      alert('Please fill in all required fields and select at least one product.')
+      return
+    }
+
+    if (!storeBundleUrl) return
+
+    router.post(
+      storeBundleUrl,
+      {
+        bundle_name: bundleFormData.bundleName,
+        item_price: bundleFormData.bundlePrice,
+        item_quantity: bundleFormData.bundleStock,
+        reorder_level: bundleFormData.bundleReorderLevel,
+        description: bundleFormData.bundleDescription || undefined,
+        product_catalog_ids: bundleFormData.selectedProducts,
+      },
+      {
+        preserveScroll: true,
+        onSuccess: () => {
+          setBundleFormData({
+            bundleName: '',
+            bundlePrice: '',
+            bundleStock: '',
+            bundleReorderLevel: '',
+            selectedProducts: [],
+            bundleDescription: '',
+          })
+          setShowCreateBundleModal(false)
+          setShowBundleSuccessModal(true)
+        },
+      }
+    )
+  }
+
   const [productSearchQuery, setProductSearchQuery] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('All')
   const [productStatusFilter, setProductStatusFilter] = useState('All')
@@ -548,6 +786,7 @@ export default function AgrivetStoreInformation({
     () =>
       products.map((product) => {
         const images = Array.isArray(product.item_images) ? product.item_images : []
+        const photos = images.length > 0 ? images.map(resolveCatalogImageUrl) : []
         const unit = [product.weight, product.metric].filter(Boolean).join(' ') || 'unit'
         const isActive = (product.item_status || 'active').toLowerCase() === 'active'
 
@@ -556,37 +795,41 @@ export default function AgrivetStoreInformation({
           productId: product.id,
           productName: product.item_name || '',
           brand: product.sub_category_name || product.category_name || '',
-          category: product.category_name || 'Uncategorized',
+          category: product.metric === 'Bundle' ? 'Product Bundle' : (product.category_name || 'Uncategorized'),
           unit,
           price: parseFloat(product.item_price) || 0,
           stock: product.item_quantity ?? 0,
           reorderLevel: 5,
           popularity: product.sold_count ?? 0,
-          photos: images,
+          photos,
           primaryPhotoIndex: 0,
           manualStatus: isActive ? 'Active' : 'Inactive',
+          isBundle: product.metric === 'Bundle',
+          dateAdded: product.created_at || product.updated_at || new Date().toISOString(),
         }
       }),
     [products]
   )
 
+  const mergedListings = useMemo(
+    () =>
+      productListings.map((listing) => ({
+        ...listing,
+        ...(listingDiscounts[listing.id] || {}),
+      })),
+    [productListings, listingDiscounts]
+  )
+
   const isCatalogProductListed = (catalogProduct) =>
-    productListings.some(
+    mergedListings.some(
       (listing) => listing.productName.toLowerCase() === catalogProduct.productName.toLowerCase()
     )
 
-  const getProductStatus = (listing) => {
-    if ((listing.manualStatus || 'Active') === 'Inactive') return 'Inactive'
-    if (listing.stock === 0) return 'Out'
-    if (listing.stock <= listing.reorderLevel) return 'Low'
-    return 'Active'
-  }
-
-  const categories = useMemo(() => ['All', ...new Set(productListings.map((l) => l.category))], [productListings])
+  const categories = useMemo(() => ['All', ...new Set(mergedListings.map((l) => l.category))], [mergedListings])
 
   const filteredListings = useMemo(() => {
     const searchLower = productSearchQuery.toLowerCase()
-    return productListings
+    return mergedListings
       .filter((l) => {
         const matchesSearch =
           l.productName.toLowerCase().includes(searchLower) ||
@@ -598,10 +841,13 @@ export default function AgrivetStoreInformation({
       })
       .sort((a, b) => {
         if (productSortBy === 'name') return a.productName.localeCompare(b.productName)
+        if (productSortBy === 'date') {
+          return new Date(b.dateAdded).getTime() - new Date(a.dateAdded).getTime()
+        }
         if (productSortBy === 'popularity') return (b.popularity ?? 0) - (a.popularity ?? 0)
         return 0
       })
-  }, [productListings, productSearchQuery, categoryFilter, productStatusFilter, productSortBy])
+  }, [mergedListings, productSearchQuery, categoryFilter, productStatusFilter, productSortBy])
 
   if (!shop || !store) {
     return (
@@ -1133,7 +1379,6 @@ export default function AgrivetStoreInformation({
                           type="button"
                           onClick={() => setShowCreateBundleModal(true)}
                           className="flex items-center gap-2 px-4 py-2.5 border-2 border-[#D3A218] text-[#D3A218] text-sm font-semibold rounded-lg hover:bg-[#FFFBF0] transition-colors"
-                          style={{ color: '#D3A218'}}
                         >
                           <Package className="w-4 h-4" />
                           Create Bundle
@@ -1188,6 +1433,7 @@ export default function AgrivetStoreInformation({
                             className="w-full text-sm border border-[#E5E7EB] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#102059] focus:border-transparent px-[20px] py-[8px] bg-[#ffffff]"
                           >
                             <option value="name">Sort by Name</option>
+                            <option value="date">Date Added</option>
                             <option value="popularity">Popularity</option>
                           </select>
                         </div>
@@ -1200,11 +1446,13 @@ export default function AgrivetStoreInformation({
                       <div className="text-center">
                         <Package className="w-16 h-16 text-[#E5E7EB] mx-auto mb-4" />
                         <h2 className="text-xl font-bold text-[#102059] mb-2">
-                          {productListings.length === 0 ? 'No Products Yet' : 'No Matching Products'}
+                          {productListings.length === 0 ? 'No Product Listings Yet' : 'No Matching Products'}
                         </h2>
-                        <p className="text-sm text-[#6B7280]">
+                        <p className="text-sm text-[#6B7280] mb-4">
                           {productListings.length === 0
-                            ? 'This store has no product listings.'
+                            ? canAddListings
+                              ? 'Start adding products from the registered catalog to this store.'
+                              : "This store hasn't added any product listings yet."
                             : 'Try adjusting your filters or search query.'}
                         </p>
                       </div>
@@ -1214,22 +1462,21 @@ export default function AgrivetStoreInformation({
                       {filteredListings.map((listing) => (
                         <div
                           key={listing.id}
+                          onClick={() => handleOpenProductDetail(listing)}
                           className="bg-white border border-[#E5E7EB] rounded-lg overflow-hidden hover:shadow-sm transition-all cursor-pointer"
-                          title="Reference UI (no detail modal here)"
-                          onClick={() => showSuccess('storeEdit', listing.productName)}
                         >
                           <div className="aspect-square bg-[#F9FAFB] overflow-hidden relative">
-                            {listing.photos?.length > 0 ? (
-                              <img
-                                src={listing.photos[listing.primaryPhotoIndex || 0]}
-                                alt={listing.productName}
-                                className="w-full h-full object-contain p-12"
-                              />
-                            ) : (
-                              <div className="w-full h-full flex items-center justify-center">
-                                <Package className="w-12 h-12 text-[#E5E7EB]" />
-                              </div>
-                            )}
+                            <img
+                              src={getListingImageSrc(listing)}
+                              alt={listing.productName}
+                              className="w-full h-full object-contain p-12"
+                              onError={(e) => {
+                                if (!e.currentTarget.dataset.fallback) {
+                                  e.currentTarget.dataset.fallback = 'true'
+                                  e.currentTarget.src = LISTING_IMAGE_FALLBACK
+                                }
+                              }}
+                            />
                             <div className="absolute top-2 left-2">
                               <span
                                 className={`text-[10px] font-semibold px-2 py-1 rounded-full ${
@@ -1239,7 +1486,9 @@ export default function AgrivetStoreInformation({
                                       ? 'bg-[#6B7280] text-white'
                                       : getProductStatus(listing) === 'Low'
                                         ? 'bg-[#F59E0B] text-white'
-                                        : 'bg-[#E20E28] text-white'
+                                        : getProductStatus(listing) === 'Out'
+                                          ? 'bg-[#E20E28] text-white'
+                                          : 'bg-[#E5E7EB] text-[#102059]'
                                 }`}
                               >
                                 {getProductStatus(listing)}
@@ -1247,23 +1496,64 @@ export default function AgrivetStoreInformation({
                             </div>
                           </div>
                           <div className="p-3">
-                            <h3 className="text-[#102059] mb-0.5 line-clamp-1 text-[12px]">{listing.productName}</h3>
+                            <h3 className="text-[#102059] mb-0.5 line-clamp-1 text-[12px]">
+                              {listing.productName}
+                            </h3>
                             <p className="text-xs text-[#6B7280] mb-2">{listing.brand}</p>
-                            <div className="flex items-baseline gap-1 mb-2">
-                              <span className="font-bold text-[#102059] text-[12px]">₱{listing.price.toFixed(2)}</span>
-                              <span className="text-xs text-[#6B7280]">/{listing.unit}</span>
+                            <div className="flex flex-col gap-0.5 mb-2">
+                              {getEffectiveDiscount(listing) > 0 ? (
+                                <>
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-bold text-[#E20E28] text-[12px]">
+                                      ₱{getDiscountedPrice(listing).toFixed(2)}
+                                    </span>
+                                    <span className="text-[9px] font-semibold bg-[#E20E28] text-white px-1.5 py-0.5 rounded">
+                                      -{getEffectiveDiscount(listing)}%
+                                    </span>
+                                  </div>
+                                  <div className="flex items-baseline gap-1">
+                                    <span className="text-[10px] text-[#6B7280] line-through">
+                                      ₱{listing.price.toFixed(2)}
+                                    </span>
+                                    <span className="text-[9px] text-[#6B7280]">/{listing.unit}</span>
+                                  </div>
+                                </>
+                              ) : (
+                                <div className="flex items-baseline gap-1">
+                                  <span className="font-bold text-[#102059] text-[12px]">
+                                    ₱{listing.price.toFixed(2)}
+                                  </span>
+                                  <span className="text-xs text-[#6B7280]">/{listing.unit}</span>
+                                </div>
+                              )}
                             </div>
                             <div className="flex items-center justify-between text-xs mb-1">
                               <span className="text-[#6B7280]">Stock:</span>
                               <span className="font-semibold text-[#102059]">{listing.stock}</span>
                             </div>
-                            <div className="flex items-center justify-between text-xs">
+                            <div className="flex items-center justify-between text-xs mb-3">
                               <span className="text-[#6B7280]">Popularity:</span>
                               <div className="flex items-center gap-1">
                                 <Heart className="w-3 h-3 text-[#102059]" />
                                 <span className="font-semibold text-[#102059]">{listing.popularity}</span>
                               </div>
                             </div>
+                            {canAddListings && getListingItemUpdateUrl(listing.id) && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  handleProductStatusToggle(listing)
+                                }}
+                                className={`w-full text-xs font-semibold py-1.5 rounded-lg transition-colors ${
+                                  (listing.manualStatus || 'Active') === 'Active'
+                                    ? 'bg-[#F9FAFB] text-[#6B7280] hover:bg-[#E5E7EB]'
+                                    : 'bg-[#102059] text-white hover:bg-[#244693]'
+                                }`}
+                              >
+                                {(listing.manualStatus || 'Active') === 'Active' ? 'Deactivate' : 'Activate'}
+                              </button>
+                            )}
                           </div>
                         </div>
                       ))}
@@ -2229,28 +2519,567 @@ export default function AgrivetStoreInformation({
                 </div>
                 <button
                   type="button"
-                  onClick={() => setShowCreateBundleModal(false)}
+                  onClick={closeCreateBundleModal}
                   className="p-2 hover:bg-[#F9FAFB] rounded-lg transition-colors"
                 >
                   <X className="w-5 h-5 text-[#6B7280]" />
                 </button>
               </div>
               <div className="flex-1 overflow-y-auto p-6">
-                <div className="text-center py-12">
-                  <Package className="w-16 h-16 text-[#E5E7EB] mx-auto mb-4" />
-                  <h3 className="text-lg font-bold text-[#102059] mb-2">Create Bundle</h3>
-                  <p className="text-sm text-[#6B7280] max-w-md mx-auto">
-                    Bundle creation will be available once store listing APIs are connected.
-                  </p>
-                </div>
+                <form className="space-y-6" onSubmit={(e) => e.preventDefault()}>
+                  <div>
+                    <h3 className="text-sm font-semibold text-[#102059] mb-4">Bundle Details</h3>
+                    <div className="space-y-4">
+                      <div>
+                        <label className="text-xs font-semibold text-[#102059] uppercase tracking-wider block mb-2">
+                          Bundle Name *
+                        </label>
+                        <input
+                          type="text"
+                          value={bundleFormData.bundleName}
+                          onChange={(e) =>
+                            setBundleFormData({ ...bundleFormData, bundleName: e.target.value })
+                          }
+                          className="w-full px-4 py-2.5 border border-[#E5E7EB] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#102059] focus:border-transparent text-sm"
+                          placeholder="e.g., Starter Kit, Ultimate Care Package"
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-3 gap-4">
+                        <div>
+                          <label className="text-xs font-semibold text-[#102059] uppercase tracking-wider block mb-2">
+                            Bundle Price (₱) *
+                          </label>
+                          <input
+                            type="number"
+                            value={bundleFormData.bundlePrice}
+                            onChange={(e) =>
+                              setBundleFormData({ ...bundleFormData, bundlePrice: e.target.value })
+                            }
+                            className="w-full px-4 py-2.5 border border-[#E5E7EB] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#102059] focus:border-transparent text-sm"
+                            placeholder="0.00"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs font-semibold text-[#102059] uppercase tracking-wider block mb-2">
+                            Stock Quantity *
+                          </label>
+                          <input
+                            type="number"
+                            value={bundleFormData.bundleStock}
+                            onChange={(e) =>
+                              setBundleFormData({ ...bundleFormData, bundleStock: e.target.value })
+                            }
+                            className="w-full px-4 py-2.5 border border-[#E5E7EB] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#102059] focus:border-transparent text-sm"
+                            placeholder="0"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs font-semibold text-[#102059] uppercase tracking-wider block mb-2">
+                            Reorder Level *
+                          </label>
+                          <input
+                            type="number"
+                            value={bundleFormData.bundleReorderLevel}
+                            onChange={(e) =>
+                              setBundleFormData({
+                                ...bundleFormData,
+                                bundleReorderLevel: e.target.value,
+                              })
+                            }
+                            className="w-full px-4 py-2.5 border border-[#E5E7EB] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#102059] focus:border-transparent text-sm"
+                            placeholder="0"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <h3 className="text-sm font-semibold text-[#102059] mb-4">
+                      Select Products for Bundle *
+                    </h3>
+                    {registeredProducts.length === 0 ? (
+                      <div className="text-center py-8 border border-dashed border-[#E5E7EB] rounded-lg">
+                        <Package className="w-12 h-12 text-[#E5E7EB] mx-auto mb-3" />
+                        <p className="text-sm text-[#6B7280]">
+                          No registered products available. Register products first to create a bundle.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        {registeredProducts.map((product) => (
+                          <label
+                            key={product.id}
+                            className="border border-[#E5E7EB] rounded-lg p-4 cursor-pointer hover:border-[#D3A218] hover:bg-[#FFFBF0] transition-all"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={bundleFormData.selectedProducts.includes(product.id)}
+                              onChange={() => toggleBundleProduct(product.id)}
+                              className="mb-3"
+                            />
+                            <div className="aspect-square bg-[#F9FAFB] rounded-lg mb-3 overflow-hidden">
+                              <img
+                                src={product.image}
+                                alt={product.productName}
+                                className="w-full h-full object-cover"
+                              />
+                            </div>
+                            <h4 className="text-sm font-semibold text-[#102059] mb-1">
+                              {product.productName}
+                            </h4>
+                            <p className="text-xs text-[#6B7280]">{product.category}</p>
+                          </label>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-semibold text-[#102059] uppercase tracking-wider block mb-2">
+                      Bundle Description
+                    </label>
+                    <textarea
+                      value={bundleFormData.bundleDescription}
+                      onChange={(e) =>
+                        setBundleFormData({ ...bundleFormData, bundleDescription: e.target.value })
+                      }
+                      rows={3}
+                      className="w-full px-4 py-2.5 border border-[#E5E7EB] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#102059] focus:border-transparent text-sm resize-none"
+                      placeholder="Describe what's included in this bundle and its benefits..."
+                    />
+                  </div>
+                </form>
               </div>
               <div className="flex items-center justify-end gap-3 p-6 border-t border-[#E5E7EB]">
                 <button
                   type="button"
-                  onClick={() => setShowCreateBundleModal(false)}
+                  onClick={closeCreateBundleModal}
                   className="px-6 py-2.5 bg-white border border-[#E5E7EB] text-[#6B7280] rounded-lg hover:bg-[#F9FAFB] transition-colors text-sm font-medium"
                 >
                   Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCreateBundle}
+                  disabled={!storeBundleUrl}
+                  className="px-6 py-2.5 bg-[#D3A218] text-white rounded-lg hover:bg-[#B8900F] transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Create Bundle
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Bundle Success Modal */}
+        {showBundleSuccessModal && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-lg border border-[#E5E7EB] w-full max-w-md p-6">
+              <div className="text-center">
+                <div className="w-16 h-16 bg-[#FFFBF0] rounded-full flex items-center justify-center mx-auto mb-4">
+                  <CheckCircle className="w-10 h-10 text-[#D3A218]" />
+                </div>
+                <h3 className="text-xl font-bold text-[#102059] mb-2">Bundle Created Successfully</h3>
+                <p className="text-sm text-[#6B7280] mb-6">
+                  Your product bundle has been created and is now available in your store listings.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setShowBundleSuccessModal(false)}
+                  className="w-full px-6 py-2.5 bg-[#D3A218] text-white rounded-lg hover:bg-[#B8900F] transition-colors text-sm font-medium"
+                >
+                  Back to Product Listing
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Product Detail Modal */}
+        {showProductDetailModal && selectedListingDetail && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-lg border border-[#E5E7EB] w-full max-w-2xl">
+              <div className="flex items-center justify-between p-6 border-b border-[#E5E7EB]">
+                <div>
+                  <h2 className="text-xl font-bold text-[#102059]">
+                    {selectedListingDetail.isBundle ? 'Bundle Details' : 'Product Details'}
+                  </h2>
+                  <p className="text-sm text-[#6B7280] mt-1">View and manage listing information</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  {canAddListings && !isEditingListing && getListingItemUpdateUrl(selectedListingDetail.id) && (
+                    <button
+                      type="button"
+                      onClick={() => setIsEditingListing(true)}
+                      className="p-2 hover:bg-[#F9FAFB] rounded-lg transition-colors"
+                      title="Edit"
+                    >
+                      <Pencil className="w-5 h-5 text-[#102059]" />
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowProductDetailModal(false)
+                      setIsEditingListing(false)
+                      setSelectedListingDetail(null)
+                    }}
+                    className="p-2 hover:bg-[#F9FAFB] rounded-lg transition-colors"
+                  >
+                    <X className="w-5 h-5 text-[#6B7280]" />
+                  </button>
+                </div>
+              </div>
+
+              <div className="p-6 space-y-6">
+                <div>
+                  <label className="text-xs font-semibold text-[#102059] uppercase tracking-wider block mb-2">
+                    {selectedListingDetail.isBundle ? 'Bundle Name' : 'Product Name'}
+                  </label>
+                  <input
+                    type="text"
+                    value={selectedListingDetail.productName}
+                    disabled
+                    className="w-full px-4 py-2.5 border border-[#E5E7EB] rounded-lg bg-[#F9FAFB] text-sm text-[#6B7280] cursor-not-allowed"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-[#102059] uppercase tracking-wider block mb-2">
+                    Category
+                  </label>
+                  <input
+                    type="text"
+                    value={selectedListingDetail.category}
+                    disabled
+                    className="w-full px-4 py-2.5 border border-[#E5E7EB] rounded-lg bg-[#F9FAFB] text-sm text-[#6B7280] cursor-not-allowed"
+                  />
+                </div>
+
+                <div className="grid grid-cols-3 gap-4">
+                  <div>
+                    <label className="text-xs font-semibold text-[#102059] uppercase tracking-wider block mb-2">
+                      {selectedListingDetail.isBundle ? 'Bundle Price (₱)' : 'Price (₱)'}
+                    </label>
+                    <input
+                      type="number"
+                      value={isEditingListing ? editListingFormData.price : selectedListingDetail.price}
+                      onChange={(e) =>
+                        setEditListingFormData({ ...editListingFormData, price: e.target.value })
+                      }
+                      disabled={!isEditingListing}
+                      className={`w-full px-4 py-2.5 border border-[#E5E7EB] rounded-lg text-sm ${
+                        isEditingListing
+                          ? 'focus:outline-none focus:ring-2 focus:ring-[#102059] focus:border-transparent'
+                          : 'bg-[#F9FAFB] text-[#6B7280] cursor-not-allowed'
+                      }`}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-[#102059] uppercase tracking-wider block mb-2">
+                      Stock Quantity
+                    </label>
+                    <input
+                      type="number"
+                      value={isEditingListing ? editListingFormData.stock : selectedListingDetail.stock}
+                      onChange={(e) =>
+                        setEditListingFormData({ ...editListingFormData, stock: e.target.value })
+                      }
+                      disabled={!isEditingListing}
+                      className={`w-full px-4 py-2.5 border border-[#E5E7EB] rounded-lg text-sm ${
+                        isEditingListing
+                          ? 'focus:outline-none focus:ring-2 focus:ring-[#102059] focus:border-transparent'
+                          : 'bg-[#F9FAFB] text-[#6B7280] cursor-not-allowed'
+                      }`}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-[#102059] uppercase tracking-wider block mb-2">
+                      Reorder Level
+                    </label>
+                    <input
+                      type="number"
+                      value={
+                        isEditingListing
+                          ? editListingFormData.reorderLevel
+                          : selectedListingDetail.reorderLevel
+                      }
+                      onChange={(e) =>
+                        setEditListingFormData({ ...editListingFormData, reorderLevel: e.target.value })
+                      }
+                      disabled={!isEditingListing}
+                      className={`w-full px-4 py-2.5 border border-[#E5E7EB] rounded-lg text-sm ${
+                        isEditingListing
+                          ? 'focus:outline-none focus:ring-2 focus:ring-[#102059] focus:border-transparent'
+                          : 'bg-[#F9FAFB] text-[#6B7280] cursor-not-allowed'
+                      }`}
+                    />
+                  </div>
+                </div>
+
+                {getEffectiveDiscount(selectedListingDetail) > 0 && (
+                  <div className="bg-[#FFF5F5] border border-[#E20E28] rounded-lg p-4">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <h4 className="text-sm font-semibold text-[#E20E28] mb-1">Active Discount</h4>
+                        <p className="text-xs text-[#6B7280]">
+                          {getEffectiveDiscount(selectedListingDetail)}% off •{' '}
+                          {selectedListingDetail.discountType === 'manual'
+                            ? 'Manual deactivation'
+                            : `Expires ${new Date(selectedListingDetail.discountExpiration).toLocaleString()}`}
+                        </p>
+                        <p className="text-sm font-semibold text-[#102059] mt-2">
+                          Discounted Price: ₱{getDiscountedPrice(selectedListingDetail).toFixed(2)}
+                        </p>
+                      </div>
+                      {canAddListings && selectedListingDetail.discountType === 'manual' && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const next = { ...listingDiscounts }
+                            delete next[selectedListingDetail.id]
+                            persistListingDiscounts(next)
+                            setSelectedListingDetail({
+                              ...selectedListingDetail,
+                              discountPercent: undefined,
+                              discountType: undefined,
+                              discountExpiration: undefined,
+                            })
+                          }}
+                          className="text-xs font-semibold text-[#E20E28] hover:text-[#B8000F] transition-colors"
+                        >
+                          Remove
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex items-center justify-between gap-3 p-6 border-t border-[#E5E7EB]">
+                <div>
+                  {canAddListings && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowDiscountModal(true)
+                        setDiscountFormData({
+                          discountPercent: selectedListingDetail.discountPercent?.toString() || '',
+                          discountType: selectedListingDetail.discountType || 'manual',
+                          expirationHours: '',
+                        })
+                      }}
+                      className="px-4 py-2.5 bg-[#E20E28] text-white rounded-lg hover:bg-[#B8000F] transition-colors text-sm font-medium"
+                    >
+                      {getEffectiveDiscount(selectedListingDetail) > 0 ? 'Edit Discount' : 'Add Discount'}
+                    </button>
+                  )}
+                </div>
+                <div className="flex items-center gap-3">
+                  {isEditingListing ? (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsEditingListing(false)
+                          setEditListingFormData({
+                            price: selectedListingDetail.price.toString(),
+                            stock: selectedListingDetail.stock.toString(),
+                            reorderLevel: selectedListingDetail.reorderLevel.toString(),
+                          })
+                        }}
+                        className="px-6 py-2.5 bg-white border border-[#E5E7EB] text-[#6B7280] rounded-lg hover:bg-[#F9FAFB] transition-colors text-sm font-medium"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleSaveListingEdit}
+                        className="px-6 py-2.5 bg-[#102059] text-white rounded-lg hover:bg-[#244693] transition-colors text-sm font-medium"
+                      >
+                        Save Changes
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowProductDetailModal(false)
+                        setIsEditingListing(false)
+                        setSelectedListingDetail(null)
+                      }}
+                      className="px-6 py-2.5 bg-[#102059] text-white rounded-lg hover:bg-[#244693] transition-colors text-sm font-medium"
+                    >
+                      Close
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Discount Modal */}
+        {showDiscountModal && selectedListingDetail && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4">
+            <div className="bg-white rounded-lg border border-[#E5E7EB] w-full max-w-md">
+              <div className="flex items-center justify-between p-6 border-b border-[#E5E7EB]">
+                <div>
+                  <h2 className="text-xl font-bold text-[#102059]">Manage Discount</h2>
+                  <p className="text-sm text-[#6B7280] mt-1">
+                    Set pricing discount for {selectedListingDetail.productName}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowDiscountModal(false)}
+                  className="p-2 hover:bg-[#F9FAFB] rounded-lg transition-colors"
+                >
+                  <X className="w-5 h-5 text-[#6B7280]" />
+                </button>
+              </div>
+
+              <div className="p-6 space-y-6">
+                <div>
+                  <label className="text-xs font-semibold text-[#102059] uppercase tracking-wider block mb-2">
+                    Discount Percentage (%)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    value={discountFormData.discountPercent}
+                    onChange={(e) =>
+                      setDiscountFormData({ ...discountFormData, discountPercent: e.target.value })
+                    }
+                    className="w-full px-4 py-2.5 border border-[#E5E7EB] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#102059] focus:border-transparent text-sm"
+                    placeholder="e.g., 20"
+                  />
+                  {discountFormData.discountPercent && (
+                    <p className="text-xs text-[#6B7280] mt-2">
+                      New Price: ₱
+                      {(
+                        selectedListingDetail.price *
+                        (1 - parseFloat(discountFormData.discountPercent || '0') / 100)
+                      ).toFixed(2)}
+                      <span className="text-[#E20E28] ml-2">
+                        (Save ₱
+                        {(
+                          (selectedListingDetail.price *
+                            parseFloat(discountFormData.discountPercent || '0')) /
+                          100
+                        ).toFixed(2)}
+                        )
+                      </span>
+                    </p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-[#102059] uppercase tracking-wider block mb-3">
+                    Discount Duration
+                  </label>
+                  <div className="space-y-3">
+                    <label className="flex items-start gap-3 p-4 border border-[#E5E7EB] rounded-lg cursor-pointer hover:bg-[#F9FAFB] transition-colors">
+                      <input
+                        type="radio"
+                        name="discountType"
+                        value="manual"
+                        checked={discountFormData.discountType === 'manual'}
+                        onChange={(e) =>
+                          setDiscountFormData({ ...discountFormData, discountType: e.target.value })
+                        }
+                        className="mt-0.5"
+                      />
+                      <div className="flex-1">
+                        <div className="text-sm font-semibold text-[#102059]">Manual Deactivation</div>
+                        <div className="text-xs text-[#6B7280] mt-1">
+                          Discount remains active until you manually remove it
+                        </div>
+                      </div>
+                    </label>
+
+                    <label className="flex items-start gap-3 p-4 border border-[#E5E7EB] rounded-lg cursor-pointer hover:bg-[#F9FAFB] transition-colors">
+                      <input
+                        type="radio"
+                        name="discountType"
+                        value="timed"
+                        checked={discountFormData.discountType === 'timed'}
+                        onChange={(e) =>
+                          setDiscountFormData({ ...discountFormData, discountType: e.target.value })
+                        }
+                        className="mt-0.5"
+                      />
+                      <div className="flex-1">
+                        <div className="text-sm font-semibold text-[#102059]">Time-Based</div>
+                        <div className="text-xs text-[#6B7280] mt-1">
+                          Automatically expires after specified duration
+                        </div>
+                      </div>
+                    </label>
+                  </div>
+                </div>
+
+                {discountFormData.discountType === 'timed' && (
+                  <div>
+                    <label className="text-xs font-semibold text-[#102059] uppercase tracking-wider block mb-2">
+                      Duration (Hours)
+                    </label>
+                    <select
+                      value={discountFormData.expirationHours}
+                      onChange={(e) =>
+                        setDiscountFormData({ ...discountFormData, expirationHours: e.target.value })
+                      }
+                      className="w-full px-4 py-2.5 border border-[#E5E7EB] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#102059] focus:border-transparent text-sm"
+                    >
+                      <option value="">Select duration</option>
+                      <option value="24">24 hours (1 day)</option>
+                      <option value="48">48 hours (2 days)</option>
+                      <option value="72">72 hours (3 days)</option>
+                      <option value="168">168 hours (7 days)</option>
+                      <option value="336">336 hours (14 days)</option>
+                      <option value="720">720 hours (30 days)</option>
+                    </select>
+                    {discountFormData.expirationHours && (
+                      <p className="text-xs text-[#6B7280] mt-2">
+                        Expires:{' '}
+                        {new Date(
+                          Date.now() +
+                            parseInt(discountFormData.expirationHours, 10) * 60 * 60 * 1000
+                        ).toLocaleString()}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <div className="flex items-center justify-end gap-3 p-6 border-t border-[#E5E7EB]">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowDiscountModal(false)
+                    setDiscountFormData({
+                      discountPercent: '',
+                      discountType: 'manual',
+                      expirationHours: '',
+                    })
+                  }}
+                  className="px-6 py-2.5 bg-white border border-[#E5E7EB] text-[#6B7280] rounded-lg hover:bg-[#F9FAFB] transition-colors text-sm font-medium"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleApplyDiscount}
+                  disabled={
+                    !discountFormData.discountPercent ||
+                    (discountFormData.discountType === 'timed' && !discountFormData.expirationHours)
+                  }
+                  className="px-6 py-2.5 bg-[#E20E28] text-white rounded-lg hover:bg-[#B8000F] transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Apply Discount
                 </button>
               </div>
             </div>

@@ -166,6 +166,8 @@ Route::middleware(['auth', 'session.valid', 'user.type:owner_manager'])->prefix(
     Route::put('/stores/{shopId}', [DashboardController::class, 'ownerManagerUpdateShop'])->name('stores.update');
     Route::post('/stores/{shopId}/cover-photo', [DashboardController::class, 'ownerManagerUpdateShopCoverPhoto'])->name('stores.cover-photo');
     Route::post('/stores/{shopId}/listings', [DashboardController::class, 'ownerManagerStoreShopListing'])->name('stores.listings.store');
+    Route::put('/stores/{shopId}/listings/{itemId}', [DashboardController::class, 'ownerManagerUpdateShopListing'])->name('stores.listings.update');
+    Route::post('/stores/{shopId}/bundles', [DashboardController::class, 'ownerManagerStoreShopBundle'])->name('stores.bundles.store');
     Route::get('/stores/{shopId}/products/create', [DashboardController::class, 'ownerManagerProductsCreate'])->name('stores.products.create');
     Route::post('/stores/{shopId}/product-catalog', [DashboardController::class, 'ownerManagerProductCatalogStore'])->name('stores.product-catalog.store');
     Route::post('/stores/{shopId}/vendors/{vendorId}/reassign', [DashboardController::class, 'ownerManagerReassignVendor'])->name('stores.vendors.reassign');
@@ -300,6 +302,13 @@ Route::get('/dashboard/vendor', [VendorController::class, 'index'])
 Route::post('/dashboard/vendor/shop-listings', [VendorController::class, 'storeShopListing'])
     ->middleware(['auth', 'session.valid', 'user.type:vendor'])
     ->name('dashboard.vendor.shop-listings.store');
+Route::put('/dashboard/vendor/shop-listings/{itemId}', [VendorController::class, 'updateShopListing'])
+    ->middleware(['auth', 'session.valid', 'user.type:vendor'])
+    ->name('dashboard.vendor.shop-listings.update');
+
+Route::post('/dashboard/vendor/shop-bundles', [VendorController::class, 'storeShopBundle'])
+    ->middleware(['auth', 'session.valid', 'user.type:vendor'])
+    ->name('dashboard.vendor.shop-bundles.store');
 
 // Vendor Management Routes
 Route::middleware(['auth', 'session.valid', 'user.type:vendor'])->prefix('dashboard/vendor')->name('dashboard.vendor.')->group(function () {
