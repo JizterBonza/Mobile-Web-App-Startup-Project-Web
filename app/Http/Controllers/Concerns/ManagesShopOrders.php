@@ -88,6 +88,7 @@ trait ManagesShopOrders
             ->select(
                 'order_items.order_id',
                 'order_items.id',
+                'order_items.item_name_at_purchase',
                 'items.item_name',
                 'order_items.quantity',
                 'order_items.price_at_purchase',
@@ -155,7 +156,7 @@ trait ManagesShopOrders
 
                 return [
                     'id'           => (int) $item->id,
-                    'name'         => $item->item_name,
+                    'name'         => $item->item_name_at_purchase ?: $item->item_name,
                     'quantity'     => (int) $item->quantity,
                     'price'        => (float) $item->price_at_purchase,
                     'originalPrice' => (float) ($item->original_price ?? $item->price_at_purchase),

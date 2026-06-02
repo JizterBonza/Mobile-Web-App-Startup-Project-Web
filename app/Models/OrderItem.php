@@ -25,6 +25,7 @@ class OrderItem extends Model
         'order_id',
         'item_id',
         'shop_id',
+        'item_name_at_purchase',
         'quantity',
         'price_at_purchase',
         'original_price',
@@ -47,6 +48,41 @@ class OrderItem extends Model
             'created_at' => 'datetime',
             'updated_at' => 'datetime',
         ];
+    }
+
+    /**
+     * The accessors to append to the model's array form.
+     *
+     * @var array<int, string>
+     */
+    protected $appends = [
+        'unit_price_paid',
+        'list_price_at_purchase',
+        'line_total_paid',
+    ];
+
+    /**
+     * Unit price actually paid (frozen at checkout).
+     */
+    public function getUnitPricePaidAttribute(): float
+    {
+        return (float) $this->price_at_purchase;
+    }
+
+    /**
+     * List price before discount at checkout (frozen at purchase time).
+     */
+    public function getListPriceAtPurchaseAttribute(): float
+    {
+        return (float) ($this->original_price ?? $this->price_at_purchase);
+    }
+
+    /**
+     * Line total using the frozen paid unit price.
+     */
+    public function getLineTotalPaidAttribute(): float
+    {
+        return round((float) $this->price_at_purchase * (int) $this->quantity, 2);
     }
 
     /**

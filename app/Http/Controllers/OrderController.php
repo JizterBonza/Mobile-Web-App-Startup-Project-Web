@@ -375,6 +375,7 @@ class OrderController extends Controller
                     'unit_price' => $serverUnitPrice,
                     'original_price' => $originalPrice,
                     'discount_percent_at_purchase' => $discountPercent,
+                    'item_name_at_purchase' => $itemModel->item_name,
                 ];
             }
 
@@ -442,11 +443,15 @@ class OrderController extends Controller
                         ?? (float) $item['price_at_purchase'];
                     $originalPrice = $locked['original_price'] ?? $unitPrice;
                     $discountPercent = $locked['discount_percent_at_purchase'] ?? 0;
+                    $itemName = $locked['item_name_at_purchase']
+                        ?? Item::find($item['item_id'])?->item_name
+                        ?? '';
 
                     OrderItem::create([
                         'order_id' => $order->id,
                         'item_id' => (int) $item['item_id'],
                         'shop_id' => (int) $item['shop_id'],
+                        'item_name_at_purchase' => $itemName,
                         'quantity' => (int) $item['quantity'],
                         'price_at_purchase' => (float) $unitPrice,
                         'original_price' => (float) $originalPrice,
