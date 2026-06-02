@@ -117,7 +117,7 @@ export function HomeSection() {
               >
                 DOWNLOAD APP
               </button>
-              <Link href="/register-store">
+              <a href="#contact">
                 <button
                   type="button"
                   className="w-full rounded-[10px] border-2 border-[#0B132B] px-8 py-3.5 text-sm font-semibold uppercase tracking-wide text-[#0B132B] transition-colors hover:bg-white/80 sm:w-auto"
@@ -125,7 +125,7 @@ export function HomeSection() {
                 >
                   BE A TRUSTED STORE
                 </button>
-              </Link>
+              </a>
             </div>
           </div>
         </div>
