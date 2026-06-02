@@ -16,6 +16,7 @@ import {
   ChevronUp,
   Filter,
   Image as ImageIcon,
+  Store,
 } from "lucide-react";
 
 /** Order management UI — layout from StoreOwnerOrders.tsx (Klasmeyt template). */
@@ -448,6 +449,21 @@ export default function OwnerManagerOrdersPanel({
                 </div>
               </div>
             </div>
+
+            {/* Store */}
+            {order.shopNames?.length > 0 && (
+              <div>
+                <h4 className="text-xs font-bold text-[#102059] uppercase tracking-wider mb-2">
+                  Store
+                </h4>
+                <div className="flex items-start gap-2 p-3 bg-[#F9FAFB] rounded-lg border border-[#E5E7EB]">
+                  <Store className="w-4 h-4 text-[#244693] mt-0.5 flex-shrink-0" />
+                  <p className="text-sm text-[#102059] font-medium">
+                    {order.shopNames.join(", ")}
+                  </p>
+                </div>
+              </div>
+            )}
 
             {/* Delivery Method */}
             <div>

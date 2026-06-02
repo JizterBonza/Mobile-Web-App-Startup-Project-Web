@@ -131,6 +131,10 @@ trait ManagesShopOrders
             ->groupBy('order_id')
             ->map(fn ($rows) => $rows->pluck('shop_id')->map(fn ($id) => (int) $id)->values()->all());
 
+        $shopNameById = DB::table('shops')
+            ->whereIn('id', $shopIds)
+            ->pluck('shop_name', 'id');
+
         $declineByOrder = collect();
         if (Schema::hasTable('order_logs')) {
             $declineByOrder = DB::table('order_logs')
@@ -142,7 +146,7 @@ trait ManagesShopOrders
                 ->keyBy('order_id');
         }
 
-        return $orderRows->map(function ($row) use ($itemsByOrder, $ridersByOrder, $proofByOrder, $shopIdsByOrder, $declineByOrder, $deliveryMethodNames, $deliveryMethodInfos, $preparingItemStatusId) {
+        return $orderRows->map(function ($row) use ($itemsByOrder, $ridersByOrder, $proofByOrder, $shopIdsByOrder, $shopNameById, $declineByOrder, $deliveryMethodNames, $deliveryMethodInfos, $preparingItemStatusId) {
             $statusMeta = $this->mapShopOrderStatus($row->status_description ?? '');
             $products = ($itemsByOrder->get($row->id) ?? collect())->map(function ($item) {
                 $thumbnail = $this->firstItemImageUrl($item->item_images);
@@ -185,10 +189,18 @@ trait ManagesShopOrders
             $deliveryMethodInfo = $row->delivery_method_info
                 ?? ($deliveryMethodId ? ($deliveryMethodInfos[$deliveryMethodId] ?? null) : null);
 
+            $orderShopIds = $shopIdsByOrder->get($row->id, []);
+            $orderShopNames = collect($orderShopIds)
+                ->map(fn (int $shopId) => $shopNameById[$shopId] ?? null)
+                ->filter()
+                ->values()
+                ->all();
+
             $payload = [
                 'id'                     => (int) $row->id,
                 'orderNumber'            => 'ORD-'.$row->id,
-                'shopIds'                => $shopIdsByOrder->get($row->id, []),
+                'shopIds'                => $orderShopIds,
+                'shopNames'              => $orderShopNames,
                 'customerId'             => (int) $row->user_id,
                 'customerName'           => trim(($row->first_name ?? '').' '.($row->last_name ?? '')),
                 'customerPhone'          => $customerPhone,
