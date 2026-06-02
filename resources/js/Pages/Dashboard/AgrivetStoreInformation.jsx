@@ -224,8 +224,10 @@ function getListingImageSrc(listing) {
 
 function getEffectiveDiscount(listing) {
   if (!listing.discountPercent) return 0
-  if (listing.discountType === 'timed' && listing.discountExpiration) {
-    if (Date.now() > listing.discountExpiration) return 0
+  if (listing.discountType === 'timed') {
+    const expiresAt = listing.discountExpiration
+      ?? (listing.discountExpiresAt ? new Date(listing.discountExpiresAt).getTime() : null)
+    if (expiresAt && Date.now() > expiresAt) return 0
   }
   return listing.discountPercent
 }
@@ -581,7 +583,6 @@ export default function AgrivetStoreInformation({
     discountType: 'manual',
     expirationHours: '',
   })
-  const [listingDiscounts, setListingDiscounts] = useState({})
   const [selectedCatalogProduct, setSelectedCatalogProduct] = useState(null)
   const [listingFormData, setListingFormData] = useState({
     price: '',
@@ -629,25 +630,6 @@ export default function AgrivetStoreInformation({
     if (isOwnerManager) return `${getBaseRoute()}/stores/${shop.id}/listings/${itemId}`
     if (isVendor) return `/dashboard/vendor/shop-listings/${itemId}`
     return null
-  }
-
-  const listingDiscountsKey = shop?.id ? `agrivetListingDiscounts_${shop.id}` : null
-
-  useEffect(() => {
-    if (!listingDiscountsKey) return
-    try {
-      const raw = sessionStorage.getItem(listingDiscountsKey)
-      setListingDiscounts(raw ? JSON.parse(raw) : {})
-    } catch {
-      setListingDiscounts({})
-    }
-  }, [listingDiscountsKey])
-
-  const persistListingDiscounts = (next) => {
-    setListingDiscounts(next)
-    if (listingDiscountsKey) {
-      sessionStorage.setItem(listingDiscountsKey, JSON.stringify(next))
-    }
   }
 
   const closeAddProductModal = () => {
@@ -737,41 +719,60 @@ export default function AgrivetStoreInformation({
     const discountPercent = discountFormData.discountPercent
       ? parseFloat(discountFormData.discountPercent)
       : 0
-    const expirationTime =
-      discountFormData.discountType === 'timed' && discountFormData.expirationHours
-        ? Date.now() + parseInt(discountFormData.expirationHours, 10) * 60 * 60 * 1000
-        : null
 
-    const discountPayload =
+    const payload =
       discountPercent > 0
         ? {
-            discountPercent,
-            discountType: discountFormData.discountType,
-            discountExpiration: expirationTime,
+            discount_percent: discountPercent,
+            discount_type: discountFormData.discountType,
+            ...(discountFormData.discountType === 'timed' && discountFormData.expirationHours
+              ? { expiration_hours: parseInt(discountFormData.expirationHours, 10) }
+              : {}),
           }
-        : null
+        : { clear_discount: true }
 
-    const next = { ...listingDiscounts }
-    if (discountPayload) {
-      next[selectedListingDetail.id] = discountPayload
-    } else {
-      delete next[selectedListingDetail.id]
-    }
-    persistListingDiscounts(next)
+    updateListingItem(selectedListingDetail.id, payload, () => {
+      const expirationTime =
+        discountFormData.discountType === 'timed' && discountFormData.expirationHours
+          ? Date.now() + parseInt(discountFormData.expirationHours, 10) * 60 * 60 * 1000
+          : null
 
-    setSelectedListingDetail({
-      ...selectedListingDetail,
-      ...(discountPayload || {
+      setSelectedListingDetail({
+        ...selectedListingDetail,
+        ...(discountPercent > 0
+          ? {
+              discountPercent,
+              discountType: discountFormData.discountType,
+              discountExpiration: expirationTime,
+              discountExpiresAt: expirationTime ? new Date(expirationTime).toISOString() : null,
+            }
+          : {
+              discountPercent: undefined,
+              discountType: undefined,
+              discountExpiration: undefined,
+              discountExpiresAt: undefined,
+            }),
+      })
+      setShowDiscountModal(false)
+      setDiscountFormData({
+        discountPercent: '',
+        discountType: 'manual',
+        expirationHours: '',
+      })
+    })
+  }
+
+  const handleRemoveDiscount = () => {
+    if (!selectedListingDetail) return
+
+    updateListingItem(selectedListingDetail.id, { clear_discount: true }, () => {
+      setSelectedListingDetail({
+        ...selectedListingDetail,
         discountPercent: undefined,
         discountType: undefined,
         discountExpiration: undefined,
-      }),
-    })
-    setShowDiscountModal(false)
-    setDiscountFormData({
-      discountPercent: '',
-      discountType: 'manual',
-      expirationHours: '',
+        discountExpiresAt: undefined,
+      })
     })
   }
 
@@ -863,6 +864,10 @@ export default function AgrivetStoreInformation({
         const unit = [product.weight, product.metric].filter(Boolean).join(' ') || 'unit'
         const isActive = (product.item_status || 'active').toLowerCase() === 'active'
 
+        const discountPercent = product.discount_percent
+          ? parseFloat(product.discount_percent)
+          : undefined
+
         return {
           id: product.id,
           productId: product.id,
@@ -871,6 +876,12 @@ export default function AgrivetStoreInformation({
           category: product.metric === 'Bundle' ? 'Product Bundle' : (product.category_name || 'Uncategorized'),
           unit,
           price: parseFloat(product.item_price) || 0,
+          discountPercent,
+          discountType: product.discount_type || undefined,
+          discountExpiresAt: product.discount_expires_at || undefined,
+          discountExpiration: product.discount_expires_at
+            ? new Date(product.discount_expires_at).getTime()
+            : undefined,
           stock: product.item_quantity ?? 0,
           reorderLevel: 5,
           popularity: product.sold_count ?? 0,
@@ -884,25 +895,16 @@ export default function AgrivetStoreInformation({
     [products]
   )
 
-  const mergedListings = useMemo(
-    () =>
-      productListings.map((listing) => ({
-        ...listing,
-        ...(listingDiscounts[listing.id] || {}),
-      })),
-    [productListings, listingDiscounts]
-  )
-
   const isCatalogProductListed = (catalogProduct) =>
-    mergedListings.some(
+    productListings.some(
       (listing) => listing.productName.toLowerCase() === catalogProduct.productName.toLowerCase()
     )
 
-  const categories = useMemo(() => ['All', ...new Set(mergedListings.map((l) => l.category))], [mergedListings])
+  const categories = useMemo(() => ['All', ...new Set(productListings.map((l) => l.category))], [productListings])
 
   const filteredListings = useMemo(() => {
     const searchLower = productSearchQuery.toLowerCase()
-    return mergedListings
+    return productListings
       .filter((l) => {
         const matchesSearch =
           l.productName.toLowerCase().includes(searchLower) ||
@@ -920,7 +922,7 @@ export default function AgrivetStoreInformation({
         if (productSortBy === 'popularity') return (b.popularity ?? 0) - (a.popularity ?? 0)
         return 0
       })
-  }, [mergedListings, productSearchQuery, categoryFilter, productStatusFilter, productSortBy])
+  }, [productListings, productSearchQuery, categoryFilter, productStatusFilter, productSortBy])
 
   if (!shop || !store) {
     return (
@@ -3008,17 +3010,7 @@ export default function AgrivetStoreInformation({
                       {canAddListings && selectedListingDetail.discountType === 'manual' && (
                         <button
                           type="button"
-                          onClick={() => {
-                            const next = { ...listingDiscounts }
-                            delete next[selectedListingDetail.id]
-                            persistListingDiscounts(next)
-                            setSelectedListingDetail({
-                              ...selectedListingDetail,
-                              discountPercent: undefined,
-                              discountType: undefined,
-                              discountExpiration: undefined,
-                            })
-                          }}
+                          onClick={handleRemoveDiscount}
                           className="text-xs font-semibold text-[#E20E28] hover:text-[#B8000F] transition-colors"
                         >
                           Remove

@@ -159,19 +159,17 @@ export default function OwnerManagerOrdersPanel({
   };
 
   const calculateOrderTotal = (products) => {
-    return products.reduce((total, product) => {
-      const discountedPrice = product.discount
-        ? product.price * (1 - product.discount / 100)
-        : product.price;
-      return total + discountedPrice * product.quantity;
-    }, 0);
+    return products.reduce((total, product) => total + product.price * product.quantity, 0);
   };
 
   const calculateOriginalTotal = (products) => {
     return products.reduce((total, product) => {
-      return total + product.price * product.quantity;
+      const originalUnitPrice = product.originalPrice ?? product.price;
+      return total + originalUnitPrice * product.quantity;
     }, 0);
   };
+
+  const productHasDiscount = (product) => (product.discount ?? 0) > 0;
 
   const handleAcceptOrder = (order) => {
     if (!order?.id || processingOrderId) {
@@ -490,10 +488,10 @@ export default function OwnerManagerOrdersPanel({
               </h4>
               <div className="space-y-2">
                 {order.products.map((product) => {
-                  const discountedPrice = product.discount
-                    ? product.price * (1 - product.discount / 100)
-                    : product.price;
-                  const itemTotal = discountedPrice * product.quantity;
+                  const unitPrice = product.price;
+                  const originalUnitPrice = product.originalPrice ?? product.price;
+                  const itemTotal = unitPrice * product.quantity;
+                  const hasDiscount = productHasDiscount(product);
                   const itemKey = `${order.id}-${product.id}`;
                   const showPreparingActions = canPerformOrderActions && order.status === "preparing";
                   const showItemStatus = !canPerformOrderActions || order.status === "preparing";
@@ -518,7 +516,7 @@ export default function OwnerManagerOrdersPanel({
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-medium text-[#102059] mb-1">{product.name}</p>
                           <p className="text-xs text-[#6B7280]">
-                            ₱{(product.discount ? discountedPrice : product.price).toLocaleString("en-PH", { minimumFractionDigits: 2 })} × {product.quantity}
+                            ₱{unitPrice.toLocaleString("en-PH", { minimumFractionDigits: 2 })} × {product.quantity}
                           </p>
                           {showItemStatus && product.itemStatus && (
                             <span
@@ -535,10 +533,10 @@ export default function OwnerManagerOrdersPanel({
                           <p className="text-sm font-bold text-[#102059]">
                             ₱{itemTotal.toLocaleString("en-PH", { minimumFractionDigits: 2 })}
                           </p>
-                          {product.discount && (
+                          {hasDiscount && (
                             <div className="flex items-center gap-2 justify-end">
                               <span className="text-xs text-[#6B7280] line-through">
-                                ₱{(product.price * product.quantity).toLocaleString("en-PH", { minimumFractionDigits: 2 })}
+                                ₱{(originalUnitPrice * product.quantity).toLocaleString("en-PH", { minimumFractionDigits: 2 })}
                               </span>
                               <span className="text-xs font-semibold text-[#E20E28]">
                                 -{product.discount}%

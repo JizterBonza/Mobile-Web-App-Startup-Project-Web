@@ -709,6 +709,9 @@ class AgrivetController extends Controller
                     'item_name' => $item->item_name,
                     'item_description' => $item->item_description,
                     'item_price' => $item->item_price,
+                    'discount_percent' => $item->discount_percent,
+                    'discount_type' => $item->discount_type,
+                    'discount_expires_at' => $item->discount_expires_at,
                     'item_quantity' => $item->item_quantity,
                     'weight' => $item->weight,
                     'metric' => $item->metric,
@@ -852,6 +855,11 @@ class AgrivetController extends Controller
             'item_price' => 'sometimes|numeric|min:0',
             'item_quantity' => 'sometimes|integer|min:0',
             'item_status' => 'sometimes|string|in:active,inactive',
+            'discount_percent' => 'nullable|numeric|min:0|max:100',
+            'discount_type' => 'nullable|string|in:manual,timed',
+            'discount_expires_at' => 'nullable|date',
+            'expiration_hours' => 'nullable|integer|min:1',
+            'clear_discount' => 'nullable|boolean',
         ]);
 
         $update = ['updated_at' => now()];
@@ -864,6 +872,35 @@ class AgrivetController extends Controller
         }
         if (array_key_exists('item_status', $validated)) {
             $update['item_status'] = $validated['item_status'];
+        }
+
+        if ($request->boolean('clear_discount')) {
+            $update['discount_percent'] = null;
+            $update['discount_type'] = null;
+            $update['discount_expires_at'] = null;
+        } elseif ($request->has('discount_percent')) {
+            $discountPercent = $validated['discount_percent'] ?? null;
+            if ($discountPercent === null || (float) $discountPercent <= 0) {
+                $update['discount_percent'] = null;
+                $update['discount_type'] = null;
+                $update['discount_expires_at'] = null;
+            } else {
+                $discountType = $validated['discount_type'] ?? 'manual';
+                $update['discount_percent'] = $discountPercent;
+                $update['discount_type'] = $discountType;
+                if ($discountType === 'timed') {
+                    if (! empty($validated['discount_expires_at'])) {
+                        $update['discount_expires_at'] = $validated['discount_expires_at'];
+                    } elseif (! empty($validated['expiration_hours'])) {
+                        $update['discount_expires_at'] = now()->addHours((int) $validated['expiration_hours']);
+                    } else {
+                        return redirect()->back()
+                            ->withErrors(['expiration_hours' => 'Expiration is required for timed discounts.']);
+                    }
+                } else {
+                    $update['discount_expires_at'] = null;
+                }
+            }
         }
 
         DB::table('items')->where('id', $itemId)->update($update);

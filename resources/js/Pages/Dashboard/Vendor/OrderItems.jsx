@@ -216,7 +216,19 @@ export default function OrderItems({ auth, order, orderItems = [], orderItemStat
                   <tr key={item.id}>
                     <td>{item.item_name}</td>
                     <td>{item.quantity}</td>
-                    <td>${parseFloat(item.price_at_purchase).toFixed(2)}</td>
+                    <td>
+                      {parseFloat(item.discount_percent_at_purchase) > 0 ? (
+                        <div>
+                          <div>${parseFloat(item.price_at_purchase).toFixed(2)}</div>
+                          <small className="d-block text-muted">
+                            <s>${parseFloat(item.original_price).toFixed(2)}</s>
+                            {' '}-{parseFloat(item.discount_percent_at_purchase).toFixed(0)}%
+                          </small>
+                        </div>
+                      ) : (
+                        `$${parseFloat(item.price_at_purchase).toFixed(2)}`
+                      )}
+                    </td>
                     <td>${parseFloat(item.total).toFixed(2)}</td>
                     <td>{getStatusBadge(item.item_status)}</td>
                     <td>

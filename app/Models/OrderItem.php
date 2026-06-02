@@ -27,6 +27,8 @@ class OrderItem extends Model
         'shop_id',
         'quantity',
         'price_at_purchase',
+        'original_price',
+        'discount_percent_at_purchase',
         'item_status',
     ];
 
@@ -40,6 +42,8 @@ class OrderItem extends Model
         return [
             'quantity' => 'integer',
             'price_at_purchase' => 'decimal:2',
+            'original_price' => 'decimal:2',
+            'discount_percent_at_purchase' => 'decimal:2',
             'created_at' => 'datetime',
             'updated_at' => 'datetime',
         ];
