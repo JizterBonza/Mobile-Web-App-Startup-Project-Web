@@ -672,7 +672,12 @@ class AgrivetController extends Controller
             ];
         });
 
-        $products = DB::table('items')
+        $catalogBrandsByProductName = ProductCatalog::approved()
+            ->whereNotNull('brand')
+            ->where('brand', '!=', '')
+            ->pluck('brand', 'product_name');
+
+        $shopItems = DB::table('items')
             ->leftJoin('category', 'items.category', '=', 'category.id')
             ->leftJoin('sub_categories', 'items.sub_category_id', '=', 'sub_categories.id')
             ->where('items.shop_id', $shop->id)
@@ -682,8 +687,30 @@ class AgrivetController extends Controller
                 'sub_categories.sub_category_name'
             )
             ->orderBy('items.created_at', 'desc')
-            ->get()
-            ->map(function ($item) {
+            ->get();
+
+        $bundleCatalogIds = $shopItems
+            ->filter(fn ($item) => ($item->metric ?? '') === 'Bundle')
+            ->flatMap(function ($item) {
+                $ids = $item->bundle_catalog_ids ? json_decode($item->bundle_catalog_ids, true) : [];
+
+                return is_array($ids) ? $ids : [];
+            })
+            ->map(fn ($id) => (int) $id)
+            ->unique()
+            ->values()
+            ->all();
+
+        $bundleCatalogById = collect();
+        if (! empty($bundleCatalogIds)) {
+            $bundleCatalogById = ProductCatalog::approved()
+                ->with('category', 'subCategory')
+                ->whereIn('id', $bundleCatalogIds)
+                ->get()
+                ->keyBy('id');
+        }
+
+        $products = $shopItems->map(function ($item) use ($catalogBrandsByProductName, $bundleCatalogById) {
                 $images = $item->item_images ? json_decode($item->item_images, true) : [];
                 if (! empty($images)) {
                     $images = array_map(function ($image) {
@@ -707,6 +734,7 @@ class AgrivetController extends Controller
                 return [
                     'id' => $item->id,
                     'item_name' => $item->item_name,
+                    'brand' => $catalogBrandsByProductName[$item->item_name] ?? '',
                     'item_description' => $item->item_description,
                     'item_price' => $item->item_price,
                     'discount_percent' => $item->discount_percent,
@@ -715,6 +743,10 @@ class AgrivetController extends Controller
                     'item_quantity' => $item->item_quantity,
                     'weight' => $item->weight,
                     'metric' => $item->metric,
+                    'bundle_catalog_ids' => $item->bundle_catalog_ids
+                        ? json_decode($item->bundle_catalog_ids, true)
+                        : [],
+                    'bundle_products' => $this->mapBundleProductsForItem($item, $bundleCatalogById),
                     'category' => $item->category,
                     'category_name' => $item->category_name,
                     'sub_category_id' => $item->sub_category_id,
@@ -960,6 +992,7 @@ class AgrivetController extends Controller
             'item_quantity' => $validated['item_quantity'],
             'weight' => null,
             'metric' => 'Bundle',
+            'bundle_catalog_ids' => json_encode(array_values($validated['product_catalog_ids'])),
             'category' => $firstProduct->category_id,
             'sub_category_id' => $firstProduct->sub_category_id,
             'item_images' => ! empty($images) ? json_encode($images) : null,
@@ -1398,6 +1431,86 @@ class AgrivetController extends Controller
     }
 
     /**
+     * @param  \Illuminate\Support\Collection<int, \App\Models\ProductCatalog>  $catalogById
+     * @return list<array<string, mixed>>
+     */
+    private function mapBundleProductsForItem(object $item, $catalogById): array
+    {
+        if (($item->metric ?? '') !== 'Bundle') {
+            return [];
+        }
+
+        $ids = $item->bundle_catalog_ids ? json_decode($item->bundle_catalog_ids, true) : [];
+        if (! is_array($ids)) {
+            $ids = [];
+        }
+
+        $products = [];
+        foreach ($ids as $id) {
+            $catalog = $catalogById->get((int) $id);
+            if ($catalog) {
+                $products[] = $this->mapProductCatalogEntry($catalog);
+            }
+        }
+
+        if (! empty($products)) {
+            return $products;
+        }
+
+        $description = $item->item_description ?? '';
+        $prefix = 'Bundle containing: ';
+        if (! str_starts_with($description, $prefix)) {
+            return [];
+        }
+
+        $names = array_values(array_filter(array_map(
+            'trim',
+            explode(',', substr($description, strlen($prefix)))
+        )));
+
+        if (empty($names)) {
+            return [];
+        }
+
+        $byName = ProductCatalog::approved()
+            ->with('category', 'subCategory')
+            ->whereIn('product_name', $names)
+            ->get()
+            ->keyBy('product_name');
+
+        foreach ($names as $name) {
+            $catalog = $byName->get($name);
+            if ($catalog) {
+                $products[] = $this->mapProductCatalogEntry($catalog);
+            }
+        }
+
+        return $products;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function mapProductCatalogEntry(ProductCatalog $p): array
+    {
+        return [
+            'id' => $p->id,
+            'brand' => $p->brand,
+            'product_name' => $p->product_name,
+            'category_id' => $p->category_id,
+            'category_name' => optional($p->category)->category_name,
+            'sub_category_id' => $p->sub_category_id,
+            'sub_category_name' => optional($p->subCategory)->sub_category_name,
+            'weight' => $p->weight,
+            'unit' => $p->unit,
+            'description' => $p->description,
+            'images' => $this->normalizeCatalogImagePaths($p->images ?? []),
+            'primary_image_index' => (int) ($p->primary_image_index ?? 0),
+            'status' => $p->status,
+        ];
+    }
+
+    /**
      * @return list<array<string, mixed>>
      */
     private function mapProductCatalogCollection(): array
@@ -1406,21 +1519,7 @@ class AgrivetController extends Controller
             ->with('category', 'subCategory')
             ->orderBy('product_name')
             ->get()
-            ->map(fn ($p) => [
-                'id' => $p->id,
-                'brand' => $p->brand,
-                'product_name' => $p->product_name,
-                'category_id' => $p->category_id,
-                'category_name' => optional($p->category)->category_name,
-                'sub_category_id' => $p->sub_category_id,
-                'sub_category_name' => optional($p->subCategory)->sub_category_name,
-                'weight' => $p->weight,
-                'unit' => $p->unit,
-                'description' => $p->description,
-                'images' => $this->normalizeCatalogImagePaths($p->images ?? []),
-                'primary_image_index' => (int) ($p->primary_image_index ?? 0),
-                'status' => $p->status,
-            ])
+            ->map(fn ($p) => $this->mapProductCatalogEntry($p))
             ->values()
             ->all();
     }

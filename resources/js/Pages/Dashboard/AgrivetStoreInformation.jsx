@@ -245,6 +245,41 @@ function getProductStatus(listing) {
   return 'Active'
 }
 
+const BUNDLE_CONTAINING_PREFIX = 'Bundle containing: '
+
+function parseBundleProductNames(description) {
+  if (!description || !description.startsWith(BUNDLE_CONTAINING_PREFIX)) return []
+  return description
+    .slice(BUNDLE_CONTAINING_PREFIX.length)
+    .split(',')
+    .map((name) => name.trim())
+    .filter(Boolean)
+}
+
+function resolveBundleIncludedProducts(description, catalog) {
+  const names = parseBundleProductNames(description)
+  if (names.length === 0) return []
+
+  const byName = new Map(
+    catalog.map((entry) => [
+      String(entry.product_name || '').toLowerCase(),
+      mapCatalogToRegisteredProduct(entry),
+    ])
+  )
+
+  return names.map((name) => {
+    const matched = byName.get(name.toLowerCase())
+    if (matched) return matched
+    return {
+      id: `bundle-product-${name}`,
+      productName: name,
+      brand: '',
+      category: '',
+      image: PLACEHOLDER_PRODUCT_IMAGE,
+    }
+  })
+}
+
 export default function AgrivetStoreInformation({
   auth,
   agrivet,
@@ -857,8 +892,15 @@ export default function AgrivetStoreInformation({
   const [productSortBy, setProductSortBy] = useState('name')
 
   const productListings = useMemo(
-    () =>
-      products.map((product) => {
+    () => {
+      const brandByProductName = new Map(
+        product_catalog.map((entry) => [
+          String(entry.product_name || '').toLowerCase(),
+          entry.brand || '',
+        ])
+      )
+
+      return products.map((product) => {
         const images = Array.isArray(product.item_images) ? product.item_images : []
         const photos = images.length > 0 ? images.map(resolveCatalogImageUrl) : []
         const unit = [product.weight, product.metric].filter(Boolean).join(' ') || 'unit'
@@ -872,7 +914,10 @@ export default function AgrivetStoreInformation({
           id: product.id,
           productId: product.id,
           productName: product.item_name || '',
-          brand: product.sub_category_name || product.category_name || '',
+          brand:
+            product.brand ||
+            brandByProductName.get(String(product.item_name || '').toLowerCase()) ||
+            '',
           category: product.metric === 'Bundle' ? 'Product Bundle' : (product.category_name || 'Uncategorized'),
           unit,
           price: parseFloat(product.item_price) || 0,
@@ -889,10 +934,18 @@ export default function AgrivetStoreInformation({
           primaryPhotoIndex: 0,
           manualStatus: isActive ? 'Active' : 'Inactive',
           isBundle: product.metric === 'Bundle',
+          description: product.item_description || '',
+          bundleProducts:
+            product.metric === 'Bundle'
+              ? Array.isArray(product.bundle_products) && product.bundle_products.length > 0
+                ? product.bundle_products.map(mapCatalogToRegisteredProduct)
+                : resolveBundleIncludedProducts(product.item_description, product_catalog)
+              : [],
           dateAdded: product.created_at || product.updated_at || new Date().toISOString(),
         }
-      }),
-    [products]
+      })
+    },
+    [products, product_catalog]
   )
 
   const isCatalogProductListed = (catalogProduct) =>
@@ -1571,9 +1624,9 @@ export default function AgrivetStoreInformation({
                             </div>
                           </div>
                           <div className="p-3">
-                            <h3 className="text-[#102059] mb-0.5 line-clamp-1 text-[12px]">
+                            <h6 className="text-[#102059] mb-0.5 line-clamp-1 text-[12px]">
                               {listing.productName}
-                            </h3>
+                            </h6>
                             <p className="text-xs text-[#6B7280] mb-2">{listing.brand}</p>
                             <div className="flex flex-col gap-0.5 mb-2">
                               {getEffectiveDiscount(listing) > 0 ? (
@@ -2991,6 +3044,47 @@ export default function AgrivetStoreInformation({
                     />
                   </div>
                 </div>
+
+                {selectedListingDetail.isBundle && (
+                  <div>
+                    <label className="text-xs font-semibold text-[#102059] uppercase tracking-wider block mb-2">
+                      Products Included
+                    </label>
+                    {selectedListingDetail.bundleProducts?.length > 0 ? (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                        {selectedListingDetail.bundleProducts.map((product) => (
+                          <div
+                            key={product.id}
+                            className="border border-[#E5E7EB] rounded-lg p-4 bg-[#F9FAFB]"
+                          >
+                            <div className="aspect-square bg-white rounded-lg mb-3 overflow-hidden">
+                              <img
+                                src={product.image}
+                                alt={product.productName}
+                                className="w-full h-full object-cover"
+                              />
+                            </div>
+                            <h4 className="text-sm font-semibold text-[#102059] mb-1">
+                              {product.productName}
+                            </h4>
+                            {product.brand ? (
+                              <p className="text-xs text-[#6B7280] mb-0.5">{product.brand}</p>
+                            ) : null}
+                            {product.category ? (
+                              <p className="text-xs text-[#6B7280]">{product.category}</p>
+                            ) : null}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-[#6B7280] py-4 border border-dashed border-[#E5E7EB] rounded-lg text-center px-4">
+                        No products are recorded for this bundle. Bundles created before this update, or with
+                        only a custom description, do not store included products—create the bundle again to
+                        show them here.
+                      </p>
+                    )}
+                  </div>
+                )}
 
                 {getEffectiveDiscount(selectedListingDetail) > 0 && (
                   <div className="bg-[#FFF5F5] border border-[#E20E28] rounded-lg p-4">
