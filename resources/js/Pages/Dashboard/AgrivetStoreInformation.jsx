@@ -280,6 +280,31 @@ function resolveBundleIncludedProducts(description, catalog) {
   })
 }
 
+function isProductFlashMessage(message) {
+  const lower = (message || '').toLowerCase()
+  return (
+    lower.includes('listing') ||
+    lower.includes('bundle') ||
+    (lower.includes('product') && !lower.includes('vendor'))
+  )
+}
+
+function isVendorFlashMessage(message) {
+  const lower = (message || '').toLowerCase()
+  return (
+    lower.includes('vendor') ||
+    lower.includes('reassigned') ||
+    lower.includes('has been added to')
+  )
+}
+
+function getProductSuccessTitle(message) {
+  const lower = (message || '').toLowerCase()
+  if (lower.includes('bundle')) return 'Bundle Created Successfully'
+  if (lower.includes('added')) return 'Product Added Successfully'
+  return 'Listing Updated Successfully'
+}
+
 export default function AgrivetStoreInformation({
   auth,
   agrivet,
@@ -405,20 +430,35 @@ export default function AgrivetStoreInformation({
   }
 
   useEffect(() => {
-    if (flash?.success || flash?.error) {
-      const message = (flash.success || flash.error || '').toLowerCase()
-      if (isVendor && visibleTabs.includes('orders') && message.includes('order')) {
-        setActiveTab('orders')
-      } else if (visibleTabs.includes('vendors') && flash?.success) {
-        setActiveTab('vendors')
-      }
+    if (!flash?.success && !flash?.error) return
+
+    const message = flash.success || flash.error || ''
+    const lower = message.toLowerCase()
+
+    if (isVendor && visibleTabs.includes('orders') && lower.includes('order')) {
+      setActiveTab('orders')
+    } else if (isProductFlashMessage(message) && visibleTabs.includes('products')) {
+      setActiveTab('products')
+    } else if (isVendorFlashMessage(message) && visibleTabs.includes('vendors')) {
+      setActiveTab('vendors')
     }
+
     if (flash?.success) {
-      if (flash.success.toLowerCase().includes('reassigned')) {
+      if (lower.includes('reassigned')) {
         const vendorName = flash.success.split(' has been reassigned')[0]?.trim() || flash.success
         showSuccess('reassign', vendorName)
-      } else {
-        showSuccess('add', flash.success)
+      } else if (isProductFlashMessage(flash.success)) {
+        if (!lower.includes('bundle')) {
+          showSuccess('product', flash.success)
+        }
+      } else if (isVendorFlashMessage(flash.success)) {
+        if (lower.includes('updated') || lower.includes('removed')) {
+          showSuccess('edit', flash.success)
+        } else {
+          showSuccess('add', flash.success)
+        }
+      } else if (lower.includes('cover photo') || lower.includes('shop updated')) {
+        showSuccess('storeEdit', store.storeName)
       }
     }
   }, [flash?.success])
@@ -1019,9 +1059,11 @@ export default function AgrivetStoreInformation({
                           ? 'Vendor Updated Successfully'
                           : successMessageType === 'status'
                             ? 'Store Status Updated'
-                            : successMessageType === 'storeEdit'
-                              ? 'Store Information Updated'
-                              : 'Vendor Status Updated'}
+                            : successMessageType === 'product'
+                              ? getProductSuccessTitle(successVendorName)
+                              : successMessageType === 'storeEdit'
+                                ? 'Store Information Updated'
+                                : 'Vendor Status Updated'}
                   </h3>
                   <p className="text-xs text-white/90 mt-0.5">
                     {successMessageType === 'add'
@@ -1032,9 +1074,11 @@ export default function AgrivetStoreInformation({
                           ? `${successVendorName}'s information has been updated`
                           : successMessageType === 'status'
                             ? `${successVendorName} is now ${store.status}`
-                            : successMessageType === 'storeEdit'
-                              ? `${successVendorName}'s information has been successfully updated`
-                              : `${successVendorName}'s status has been updated`}
+                            : successMessageType === 'product'
+                              ? successVendorName
+                              : successMessageType === 'storeEdit'
+                                ? `${successVendorName}'s information has been successfully updated`
+                                : `${successVendorName}'s status has been updated`}
                   </p>
                 </div>
                 <button onClick={() => setShowSuccessMessage(false)} className="p-1.5 hover:bg-white/20 rounded transition-colors">
