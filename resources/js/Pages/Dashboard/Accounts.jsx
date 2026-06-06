@@ -19,6 +19,7 @@ import {
 import AdminKlasmeytLayout from '../../Layouts/AdminKlasmeytLayout'
 import SuperAdminKlasmeytLayout from '../../Layouts/SuperAdminKlasmeytLayout'
 import { useDashboardSession } from '../../hooks/useDashboardSession'
+import PasswordInput from '../../Components/PasswordInput'
 
 const ROLE_ORDER = ['super_admin', 'admin', 'vendor', 'veterinarian', 'customer', 'rider']
 
@@ -140,6 +141,7 @@ export default function Accounts({ auth, users = [], flash }) {
     const [accountSortBy, setAccountSortBy] = useState('name')
     const [accountItemsPerPage, setAccountItemsPerPage] = useState(10)
     const [currentAccountPage, setCurrentAccountPage] = useState(1)
+    const [togglingUserId, setTogglingUserId] = useState(null)
 
     const addForm = useForm({
         first_name: '',
@@ -155,19 +157,6 @@ export default function Accounts({ auth, users = [], flash }) {
     })
 
     const editForm = useForm({
-        first_name: '',
-        middle_name: '',
-        last_name: '',
-        email: '',
-        mobile_number: '',
-        password: '',
-        password_confirmation: '',
-        username: '',
-        user_type: 'vendor',
-        status: 'active',
-    })
-
-    const statusToggleForm = useForm({
         first_name: '',
         middle_name: '',
         last_name: '',
@@ -471,25 +460,28 @@ export default function Accounts({ auth, users = [], flash }) {
 
     const handleAccountStatusToggle = (e, user) => {
         e.stopPropagation()
-        if (statusToggleForm.processing) {
+        if (togglingUserId !== null) {
             return
         }
         const newStatus = user.status === 'active' ? 'inactive' : 'active'
-        statusToggleForm.setData({
-            first_name: user.first_name,
-            middle_name: user.middle_name || '',
-            last_name: user.last_name,
-            email: user.email,
-            mobile_number: user.mobile_number || '',
-            password: '',
-            password_confirmation: '',
-            username: user.username || '',
-            user_type: user.user_type,
-            status: newStatus,
-        })
-        statusToggleForm.put(`${getBaseRoute()}/${user.id}`, {
-            preserveScroll: true,
-        })
+        setTogglingUserId(user.id)
+        router.put(
+            `${getBaseRoute()}/${user.id}`,
+            {
+                first_name: user.first_name,
+                middle_name: user.middle_name || '',
+                last_name: user.last_name,
+                email: user.email,
+                mobile_number: user.mobile_number || '',
+                username: user.username || '',
+                user_type: user.user_type,
+                status: newStatus,
+            },
+            {
+                preserveScroll: true,
+                onFinish: () => setTogglingUserId(null),
+            },
+        )
     }
 
     const summaryRoles = useMemo(() => {
@@ -734,7 +726,7 @@ export default function Accounts({ auth, users = [], flash }) {
                                                     <button
                                                         type="button"
                                                         onClick={(e) => handleAccountStatusToggle(e, user)}
-                                                        disabled={statusToggleForm.processing}
+                                                        disabled={togglingUserId === user.id}
                                                         className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-all duration-300 disabled:opacity-50 ${
                                                             user.status === 'active' ? 'bg-[#00C950]' : 'bg-[#D1D5DB]'
                                                         }`}
@@ -752,7 +744,7 @@ export default function Accounts({ auth, users = [], flash }) {
                                                 </div>
 
                                                 <div className="flex items-center justify-end gap-1 sm:justify-end">
-                                                    <button
+                                                    {/* <button
                                                         type="button"
                                                         onClick={(e) => {
                                                             e.stopPropagation()
@@ -762,7 +754,7 @@ export default function Accounts({ auth, users = [], flash }) {
                                                         title="Edit account"
                                                     >
                                                         <Pencil className="h-5 w-5" />
-                                                    </button>
+                                                    </button> */}
                                                     {user.status === 'active' && (
                                                         <button
                                                             type="button"
@@ -1016,8 +1008,7 @@ export default function Accounts({ auth, users = [], flash }) {
                                     <div className="grid gap-4 sm:grid-cols-2">
                                         {modalField(
                                             'Password *',
-                                            <input
-                                                type="password"
+                                            <PasswordInput
                                                 required
                                                 className={`${inputClass} ${addForm.errors.password ? 'border-red-400' : ''}`}
                                                 value={addForm.data.password}
@@ -1026,8 +1017,7 @@ export default function Accounts({ auth, users = [], flash }) {
                                         )}
                                         {modalField(
                                             'Confirm password *',
-                                            <input
-                                                type="password"
+                                            <PasswordInput
                                                 required
                                                 className={`${inputClass} ${addForm.errors.password_confirmation ? 'border-red-400' : ''}`}
                                                 value={addForm.data.password_confirmation}
@@ -1186,8 +1176,7 @@ export default function Accounts({ auth, users = [], flash }) {
                                     <div className="grid gap-4 sm:grid-cols-2">
                                         {modalField(
                                             'Password (leave blank to keep)',
-                                            <input
-                                                type="password"
+                                            <PasswordInput
                                                 className={`${inputClass} ${editForm.errors.password ? 'border-red-400' : ''}`}
                                                 value={editForm.data.password}
                                                 onChange={(e) => editForm.setData('password', e.target.value)}
@@ -1196,8 +1185,7 @@ export default function Accounts({ auth, users = [], flash }) {
                                         )}
                                         {modalField(
                                             'Confirm password',
-                                            <input
-                                                type="password"
+                                            <PasswordInput
                                                 className={`${inputClass} ${editForm.errors.password_confirmation ? 'border-red-400' : ''}`}
                                                 value={editForm.data.password_confirmation}
                                                 onChange={(e) => editForm.setData('password_confirmation', e.target.value)}

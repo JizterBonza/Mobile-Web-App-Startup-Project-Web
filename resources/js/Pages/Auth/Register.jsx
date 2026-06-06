@@ -1,6 +1,6 @@
-import { useState } from 'react';
 import { Link, useForm } from '@inertiajs/react';
 import AuthLayout from '../../Layouts/AuthLayout';
+import PasswordInput from '../../Components/PasswordInput';
 
 export default function Register() {
     const { data, setData, post, processing, errors } = useForm({
@@ -62,43 +62,33 @@ export default function Register() {
                     )}
                 </div>
                 
-                <div className="input-group mb-3">
-                    <input
-                        type="password"
+                <div className="mb-3">
+                    <PasswordInput
+                        variant="bootstrap"
                         className={`form-control ${errors.password ? 'is-invalid' : ''}`}
                         placeholder="Password"
                         value={data.password}
                         onChange={(e) => setData('password', e.target.value)}
                         required
                     />
-                    <div className="input-group-append">
-                        <div className="input-group-text">
-                            <span className="fas fa-lock"></span>
-                        </div>
-                    </div>
                     {errors.password && (
-                        <div className="invalid-feedback">
+                        <div className="invalid-feedback d-block">
                             {errors.password}
                         </div>
                     )}
                 </div>
                 
-                <div className="input-group mb-3">
-                    <input
-                        type="password"
+                <div className="mb-3">
+                    <PasswordInput
+                        variant="bootstrap"
                         className={`form-control ${errors.password_confirmation ? 'is-invalid' : ''}`}
                         placeholder="Retype password"
                         value={data.password_confirmation}
                         onChange={(e) => setData('password_confirmation', e.target.value)}
                         required
                     />
-                    <div className="input-group-append">
-                        <div className="input-group-text">
-                            <span className="fas fa-lock"></span>
-                        </div>
-                    </div>
                     {errors.password_confirmation && (
-                        <div className="invalid-feedback">
+                        <div className="invalid-feedback d-block">
                             {errors.password_confirmation}
                         </div>
                     )}

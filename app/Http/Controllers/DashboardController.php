@@ -22,7 +22,7 @@ class DashboardController extends Controller
         // User counts grouped by type and status
         $userRows = DB::table('users')
             ->select('user_type', 'status', DB::raw('count(*) as count'))
-            ->whereIn('user_type', ['admin', 'vendor', 'veterinarian', 'rider'])
+            ->whereIn('user_type', ['super_admin', 'admin', 'vendor', 'veterinarian', 'rider'])
             ->groupBy('user_type', 'status')
             ->get()
             ->groupBy('user_type');
@@ -117,6 +117,7 @@ class DashboardController extends Controller
         return Inertia::render('Dashboard/SuperAdminDashboard', [
             'insights' => [
                 'userStats' => [
+                    'superAdmins'   => $roleStat('super_admin'),
                     'admins'        => $roleStat('admin'),
                     'agrivets'      => ['total' => $agrivetTotal, 'active' => $agrivetActive, 'inactive' => $agrivetTotal - $agrivetActive],
                     'vendors'       => $roleStat('vendor'),

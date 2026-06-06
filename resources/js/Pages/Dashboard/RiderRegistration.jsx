@@ -4,6 +4,7 @@ import { ArrowLeft, Check, X, AlertTriangle, Upload, Trash2 } from 'lucide-react
 import KlasmeytDashboardLayout from '../../Layouts/KlasmeytDashboardLayout'
 import SuperAdminKlasmeytLayout from '../../Layouts/SuperAdminKlasmeytLayout'
 import { useDashboardSession } from '../../hooks/useDashboardSession'
+import PasswordInput from '../../Components/PasswordInput'
 
 const inputClass =
     'w-full px-4 py-3 border border-[#E5E7EB] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#244693] focus:border-transparent text-sm text-[#1F2937]'
@@ -390,8 +391,7 @@ export default function RiderRegistration({ auth }) {
                                             <label className="mb-2 block text-sm font-semibold text-[#102059]">
                                                 Password <span className="text-[#E20E28]">*</span>
                                             </label>
-                                            <input
-                                                type="password"
+                                            <PasswordInput
                                                 className={inputClass}
                                                 value={form.data.password}
                                                 onChange={(e) => form.setData('password', e.target.value)}
@@ -402,8 +402,7 @@ export default function RiderRegistration({ auth }) {
                                             <label className="mb-2 block text-sm font-semibold text-[#102059]">
                                                 Confirm password <span className="text-[#E20E28]">*</span>
                                             </label>
-                                            <input
-                                                type="password"
+                                            <PasswordInput
                                                 className={inputClass}
                                                 value={form.data.password_confirmation}
                                                 onChange={(e) => form.setData('password_confirmation', e.target.value)}

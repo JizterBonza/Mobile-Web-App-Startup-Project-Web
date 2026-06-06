@@ -4,6 +4,7 @@ import { ArrowLeft, Check, Upload, X } from 'lucide-react'
 import KlasmeytDashboardLayout from '../../Layouts/KlasmeytDashboardLayout'
 import SuperAdminKlasmeytLayout from '../../Layouts/SuperAdminKlasmeytLayout'
 import PinLocationMap from '../../Components/PinLocationMap'
+import PasswordInput from '../../Components/PasswordInput'
 
 const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 const FULL_DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
@@ -360,9 +361,8 @@ export default function AddAgrivet({ auth, zones = [], flash }) {
                                                 <label className="mb-2 block text-xs text-[#6B7280]" htmlFor="password">
                                                     Password (owner/manager login) <span className="text-[#E20E28]">*</span>
                                                 </label>
-                                                <input
+                                                <PasswordInput
                                                     id="password"
-                                                    type="password"
                                                     autoComplete="new-password"
                                                     required
                                                     className={`${inputClass} ${form.errors.password ? 'border-red-400' : ''}`}
@@ -381,9 +381,8 @@ export default function AddAgrivet({ auth, zones = [], flash }) {
                                                 >
                                                     Confirm password <span className="text-[#E20E28]">*</span>
                                                 </label>
-                                                <input
+                                                <PasswordInput
                                                     id="password_confirmation"
-                                                    type="password"
                                                     autoComplete="new-password"
                                                     required
                                                     className={`${inputClass} ${form.errors.password_confirmation ? 'border-red-400' : ''}`}
