@@ -290,7 +290,7 @@ export default function Profile({ auth, profileData, flash }) {
                   <div className="form-group">
                     <button 
                       type="submit" 
-                      className="btn btn-primary mr-2"
+                      className="btn mr-2" style={{ backgroundColor: 'rgb(16, 32, 89)', border: '1px solid rgb(16, 32, 89)', color: 'white' }}
                       disabled={processing}
                     >
                       {processing ? (
