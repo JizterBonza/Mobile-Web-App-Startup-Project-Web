@@ -32,7 +32,7 @@ export default function PaymentMethods({ auth, paymentMethods = [], flash }) {
 
   const addForm = useForm({ name: '', status: 'active' })
   const editForm = useForm({ name: '', status: 'active' })
-  const statusToggleForm = useForm({ name: '', status: 'active' })
+  const [togglingPaymentMethodId, setTogglingPaymentMethodId] = useState(null)
 
   useEffect(() => {
     if (showAddModal) setTimeout(() => setShowAddModalAnimation(true), 10)
@@ -97,10 +97,21 @@ export default function PaymentMethods({ auth, paymentMethods = [], flash }) {
 
   const handleStatusToggle = (e, pm) => {
     e.stopPropagation()
-    if (statusToggleForm.processing) return
-    const newStatus = (pm.status_label || pm.status) === 'active' ? 'inactive' : 'active'
-    statusToggleForm.setData({ name: pm.name, status: newStatus })
-    statusToggleForm.put(`${baseRoute}/${pm.id}`, { preserveScroll: true })
+    if (togglingPaymentMethodId !== null) return
+    const isActive = pm.status_label === 'active' || pm.status === true
+    const newStatus = isActive ? 'inactive' : 'active'
+    setTogglingPaymentMethodId(pm.id)
+    router.put(
+      `${baseRoute}/${pm.id}`,
+      {
+        name: pm.name,
+        status: newStatus,
+      },
+      {
+        preserveScroll: true,
+        onFinish: () => setTogglingPaymentMethodId(null),
+      },
+    )
   }
 
   const handleAddPaymentMethod = (e) => {
@@ -146,7 +157,7 @@ export default function PaymentMethods({ auth, paymentMethods = [], flash }) {
   const sortedMethods = useMemo(() => {
     const q = searchQuery.trim().toLowerCase()
     let list = paymentMethods.filter((pm) => {
-      const isActive = (pm.status_label || pm.status) === 'active'
+      const isActive = pm.status_label === 'active' || pm.status === true
       if (statusFilter === 'Active' && !isActive) return false
       if (statusFilter === 'Inactive' && isActive) return false
       if (!q) return true
@@ -266,7 +277,7 @@ export default function PaymentMethods({ auth, paymentMethods = [], flash }) {
           <div className="divide-y divide-[#E5E7EB]">
             {displayedMethods.length > 0 ? (
               displayedMethods.map((pm) => {
-                const isActive = (pm.status_label || pm.status) === 'active'
+                const isActive = pm.status_label === 'active' || pm.status === true
                 const dateAdded = pm.created_at
                   ? new Date(pm.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
                   : 'N/A'
@@ -294,7 +305,7 @@ export default function PaymentMethods({ auth, paymentMethods = [], flash }) {
                           <button
                             type="button"
                             onClick={(e) => handleStatusToggle(e, pm)}
-                            disabled={statusToggleForm.processing}
+                            disabled={togglingPaymentMethodId === pm.id}
                             className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-all duration-300 disabled:opacity-50 ${
                               isActive ? 'bg-[#00C950]' : 'bg-[#D1D5DB]'
                             }`}
