@@ -18,6 +18,7 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 use App\Http\Controllers\Concerns\ManagesShopOrders;
+use App\Services\UserWelcomeEmailService;
 
 class AgrivetController extends Controller
 {
@@ -103,8 +104,11 @@ class AgrivetController extends Controller
             ? 'dashboard.admin.agrivets.index'
             : 'dashboard.super-admin.agrivets.index';
 
+        $ownerManager = null;
+        $ownerUsername = null;
+
         try {
-            DB::transaction(function () use ($request, $validated) {
+            DB::transaction(function () use ($request, $validated, &$ownerManager, &$ownerUsername) {
                 $storePath = $request->file('store_image')->store('agrivets/wizard', 'public');
                 $permitPath = $request->file('permit_image')->store('agrivets/wizard', 'public');
 
@@ -168,7 +172,7 @@ class AgrivetController extends Controller
                     'shop_status' => 'active',
                 ]);
 
-                $username = explode('@', $validated['email'])[0].'_'.time();
+                $ownerUsername = explode('@', $validated['email'])[0].'_'.time();
 
                 $ownerDetail = UserDetail::create([
                     'first_name' => $validated['first_name'],
@@ -179,7 +183,7 @@ class AgrivetController extends Controller
                 ]);
 
                 $ownerCredential = UserCredential::create([
-                    'username' => $username,
+                    'username' => $ownerUsername,
                     'password_hash' => Hash::make($validated['password']),
                 ]);
 
@@ -207,8 +211,17 @@ class AgrivetController extends Controller
                 ActivityLog::log('created', "Agrivet created (wizard): {$agrivet->name}", $agrivet, null, $agrivet->toArray());
             });
 
+            $emailSent = $ownerManager
+                ? app(UserWelcomeEmailService::class)->send($ownerManager, $ownerUsername, $validated['password'])
+                : false;
+
+            $successMessage = UserWelcomeEmailService::successMessage(
+                $emailSent,
+                'Agrivet, primary store, and owner/manager login created successfully.'
+            );
+
             return redirect()->route($redirectRoute)
-                ->with('success', 'Agrivet, primary store, and owner/manager login created successfully.');
+                ->with('success', $successMessage);
         } catch (\Throwable $e) {
             Log::error('Agrivet setup wizard failed', [
                 'message' => $e->getMessage(),
@@ -1130,6 +1143,8 @@ class AgrivetController extends Controller
             }
             ActivityLog::log('created', "Vendor created and added to shop: {$vendor->userDetail->email} → {$shop->shop_name}", $vendor, null, $newVendorValues);
 
+            $emailSent = app(UserWelcomeEmailService::class)->send($vendor, $username, $request->password);
+
             // Redirect to store information (vendors tab) based on current user's role
             $currentUser = auth()->user();
             $redirectRoute = match ($currentUser->user_type) {
@@ -1142,8 +1157,13 @@ class AgrivetController extends Controller
 
             $redirectParams = $currentUser->user_type === 'owner_manager' ? [$shopId] : [$id, $shopId];
 
+            $successMessage = UserWelcomeEmailService::successMessage(
+                $emailSent,
+                "{$vendorName} has been added to {$shop->shop_name} successfully."
+            );
+
             return redirect(route($redirectRoute, $redirectParams).'?tab=vendors')
-                ->with('success', "{$vendorName} has been added to {$shop->shop_name} successfully.");
+                ->with('success', $successMessage);
         } catch (\Exception $e) {
             DB::rollBack();
             return redirect()->back()

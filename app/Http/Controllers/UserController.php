@@ -7,6 +7,7 @@ use App\Models\Agrivet;
 use App\Models\User;
 use App\Models\UserDetail;
 use App\Models\UserCredential;
+use App\Services\UserWelcomeEmailService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -280,13 +281,17 @@ class UserController extends Controller
                 $user->toArray()
             );
 
+            $emailSent = app(UserWelcomeEmailService::class)->send($user, $username, $request->password);
+
             // Redirect based on current user's role
             $redirectRoute = $currentUser->user_type === 'admin' 
                 ? 'dashboard.admin.users.index' 
                 : 'dashboard.super-admin.users.index';
 
+            $successMessage = UserWelcomeEmailService::successMessage($emailSent);
+
             return redirect()->route($redirectRoute)
-                ->with('success', 'User created successfully.');
+                ->with('success', $successMessage);
         } catch (\Exception $e) {
             DB::rollBack();
             return redirect()->back()
