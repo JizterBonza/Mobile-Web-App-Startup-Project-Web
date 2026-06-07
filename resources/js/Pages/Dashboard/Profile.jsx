@@ -75,7 +75,7 @@ export default function Profile({ auth, profileData, flash }) {
       <div className="row">
         {/* Profile Card */}
         <div className="col-md-4">
-          <div className="card card-primary card-outline">
+          <div className="card card-outline" style={{ borderTop: '3px solid rgb(16, 32, 89)' }}>
             <div className="card-body box-profile">
               <div className="text-center">
                 <div 
@@ -84,7 +84,7 @@ export default function Profile({ auth, profileData, flash }) {
                     width: '128px',
                     height: '128px',
                     margin: '0 auto',
-                    backgroundColor: '#007bff',
+                    backgroundColor: 'rgb(16, 32, 89)',
                     color: '#fff',
                     fontSize: '48px',
                     fontWeight: 'bold',
@@ -132,7 +132,7 @@ export default function Profile({ auth, profileData, flash }) {
 
               {!isEditing && (
                 <button 
-                  className="btn btn-primary btn-block"
+                  className="btn btn-block" style={{ backgroundColor: 'rgb(16, 32, 89)', border: '1px solid rgb(16, 32, 89)', color: 'white' }}
                   onClick={() => setIsEditing(true)}
                 >
                   <i className="fas fa-edit mr-2"></i> Edit Profile
