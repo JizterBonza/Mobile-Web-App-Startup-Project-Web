@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useForm, router, Link } from '@inertiajs/react'
-import { ArrowLeft, Plus, Search, Pencil, Trash2, Tag } from 'lucide-react'
+import { ArrowLeft, Plus, Search, Pencil, Trash2, Tag, History } from 'lucide-react'
 import SuperAdminOrAdminLayout from '../../Layouts/SuperAdminOrAdminLayout'
 
 export default function Categories({ auth, categories = [], flash }) {
@@ -10,6 +10,12 @@ export default function Categories({ auth, categories = [], flash }) {
   const [showEditModalAnimation, setShowEditModalAnimation] = useState(false)
   const [showRemoveModal, setShowRemoveModal]     = useState(false)
   const [showRemoveModalAnimation, setShowRemoveModalAnimation] = useState(false)
+  const [showRateHistoryModal, setShowRateHistoryModal] = useState(false)
+  const [showRateHistoryAnimation, setShowRateHistoryAnimation] = useState(false)
+  const [rateHistoryCategory, setRateHistoryCategory] = useState(null)
+  const [rateHistoryLogs, setRateHistoryLogs] = useState([])
+  const [rateHistoryLoading, setRateHistoryLoading] = useState(false)
+  const [rateHistoryError, setRateHistoryError] = useState('')
   const [selectedCategory, setSelectedCategory]   = useState(null)
   const [categoryToRemove, setCategoryToRemove]   = useState(null)
   const [showSuccessAlert, setShowSuccessAlert]   = useState(true)
@@ -19,12 +25,13 @@ export default function Categories({ auth, categories = [], flash }) {
   const [itemsPerPage, setItemsPerPage]           = useState(10)
   const [currentPage, setCurrentPage]             = useState(1)
 
-  const addForm = useForm({ category_name: '', category_description: '', category_image_url: '', status: 'active' })
-  const editForm = useForm({ category_name: '', category_description: '', category_image_url: '', status: 'active' })
+  const addForm = useForm({ category_name: '', category_description: '', category_image_url: '', category_rate: '', status: 'active' })
+  const editForm = useForm({ category_name: '', category_description: '', category_image_url: '', category_rate: '', status: 'active' })
 
   useEffect(() => { showAddModal ? setTimeout(() => setShowAddModalAnimation(true), 10) : setShowAddModalAnimation(false) }, [showAddModal])
   useEffect(() => { showEditModal ? setTimeout(() => setShowEditModalAnimation(true), 10) : setShowEditModalAnimation(false) }, [showEditModal])
   useEffect(() => { showRemoveModal ? setTimeout(() => setShowRemoveModalAnimation(true), 10) : setShowRemoveModalAnimation(false) }, [showRemoveModal])
+  useEffect(() => { showRateHistoryModal ? setTimeout(() => setShowRateHistoryAnimation(true), 10) : setShowRateHistoryAnimation(false) }, [showRateHistoryModal])
 
   const closeAddModal = () => {
     setShowAddModalAnimation(false)
@@ -37,6 +44,15 @@ export default function Categories({ auth, categories = [], flash }) {
   const closeRemoveModal = () => {
     setShowRemoveModalAnimation(false)
     setTimeout(() => { setShowRemoveModal(false); setCategoryToRemove(null) }, 300)
+  }
+  const closeRateHistoryModal = () => {
+    setShowRateHistoryAnimation(false)
+    setTimeout(() => {
+      setShowRateHistoryModal(false)
+      setRateHistoryCategory(null)
+      setRateHistoryLogs([])
+      setRateHistoryError('')
+    }, 300)
   }
 
   useEffect(() => {
@@ -70,6 +86,7 @@ export default function Categories({ auth, categories = [], flash }) {
       category_name:        String(category.category_name || ''),
       category_description: String(category.category_description || ''),
       category_image_url:   String(category.category_image_url || ''),
+      category_rate:        category.category_rate != null ? String(category.category_rate) : '',
       status:               String(category.status || 'active'),
     })
     setShowEditModal(true)
@@ -91,6 +108,38 @@ export default function Categories({ auth, categories = [], flash }) {
   const confirmDeleteCategory = () => {
     if (categoryToRemove) {
       router.delete(`${baseRoute}/${categoryToRemove.id}`, { preserveScroll: true, onSuccess: () => closeRemoveModal() })
+    }
+  }
+
+  const formatRate = (rate) => rate != null ? `${Number(rate)}%` : '—'
+
+  const handleViewRateHistory = async (category) => {
+    setRateHistoryCategory(category)
+    setRateHistoryLogs([])
+    setRateHistoryError('')
+    setRateHistoryLoading(true)
+    setShowRateHistoryModal(true)
+    setShowRateHistoryAnimation(false)
+
+    try {
+      const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content')
+      const response = await fetch(`${baseRoute}/${category.id}/rate-history`, {
+        headers: {
+          Accept: 'application/json',
+          'X-Requested-With': 'XMLHttpRequest',
+          ...(csrfToken ? { 'X-CSRF-TOKEN': csrfToken } : {}),
+        },
+      })
+
+      if (!response.ok) throw new Error('Failed to load rate history')
+
+      const payload = await response.json()
+      setRateHistoryLogs(payload.data || [])
+      if (payload.category) setRateHistoryCategory(payload.category)
+    } catch {
+      setRateHistoryError('Unable to load rate history. Please try again.')
+    } finally {
+      setRateHistoryLoading(false)
     }
   }
 
@@ -197,10 +246,18 @@ export default function Categories({ auth, categories = [], flash }) {
                 </div>
 
                 {/* Info */}
-                <div className="grid flex-1 grid-cols-1 gap-4 md:grid-cols-[1fr_100px_160px_80px]">
+                <div className="grid flex-1 grid-cols-1 gap-4 md:grid-cols-[1fr_80px_100px_160px_80px]">
                   <div className="min-w-0">
                     <p className="truncate text-sm font-bold text-[#102059]">{category.category_name}</p>
                     <p className="truncate text-xs text-[#6B7280]">{category.category_description || '—'}</p>
+                  </div>
+                  <div className="flex items-center">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wider text-[#9CA3AF]">Rate</p>
+                      <p className="mt-0.5 text-xs font-semibold text-[#102059]">
+                        {category.category_rate != null ? `${Number(category.category_rate)}%` : '—'}
+                      </p>
+                    </div>
                   </div>
                   <div className="flex items-center">
                     <div>
@@ -225,6 +282,14 @@ export default function Categories({ auth, categories = [], flash }) {
 
                 {/* Actions */}
                 <div className="flex flex-shrink-0 items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleViewRateHistory(category)}
+                    className="flex h-8 w-8 items-center justify-center rounded-lg border border-[#E5E7EB] text-[#6B7280] transition-colors hover:border-[#102059] hover:text-[#102059]"
+                    title="Rate history"
+                  >
+                    <History className="h-3.5 w-3.5" />
+                  </button>
                   <button
                     type="button"
                     onClick={() => handleEditCategory(category)}
@@ -310,6 +375,26 @@ export default function Categories({ auth, categories = [], flash }) {
                       {addForm.errors.category_image_url && <div className="invalid-feedback">{addForm.errors.category_image_url}</div>}
                     </div>
                     <div className="form-group">
+                      <label>Rate (%) <span className="text-danger">*</span></label>
+                      <div className="input-group">
+                        <input
+                          type="number"
+                          className={`form-control ${addForm.errors.category_rate ? 'is-invalid' : ''}`}
+                          value={addForm.data.category_rate}
+                          onChange={e => addForm.setData('category_rate', e.target.value)}
+                          min="0"
+                          max="100"
+                          step="0.01"
+                          placeholder="0"
+                          required
+                        />
+                        <div className="input-group-append">
+                          <span className="input-group-text">%</span>
+                        </div>
+                        {addForm.errors.category_rate && <div className="invalid-feedback d-block">{addForm.errors.category_rate}</div>}
+                      </div>
+                    </div>
+                    <div className="form-group">
                       <label>Status <span className="text-danger">*</span></label>
                       <select className={`form-control ${addForm.errors.status ? 'is-invalid' : ''}`}
                         value={addForm.data.status} onChange={e => addForm.setData('status', e.target.value)} required>
@@ -365,6 +450,26 @@ export default function Categories({ auth, categories = [], flash }) {
                       {editForm.errors.category_image_url && <div className="invalid-feedback">{editForm.errors.category_image_url}</div>}
                     </div>
                     <div className="form-group">
+                      <label>Rate (%) <span className="text-danger">*</span></label>
+                      <div className="input-group">
+                        <input
+                          type="number"
+                          className={`form-control ${editForm.errors.category_rate ? 'is-invalid' : ''}`}
+                          value={editForm.data.category_rate}
+                          onChange={e => editForm.setData('category_rate', e.target.value)}
+                          min="0"
+                          max="100"
+                          step="0.01"
+                          placeholder="0"
+                          required
+                        />
+                        <div className="input-group-append">
+                          <span className="input-group-text">%</span>
+                        </div>
+                        {editForm.errors.category_rate && <div className="invalid-feedback d-block">{editForm.errors.category_rate}</div>}
+                      </div>
+                    </div>
+                    <div className="form-group">
                       <label>Status <span className="text-danger">*</span></label>
                       <select className={`form-control ${editForm.errors.status ? 'is-invalid' : ''}`}
                         value={editForm.data.status} onChange={e => editForm.setData('status', e.target.value)} required>
@@ -381,6 +486,70 @@ export default function Categories({ auth, categories = [], flash }) {
                     </button>
                   </div>
                 </form>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* ── Rate History Modal ── */}
+      {showRateHistoryModal && rateHistoryCategory && (
+        <>
+          <div className={`modal-backdrop fade ${showRateHistoryAnimation ? 'show' : ''}`} onClick={closeRateHistoryModal}></div>
+          <div className={`modal fade ${showRateHistoryAnimation ? 'show' : ''} d-block`} tabIndex="-1" style={{ zIndex: 1050 }}>
+            <div className="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-lg">
+              <div className="modal-content">
+                <div className="modal-header">
+                  <h4 className="modal-title">Rate History — {rateHistoryCategory.category_name}</h4>
+                  <button type="button" className="close" onClick={closeRateHistoryModal}><span>&times;</span></button>
+                </div>
+                <div className="modal-body">
+                  <p className="mb-3 text-sm text-muted">
+                    Current rate: <strong>{formatRate(rateHistoryCategory.category_rate)}</strong>
+                  </p>
+
+                  {rateHistoryLoading && (
+                    <p className="text-sm text-muted mb-0">Loading rate history...</p>
+                  )}
+
+                  {rateHistoryError && (
+                    <div className="rounded-lg border border-[#E20E28]/30 bg-[#FEE2E2] px-4 py-3 text-sm text-[#E20E28]">
+                      {rateHistoryError}
+                    </div>
+                  )}
+
+                  {!rateHistoryLoading && !rateHistoryError && rateHistoryLogs.length === 0 && (
+                    <p className="text-sm text-muted mb-0">No rate changes recorded yet.</p>
+                  )}
+
+                  {!rateHistoryLoading && !rateHistoryError && rateHistoryLogs.length > 0 && (
+                    <div className="table-responsive">
+                      <table className="table table-sm table-hover mb-0">
+                        <thead>
+                          <tr>
+                            <th>Date</th>
+                            <th>Previous Rate</th>
+                            <th>New Rate</th>
+                            <th>Changed By</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {rateHistoryLogs.map(log => (
+                            <tr key={log.id}>
+                              <td>{log.created_at ? new Date(log.created_at).toLocaleString() : '—'}</td>
+                              <td>{log.old_rate != null ? formatRate(log.old_rate) : 'Initial set'}</td>
+                              <td>{formatRate(log.new_rate)}</td>
+                              <td>{log.changed_by || '—'}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+                <div className="modal-footer">
+                  <button type="button" className="btn btn-secondary" onClick={closeRateHistoryModal}>Close</button>
+                </div>
               </div>
             </div>
           </div>
