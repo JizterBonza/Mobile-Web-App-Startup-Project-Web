@@ -91,6 +91,21 @@ class Item extends Model
     protected $appends = ['shop_name', 'effective_price', 'active_discount_percent'];
 
     /**
+     * Scope to items with a discount that is not yet expired.
+     */
+    public function scopeWithActiveDiscount($query)
+    {
+        return $query
+            ->where('discount_percent', '>', 0)
+            ->where(function ($q) {
+                $q->where('discount_type', '!=', 'timed')
+                    ->orWhereNull('discount_type')
+                    ->orWhereNull('discount_expires_at')
+                    ->orWhere('discount_expires_at', '>', now());
+            });
+    }
+
+    /**
      * Active discount percentage (0 when expired or unset).
      */
     public function getActiveDiscountPercent(): float

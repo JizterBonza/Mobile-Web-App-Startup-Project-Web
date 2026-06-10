@@ -45,6 +45,7 @@ Route::get('categories/{id}', [CategoryController::class, 'show']);
 Route::get('/items/search', [ItemController::class, 'search']);
 Route::get('items', [ItemController::class, 'index']);
 Route::get('items/random', [ItemController::class, 'random']);
+Route::get('items/on-sale', [ItemController::class, 'onSale']);
 Route::get('items/{id}/reviews', [ItemController::class, 'getItemWithReviews']);
 Route::get('items/{id}', [ItemController::class, 'show']);
 Route::post('items', [ItemController::class, 'store']);
