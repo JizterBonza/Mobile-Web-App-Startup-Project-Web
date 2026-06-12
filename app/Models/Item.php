@@ -36,6 +36,10 @@ class Item extends Model
         'average_rating',
         'total_reviews',
         'sold_count',
+        'weight',
+        'metric',
+        'is_bundle',
+        'bundle_catalog_ids',
     ];
 
     /**
@@ -54,6 +58,9 @@ class Item extends Model
             'average_rating' => 'decimal:2',
             'total_reviews' => 'integer',
             'sold_count' => 'integer',
+            'weight' => 'decimal:2',
+            'is_bundle' => 'boolean',
+            'bundle_catalog_ids' => 'array',
             'created_at' => 'datetime',
             'updated_at' => 'datetime',
         ];

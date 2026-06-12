@@ -958,7 +958,7 @@ export default function AgrivetStoreInformation({
             product.brand ||
             brandByProductName.get(String(product.item_name || '').toLowerCase()) ||
             '',
-          category: product.metric === 'Bundle' ? 'Product Bundle' : (product.category_name || 'Uncategorized'),
+          category: product.is_bundle ? 'Product Bundle' : (product.category_name || 'Uncategorized'),
           unit,
           price: parseFloat(product.item_price) || 0,
           discountPercent,
@@ -973,10 +973,10 @@ export default function AgrivetStoreInformation({
           photos,
           primaryPhotoIndex: 0,
           manualStatus: isActive ? 'Active' : 'Inactive',
-          isBundle: product.metric === 'Bundle',
+          isBundle: Boolean(product.is_bundle),
           description: product.item_description || '',
           bundleProducts:
-            product.metric === 'Bundle'
+            product.is_bundle
               ? Array.isArray(product.bundle_products) && product.bundle_products.length > 0
                 ? product.bundle_products.map(mapCatalogToRegisteredProduct)
                 : resolveBundleIncludedProducts(product.item_description, product_catalog)
