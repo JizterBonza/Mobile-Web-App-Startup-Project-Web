@@ -6,11 +6,13 @@ import {
   Clock,
   Filter,
   Heart,
+  Info,
   MapPin,
   Package,
   Pencil,
   Plus,
   Search,
+  ShoppingCart,
   Star,
   Trash2,
   TrendingUp,
@@ -19,6 +21,18 @@ import {
   Users,
   X,
 } from 'lucide-react'
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Legend,
+  Line,
+  LineChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts'
 import { AnimatePresence, motion } from 'motion/react'
 import OwnerManagerKlasmeytLayout from '../../Layouts/OwnerManagerKlasmeytLayout'
 import SuperAdminOrAdminLayout from '../../Layouts/SuperAdminOrAdminLayout'
@@ -107,8 +121,63 @@ function formatReviewDate(dateStr) {
   })
 }
 
+const EMPTY_PERIOD_INSIGHTS = {
+  newCustomers: 0,
+  returningCustomers: 0,
+  totalCustomers: 0,
+  retentionRate: null,
+  orderCount: 0,
+  productsSold: 0,
+  revenue: 0,
+  trends: {},
+  customerChart: [],
+  revenueChart: [],
+}
+
+function getPeriodInsights(storeInsights, period) {
+  return storeInsights?.[period] ?? EMPTY_PERIOD_INSIGHTS
+}
+
+function formatInsightNumber(value) {
+  if (value == null) return '0'
+  return Number(value).toLocaleString()
+}
+
+function formatInsightCurrency(amount) {
+  if (amount == null || amount === 0) return '₱0'
+  if (amount >= 1_000_000) return `₱${(amount / 1_000_000).toFixed(2)}M`
+  if (amount >= 1_000) return `₱${(amount / 1_000).toFixed(1)}K`
+  return `₱${Number(amount).toLocaleString()}`
+}
+
+function formatRetentionRate(value) {
+  if (value == null) return '—'
+  return `${value}%`
+}
+
+function InsightTrendBadge({ trend }) {
+  if (trend == null || trend === '') return null
+  return (
+    <div className="flex items-center gap-1 text-xs font-semibold text-[#00C950]">
+      <TrendingUp className="w-3.5 h-3.5" />
+      {`${Math.abs(Number(trend))}%`}
+    </div>
+  )
+}
+
+function InsightChartEmpty({ message = 'No data available for this period' }) {
+  return (
+    <div className="flex items-center justify-center h-[350px] text-sm text-[#65676B]">
+      {message}
+    </div>
+  )
+}
+
 const PLACEHOLDER_PRODUCT_IMAGE =
   'https://images.unsplash.com/photo-1516382799247-87df95d790b7?auto=format&fit=crop&w=400&q=60'
+
+const LISTING_IMAGE_FALLBACK =
+  "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='400' viewBox='0 0 400 400'%3E%3Crect width='400' height='400' fill='%23F3F4F6'/%3E%3Cg transform='translate(200,200)'%3E%3Crect x='-60' y='-70' width='120' height='120' rx='8' fill='%23D1D5DB' stroke='%239CA3AF' stroke-width='3'/%3E%3Cpath d='M -40,-50 L -40,-30 M 0,-50 L 0,-30 M 40,-50 L 40,-30' stroke='%239CA3AF' stroke-width='3' stroke-linecap='round'/%3E%3Crect x='-60' y='-70' width='120' height='25' rx='8' fill='%239CA3AF'/%3E%3C/g%3E%3C/svg%3E"
 
 function resolveCatalogImageUrl(image) {
   if (!image || typeof image !== 'string') return PLACEHOLDER_PRODUCT_IMAGE
@@ -147,6 +216,95 @@ function catalogProductMatchesSearch(product, query) {
   )
 }
 
+function getListingImageSrc(listing) {
+  const idx = listing.primaryPhotoIndex || 0
+  const photo = listing.photos?.[idx] || listing.photos?.[0]
+  return photo ? resolveCatalogImageUrl(photo) : LISTING_IMAGE_FALLBACK
+}
+
+function getEffectiveDiscount(listing) {
+  if (!listing.discountPercent) return 0
+  if (listing.discountType === 'timed') {
+    const expiresAt = listing.discountExpiration
+      ?? (listing.discountExpiresAt ? new Date(listing.discountExpiresAt).getTime() : null)
+    if (expiresAt && Date.now() > expiresAt) return 0
+  }
+  return listing.discountPercent
+}
+
+function getDiscountedPrice(listing) {
+  const discount = getEffectiveDiscount(listing)
+  if (discount === 0) return listing.price
+  return listing.price * (1 - discount / 100)
+}
+
+function getProductStatus(listing) {
+  if ((listing.manualStatus || 'Active') === 'Inactive') return 'Inactive'
+  if (listing.stock === 0) return 'Out'
+  if (listing.stock <= listing.reorderLevel) return 'Low'
+  return 'Active'
+}
+
+const BUNDLE_CONTAINING_PREFIX = 'Bundle containing: '
+
+function parseBundleProductNames(description) {
+  if (!description || !description.startsWith(BUNDLE_CONTAINING_PREFIX)) return []
+  return description
+    .slice(BUNDLE_CONTAINING_PREFIX.length)
+    .split(',')
+    .map((name) => name.trim())
+    .filter(Boolean)
+}
+
+function resolveBundleIncludedProducts(description, catalog) {
+  const names = parseBundleProductNames(description)
+  if (names.length === 0) return []
+
+  const byName = new Map(
+    catalog.map((entry) => [
+      String(entry.product_name || '').toLowerCase(),
+      mapCatalogToRegisteredProduct(entry),
+    ])
+  )
+
+  return names.map((name) => {
+    const matched = byName.get(name.toLowerCase())
+    if (matched) return matched
+    return {
+      id: `bundle-product-${name}`,
+      productName: name,
+      brand: '',
+      category: '',
+      image: PLACEHOLDER_PRODUCT_IMAGE,
+    }
+  })
+}
+
+function isProductFlashMessage(message) {
+  const lower = (message || '').toLowerCase()
+  return (
+    lower.includes('listing') ||
+    lower.includes('bundle') ||
+    (lower.includes('product') && !lower.includes('vendor'))
+  )
+}
+
+function isVendorFlashMessage(message) {
+  const lower = (message || '').toLowerCase()
+  return (
+    lower.includes('vendor') ||
+    lower.includes('reassigned') ||
+    lower.includes('has been added to')
+  )
+}
+
+function getProductSuccessTitle(message) {
+  const lower = (message || '').toLowerCase()
+  if (lower.includes('bundle')) return 'Bundle Created Successfully'
+  if (lower.includes('added')) return 'Product Added Successfully'
+  return 'Listing Updated Successfully'
+}
+
 export default function AgrivetStoreInformation({
   auth,
   agrivet,
@@ -159,6 +317,7 @@ export default function AgrivetStoreInformation({
   orders = [],
   deliveryMethods = [],
   preparingItemStatusId = null,
+  storeInsights = null,
   flash,
 }) {
   const isOwnerManager = auth?.user?.user_type === 'owner_manager'
@@ -236,6 +395,12 @@ export default function AgrivetStoreInformation({
     return 'about'
   })
   const [direction, setDirection] = useState(1)
+  const [insightsPeriod, setInsightsPeriod] = useState('weekly')
+
+  const periodInsights = useMemo(
+    () => getPeriodInsights(storeInsights, insightsPeriod),
+    [storeInsights, insightsPeriod],
+  )
 
   const [starFilter, setStarFilter] = useState(null)
   const averageRating = parseFloat(shop?.average_rating || 0)
@@ -265,20 +430,35 @@ export default function AgrivetStoreInformation({
   }
 
   useEffect(() => {
-    if (flash?.success || flash?.error) {
-      const message = (flash.success || flash.error || '').toLowerCase()
-      if (isVendor && visibleTabs.includes('orders') && message.includes('order')) {
-        setActiveTab('orders')
-      } else if (visibleTabs.includes('vendors') && flash?.success) {
-        setActiveTab('vendors')
-      }
+    if (!flash?.success && !flash?.error) return
+
+    const message = flash.success || flash.error || ''
+    const lower = message.toLowerCase()
+
+    if (isVendor && visibleTabs.includes('orders') && lower.includes('order')) {
+      setActiveTab('orders')
+    } else if (isProductFlashMessage(message) && visibleTabs.includes('products')) {
+      setActiveTab('products')
+    } else if (isVendorFlashMessage(message) && visibleTabs.includes('vendors')) {
+      setActiveTab('vendors')
     }
+
     if (flash?.success) {
-      if (flash.success.toLowerCase().includes('reassigned')) {
+      if (lower.includes('reassigned')) {
         const vendorName = flash.success.split(' has been reassigned')[0]?.trim() || flash.success
         showSuccess('reassign', vendorName)
-      } else {
-        showSuccess('add', flash.success)
+      } else if (isProductFlashMessage(flash.success)) {
+        if (!lower.includes('bundle')) {
+          showSuccess('product', flash.success)
+        }
+      } else if (isVendorFlashMessage(flash.success)) {
+        if (lower.includes('updated') || lower.includes('removed')) {
+          showSuccess('edit', flash.success)
+        } else {
+          showSuccess('add', flash.success)
+        }
+      } else if (lower.includes('cover photo') || lower.includes('shop updated')) {
+        showSuccess('storeEdit', store.storeName)
       }
     }
   }, [flash?.success])
@@ -463,12 +643,35 @@ export default function AgrivetStoreInformation({
 
   const [showAddProductModal, setShowAddProductModal] = useState(false)
   const [showCreateBundleModal, setShowCreateBundleModal] = useState(false)
+  const [showBundleSuccessModal, setShowBundleSuccessModal] = useState(false)
+  const [showProductDetailModal, setShowProductDetailModal] = useState(false)
+  const [selectedListingDetail, setSelectedListingDetail] = useState(null)
+  const [isEditingListing, setIsEditingListing] = useState(false)
+  const [editListingFormData, setEditListingFormData] = useState({
+    price: '',
+    stock: '',
+    reorderLevel: '',
+  })
+  const [showDiscountModal, setShowDiscountModal] = useState(false)
+  const [discountFormData, setDiscountFormData] = useState({
+    discountPercent: '',
+    discountType: 'manual',
+    expirationHours: '',
+  })
   const [selectedCatalogProduct, setSelectedCatalogProduct] = useState(null)
   const [listingFormData, setListingFormData] = useState({
     price: '',
     stock: '',
     discount: '',
     reorderLevel: '',
+  })
+  const [bundleFormData, setBundleFormData] = useState({
+    bundleName: '',
+    bundlePrice: '',
+    bundleStock: '',
+    bundleReorderLevel: '',
+    selectedProducts: [],
+    bundleDescription: '',
   })
   const [productAddSearchQuery, setProductAddSearchQuery] = useState('')
   const [showProductAddSuggestions, setShowProductAddSuggestions] = useState(false)
@@ -489,6 +692,20 @@ export default function AgrivetStoreInformation({
     if (isVendor) return '/dashboard/vendor/shop-listings'
     return null
   }, [shop?.id, isOwnerManager, isVendor])
+
+  const storeBundleUrl = useMemo(() => {
+    if (!shop?.id) return null
+    if (isOwnerManager) return `${getBaseRoute()}/stores/${shop.id}/bundles`
+    if (isVendor) return '/dashboard/vendor/shop-bundles'
+    return null
+  }, [shop?.id, isOwnerManager, isVendor])
+
+  const getListingItemUpdateUrl = (itemId) => {
+    if (!shop?.id || !itemId) return null
+    if (isOwnerManager) return `${getBaseRoute()}/stores/${shop.id}/listings/${itemId}`
+    if (isVendor) return `/dashboard/vendor/shop-listings/${itemId}`
+    return null
+  }
 
   const closeAddProductModal = () => {
     setShowAddProductModal(false)
@@ -527,6 +744,113 @@ export default function AgrivetStoreInformation({
     )
   }
 
+  const updateListingItem = (listingId, payload, onSuccess) => {
+    const url = getListingItemUpdateUrl(listingId)
+    if (!url) return
+    router.put(url, payload, {
+      preserveScroll: true,
+      onSuccess,
+    })
+  }
+
+  const handleProductStatusToggle = (listing) => {
+    const currentManualStatus = listing.manualStatus || 'Active'
+    const nextStatus = currentManualStatus === 'Active' ? 'Inactive' : 'Active'
+    updateListingItem(listing.id, {
+      item_status: nextStatus === 'Active' ? 'active' : 'inactive',
+    })
+  }
+
+  const handleOpenProductDetail = (listing) => {
+    setSelectedListingDetail(listing)
+    setEditListingFormData({
+      price: listing.price.toString(),
+      stock: listing.stock.toString(),
+      reorderLevel: listing.reorderLevel.toString(),
+    })
+    setIsEditingListing(false)
+    setShowProductDetailModal(true)
+  }
+
+  const handleSaveListingEdit = () => {
+    if (!selectedListingDetail) return
+    updateListingItem(
+      selectedListingDetail.id,
+      {
+        item_price: editListingFormData.price,
+        item_quantity: editListingFormData.stock,
+      },
+      () => {
+        setIsEditingListing(false)
+        setShowProductDetailModal(false)
+        setSelectedListingDetail(null)
+      }
+    )
+  }
+
+  const handleApplyDiscount = () => {
+    if (!selectedListingDetail) return
+
+    const discountPercent = discountFormData.discountPercent
+      ? parseFloat(discountFormData.discountPercent)
+      : 0
+
+    const payload =
+      discountPercent > 0
+        ? {
+            discount_percent: discountPercent,
+            discount_type: discountFormData.discountType,
+            ...(discountFormData.discountType === 'timed' && discountFormData.expirationHours
+              ? { expiration_hours: parseInt(discountFormData.expirationHours, 10) }
+              : {}),
+          }
+        : { clear_discount: true }
+
+    updateListingItem(selectedListingDetail.id, payload, () => {
+      const expirationTime =
+        discountFormData.discountType === 'timed' && discountFormData.expirationHours
+          ? Date.now() + parseInt(discountFormData.expirationHours, 10) * 60 * 60 * 1000
+          : null
+
+      setSelectedListingDetail({
+        ...selectedListingDetail,
+        ...(discountPercent > 0
+          ? {
+              discountPercent,
+              discountType: discountFormData.discountType,
+              discountExpiration: expirationTime,
+              discountExpiresAt: expirationTime ? new Date(expirationTime).toISOString() : null,
+            }
+          : {
+              discountPercent: undefined,
+              discountType: undefined,
+              discountExpiration: undefined,
+              discountExpiresAt: undefined,
+            }),
+      })
+      setShowDiscountModal(false)
+      setDiscountFormData({
+        discountPercent: '',
+        discountType: 'manual',
+        expirationHours: '',
+      })
+    })
+  }
+
+  const handleRemoveDiscount = () => {
+    if (!selectedListingDetail) return
+
+    updateListingItem(selectedListingDetail.id, { clear_discount: true }, () => {
+      setSelectedListingDetail({
+        ...selectedListingDetail,
+        discountPercent: undefined,
+        discountType: undefined,
+        discountExpiration: undefined,
+        discountExpiresAt: undefined,
+      })
+    })
+  }
+
   const handleRegisterProduct = () => {
     if (isVendor) {
       router.visit('/dashboard/vendor/products/create')
@@ -539,48 +863,135 @@ export default function AgrivetStoreInformation({
     showSuccess('storeEdit', 'Register Product')
   }
 
+  const closeCreateBundleModal = () => {
+    setShowCreateBundleModal(false)
+    setBundleFormData({
+      bundleName: '',
+      bundlePrice: '',
+      bundleStock: '',
+      bundleReorderLevel: '',
+      selectedProducts: [],
+      bundleDescription: '',
+    })
+  }
+
+  const toggleBundleProduct = (productId) => {
+    setBundleFormData((prev) => ({
+      ...prev,
+      selectedProducts: prev.selectedProducts.includes(productId)
+        ? prev.selectedProducts.filter((id) => id !== productId)
+        : [...prev.selectedProducts, productId],
+    }))
+  }
+
+  const handleCreateBundle = () => {
+    if (
+      !bundleFormData.bundleName ||
+      !bundleFormData.bundlePrice ||
+      !bundleFormData.bundleStock ||
+      !bundleFormData.bundleReorderLevel ||
+      bundleFormData.selectedProducts.length === 0
+    ) {
+      alert('Please fill in all required fields and select at least one product.')
+      return
+    }
+
+    if (!storeBundleUrl) return
+
+    router.post(
+      storeBundleUrl,
+      {
+        bundle_name: bundleFormData.bundleName,
+        item_price: bundleFormData.bundlePrice,
+        item_quantity: bundleFormData.bundleStock,
+        reorder_level: bundleFormData.bundleReorderLevel,
+        description: bundleFormData.bundleDescription || undefined,
+        product_catalog_ids: bundleFormData.selectedProducts,
+      },
+      {
+        preserveScroll: true,
+        onSuccess: () => {
+          setBundleFormData({
+            bundleName: '',
+            bundlePrice: '',
+            bundleStock: '',
+            bundleReorderLevel: '',
+            selectedProducts: [],
+            bundleDescription: '',
+          })
+          setShowCreateBundleModal(false)
+          setShowBundleSuccessModal(true)
+        },
+      }
+    )
+  }
+
   const [productSearchQuery, setProductSearchQuery] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('All')
   const [productStatusFilter, setProductStatusFilter] = useState('All')
   const [productSortBy, setProductSortBy] = useState('name')
 
   const productListings = useMemo(
-    () =>
-      products.map((product) => {
+    () => {
+      const brandByProductName = new Map(
+        product_catalog.map((entry) => [
+          String(entry.product_name || '').toLowerCase(),
+          entry.brand || '',
+        ])
+      )
+
+      return products.map((product) => {
         const images = Array.isArray(product.item_images) ? product.item_images : []
+        const photos = images.length > 0 ? images.map(resolveCatalogImageUrl) : []
         const unit = [product.weight, product.metric].filter(Boolean).join(' ') || 'unit'
         const isActive = (product.item_status || 'active').toLowerCase() === 'active'
+
+        const discountPercent = product.discount_percent
+          ? parseFloat(product.discount_percent)
+          : undefined
 
         return {
           id: product.id,
           productId: product.id,
           productName: product.item_name || '',
-          brand: product.sub_category_name || product.category_name || '',
-          category: product.category_name || 'Uncategorized',
+          brand:
+            product.brand ||
+            brandByProductName.get(String(product.item_name || '').toLowerCase()) ||
+            '',
+          category: product.metric === 'Bundle' ? 'Product Bundle' : (product.category_name || 'Uncategorized'),
           unit,
           price: parseFloat(product.item_price) || 0,
+          discountPercent,
+          discountType: product.discount_type || undefined,
+          discountExpiresAt: product.discount_expires_at || undefined,
+          discountExpiration: product.discount_expires_at
+            ? new Date(product.discount_expires_at).getTime()
+            : undefined,
           stock: product.item_quantity ?? 0,
           reorderLevel: 5,
           popularity: product.sold_count ?? 0,
-          photos: images,
+          photos,
           primaryPhotoIndex: 0,
           manualStatus: isActive ? 'Active' : 'Inactive',
+          isBundle: product.metric === 'Bundle',
+          description: product.item_description || '',
+          bundleProducts:
+            product.metric === 'Bundle'
+              ? Array.isArray(product.bundle_products) && product.bundle_products.length > 0
+                ? product.bundle_products.map(mapCatalogToRegisteredProduct)
+                : resolveBundleIncludedProducts(product.item_description, product_catalog)
+              : [],
+          dateAdded: product.created_at || product.updated_at || new Date().toISOString(),
         }
-      }),
-    [products]
+      })
+    },
+    [products, product_catalog]
   )
 
   const isCatalogProductListed = (catalogProduct) =>
     productListings.some(
       (listing) => listing.productName.toLowerCase() === catalogProduct.productName.toLowerCase()
     )
-
-  const getProductStatus = (listing) => {
-    if ((listing.manualStatus || 'Active') === 'Inactive') return 'Inactive'
-    if (listing.stock === 0) return 'Out'
-    if (listing.stock <= listing.reorderLevel) return 'Low'
-    return 'Active'
-  }
 
   const categories = useMemo(() => ['All', ...new Set(productListings.map((l) => l.category))], [productListings])
 
@@ -598,6 +1009,9 @@ export default function AgrivetStoreInformation({
       })
       .sort((a, b) => {
         if (productSortBy === 'name') return a.productName.localeCompare(b.productName)
+        if (productSortBy === 'date') {
+          return new Date(b.dateAdded).getTime() - new Date(a.dateAdded).getTime()
+        }
         if (productSortBy === 'popularity') return (b.popularity ?? 0) - (a.popularity ?? 0)
         return 0
       })
@@ -645,9 +1059,11 @@ export default function AgrivetStoreInformation({
                           ? 'Vendor Updated Successfully'
                           : successMessageType === 'status'
                             ? 'Store Status Updated'
-                            : successMessageType === 'storeEdit'
-                              ? 'Store Information Updated'
-                              : 'Vendor Status Updated'}
+                            : successMessageType === 'product'
+                              ? getProductSuccessTitle(successVendorName)
+                              : successMessageType === 'storeEdit'
+                                ? 'Store Information Updated'
+                                : 'Vendor Status Updated'}
                   </h3>
                   <p className="text-xs text-white/90 mt-0.5">
                     {successMessageType === 'add'
@@ -658,9 +1074,11 @@ export default function AgrivetStoreInformation({
                           ? `${successVendorName}'s information has been updated`
                           : successMessageType === 'status'
                             ? `${successVendorName} is now ${store.status}`
-                            : successMessageType === 'storeEdit'
-                              ? `${successVendorName}'s information has been successfully updated`
-                              : `${successVendorName}'s status has been updated`}
+                            : successMessageType === 'product'
+                              ? successVendorName
+                              : successMessageType === 'storeEdit'
+                                ? `${successVendorName}'s information has been successfully updated`
+                                : `${successVendorName}'s status has been updated`}
                   </p>
                 </div>
                 <button onClick={() => setShowSuccessMessage(false)} className="p-1.5 hover:bg-white/20 rounded transition-colors">
@@ -1133,7 +1551,6 @@ export default function AgrivetStoreInformation({
                           type="button"
                           onClick={() => setShowCreateBundleModal(true)}
                           className="flex items-center gap-2 px-4 py-2.5 border-2 border-[#D3A218] text-[#D3A218] text-sm font-semibold rounded-lg hover:bg-[#FFFBF0] transition-colors"
-                          style={{ color: '#D3A218'}}
                         >
                           <Package className="w-4 h-4" />
                           Create Bundle
@@ -1188,6 +1605,7 @@ export default function AgrivetStoreInformation({
                             className="w-full text-sm border border-[#E5E7EB] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#102059] focus:border-transparent px-[20px] py-[8px] bg-[#ffffff]"
                           >
                             <option value="name">Sort by Name</option>
+                            <option value="date">Date Added</option>
                             <option value="popularity">Popularity</option>
                           </select>
                         </div>
@@ -1200,11 +1618,13 @@ export default function AgrivetStoreInformation({
                       <div className="text-center">
                         <Package className="w-16 h-16 text-[#E5E7EB] mx-auto mb-4" />
                         <h2 className="text-xl font-bold text-[#102059] mb-2">
-                          {productListings.length === 0 ? 'No Products Yet' : 'No Matching Products'}
+                          {productListings.length === 0 ? 'No Product Listings Yet' : 'No Matching Products'}
                         </h2>
-                        <p className="text-sm text-[#6B7280]">
+                        <p className="text-sm text-[#6B7280] mb-4">
                           {productListings.length === 0
-                            ? 'This store has no product listings.'
+                            ? canAddListings
+                              ? 'Start adding products from the registered catalog to this store.'
+                              : "This store hasn't added any product listings yet."
                             : 'Try adjusting your filters or search query.'}
                         </p>
                       </div>
@@ -1214,22 +1634,21 @@ export default function AgrivetStoreInformation({
                       {filteredListings.map((listing) => (
                         <div
                           key={listing.id}
+                          onClick={() => handleOpenProductDetail(listing)}
                           className="bg-white border border-[#E5E7EB] rounded-lg overflow-hidden hover:shadow-sm transition-all cursor-pointer"
-                          title="Reference UI (no detail modal here)"
-                          onClick={() => showSuccess('storeEdit', listing.productName)}
                         >
                           <div className="aspect-square bg-[#F9FAFB] overflow-hidden relative">
-                            {listing.photos?.length > 0 ? (
-                              <img
-                                src={listing.photos[listing.primaryPhotoIndex || 0]}
-                                alt={listing.productName}
-                                className="w-full h-full object-contain p-12"
-                              />
-                            ) : (
-                              <div className="w-full h-full flex items-center justify-center">
-                                <Package className="w-12 h-12 text-[#E5E7EB]" />
-                              </div>
-                            )}
+                            <img
+                              src={getListingImageSrc(listing)}
+                              alt={listing.productName}
+                              className="w-full h-full object-contain p-12"
+                              onError={(e) => {
+                                if (!e.currentTarget.dataset.fallback) {
+                                  e.currentTarget.dataset.fallback = 'true'
+                                  e.currentTarget.src = LISTING_IMAGE_FALLBACK
+                                }
+                              }}
+                            />
                             <div className="absolute top-2 left-2">
                               <span
                                 className={`text-[10px] font-semibold px-2 py-1 rounded-full ${
@@ -1239,7 +1658,9 @@ export default function AgrivetStoreInformation({
                                       ? 'bg-[#6B7280] text-white'
                                       : getProductStatus(listing) === 'Low'
                                         ? 'bg-[#F59E0B] text-white'
-                                        : 'bg-[#E20E28] text-white'
+                                        : getProductStatus(listing) === 'Out'
+                                          ? 'bg-[#E20E28] text-white'
+                                          : 'bg-[#E5E7EB] text-[#102059]'
                                 }`}
                               >
                                 {getProductStatus(listing)}
@@ -1247,23 +1668,64 @@ export default function AgrivetStoreInformation({
                             </div>
                           </div>
                           <div className="p-3">
-                            <h3 className="text-[#102059] mb-0.5 line-clamp-1 text-[12px]">{listing.productName}</h3>
+                            <h6 className="text-[#102059] mb-0.5 line-clamp-1 text-[12px]">
+                              {listing.productName}
+                            </h6>
                             <p className="text-xs text-[#6B7280] mb-2">{listing.brand}</p>
-                            <div className="flex items-baseline gap-1 mb-2">
-                              <span className="font-bold text-[#102059] text-[12px]">₱{listing.price.toFixed(2)}</span>
-                              <span className="text-xs text-[#6B7280]">/{listing.unit}</span>
+                            <div className="flex flex-col gap-0.5 mb-2">
+                              {getEffectiveDiscount(listing) > 0 ? (
+                                <>
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-bold text-[#E20E28] text-[12px]">
+                                      ₱{getDiscountedPrice(listing).toFixed(2)}
+                                    </span>
+                                    <span className="text-[9px] font-semibold bg-[#E20E28] text-white px-1.5 py-0.5 rounded">
+                                      -{getEffectiveDiscount(listing)}%
+                                    </span>
+                                  </div>
+                                  <div className="flex items-baseline gap-1">
+                                    <span className="text-[10px] text-[#6B7280] line-through">
+                                      ₱{listing.price.toFixed(2)}
+                                    </span>
+                                    <span className="text-[9px] text-[#6B7280]">/{listing.unit}</span>
+                                  </div>
+                                </>
+                              ) : (
+                                <div className="flex items-baseline gap-1">
+                                  <span className="font-bold text-[#102059] text-[12px]">
+                                    ₱{listing.price.toFixed(2)}
+                                  </span>
+                                  <span className="text-xs text-[#6B7280]">/{listing.unit}</span>
+                                </div>
+                              )}
                             </div>
                             <div className="flex items-center justify-between text-xs mb-1">
                               <span className="text-[#6B7280]">Stock:</span>
                               <span className="font-semibold text-[#102059]">{listing.stock}</span>
                             </div>
-                            <div className="flex items-center justify-between text-xs">
+                            <div className="flex items-center justify-between text-xs mb-3">
                               <span className="text-[#6B7280]">Popularity:</span>
                               <div className="flex items-center gap-1">
                                 <Heart className="w-3 h-3 text-[#102059]" />
                                 <span className="font-semibold text-[#102059]">{listing.popularity}</span>
                               </div>
                             </div>
+                            {canAddListings && getListingItemUpdateUrl(listing.id) && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  handleProductStatusToggle(listing)
+                                }}
+                                className={`w-full text-xs font-semibold py-1.5 rounded-lg transition-colors ${
+                                  (listing.manualStatus || 'Active') === 'Active'
+                                    ? 'bg-[#F9FAFB] text-[#6B7280] hover:bg-[#E5E7EB]'
+                                    : 'bg-[#102059] text-white hover:bg-[#244693]'
+                                }`}
+                              >
+                                {(listing.manualStatus || 'Active') === 'Active' ? 'Deactivate' : 'Activate'}
+                              </button>
+                            )}
                           </div>
                         </div>
                       ))}
@@ -1294,24 +1756,6 @@ export default function AgrivetStoreInformation({
               )}
 
               {activeTab === 'insights' && (
-                <div className="bg-white rounded-lg border border-[#E5E7EB] min-h-[600px]">
-                  <div className="border-b border-[#E5E7EB] p-6">
-                    <h2 className="text-xl font-bold text-[#102059]">Store Insights</h2>
-                    <p className="text-sm text-[#65676B] mt-1">Analytics for orders, customers, and revenue</p>
-                  </div>
-                  <div className="flex flex-col items-center justify-center py-16 px-6">
-                    <div className="w-16 h-16 bg-[#E3F2FD] rounded-full flex items-center justify-center mb-4">
-                      <TrendingUp className="w-8 h-8 text-[#244693]" />
-                    </div>
-                    <h3 className="text-lg font-bold text-[#102059] mb-2">No insights available yet</h3>
-                    <p className="text-sm text-[#65676B] text-center max-w-md">
-                      Store analytics will appear here once there is enough order and customer activity data.
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              {false && activeTab === 'insights_OLD' && (
                 <div className="space-y-6">
                   <div className="flex items-center justify-between mb-4">
                     <h2 className="text-xl font-bold text-[#102059]">Store Insights</h2>
@@ -1319,9 +1763,12 @@ export default function AgrivetStoreInformation({
                       {['weekly', 'monthly', 'yearly'].map((p) => (
                         <button
                           key={p}
+                          type="button"
                           onClick={() => setInsightsPeriod(p)}
                           className={`px-3 py-1.5 text-xs font-semibold rounded-full transition-all ${
-                            insightsPeriod === p ? 'bg-white text-[#244693] shadow-sm' : 'text-[#65676B] hover:text-[#102059]'
+                            insightsPeriod === p
+                              ? 'bg-white text-[#244693] shadow-sm'
+                              : 'text-[#65676B] hover:text-[#102059]'
                           }`}
                         >
                           {p.charAt(0).toUpperCase() + p.slice(1)}
@@ -1338,66 +1785,151 @@ export default function AgrivetStoreInformation({
                       <h3 className="text-lg font-bold text-[#102059]">Customer Metrics</h3>
                     </div>
 
+                    <div className="grid grid-cols-4 gap-4">
+                      <div className="bg-white rounded-lg border border-[#E5E7EB] p-4 relative group">
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="w-10 h-10 bg-[#E3F2FD] rounded-full flex items-center justify-center">
+                            <UserPlus className="w-5 h-5 text-[#244693]" />
+                          </div>
+                          <InsightTrendBadge trend={periodInsights.trends?.newCustomers} />
+                        </div>
+                        <h3 className="text-2xl font-bold text-[#102059] mb-1">
+                          {formatInsightNumber(periodInsights.newCustomers)}
+                        </h3>
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm text-[#65676B]">New Customers</p>
+                          <div className="relative">
+                            <Info className="w-3.5 h-3.5 text-[#244693] cursor-help" />
+                            <div className="absolute left-0 bottom-full mb-2 w-64 bg-[#102059] text-white text-xs rounded-lg p-3 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-10 shadow-lg">
+                              <p className="font-semibold mb-1">Customer Acquisition</p>
+                              <p>
+                                Tracks first-time customers. Shows marketing effectiveness and brand reach. Growth
+                                indicates successful customer acquisition strategies.
+                              </p>
+                              <div className="absolute left-4 top-full w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-[#102059]" />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="bg-white rounded-lg border border-[#E5E7EB] p-4 relative group">
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="w-10 h-10 bg-[#FFF3E0] rounded-full flex items-center justify-center">
+                            <Users className="w-5 h-5 text-[#D3A218]" />
+                          </div>
+                          <InsightTrendBadge trend={periodInsights.trends?.returningCustomers} />
+                        </div>
+                        <h3 className="text-2xl font-bold text-[#102059] mb-1">
+                          {formatInsightNumber(periodInsights.returningCustomers)}
+                        </h3>
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm text-[#65676B]">Returning Customers</p>
+                          <div className="relative">
+                            <Info className="w-3.5 h-3.5 text-[#D3A218] cursor-help" />
+                            <div className="absolute left-0 bottom-full mb-2 w-64 bg-[#102059] text-white text-xs rounded-lg p-3 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-10 shadow-lg">
+                              <p className="font-semibold mb-1">Customer Loyalty</p>
+                              <p>
+                                Measures repeat business. Indicates product quality and customer satisfaction. High
+                                numbers mean lower acquisition costs and sustainable revenue.
+                              </p>
+                              <div className="absolute left-4 top-full w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-[#102059]" />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="bg-white rounded-lg border border-[#E5E7EB] p-4 relative group">
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="w-10 h-10 bg-[#F3E5F5] rounded-full flex items-center justify-center">
+                            <Users className="w-5 h-5 text-[#9C27B0]" />
+                          </div>
+                          <InsightTrendBadge trend={periodInsights.trends?.totalCustomers} />
+                        </div>
+                        <h3 className="text-2xl font-bold text-[#102059] mb-1">
+                          {formatInsightNumber(periodInsights.totalCustomers)}
+                        </h3>
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm text-[#65676B]">Total Customers</p>
+                          <div className="relative">
+                            <Info className="w-3.5 h-3.5 text-[#9C27B0] cursor-help" />
+                            <div className="absolute left-0 bottom-full mb-2 w-64 bg-[#102059] text-white text-xs rounded-lg p-3 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-10 shadow-lg">
+                              <p className="font-semibold mb-1">Market Reach</p>
+                              <p>
+                                Shows overall customer base size. Reflects brand presence and market penetration.
+                                Growth indicates expanding market share and business scale.
+                              </p>
+                              <div className="absolute left-4 top-full w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-[#102059]" />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="bg-white rounded-lg border border-[#E5E7EB] p-4 relative group">
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="w-10 h-10 bg-[#E8F5E9] rounded-full flex items-center justify-center">
+                            <CheckCircle className="w-5 h-5 text-[#00C950]" />
+                          </div>
+                          <InsightTrendBadge trend={periodInsights.trends?.retentionRate} />
+                        </div>
+                        <h3 className="text-2xl font-bold text-[#102059] mb-1">
+                          {formatRetentionRate(periodInsights.retentionRate)}
+                        </h3>
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm text-[#65676B]">Retention Rate</p>
+                          <div className="relative">
+                            <Info className="w-3.5 h-3.5 text-[#00C950] cursor-help" />
+                            <div className="absolute right-0 bottom-full mb-2 w-64 bg-[#102059] text-white text-xs rounded-lg p-3 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-10 shadow-lg">
+                              <p className="font-semibold mb-1">Business Sustainability</p>
+                              <p>
+                                Percentage of customers who return. Critical for long-term success. Higher rates mean
+                                stable revenue, reduced marketing costs, and strong customer relationships.
+                              </p>
+                              <div className="absolute right-4 top-full w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-[#102059]" />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
                     <div className="bg-white rounded-lg border border-[#E5E7EB] p-6">
                       <div className="flex items-center gap-2 mb-6 group relative">
                         <h3 className="text-lg font-bold text-[#102059]">Customer Analysis</h3>
                         <Info className="w-4 h-4 text-[#244693] cursor-help" />
+                        <div className="absolute left-0 top-full mt-2 w-80 bg-[#102059] text-white text-xs rounded-lg p-3 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-10 shadow-lg">
+                          <p className="font-semibold mb-1">Customer Acquisition vs Retention Insights</p>
+                          <p>
+                            This chart compares new and returning customers over time. Use it to balance marketing
+                            spend between acquiring new customers and retaining existing ones.
+                          </p>
+                          <div className="absolute left-4 -top-2 w-0 h-0 border-l-4 border-r-4 border-b-4 border-transparent border-b-[#102059]" />
+                        </div>
                       </div>
-                      <ResponsiveContainer width="100%" height={350}>
-                        <BarChart
-                          key={`customer-chart-${insightsPeriod}`}
-                          data={
-                            insightsPeriod === 'weekly'
-                              ? [
-                                  { name: 'Mon', new: 1, returning: 3 },
-                                  { name: 'Tue', new: 1, returning: 4 },
-                                  { name: 'Wed', new: 0, returning: 3 },
-                                  { name: 'Thu', new: 1, returning: 2 },
-                                  { name: 'Fri', new: 2, returning: 3 },
-                                  { name: 'Sat', new: 1, returning: 2 },
-                                  { name: 'Sun', new: 0, returning: 1 },
-                                ]
-                              : insightsPeriod === 'monthly'
-                                ? [
-                                    { name: 'Week 1', new: 5, returning: 15 },
-                                    { name: 'Week 2', new: 6, returning: 18 },
-                                    { name: 'Week 3', new: 7, returning: 20 },
-                                    { name: 'Week 4', new: 8, returning: 19 },
-                                    { name: 'Week 5', new: 2, returning: 3 },
-                                  ]
-                                : [
-                                    { name: 'Jan', new: 24, returning: 38 },
-                                    { name: 'Feb', new: 27, returning: 41 },
-                                    { name: 'Mar', new: 29, returning: 44 },
-                                    { name: 'Apr', new: 31, returning: 47 },
-                                    { name: 'May', new: 28, returning: 43 },
-                                    { name: 'Jun', new: 30, returning: 45 },
-                                    { name: 'Jul', new: 32, returning: 48 },
-                                    { name: 'Aug', new: 26, returning: 39 },
-                                    { name: 'Sep', new: 28, returning: 42 },
-                                    { name: 'Oct', new: 30, returning: 44 },
-                                    { name: 'Nov', new: 29, returning: 43 },
-                                    { name: 'Dec', new: 28, returning: 34 },
-                                  ]
-                          }
-                          margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
-                        >
-                          <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
-                          <XAxis dataKey="name" stroke="#65676B" style={{ fontSize: '12px' }} />
-                          <YAxis stroke="#65676B" style={{ fontSize: '12px' }} />
-                          <Tooltip
-                            contentStyle={{
-                              backgroundColor: 'white',
-                              border: '1px solid #E5E7EB',
-                              borderRadius: '8px',
-                              fontSize: '12px',
-                            }}
-                          />
-                          <Legend wrapperStyle={{ fontSize: '12px', paddingTop: '20px' }} />
-                          <Bar dataKey="new" fill="#244693" name="New Customers" radius={[4, 4, 0, 0]} />
-                          <Bar dataKey="returning" fill="#D3A218" name="Returning Customers" radius={[4, 4, 0, 0]} />
-                        </BarChart>
-                      </ResponsiveContainer>
+                      {periodInsights.customerChart.length === 0 ? (
+                        <InsightChartEmpty />
+                      ) : (
+                        <ResponsiveContainer width="100%" height={350}>
+                          <BarChart
+                            key={`customer-chart-${insightsPeriod}`}
+                            data={periodInsights.customerChart}
+                            margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+                          >
+                            <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
+                            <XAxis dataKey="name" stroke="#65676B" style={{ fontSize: '12px' }} />
+                            <YAxis stroke="#65676B" style={{ fontSize: '12px' }} />
+                            <Tooltip
+                              contentStyle={{
+                                backgroundColor: 'white',
+                                border: '1px solid #E5E7EB',
+                                borderRadius: '8px',
+                                fontSize: '12px',
+                              }}
+                            />
+                            <Legend wrapperStyle={{ fontSize: '12px', paddingTop: '20px' }} />
+                            <Bar dataKey="new" fill="#244693" name="New Customers" radius={[4, 4, 0, 0]} />
+                            <Bar dataKey="returning" fill="#D3A218" name="Returning Customers" radius={[4, 4, 0, 0]} />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      )}
                     </div>
                   </div>
 
@@ -1415,33 +1947,50 @@ export default function AgrivetStoreInformation({
                           <div className="w-10 h-10 bg-[#FFF3E0] rounded-full flex items-center justify-center">
                             <ShoppingCart className="w-5 h-5 text-[#D3A218]" />
                           </div>
-                          <div className="flex items-center gap-1 text-xs font-semibold text-[#00C950]">
-                            <TrendingUp className="w-3.5 h-3.5" />
-                            {insightsPeriod === 'weekly' ? '15%' : insightsPeriod === 'monthly' ? '28%' : '52%'}
-                          </div>
+                          <InsightTrendBadge trend={periodInsights.trends?.orderCount} />
                         </div>
                         <h3 className="text-2xl font-bold text-[#102059] mb-1">
-                          {insightsPeriod === 'weekly' ? '32' : insightsPeriod === 'monthly' ? '138' : '1,456'}
+                          {formatInsightNumber(periodInsights.orderCount)}
                         </h3>
                         <div className="flex items-center gap-2">
                           <p className="text-sm text-[#65676B]">Number of Orders</p>
+                          <div className="relative">
+                            <Info className="w-3.5 h-3.5 text-[#D3A218] cursor-help" />
+                            <div className="absolute left-0 bottom-full mb-2 w-64 bg-[#102059] text-white text-xs rounded-lg p-3 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-10 shadow-lg">
+                              <p className="font-semibold mb-1">Transaction Volume</p>
+                              <p>
+                                Total purchase transactions. Indicates business activity and customer engagement.
+                                Track trends to optimize inventory, staffing, and operations.
+                              </p>
+                              <div className="absolute left-4 top-full w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-[#102059]" />
+                            </div>
+                          </div>
                         </div>
                       </div>
+
                       <div className="bg-white rounded-lg border border-[#E5E7EB] p-4 relative group">
                         <div className="flex items-center justify-between mb-3">
                           <div className="w-10 h-10 bg-[#E3F2FD] rounded-full flex items-center justify-center">
                             <Package className="w-5 h-5 text-[#244693]" />
                           </div>
-                          <div className="flex items-center gap-1 text-xs font-semibold text-[#00C950]">
-                            <TrendingUp className="w-3.5 h-3.5" />
-                            {insightsPeriod === 'weekly' ? '18%' : insightsPeriod === 'monthly' ? '31%' : '58%'}
-                          </div>
+                          <InsightTrendBadge trend={periodInsights.trends?.productsSold} />
                         </div>
                         <h3 className="text-2xl font-bold text-[#102059] mb-1">
-                          {insightsPeriod === 'weekly' ? '124' : insightsPeriod === 'monthly' ? '538' : '5,847'}
+                          {formatInsightNumber(periodInsights.productsSold)}
                         </h3>
                         <div className="flex items-center gap-2">
                           <p className="text-sm text-[#65676B]">Products Sold</p>
+                          <div className="relative">
+                            <Info className="w-3.5 h-3.5 text-[#244693] cursor-help" />
+                            <div className="absolute left-0 bottom-full mb-2 w-64 bg-[#102059] text-white text-xs rounded-lg p-3 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-10 shadow-lg">
+                              <p className="font-semibold mb-1">Inventory Performance</p>
+                              <p>
+                                Total items moved. Shows product demand and inventory turnover. Use to identify
+                                best-sellers, plan restocking, and optimize product mix.
+                              </p>
+                              <div className="absolute left-4 top-full w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-[#102059]" />
+                            </div>
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -1455,90 +2004,101 @@ export default function AgrivetStoreInformation({
                       <h3 className="text-lg font-bold text-[#102059]">Financial Performance</h3>
                     </div>
 
+                    <div className="bg-white rounded-lg border border-[#E5E7EB] p-4 max-w-sm relative group">
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="w-10 h-10 bg-[#FFEBEE] rounded-full flex items-center justify-center">
+                          <TrendingUp className="w-5 h-5 text-[#E20E28]" />
+                        </div>
+                        <InsightTrendBadge trend={periodInsights.trends?.revenue} />
+                      </div>
+                      <h3 className="text-2xl font-bold text-[#102059] mb-1">
+                        {formatInsightCurrency(periodInsights.revenue)}
+                      </h3>
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm text-[#65676B]">Revenue Growth</p>
+                        <div className="relative">
+                          <Info className="w-3.5 h-3.5 text-[#E20E28] cursor-help" />
+                          <div className="absolute left-0 bottom-full mb-2 w-64 bg-[#102059] text-white text-xs rounded-lg p-3 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-10 shadow-lg">
+                            <p className="font-semibold mb-1">Financial Health</p>
+                            <p>
+                              Total income growth vs previous period. Key profitability indicator. Use to assess
+                              business viability, plan expansion, and make investment decisions.
+                            </p>
+                            <div className="absolute left-4 top-full w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-[#102059]" />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
                     <div className="bg-white rounded-lg border border-[#E5E7EB] p-6">
                       <div className="flex items-center gap-2 mb-6 group relative">
                         <h3 className="text-lg font-bold text-[#102059]">Revenue Trend</h3>
                         <Info className="w-4 h-4 text-[#244693] cursor-help" />
+                        <div className="absolute left-0 top-full mt-2 w-80 bg-[#102059] text-white text-xs rounded-lg p-3 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-10 shadow-lg">
+                          <p className="font-semibold mb-1">Financial & Order Performance Tracking</p>
+                          <p>
+                            This dual-axis chart shows revenue (blue, left axis) and order volume (gold, right axis)
+                            trends. Use it to identify peak sales periods, seasonal patterns, and growth opportunities.
+                          </p>
+                          <div className="absolute left-4 -top-2 w-0 h-0 border-l-4 border-r-4 border-b-4 border-transparent border-b-[#102059]" />
+                        </div>
                       </div>
-                      <ResponsiveContainer width="100%" height={350}>
-                        <LineChart
-                          key={`revenue-chart-${insightsPeriod}`}
-                          data={
-                            insightsPeriod === 'weekly'
-                              ? [
-                                  { name: 'Mon', revenue: 4800, orders: 4 },
-                                  { name: 'Tue', revenue: 6200, orders: 5 },
-                                  { name: 'Wed', revenue: 3900, orders: 3 },
-                                  { name: 'Thu', revenue: 5100, orders: 4 },
-                                  { name: 'Fri', revenue: 7500, orders: 6 },
-                                  { name: 'Sat', revenue: 6800, orders: 5 },
-                                  { name: 'Sun', revenue: 4100, orders: 5 },
-                                ]
-                              : insightsPeriod === 'monthly'
-                                ? [
-                                    { name: 'Week 1', revenue: 28500, orders: 27 },
-                                    { name: 'Week 2', revenue: 32400, orders: 33 },
-                                    { name: 'Week 3', revenue: 36800, orders: 37 },
-                                    { name: 'Week 4', revenue: 41200, orders: 35 },
-                                    { name: 'Week 5', revenue: 26300, orders: 6 },
-                                  ]
-                                : [
-                                    { name: 'Jan', revenue: 128000, orders: 118 },
-                                    { name: 'Feb', revenue: 135000, orders: 125 },
-                                    { name: 'Mar', revenue: 142000, orders: 132 },
-                                    { name: 'Apr', revenue: 148000, orders: 138 },
-                                    { name: 'May', revenue: 138000, orders: 128 },
-                                    { name: 'Jun', revenue: 145000, orders: 135 },
-                                    { name: 'Jul', revenue: 152000, orders: 142 },
-                                    { name: 'Aug', revenue: 132000, orders: 122 },
-                                    { name: 'Sep', revenue: 139000, orders: 129 },
-                                    { name: 'Oct', revenue: 147000, orders: 137 },
-                                    { name: 'Nov', revenue: 143000, orders: 133 },
-                                    { name: 'Dec', revenue: 126000, orders: 117 },
-                                  ]
-                          }
-                          margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
-                        >
-                          <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
-                          <XAxis dataKey="name" stroke="#65676B" style={{ fontSize: '12px' }} />
-                          <YAxis
-                            yAxisId="left"
-                            stroke="#244693"
-                            style={{ fontSize: '12px' }}
-                            tickFormatter={(value) => (value >= 1000 ? `₱${value / 1000}K` : `₱${value}`)}
-                          />
-                          <YAxis yAxisId="right" orientation="right" stroke="#D3A218" style={{ fontSize: '12px' }} />
-                          <Tooltip
-                            contentStyle={{
-                              backgroundColor: 'white',
-                              border: '1px solid #E5E7EB',
-                              borderRadius: '8px',
-                              fontSize: '12px',
-                            }}
-                          />
-                          <Legend wrapperStyle={{ fontSize: '12px', paddingTop: '20px' }} />
-                          <Line
-                            type="monotone"
-                            dataKey="revenue"
-                            stroke="#244693"
-                            strokeWidth={3}
-                            dot={{ fill: '#244693', r: 4 }}
-                            activeDot={{ r: 6 }}
-                            name="Revenue"
-                            yAxisId="left"
-                          />
-                          <Line
-                            type="monotone"
-                            dataKey="orders"
-                            stroke="#D3A218"
-                            strokeWidth={3}
-                            dot={{ fill: '#D3A218', r: 4 }}
-                            activeDot={{ r: 6 }}
-                            name="Orders"
-                            yAxisId="right"
-                          />
-                        </LineChart>
-                      </ResponsiveContainer>
+                      {periodInsights.revenueChart.length === 0 ? (
+                        <InsightChartEmpty />
+                      ) : (
+                        <ResponsiveContainer width="100%" height={350}>
+                          <LineChart
+                            key={`revenue-chart-${insightsPeriod}`}
+                            data={periodInsights.revenueChart}
+                            margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+                          >
+                            <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
+                            <XAxis dataKey="name" stroke="#65676B" style={{ fontSize: '12px' }} />
+                            <YAxis
+                              yAxisId="left"
+                              stroke="#244693"
+                              style={{ fontSize: '12px' }}
+                              tickFormatter={(value) => (value >= 1000 ? `₱${value / 1000}K` : `₱${value}`)}
+                            />
+                            <YAxis yAxisId="right" orientation="right" stroke="#D3A218" style={{ fontSize: '12px' }} />
+                            <Tooltip
+                              contentStyle={{
+                                backgroundColor: 'white',
+                                border: '1px solid #E5E7EB',
+                                borderRadius: '8px',
+                                fontSize: '12px',
+                              }}
+                              formatter={(value, name) => {
+                                if (name === 'Revenue') {
+                                  return [`₱${Number(value).toLocaleString()}`, 'Revenue']
+                                }
+                                return [value, 'Orders']
+                              }}
+                            />
+                            <Legend wrapperStyle={{ fontSize: '12px', paddingTop: '20px' }} />
+                            <Line
+                              type="monotone"
+                              dataKey="revenue"
+                              stroke="#244693"
+                              strokeWidth={3}
+                              dot={{ fill: '#244693', r: 4 }}
+                              activeDot={{ r: 6 }}
+                              name="Revenue"
+                              yAxisId="left"
+                            />
+                            <Line
+                              type="monotone"
+                              dataKey="orders"
+                              stroke="#D3A218"
+                              strokeWidth={3}
+                              dot={{ fill: '#D3A218', r: 4 }}
+                              activeDot={{ r: 6 }}
+                              name="Orders"
+                              yAxisId="right"
+                            />
+                          </LineChart>
+                        </ResponsiveContainer>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -2229,28 +2789,598 @@ export default function AgrivetStoreInformation({
                 </div>
                 <button
                   type="button"
-                  onClick={() => setShowCreateBundleModal(false)}
+                  onClick={closeCreateBundleModal}
                   className="p-2 hover:bg-[#F9FAFB] rounded-lg transition-colors"
                 >
                   <X className="w-5 h-5 text-[#6B7280]" />
                 </button>
               </div>
               <div className="flex-1 overflow-y-auto p-6">
-                <div className="text-center py-12">
-                  <Package className="w-16 h-16 text-[#E5E7EB] mx-auto mb-4" />
-                  <h3 className="text-lg font-bold text-[#102059] mb-2">Create Bundle</h3>
-                  <p className="text-sm text-[#6B7280] max-w-md mx-auto">
-                    Bundle creation will be available once store listing APIs are connected.
-                  </p>
-                </div>
+                <form className="space-y-6" onSubmit={(e) => e.preventDefault()}>
+                  <div>
+                    <h3 className="text-sm font-semibold text-[#102059] mb-4">Bundle Details</h3>
+                    <div className="space-y-4">
+                      <div>
+                        <label className="text-xs font-semibold text-[#102059] uppercase tracking-wider block mb-2">
+                          Bundle Name *
+                        </label>
+                        <input
+                          type="text"
+                          value={bundleFormData.bundleName}
+                          onChange={(e) =>
+                            setBundleFormData({ ...bundleFormData, bundleName: e.target.value })
+                          }
+                          className="w-full px-4 py-2.5 border border-[#E5E7EB] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#102059] focus:border-transparent text-sm"
+                          placeholder="e.g., Starter Kit, Ultimate Care Package"
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-3 gap-4">
+                        <div>
+                          <label className="text-xs font-semibold text-[#102059] uppercase tracking-wider block mb-2">
+                            Bundle Price (₱) *
+                          </label>
+                          <input
+                            type="number"
+                            value={bundleFormData.bundlePrice}
+                            onChange={(e) =>
+                              setBundleFormData({ ...bundleFormData, bundlePrice: e.target.value })
+                            }
+                            className="w-full px-4 py-2.5 border border-[#E5E7EB] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#102059] focus:border-transparent text-sm"
+                            placeholder="0.00"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs font-semibold text-[#102059] uppercase tracking-wider block mb-2">
+                            Stock Quantity *
+                          </label>
+                          <input
+                            type="number"
+                            value={bundleFormData.bundleStock}
+                            onChange={(e) =>
+                              setBundleFormData({ ...bundleFormData, bundleStock: e.target.value })
+                            }
+                            className="w-full px-4 py-2.5 border border-[#E5E7EB] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#102059] focus:border-transparent text-sm"
+                            placeholder="0"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs font-semibold text-[#102059] uppercase tracking-wider block mb-2">
+                            Reorder Level *
+                          </label>
+                          <input
+                            type="number"
+                            value={bundleFormData.bundleReorderLevel}
+                            onChange={(e) =>
+                              setBundleFormData({
+                                ...bundleFormData,
+                                bundleReorderLevel: e.target.value,
+                              })
+                            }
+                            className="w-full px-4 py-2.5 border border-[#E5E7EB] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#102059] focus:border-transparent text-sm"
+                            placeholder="0"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <h3 className="text-sm font-semibold text-[#102059] mb-4">
+                      Select Products for Bundle *
+                    </h3>
+                    {registeredProducts.length === 0 ? (
+                      <div className="text-center py-8 border border-dashed border-[#E5E7EB] rounded-lg">
+                        <Package className="w-12 h-12 text-[#E5E7EB] mx-auto mb-3" />
+                        <p className="text-sm text-[#6B7280]">
+                          No registered products available. Register products first to create a bundle.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        {registeredProducts.map((product) => (
+                          <label
+                            key={product.id}
+                            className="border border-[#E5E7EB] rounded-lg p-4 cursor-pointer hover:border-[#D3A218] hover:bg-[#FFFBF0] transition-all"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={bundleFormData.selectedProducts.includes(product.id)}
+                              onChange={() => toggleBundleProduct(product.id)}
+                              className="mb-3"
+                            />
+                            <div className="aspect-square bg-[#F9FAFB] rounded-lg mb-3 overflow-hidden">
+                              <img
+                                src={product.image}
+                                alt={product.productName}
+                                className="w-full h-full object-cover"
+                              />
+                            </div>
+                            <h4 className="text-sm font-semibold text-[#102059] mb-1">
+                              {product.productName}
+                            </h4>
+                            <p className="text-xs text-[#6B7280]">{product.category}</p>
+                          </label>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-semibold text-[#102059] uppercase tracking-wider block mb-2">
+                      Bundle Description
+                    </label>
+                    <textarea
+                      value={bundleFormData.bundleDescription}
+                      onChange={(e) =>
+                        setBundleFormData({ ...bundleFormData, bundleDescription: e.target.value })
+                      }
+                      rows={3}
+                      className="w-full px-4 py-2.5 border border-[#E5E7EB] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#102059] focus:border-transparent text-sm resize-none"
+                      placeholder="Describe what's included in this bundle and its benefits..."
+                    />
+                  </div>
+                </form>
               </div>
               <div className="flex items-center justify-end gap-3 p-6 border-t border-[#E5E7EB]">
                 <button
                   type="button"
-                  onClick={() => setShowCreateBundleModal(false)}
+                  onClick={closeCreateBundleModal}
                   className="px-6 py-2.5 bg-white border border-[#E5E7EB] text-[#6B7280] rounded-lg hover:bg-[#F9FAFB] transition-colors text-sm font-medium"
                 >
                   Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCreateBundle}
+                  disabled={!storeBundleUrl}
+                  className="px-6 py-2.5 bg-[#D3A218] text-white rounded-lg hover:bg-[#B8900F] transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Create Bundle
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Bundle Success Modal */}
+        {showBundleSuccessModal && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-lg border border-[#E5E7EB] w-full max-w-md p-6">
+              <div className="text-center">
+                <div className="w-16 h-16 bg-[#FFFBF0] rounded-full flex items-center justify-center mx-auto mb-4">
+                  <CheckCircle className="w-10 h-10 text-[#D3A218]" />
+                </div>
+                <h3 className="text-xl font-bold text-[#102059] mb-2">Bundle Created Successfully</h3>
+                <p className="text-sm text-[#6B7280] mb-6">
+                  Your product bundle has been created and is now available in your store listings.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setShowBundleSuccessModal(false)}
+                  className="w-full px-6 py-2.5 bg-[#D3A218] text-white rounded-lg hover:bg-[#B8900F] transition-colors text-sm font-medium"
+                >
+                  Back to Product Listing
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Product Detail Modal */}
+        {showProductDetailModal && selectedListingDetail && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-lg border border-[#E5E7EB] w-full max-w-2xl">
+              <div className="flex items-center justify-between p-6 border-b border-[#E5E7EB]">
+                <div>
+                  <h2 className="text-xl font-bold text-[#102059]">
+                    {selectedListingDetail.isBundle ? 'Bundle Details' : 'Product Details'}
+                  </h2>
+                  <p className="text-sm text-[#6B7280] mt-1">View and manage listing information</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  {canAddListings && !isEditingListing && getListingItemUpdateUrl(selectedListingDetail.id) && (
+                    <button
+                      type="button"
+                      onClick={() => setIsEditingListing(true)}
+                      className="p-2 hover:bg-[#F9FAFB] rounded-lg transition-colors"
+                      title="Edit"
+                    >
+                      <Pencil className="w-5 h-5 text-[#102059]" />
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowProductDetailModal(false)
+                      setIsEditingListing(false)
+                      setSelectedListingDetail(null)
+                    }}
+                    className="p-2 hover:bg-[#F9FAFB] rounded-lg transition-colors"
+                  >
+                    <X className="w-5 h-5 text-[#6B7280]" />
+                  </button>
+                </div>
+              </div>
+
+              <div className="p-6 space-y-6">
+                <div>
+                  <label className="text-xs font-semibold text-[#102059] uppercase tracking-wider block mb-2">
+                    {selectedListingDetail.isBundle ? 'Bundle Name' : 'Product Name'}
+                  </label>
+                  <input
+                    type="text"
+                    value={selectedListingDetail.productName}
+                    disabled
+                    className="w-full px-4 py-2.5 border border-[#E5E7EB] rounded-lg bg-[#F9FAFB] text-sm text-[#6B7280] cursor-not-allowed"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-[#102059] uppercase tracking-wider block mb-2">
+                    Category
+                  </label>
+                  <input
+                    type="text"
+                    value={selectedListingDetail.category}
+                    disabled
+                    className="w-full px-4 py-2.5 border border-[#E5E7EB] rounded-lg bg-[#F9FAFB] text-sm text-[#6B7280] cursor-not-allowed"
+                  />
+                </div>
+
+                <div className="grid grid-cols-3 gap-4">
+                  <div>
+                    <label className="text-xs font-semibold text-[#102059] uppercase tracking-wider block mb-2">
+                      {selectedListingDetail.isBundle ? 'Bundle Price (₱)' : 'Price (₱)'}
+                    </label>
+                    <input
+                      type="number"
+                      value={isEditingListing ? editListingFormData.price : selectedListingDetail.price}
+                      onChange={(e) =>
+                        setEditListingFormData({ ...editListingFormData, price: e.target.value })
+                      }
+                      disabled={!isEditingListing}
+                      className={`w-full px-4 py-2.5 border border-[#E5E7EB] rounded-lg text-sm ${
+                        isEditingListing
+                          ? 'focus:outline-none focus:ring-2 focus:ring-[#102059] focus:border-transparent'
+                          : 'bg-[#F9FAFB] text-[#6B7280] cursor-not-allowed'
+                      }`}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-[#102059] uppercase tracking-wider block mb-2">
+                      Stock Quantity
+                    </label>
+                    <input
+                      type="number"
+                      value={isEditingListing ? editListingFormData.stock : selectedListingDetail.stock}
+                      onChange={(e) =>
+                        setEditListingFormData({ ...editListingFormData, stock: e.target.value })
+                      }
+                      disabled={!isEditingListing}
+                      className={`w-full px-4 py-2.5 border border-[#E5E7EB] rounded-lg text-sm ${
+                        isEditingListing
+                          ? 'focus:outline-none focus:ring-2 focus:ring-[#102059] focus:border-transparent'
+                          : 'bg-[#F9FAFB] text-[#6B7280] cursor-not-allowed'
+                      }`}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-[#102059] uppercase tracking-wider block mb-2">
+                      Reorder Level
+                    </label>
+                    <input
+                      type="number"
+                      value={
+                        isEditingListing
+                          ? editListingFormData.reorderLevel
+                          : selectedListingDetail.reorderLevel
+                      }
+                      onChange={(e) =>
+                        setEditListingFormData({ ...editListingFormData, reorderLevel: e.target.value })
+                      }
+                      disabled={!isEditingListing}
+                      className={`w-full px-4 py-2.5 border border-[#E5E7EB] rounded-lg text-sm ${
+                        isEditingListing
+                          ? 'focus:outline-none focus:ring-2 focus:ring-[#102059] focus:border-transparent'
+                          : 'bg-[#F9FAFB] text-[#6B7280] cursor-not-allowed'
+                      }`}
+                    />
+                  </div>
+                </div>
+
+                {selectedListingDetail.isBundle && (
+                  <div>
+                    <label className="text-xs font-semibold text-[#102059] uppercase tracking-wider block mb-2">
+                      Products Included
+                    </label>
+                    {selectedListingDetail.bundleProducts?.length > 0 ? (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                        {selectedListingDetail.bundleProducts.map((product) => (
+                          <div
+                            key={product.id}
+                            className="border border-[#E5E7EB] rounded-lg p-4 bg-[#F9FAFB]"
+                          >
+                            <div className="aspect-square bg-white rounded-lg mb-3 overflow-hidden">
+                              <img
+                                src={product.image}
+                                alt={product.productName}
+                                className="w-full h-full object-cover"
+                              />
+                            </div>
+                            <h4 className="text-sm font-semibold text-[#102059] mb-1">
+                              {product.productName}
+                            </h4>
+                            {product.brand ? (
+                              <p className="text-xs text-[#6B7280] mb-0.5">{product.brand}</p>
+                            ) : null}
+                            {product.category ? (
+                              <p className="text-xs text-[#6B7280]">{product.category}</p>
+                            ) : null}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-[#6B7280] py-4 border border-dashed border-[#E5E7EB] rounded-lg text-center px-4">
+                        No products are recorded for this bundle. Bundles created before this update, or with
+                        only a custom description, do not store included products—create the bundle again to
+                        show them here.
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                {getEffectiveDiscount(selectedListingDetail) > 0 && (
+                  <div className="bg-[#FFF5F5] border border-[#E20E28] rounded-lg p-4">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <h4 className="text-sm font-semibold text-[#E20E28] mb-1">Active Discount</h4>
+                        <p className="text-xs text-[#6B7280]">
+                          {getEffectiveDiscount(selectedListingDetail)}% off •{' '}
+                          {selectedListingDetail.discountType === 'manual'
+                            ? 'Manual deactivation'
+                            : `Expires ${new Date(selectedListingDetail.discountExpiration).toLocaleString()}`}
+                        </p>
+                        <p className="text-sm font-semibold text-[#102059] mt-2">
+                          Discounted Price: ₱{getDiscountedPrice(selectedListingDetail).toFixed(2)}
+                        </p>
+                      </div>
+                      {canAddListings && selectedListingDetail.discountType === 'manual' && (
+                        <button
+                          type="button"
+                          onClick={handleRemoveDiscount}
+                          className="text-xs font-semibold text-[#E20E28] hover:text-[#B8000F] transition-colors"
+                        >
+                          Remove
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex items-center justify-between gap-3 p-6 border-t border-[#E5E7EB]">
+                <div>
+                  {canAddListings && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowDiscountModal(true)
+                        setDiscountFormData({
+                          discountPercent: selectedListingDetail.discountPercent?.toString() || '',
+                          discountType: selectedListingDetail.discountType || 'manual',
+                          expirationHours: '',
+                        })
+                      }}
+                      className="px-4 py-2.5 bg-[#E20E28] text-white rounded-lg hover:bg-[#B8000F] transition-colors text-sm font-medium"
+                    >
+                      {getEffectiveDiscount(selectedListingDetail) > 0 ? 'Edit Discount' : 'Add Discount'}
+                    </button>
+                  )}
+                </div>
+                <div className="flex items-center gap-3">
+                  {isEditingListing ? (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsEditingListing(false)
+                          setEditListingFormData({
+                            price: selectedListingDetail.price.toString(),
+                            stock: selectedListingDetail.stock.toString(),
+                            reorderLevel: selectedListingDetail.reorderLevel.toString(),
+                          })
+                        }}
+                        className="px-6 py-2.5 bg-white border border-[#E5E7EB] text-[#6B7280] rounded-lg hover:bg-[#F9FAFB] transition-colors text-sm font-medium"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleSaveListingEdit}
+                        className="px-6 py-2.5 bg-[#102059] text-white rounded-lg hover:bg-[#244693] transition-colors text-sm font-medium"
+                      >
+                        Save Changes
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowProductDetailModal(false)
+                        setIsEditingListing(false)
+                        setSelectedListingDetail(null)
+                      }}
+                      className="px-6 py-2.5 bg-[#102059] text-white rounded-lg hover:bg-[#244693] transition-colors text-sm font-medium"
+                    >
+                      Close
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Discount Modal */}
+        {showDiscountModal && selectedListingDetail && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4">
+            <div className="bg-white rounded-lg border border-[#E5E7EB] w-full max-w-md">
+              <div className="flex items-center justify-between p-6 border-b border-[#E5E7EB]">
+                <div>
+                  <h2 className="text-xl font-bold text-[#102059]">Manage Discount</h2>
+                  <p className="text-sm text-[#6B7280] mt-1">
+                    Set pricing discount for {selectedListingDetail.productName}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowDiscountModal(false)}
+                  className="p-2 hover:bg-[#F9FAFB] rounded-lg transition-colors"
+                >
+                  <X className="w-5 h-5 text-[#6B7280]" />
+                </button>
+              </div>
+
+              <div className="p-6 space-y-6">
+                <div>
+                  <label className="text-xs font-semibold text-[#102059] uppercase tracking-wider block mb-2">
+                    Discount Percentage (%)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    value={discountFormData.discountPercent}
+                    onChange={(e) =>
+                      setDiscountFormData({ ...discountFormData, discountPercent: e.target.value })
+                    }
+                    className="w-full px-4 py-2.5 border border-[#E5E7EB] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#102059] focus:border-transparent text-sm"
+                    placeholder="e.g., 20"
+                  />
+                  {discountFormData.discountPercent && (
+                    <p className="text-xs text-[#6B7280] mt-2">
+                      New Price: ₱
+                      {(
+                        selectedListingDetail.price *
+                        (1 - parseFloat(discountFormData.discountPercent || '0') / 100)
+                      ).toFixed(2)}
+                      <span className="text-[#E20E28] ml-2">
+                        (Save ₱
+                        {(
+                          (selectedListingDetail.price *
+                            parseFloat(discountFormData.discountPercent || '0')) /
+                          100
+                        ).toFixed(2)}
+                        )
+                      </span>
+                    </p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-[#102059] uppercase tracking-wider block mb-3">
+                    Discount Duration
+                  </label>
+                  <div className="space-y-3">
+                    <label className="flex items-start gap-3 p-4 border border-[#E5E7EB] rounded-lg cursor-pointer hover:bg-[#F9FAFB] transition-colors">
+                      <input
+                        type="radio"
+                        name="discountType"
+                        value="manual"
+                        checked={discountFormData.discountType === 'manual'}
+                        onChange={(e) =>
+                          setDiscountFormData({ ...discountFormData, discountType: e.target.value })
+                        }
+                        className="mt-0.5"
+                      />
+                      <div className="flex-1">
+                        <div className="text-sm font-semibold text-[#102059]">Manual Deactivation</div>
+                        <div className="text-xs text-[#6B7280] mt-1">
+                          Discount remains active until you manually remove it
+                        </div>
+                      </div>
+                    </label>
+
+                    <label className="flex items-start gap-3 p-4 border border-[#E5E7EB] rounded-lg cursor-pointer hover:bg-[#F9FAFB] transition-colors">
+                      <input
+                        type="radio"
+                        name="discountType"
+                        value="timed"
+                        checked={discountFormData.discountType === 'timed'}
+                        onChange={(e) =>
+                          setDiscountFormData({ ...discountFormData, discountType: e.target.value })
+                        }
+                        className="mt-0.5"
+                      />
+                      <div className="flex-1">
+                        <div className="text-sm font-semibold text-[#102059]">Time-Based</div>
+                        <div className="text-xs text-[#6B7280] mt-1">
+                          Automatically expires after specified duration
+                        </div>
+                      </div>
+                    </label>
+                  </div>
+                </div>
+
+                {discountFormData.discountType === 'timed' && (
+                  <div>
+                    <label className="text-xs font-semibold text-[#102059] uppercase tracking-wider block mb-2">
+                      Duration (Hours)
+                    </label>
+                    <select
+                      value={discountFormData.expirationHours}
+                      onChange={(e) =>
+                        setDiscountFormData({ ...discountFormData, expirationHours: e.target.value })
+                      }
+                      className="w-full px-4 py-2.5 border border-[#E5E7EB] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#102059] focus:border-transparent text-sm"
+                    >
+                      <option value="">Select duration</option>
+                      <option value="24">24 hours (1 day)</option>
+                      <option value="48">48 hours (2 days)</option>
+                      <option value="72">72 hours (3 days)</option>
+                      <option value="168">168 hours (7 days)</option>
+                      <option value="336">336 hours (14 days)</option>
+                      <option value="720">720 hours (30 days)</option>
+                    </select>
+                    {discountFormData.expirationHours && (
+                      <p className="text-xs text-[#6B7280] mt-2">
+                        Expires:{' '}
+                        {new Date(
+                          Date.now() +
+                            parseInt(discountFormData.expirationHours, 10) * 60 * 60 * 1000
+                        ).toLocaleString()}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <div className="flex items-center justify-end gap-3 p-6 border-t border-[#E5E7EB]">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowDiscountModal(false)
+                    setDiscountFormData({
+                      discountPercent: '',
+                      discountType: 'manual',
+                      expirationHours: '',
+                    })
+                  }}
+                  className="px-6 py-2.5 bg-white border border-[#E5E7EB] text-[#6B7280] rounded-lg hover:bg-[#F9FAFB] transition-colors text-sm font-medium"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleApplyDiscount}
+                  disabled={
+                    !discountFormData.discountPercent ||
+                    (discountFormData.discountType === 'timed' && !discountFormData.expirationHours)
+                  }
+                  className="px-6 py-2.5 bg-[#E20E28] text-white rounded-lg hover:bg-[#B8000F] transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Apply Discount
                 </button>
               </div>
             </div>

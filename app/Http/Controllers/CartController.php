@@ -13,7 +13,7 @@ class CartController extends Controller
     private const CART_SELECT = ['id', 'user_id', 'item_id', 'quantity', 'price_snapshot'];
 
     /** Item select: exclude item_status, created_at, updated_at */
-    private const ITEM_SELECT = ['id', 'shop_id', 'item_name', 'item_description', 'item_price', 'item_quantity', 'category', 'item_images', 'average_rating', 'total_reviews', 'sold_count'];
+    private const ITEM_SELECT = ['id', 'shop_id', 'item_name', 'item_description', 'item_price', 'discount_percent', 'discount_type', 'discount_expires_at', 'item_quantity', 'category', 'item_images', 'average_rating', 'total_reviews', 'sold_count'];
 
     /** Shop select: exclude shop_status, created_at, updated_at */
     private const SHOP_SELECT = ['id', 'agrivet_id', 'zone_id', 'shop_name', 'shop_description', 'shop_address', 'shop_city', 'shop_postal_code', 'shop_province', 'shop_lat', 'shop_long', 'contact_number', 'average_rating', 'total_reviews'];
@@ -157,7 +157,7 @@ class CartController extends Controller
         if ($existingCart) {
             // Update quantity if item already exists in cart
             $existingCart->quantity += $request->quantity ?? 1;
-            $existingCart->price_snapshot = $item->item_price;
+            $existingCart->price_snapshot = $item->getEffectivePrice();
             $existingCart->save();
 
             $existingCart->load($this->cartWith());
@@ -174,7 +174,7 @@ class CartController extends Controller
             'user_id' => $request->user_id,
             'item_id' => $request->item_id,
             'quantity' => $request->quantity ?? 1,
-            'price_snapshot' => $item->item_price,
+            'price_snapshot' => $item->getEffectivePrice(),
             'status' => $request->status ?? 'active',
             'created_at' => now(),
         ]);
@@ -223,7 +223,7 @@ class CartController extends Controller
         if ($request->has('quantity')) {
             $item = Item::find($cart->item_id);
             if ($item) {
-                $cart->price_snapshot = $item->item_price;
+                $cart->price_snapshot = $item->getEffectivePrice();
             }
         }
 

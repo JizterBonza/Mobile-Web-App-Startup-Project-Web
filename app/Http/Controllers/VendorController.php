@@ -122,6 +122,36 @@ class VendorController extends Controller
     }
 
     /**
+     * Update a shop listing (vendor's assigned shop).
+     */
+    public function updateShopListing(Request $request, $itemId)
+    {
+        $shop = $this->getVendorShopWithAgrivet();
+
+        if (! $shop || ! $shop->agrivet) {
+            return redirect()->back()
+                ->withErrors(['error' => 'You are not associated with any shop.']);
+        }
+
+        return app(AgrivetController::class)->updateShopListing($request, $shop->agrivet->id, $shop->id, $itemId);
+    }
+
+    /**
+     * Create a product bundle listing (vendor's assigned shop).
+     */
+    public function storeShopBundle(Request $request)
+    {
+        $shop = $this->getVendorShopWithAgrivet();
+
+        if (! $shop || ! $shop->agrivet) {
+            return redirect()->back()
+                ->withErrors(['error' => 'You are not associated with any shop.']);
+        }
+
+        return app(AgrivetController::class)->storeShopBundle($request, $shop->agrivet->id, $shop->id);
+    }
+
+    /**
      * Display store management page.
      */
     public function storeIndex()
@@ -252,6 +282,9 @@ class VendorController extends Controller
                 'item_name' => $item->item_name,
                 'item_description' => $item->item_description,
                 'item_price' => $item->item_price,
+                'discount_percent' => $item->discount_percent,
+                'discount_type' => $item->discount_type,
+                'discount_expires_at' => $item->discount_expires_at,
                 'item_quantity' => $item->item_quantity,
                 'weight' => $item->weight,
                 'metric' => $item->metric,
@@ -796,8 +829,11 @@ class VendorController extends Controller
                 'order_items.id',
                 'order_items.order_id',
                 'order_items.item_id',
+                'order_items.item_name_at_purchase',
                 'order_items.quantity',
                 'order_items.price_at_purchase',
+                'order_items.original_price',
+                'order_items.discount_percent_at_purchase',
                 'order_items.item_status',
                 'order_items.created_at',
                 'items.item_name'
@@ -810,9 +846,11 @@ class VendorController extends Controller
                 'id' => $item->id,
                 'order_id' => $item->order_id,
                 'item_id' => $item->item_id,
-                'item_name' => $item->item_name,
+                'item_name' => $item->item_name_at_purchase ?: $item->item_name,
                 'quantity' => $item->quantity,
                 'price_at_purchase' => $item->price_at_purchase,
+                'original_price' => $item->original_price ?? $item->price_at_purchase,
+                'discount_percent_at_purchase' => $item->discount_percent_at_purchase ?? 0,
                 'total' => $item->quantity * $item->price_at_purchase,
                 'item_status' => $item->item_status,
                 'created_at' => $item->created_at,

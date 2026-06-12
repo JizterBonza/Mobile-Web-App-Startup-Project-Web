@@ -121,7 +121,7 @@ export function DashboardHeader({
                                             ? 'bg-[#244693] text-white'
                                             : 'bg-transparent text-[#4B5563] hover:text-[#102059]'
                                     }`}
-                                    style={{ fontFamily: 'Inter Condensed, sans-serif', backgroundColor: activeTab === item.id ? '#244693' : 'transparent', color: activeTab === item.id ? 'white' : '#4B5563' }}
+                                    style={{ fontFamily: 'Inter Condensed, sans-serif', backgroundColor: activeTab === item.id ? 'rgb(16, 32, 89)' : 'transparent', color: activeTab === item.id ? 'white' : '#4B5563' }}
                                 >
                                     {item.label}
                                 </Link>

@@ -32,7 +32,7 @@ export default function DeliveryMethods({ auth, deliveryMethods = [], flash }) {
 
   const addForm = useForm({ description: '', status: 'active' })
   const editForm = useForm({ description: '', status: 'active' })
-  const statusToggleForm = useForm({ description: '', status: 'active' })
+  const [togglingDeliveryMethodId, setTogglingDeliveryMethodId] = useState(null)
 
   useEffect(() => {
     if (showAddModal) setTimeout(() => setShowAddModalAnimation(true), 10)
@@ -97,11 +97,21 @@ export default function DeliveryMethods({ auth, deliveryMethods = [], flash }) {
 
   const handleStatusToggle = (e, dm) => {
     e.stopPropagation()
-    if (statusToggleForm.processing) return
-    const isActive = (dm.status_label || dm.status) === 'active'
+    if (togglingDeliveryMethodId !== null) return
+    const isActive = dm.status_label === 'active' || dm.status === true
     const newStatus = isActive ? 'inactive' : 'active'
-    statusToggleForm.setData({ description: dm.description, status: newStatus })
-    statusToggleForm.put(`${baseRoute}/${dm.id}`, { preserveScroll: true })
+    setTogglingDeliveryMethodId(dm.id)
+    router.put(
+      `${baseRoute}/${dm.id}`,
+      {
+        description: dm.description,
+        status: newStatus,
+      },
+      {
+        preserveScroll: true,
+        onFinish: () => setTogglingDeliveryMethodId(null),
+      },
+    )
   }
 
   const handleAddDeliveryMethod = (e) => {
@@ -295,7 +305,7 @@ export default function DeliveryMethods({ auth, deliveryMethods = [], flash }) {
                           <button
                             type="button"
                             onClick={(e) => handleStatusToggle(e, dm)}
-                            disabled={statusToggleForm.processing}
+                            disabled={togglingDeliveryMethodId === dm.id}
                             className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-all duration-300 disabled:opacity-50 ${
                               isActive ? 'bg-[#00C950]' : 'bg-[#D1D5DB]'
                             }`}

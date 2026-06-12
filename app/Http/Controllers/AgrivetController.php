@@ -18,6 +18,7 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 use App\Http\Controllers\Concerns\ManagesShopOrders;
+use App\Services\UserWelcomeEmailService;
 
 class AgrivetController extends Controller
 {
@@ -103,8 +104,11 @@ class AgrivetController extends Controller
             ? 'dashboard.admin.agrivets.index'
             : 'dashboard.super-admin.agrivets.index';
 
+        $ownerManager = null;
+        $ownerUsername = null;
+
         try {
-            DB::transaction(function () use ($request, $validated) {
+            DB::transaction(function () use ($request, $validated, &$ownerManager, &$ownerUsername) {
                 $storePath = $request->file('store_image')->store('agrivets/wizard', 'public');
                 $permitPath = $request->file('permit_image')->store('agrivets/wizard', 'public');
 
@@ -168,7 +172,7 @@ class AgrivetController extends Controller
                     'shop_status' => 'active',
                 ]);
 
-                $username = explode('@', $validated['email'])[0].'_'.time();
+                $ownerUsername = explode('@', $validated['email'])[0].'_'.time();
 
                 $ownerDetail = UserDetail::create([
                     'first_name' => $validated['first_name'],
@@ -179,7 +183,7 @@ class AgrivetController extends Controller
                 ]);
 
                 $ownerCredential = UserCredential::create([
-                    'username' => $username,
+                    'username' => $ownerUsername,
                     'password_hash' => Hash::make($validated['password']),
                 ]);
 
@@ -207,8 +211,17 @@ class AgrivetController extends Controller
                 ActivityLog::log('created', "Agrivet created (wizard): {$agrivet->name}", $agrivet, null, $agrivet->toArray());
             });
 
+            $emailSent = $ownerManager
+                ? app(UserWelcomeEmailService::class)->send($ownerManager, $ownerUsername, $validated['password'])
+                : false;
+
+            $successMessage = UserWelcomeEmailService::successMessage(
+                $emailSent,
+                'Agrivet, primary store, and owner/manager login created successfully.'
+            );
+
             return redirect()->route($redirectRoute)
-                ->with('success', 'Agrivet, primary store, and owner/manager login created successfully.');
+                ->with('success', $successMessage);
         } catch (\Throwable $e) {
             Log::error('Agrivet setup wizard failed', [
                 'message' => $e->getMessage(),
@@ -672,7 +685,12 @@ class AgrivetController extends Controller
             ];
         });
 
-        $products = DB::table('items')
+        $catalogBrandsByProductName = ProductCatalog::approved()
+            ->whereNotNull('brand')
+            ->where('brand', '!=', '')
+            ->pluck('brand', 'product_name');
+
+        $shopItems = DB::table('items')
             ->leftJoin('category', 'items.category', '=', 'category.id')
             ->leftJoin('sub_categories', 'items.sub_category_id', '=', 'sub_categories.id')
             ->where('items.shop_id', $shop->id)
@@ -682,8 +700,30 @@ class AgrivetController extends Controller
                 'sub_categories.sub_category_name'
             )
             ->orderBy('items.created_at', 'desc')
-            ->get()
-            ->map(function ($item) {
+            ->get();
+
+        $bundleCatalogIds = $shopItems
+            ->filter(fn ($item) => ($item->metric ?? '') === 'Bundle')
+            ->flatMap(function ($item) {
+                $ids = $item->bundle_catalog_ids ? json_decode($item->bundle_catalog_ids, true) : [];
+
+                return is_array($ids) ? $ids : [];
+            })
+            ->map(fn ($id) => (int) $id)
+            ->unique()
+            ->values()
+            ->all();
+
+        $bundleCatalogById = collect();
+        if (! empty($bundleCatalogIds)) {
+            $bundleCatalogById = ProductCatalog::approved()
+                ->with('category', 'subCategory')
+                ->whereIn('id', $bundleCatalogIds)
+                ->get()
+                ->keyBy('id');
+        }
+
+        $products = $shopItems->map(function ($item) use ($catalogBrandsByProductName, $bundleCatalogById) {
                 $images = $item->item_images ? json_decode($item->item_images, true) : [];
                 if (! empty($images)) {
                     $images = array_map(function ($image) {
@@ -707,11 +747,19 @@ class AgrivetController extends Controller
                 return [
                     'id' => $item->id,
                     'item_name' => $item->item_name,
+                    'brand' => $catalogBrandsByProductName[$item->item_name] ?? '',
                     'item_description' => $item->item_description,
                     'item_price' => $item->item_price,
+                    'discount_percent' => $item->discount_percent,
+                    'discount_type' => $item->discount_type,
+                    'discount_expires_at' => $item->discount_expires_at,
                     'item_quantity' => $item->item_quantity,
                     'weight' => $item->weight,
                     'metric' => $item->metric,
+                    'bundle_catalog_ids' => $item->bundle_catalog_ids
+                        ? json_decode($item->bundle_catalog_ids, true)
+                        : [],
+                    'bundle_products' => $this->mapBundleProductsForItem($item, $bundleCatalogById),
                     'category' => $item->category,
                     'category_name' => $item->category_name,
                     'sub_category_id' => $item->sub_category_id,
@@ -828,6 +876,149 @@ class AgrivetController extends Controller
 
         return redirect()->back()
             ->with('success', 'Product added to store successfully.');
+    }
+
+    /**
+     * Update a shop listing (price, stock, status).
+     */
+    public function updateShopListing(Request $request, $id, $shopId, $itemId)
+    {
+        $agrivet = Agrivet::findOrFail($id);
+        $shop = Shop::where('agrivet_id', $agrivet->id)->findOrFail($shopId);
+
+        $item = DB::table('items')
+            ->where('id', $itemId)
+            ->where('shop_id', $shop->id)
+            ->first();
+
+        if (! $item) {
+            return redirect()->back()
+                ->withErrors(['error' => 'Listing not found.']);
+        }
+
+        $validated = $request->validate([
+            'item_price' => 'sometimes|numeric|min:0',
+            'item_quantity' => 'sometimes|integer|min:0',
+            'item_status' => 'sometimes|string|in:active,inactive',
+            'discount_percent' => 'nullable|numeric|min:0|max:100',
+            'discount_type' => 'nullable|string|in:manual,timed',
+            'discount_expires_at' => 'nullable|date',
+            'expiration_hours' => 'nullable|integer|min:1',
+            'clear_discount' => 'nullable|boolean',
+        ]);
+
+        $update = ['updated_at' => now()];
+
+        if (array_key_exists('item_price', $validated)) {
+            $update['item_price'] = $validated['item_price'];
+        }
+        if (array_key_exists('item_quantity', $validated)) {
+            $update['item_quantity'] = $validated['item_quantity'];
+        }
+        if (array_key_exists('item_status', $validated)) {
+            $update['item_status'] = $validated['item_status'];
+        }
+
+        if ($request->boolean('clear_discount')) {
+            $update['discount_percent'] = null;
+            $update['discount_type'] = null;
+            $update['discount_expires_at'] = null;
+        } elseif ($request->has('discount_percent')) {
+            $discountPercent = $validated['discount_percent'] ?? null;
+            if ($discountPercent === null || (float) $discountPercent <= 0) {
+                $update['discount_percent'] = null;
+                $update['discount_type'] = null;
+                $update['discount_expires_at'] = null;
+            } else {
+                $discountType = $validated['discount_type'] ?? 'manual';
+                $update['discount_percent'] = $discountPercent;
+                $update['discount_type'] = $discountType;
+                if ($discountType === 'timed') {
+                    if (! empty($validated['discount_expires_at'])) {
+                        $update['discount_expires_at'] = $validated['discount_expires_at'];
+                    } elseif (! empty($validated['expiration_hours'])) {
+                        $update['discount_expires_at'] = now()->addHours((int) $validated['expiration_hours']);
+                    } else {
+                        return redirect()->back()
+                            ->withErrors(['expiration_hours' => 'Expiration is required for timed discounts.']);
+                    }
+                } else {
+                    $update['discount_expires_at'] = null;
+                }
+            }
+        }
+
+        DB::table('items')->where('id', $itemId)->update($update);
+
+        return redirect()->back()
+            ->with('success', 'Listing updated successfully.');
+    }
+
+    /**
+     * Create a product bundle listing from multiple catalog products.
+     */
+    public function storeShopBundle(Request $request, $id, $shopId)
+    {
+        $agrivet = Agrivet::findOrFail($id);
+        $shop = Shop::where('agrivet_id', $agrivet->id)->findOrFail($shopId);
+
+        $validated = $request->validate([
+            'bundle_name' => 'required|string|max:150',
+            'item_price' => 'required|numeric|min:0',
+            'item_quantity' => 'required|integer|min:0',
+            'reorder_level' => 'nullable|integer|min:0',
+            'description' => 'nullable|string|max:2000',
+            'product_catalog_ids' => 'required|array|min:1',
+            'product_catalog_ids.*' => 'integer|exists:product_catalog,id',
+        ]);
+
+        $alreadyListed = DB::table('items')
+            ->where('shop_id', $shop->id)
+            ->where('item_name', $validated['bundle_name'])
+            ->exists();
+
+        if ($alreadyListed) {
+            return redirect()->back()
+                ->withErrors(['bundle_name' => 'A bundle with this name already exists in the store.']);
+        }
+
+        $catalogProducts = ProductCatalog::approved()
+            ->whereIn('id', $validated['product_catalog_ids'])
+            ->get();
+
+        if ($catalogProducts->count() !== count($validated['product_catalog_ids'])) {
+            return redirect()->back()
+                ->withErrors(['product_catalog_ids' => 'One or more selected products are invalid.']);
+        }
+
+        $firstProduct = $catalogProducts->first();
+        $images = $this->normalizeCatalogImagePaths($firstProduct->images ?? []);
+        $bundleProductNames = $catalogProducts->pluck('product_name')->join(', ');
+        $description = $validated['description']
+            ?: "Bundle containing: {$bundleProductNames}";
+
+        DB::table('items')->insert([
+            'shop_id' => $shop->id,
+            'item_name' => $validated['bundle_name'],
+            'item_description' => $description,
+            'item_price' => $validated['item_price'],
+            'item_quantity' => $validated['item_quantity'],
+            'weight' => null,
+            'metric' => 'Bundle',
+            'bundle_catalog_ids' => json_encode(array_values($validated['product_catalog_ids'])),
+            'category' => $firstProduct->category_id,
+            'sub_category_id' => $firstProduct->sub_category_id,
+            'item_images' => ! empty($images) ? json_encode($images) : null,
+            'item_status' => 'active',
+            'average_rating' => 0.00,
+            'total_reviews' => 0,
+            'sold_count' => 0,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        return redirect()->back()
+            ->with('success', 'Product bundle created successfully.');
     }
 
     /**
@@ -952,6 +1143,8 @@ class AgrivetController extends Controller
             }
             ActivityLog::log('created', "Vendor created and added to shop: {$vendor->userDetail->email} → {$shop->shop_name}", $vendor, null, $newVendorValues);
 
+            $emailSent = app(UserWelcomeEmailService::class)->send($vendor, $username, $request->password);
+
             // Redirect to store information (vendors tab) based on current user's role
             $currentUser = auth()->user();
             $redirectRoute = match ($currentUser->user_type) {
@@ -964,8 +1157,13 @@ class AgrivetController extends Controller
 
             $redirectParams = $currentUser->user_type === 'owner_manager' ? [$shopId] : [$id, $shopId];
 
+            $successMessage = UserWelcomeEmailService::successMessage(
+                $emailSent,
+                "{$vendorName} has been added to {$shop->shop_name} successfully."
+            );
+
             return redirect(route($redirectRoute, $redirectParams).'?tab=vendors')
-                ->with('success', "{$vendorName} has been added to {$shop->shop_name} successfully.");
+                ->with('success', $successMessage);
         } catch (\Exception $e) {
             DB::rollBack();
             return redirect()->back()
@@ -1253,6 +1451,86 @@ class AgrivetController extends Controller
     }
 
     /**
+     * @param  \Illuminate\Support\Collection<int, \App\Models\ProductCatalog>  $catalogById
+     * @return list<array<string, mixed>>
+     */
+    private function mapBundleProductsForItem(object $item, $catalogById): array
+    {
+        if (($item->metric ?? '') !== 'Bundle') {
+            return [];
+        }
+
+        $ids = $item->bundle_catalog_ids ? json_decode($item->bundle_catalog_ids, true) : [];
+        if (! is_array($ids)) {
+            $ids = [];
+        }
+
+        $products = [];
+        foreach ($ids as $id) {
+            $catalog = $catalogById->get((int) $id);
+            if ($catalog) {
+                $products[] = $this->mapProductCatalogEntry($catalog);
+            }
+        }
+
+        if (! empty($products)) {
+            return $products;
+        }
+
+        $description = $item->item_description ?? '';
+        $prefix = 'Bundle containing: ';
+        if (! str_starts_with($description, $prefix)) {
+            return [];
+        }
+
+        $names = array_values(array_filter(array_map(
+            'trim',
+            explode(',', substr($description, strlen($prefix)))
+        )));
+
+        if (empty($names)) {
+            return [];
+        }
+
+        $byName = ProductCatalog::approved()
+            ->with('category', 'subCategory')
+            ->whereIn('product_name', $names)
+            ->get()
+            ->keyBy('product_name');
+
+        foreach ($names as $name) {
+            $catalog = $byName->get($name);
+            if ($catalog) {
+                $products[] = $this->mapProductCatalogEntry($catalog);
+            }
+        }
+
+        return $products;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function mapProductCatalogEntry(ProductCatalog $p): array
+    {
+        return [
+            'id' => $p->id,
+            'brand' => $p->brand,
+            'product_name' => $p->product_name,
+            'category_id' => $p->category_id,
+            'category_name' => optional($p->category)->category_name,
+            'sub_category_id' => $p->sub_category_id,
+            'sub_category_name' => optional($p->subCategory)->sub_category_name,
+            'weight' => $p->weight,
+            'unit' => $p->unit,
+            'description' => $p->description,
+            'images' => $this->normalizeCatalogImagePaths($p->images ?? []),
+            'primary_image_index' => (int) ($p->primary_image_index ?? 0),
+            'status' => $p->status,
+        ];
+    }
+
+    /**
      * @return list<array<string, mixed>>
      */
     private function mapProductCatalogCollection(): array
@@ -1261,21 +1539,7 @@ class AgrivetController extends Controller
             ->with('category', 'subCategory')
             ->orderBy('product_name')
             ->get()
-            ->map(fn ($p) => [
-                'id' => $p->id,
-                'brand' => $p->brand,
-                'product_name' => $p->product_name,
-                'category_id' => $p->category_id,
-                'category_name' => optional($p->category)->category_name,
-                'sub_category_id' => $p->sub_category_id,
-                'sub_category_name' => optional($p->subCategory)->sub_category_name,
-                'weight' => $p->weight,
-                'unit' => $p->unit,
-                'description' => $p->description,
-                'images' => $this->normalizeCatalogImagePaths($p->images ?? []),
-                'primary_image_index' => (int) ($p->primary_image_index ?? 0),
-                'status' => $p->status,
-            ])
+            ->map(fn ($p) => $this->mapProductCatalogEntry($p))
             ->values()
             ->all();
     }

@@ -316,6 +316,7 @@ class OrderController extends Controller
             // Check inventory availability inside transaction to prevent race conditions
             $lockedItems = [];
             $serverTotalWeightKg = 0.0;
+            $serverSubtotal = 0.0;
             foreach ($data['items'] as $item) {
                 // Lock the item row for update to prevent concurrent modifications
                 $itemModel = Item::lockForUpdate()->find($item['item_id']);
@@ -344,6 +345,20 @@ class OrderController extends Controller
                     ], 400);
                 }
 
+                $serverUnitPrice = $itemModel->getEffectivePrice();
+                $clientUnitPrice = (float) $item['price_at_purchase'];
+                if (abs($serverUnitPrice - $clientUnitPrice) > 0.01) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => "Price for \"{$itemModel->item_name}\" has changed. Please refresh your cart.",
+                        'item_id' => $item['item_id'],
+                        'expected_price' => $serverUnitPrice,
+                        'received_price' => $clientUnitPrice,
+                    ], 422);
+                }
+
+                $serverSubtotal += $serverUnitPrice * $orderedQuantity;
+
                 // Accumulate total weight from server-side item data so the handling
                 // fee check cannot be bypassed by client-supplied weights.
                 if ($itemModel->weight !== null) {
@@ -351,19 +366,36 @@ class OrderController extends Controller
                 }
 
                 // Store locked item for later update
+                $originalPrice = round((float) $itemModel->item_price, 2);
+                $discountPercent = round($itemModel->getActiveDiscountPercent(), 2);
+
                 $lockedItems[$item['item_id']] = [
                     'model' => $itemModel,
-                    'ordered_quantity' => $orderedQuantity
+                    'ordered_quantity' => $orderedQuantity,
+                    'unit_price' => $serverUnitPrice,
+                    'original_price' => $originalPrice,
+                    'discount_percent_at_purchase' => $discountPercent,
+                    'item_name_at_purchase' => $itemModel->item_name,
                 ];
+            }
+
+            $serverSubtotal = round($serverSubtotal, 2);
+            $clientSubtotal = round((float) ($data['subtotal'] ?? 0), 2);
+            if (abs($serverSubtotal - $clientSubtotal) > 0.01) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Order subtotal does not match current item prices.',
+                    'expected_subtotal' => $serverSubtotal,
+                    'received_subtotal' => $clientSubtotal,
+                ], 422);
             }
 
             // Validate that the client's total_amount covers the DB-configured
             // handling fee for this cart's weight. We allow the client to include
             // extra (e.g. shipping) on top of subtotal+handling, but not less.
             $serverHandlingFee = $this->calculateHandlingFee($serverTotalWeightKg);
-            $clientSubtotal = (float) ($data['subtotal'] ?? 0);
             $clientTotal = (float) ($data['total_amount'] ?? 0);
-            $minTotal = $clientSubtotal + $serverHandlingFee;
+            $minTotal = $serverSubtotal + $serverHandlingFee;
             if ($clientTotal + 0.01 < $minTotal) {
                 return response()->json([
                     'success' => false,
@@ -377,7 +409,7 @@ class OrderController extends Controller
             // Create order detail first
             $orderDetailData = [
                 'order_code' => $data['order_code'] ?? '#ORD-' . strtoupper(Str::random(10)),
-                'subtotal' => $data['subtotal'],
+                'subtotal' => $serverSubtotal,
                 'shipping_fee' => $data['shipping_fee'] ?? 0.00,
                 'total_amount' => $data['total_amount'],
                 'address_id' => $data['shipping_address_id'],
@@ -405,12 +437,25 @@ class OrderController extends Controller
             // Create order items and update item inventory
             if (isset($data['items']) && is_array($data['items'])) {
                 foreach ($data['items'] as $item) {
+                    $locked = $lockedItems[$item['item_id']] ?? null;
+                    $unitPrice = $locked['unit_price']
+                        ?? Item::find($item['item_id'])?->getEffectivePrice()
+                        ?? (float) $item['price_at_purchase'];
+                    $originalPrice = $locked['original_price'] ?? $unitPrice;
+                    $discountPercent = $locked['discount_percent_at_purchase'] ?? 0;
+                    $itemName = $locked['item_name_at_purchase']
+                        ?? Item::find($item['item_id'])?->item_name
+                        ?? '';
+
                     OrderItem::create([
                         'order_id' => $order->id,
                         'item_id' => (int) $item['item_id'],
                         'shop_id' => (int) $item['shop_id'],
+                        'item_name_at_purchase' => $itemName,
                         'quantity' => (int) $item['quantity'],
-                        'price_at_purchase' => (float) $item['price_at_purchase'],
+                        'price_at_purchase' => (float) $unitPrice,
+                        'original_price' => (float) $originalPrice,
+                        'discount_percent_at_purchase' => (float) $discountPercent,
                         'item_status' => 1,
                     ]);
 
@@ -631,10 +676,22 @@ class OrderController extends Controller
 
         foreach ($data['items'] as $entry) {
             $quantity = (int) $entry['quantity'];
-            $subtotal += (float) $entry['price_at_purchase'] * $quantity;
+            $itemModel = $items->get($entry['item_id']);
+            $unitPrice = $itemModel ? $itemModel->getEffectivePrice() : (float) $entry['price_at_purchase'];
+
+            if ($itemModel && abs($unitPrice - (float) $entry['price_at_purchase']) > 0.01) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'One or more item prices have changed. Please refresh your cart.',
+                    'item_id' => $entry['item_id'],
+                    'expected_price' => $unitPrice,
+                    'received_price' => (float) $entry['price_at_purchase'],
+                ], 422);
+            }
+
+            $subtotal += $unitPrice * $quantity;
 
             // Look up item's weight & metric, convert to kg, and multiply by quantity
-            $itemModel = $items->get($entry['item_id']);
             if ($itemModel && $itemModel->weight !== null) {
                 $totalWeightKg += $this->convertToKg((float) $itemModel->weight, $itemModel->metric) * $quantity;
             }

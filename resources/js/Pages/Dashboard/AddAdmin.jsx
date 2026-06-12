@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Head, useForm, router } from '@inertiajs/react'
 import { ArrowLeft, Check, X, AlertTriangle } from 'lucide-react'
 import SuperAdminKlasmeytLayout from '../../Layouts/SuperAdminKlasmeytLayout'
+import PasswordInput from '../../Components/PasswordInput'
 import { useDashboardSession } from '../../hooks/useDashboardSession'
 
 const inputClass =
@@ -314,8 +315,7 @@ export default function AddAdmin({ auth }) {
                                             <label className="mb-2 block text-sm font-semibold text-[#102059]">
                                                 Password <span className="text-[#E20E28]">*</span>
                                             </label>
-                                            <input
-                                                type="password"
+                                            <PasswordInput
                                                 className={`${inputClass} ${inputError(form.errors.password)}`}
                                                 value={form.data.password}
                                                 onChange={(e) => form.setData('password', e.target.value)}
@@ -327,8 +327,7 @@ export default function AddAdmin({ auth }) {
                                             <label className="mb-2 block text-sm font-semibold text-[#102059]">
                                                 Confirm password <span className="text-[#E20E28]">*</span>
                                             </label>
-                                            <input
-                                                type="password"
+                                            <PasswordInput
                                                 className={`${inputClass} ${inputError(form.errors.password_confirmation)}`}
                                                 value={form.data.password_confirmation}
                                                 onChange={(e) => form.setData('password_confirmation', e.target.value)}

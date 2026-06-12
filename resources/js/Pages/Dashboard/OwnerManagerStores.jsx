@@ -11,8 +11,16 @@ function formatShopStatus(status) {
     return status === 'active' ? 'Active' : 'Inactive'
 }
 
+function shopCoverUrl(logoUrl) {
+    if (!logoUrl) return null
+    if (logoUrl.startsWith('http://') || logoUrl.startsWith('https://') || logoUrl.startsWith('/')) {
+        return logoUrl
+    }
+    return `/storage/${logoUrl}`
+}
+
 function shopCover(shop) {
-    return shop.logo_url || DEFAULT_COVER
+    return shopCoverUrl(shop.logo_url) || DEFAULT_COVER
 }
 
 export default function OwnerManagerStores({ auth, agrivet, shops = [] }) {
@@ -104,7 +112,7 @@ export default function OwnerManagerStores({ auth, agrivet, shops = [] }) {
                                     <div className="relative h-40 w-full overflow-hidden bg-[#F8F9FB]">
                                         <img
                                             src={shopCover(shop)}
-                                            alt={shop.shop_name}
+                                            alt={`${shop.shop_name} storefront`}
                                             className="w-full h-full object-cover"
                                         />
                                         <span

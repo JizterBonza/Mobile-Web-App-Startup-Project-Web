@@ -26,6 +26,9 @@ class Item extends Model
         'item_name',
         'item_description',
         'item_price',
+        'discount_percent',
+        'discount_type',
+        'discount_expires_at',
         'item_quantity',
         'category',
         'item_images',
@@ -44,6 +47,8 @@ class Item extends Model
     {
         return [
             'item_price' => 'decimal:2',
+            'discount_percent' => 'decimal:2',
+            'discount_expires_at' => 'datetime',
             'item_quantity' => 'integer',
             'item_images' => 'array',
             'average_rating' => 'decimal:2',
@@ -83,7 +88,50 @@ class Item extends Model
      *
      * @var array<int, string>
      */
-    protected $appends = ['shop_name'];
+    protected $appends = ['shop_name', 'effective_price', 'active_discount_percent'];
+
+    /**
+     * Active discount percentage (0 when expired or unset).
+     */
+    public function getActiveDiscountPercent(): float
+    {
+        if ($this->discount_percent === null || (float) $this->discount_percent <= 0) {
+            return 0.0;
+        }
+
+        if ($this->discount_type === 'timed' && $this->discount_expires_at !== null) {
+            if (now()->greaterThan($this->discount_expires_at)) {
+                return 0.0;
+            }
+        }
+
+        return (float) $this->discount_percent;
+    }
+
+    /**
+     * Price after applying an active discount.
+     */
+    public function getEffectivePrice(): float
+    {
+        $discount = $this->getActiveDiscountPercent();
+        $price = (float) $this->item_price;
+
+        if ($discount <= 0) {
+            return round($price, 2);
+        }
+
+        return round($price * (1 - $discount / 100), 2);
+    }
+
+    public function getEffectivePriceAttribute(): float
+    {
+        return $this->getEffectivePrice();
+    }
+
+    public function getActiveDiscountPercentAttribute(): float
+    {
+        return $this->getActiveDiscountPercent();
+    }
 
     /**
      * Get the shop name from the related shop.

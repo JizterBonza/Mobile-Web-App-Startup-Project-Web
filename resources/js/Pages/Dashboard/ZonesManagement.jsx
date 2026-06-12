@@ -31,9 +31,11 @@ export default function ZonesManagement({ auth, zones = [], flash }) {
   const [itemsPerPage, setItemsPerPage] = useState(10)
   const [currentPage, setCurrentPage] = useState(1)
 
+  const [togglingZoneId, setTogglingZoneId] = useState(null)
+  const [isDeleting, setIsDeleting] = useState(false)
+
   const addForm = useForm({ name: '', description: '', boundary: [], status: 'active' })
   const editForm = useForm({ name: '', description: '', boundary: [], status: 'active' })
-  const statusToggleForm = useForm({ name: '', description: '', boundary: [], status: 'active' })
 
   useEffect(() => {
     if (showAddModal) setTimeout(() => setShowAddModalAnimation(true), 10)
@@ -69,6 +71,7 @@ export default function ZonesManagement({ auth, zones = [], flash }) {
   }
 
   const closeRemoveModal = () => {
+    if (isDeleting) return
     setShowRemoveModalAnimation(false)
     setTimeout(() => {
       setShowRemoveModal(false)
@@ -98,16 +101,23 @@ export default function ZonesManagement({ auth, zones = [], flash }) {
 
   const handleStatusToggle = (e, zone) => {
     e.stopPropagation()
-    if (statusToggleForm.processing) return
-    const isActive = (zone.status_label || zone.status) === 'active'
+    if (togglingZoneId !== null) return
+    const isActive = zone.status_label === 'active' || zone.status === true
     const newStatus = isActive ? 'inactive' : 'active'
-    statusToggleForm.setData({
-      name: zone.name,
-      description: zone.description || '',
-      boundary: Array.isArray(zone.boundary) ? zone.boundary : [],
-      status: newStatus,
-    })
-    statusToggleForm.put(`${baseRoute}/${zone.id}`, { preserveScroll: true })
+    setTogglingZoneId(zone.id)
+    router.put(
+      `${baseRoute}/${zone.id}`,
+      {
+        name: zone.name,
+        description: zone.description || '',
+        boundary: Array.isArray(zone.boundary) ? zone.boundary : [],
+        status: newStatus,
+      },
+      {
+        preserveScroll: true,
+        onFinish: () => setTogglingZoneId(null),
+      },
+    )
   }
 
   const handleAddZone = (e) => {
@@ -146,26 +156,40 @@ export default function ZonesManagement({ auth, zones = [], flash }) {
     })
   }
 
-  const handleDeleteZone = (id) => {
-    const z = zones.find((x) => x.id === id)
-    setZoneToRemove(z)
+  const handleDeleteZone = (zone) => {
+    setZoneToRemove(zone)
     setShowRemoveModal(true)
     setShowRemoveModalAnimation(false)
   }
 
   const confirmDeleteZone = () => {
-    if (zoneToRemove) {
-      router.delete(`${baseRoute}/${zoneToRemove.id}`, {
-        preserveScroll: true,
-        onSuccess: () => closeRemoveModal(),
-      })
-    }
+    if (!zoneToRemove || isDeleting) return
+    setIsDeleting(true)
+    router.delete(`${baseRoute}/${zoneToRemove.id}`, {
+      preserveScroll: true,
+      onSuccess: () => {
+        setIsDeleting(false)
+        closeRemoveModal()
+      },
+      onError: () => setIsDeleting(false),
+      onFinish: () => setIsDeleting(false),
+    })
   }
+
+  const zonesWithBoundary = useMemo(
+    () => zones.filter((z) => Array.isArray(z.boundary) && z.boundary.length >= 3),
+    [zones]
+  )
+
+  const editMapReferenceZones = useMemo(
+    () => zonesWithBoundary.filter((z) => z.id !== selectedZone?.id),
+    [zonesWithBoundary, selectedZone?.id]
+  )
 
   const sortedZones = useMemo(() => {
     const q = searchQuery.trim().toLowerCase()
     let list = zones.filter((z) => {
-      const isActive = (z.status_label || z.status) === 'active'
+      const isActive = z.status_label === 'active' || z.status === true
       if (statusFilter === 'Active' && !isActive) return false
       if (statusFilter === 'Inactive' && isActive) return false
       if (!q) return true
@@ -287,7 +311,7 @@ export default function ZonesManagement({ auth, zones = [], flash }) {
           <div className="divide-y divide-[#E5E7EB]">
             {displayedZones.length > 0 ? (
               displayedZones.map((z) => {
-                const isActive = (z.status_label || z.status) === 'active'
+                const isActive = z.status_label === 'active' || z.status === true
                 const dateAdded = z.created_at
                   ? new Date(z.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
                   : 'N/A'
@@ -325,7 +349,7 @@ export default function ZonesManagement({ auth, zones = [], flash }) {
                           <button
                             type="button"
                             onClick={(e) => handleStatusToggle(e, z)}
-                            disabled={statusToggleForm.processing}
+                            disabled={togglingZoneId === z.id}
                             className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-all duration-300 disabled:opacity-50 ${
                               isActive ? 'bg-[#00C950]' : 'bg-[#D1D5DB]'
                             }`}
@@ -355,7 +379,7 @@ export default function ZonesManagement({ auth, zones = [], flash }) {
                           </button>
                           <button
                             type="button"
-                            onClick={() => handleDeleteZone(z.id)}
+                            onClick={() => handleDeleteZone(z)}
                             className="rounded-lg p-1.5 text-[#E20E28] transition-colors hover:bg-[#FEE2E2]"
                             title="Delete zone"
                           >
@@ -454,9 +478,12 @@ export default function ZonesManagement({ auth, zones = [], flash }) {
                     <div className="form-group">
                       <label>Zone boundary (draw on map) <span className="text-danger">*</span></label>
                       <ZoneDrawMap
+                        key={showAddModal ? 'add-zone-map' : 'add-zone-map-closed'}
                         initialBoundary={addForm.data.boundary}
+                        otherZones={zonesWithBoundary}
                         onBoundaryChange={(boundary) => addForm.setData('boundary', boundary)}
                         height={320}
+                        active={showAddModalAnimation}
                       />
                       {addForm.errors.boundary && <div className="invalid-feedback d-block">{addForm.errors.boundary}</div>}
                     </div>
@@ -528,8 +555,10 @@ export default function ZonesManagement({ auth, zones = [], flash }) {
                       <ZoneDrawMap
                         key={selectedZone.id}
                         initialBoundary={editForm.data.boundary}
+                        otherZones={editMapReferenceZones}
                         onBoundaryChange={(boundary) => editForm.setData('boundary', boundary)}
                         height={320}
+                        active={showEditModalAnimation}
                       />
                       {editForm.errors.boundary && <div className="invalid-feedback d-block">{editForm.errors.boundary}</div>}
                     </div>
@@ -563,22 +592,49 @@ export default function ZonesManagement({ auth, zones = [], flash }) {
       {/* Delete Confirmation Modal */}
       {showRemoveModal && zoneToRemove && (
         <>
-          <div className={`modal-backdrop fade ${showRemoveModalAnimation ? 'show' : ''}`} onClick={closeRemoveModal}></div>
-          <div className={`modal fade ${showRemoveModalAnimation ? 'show' : ''} d-block`} tabIndex="-1" style={{ zIndex: 1050 }}>
-            <div className="modal-dialog modal-dialog-centered">
-              <div className="modal-content">
-                <div className="modal-header">
-                  <h4 className="modal-title">Confirm Delete</h4>
-                  <button type="button" className="close" onClick={closeRemoveModal}><span>&times;</span></button>
-                </div>
-                <div className="modal-body">
-                  <p>Are you sure you want to delete zone <strong>{zoneToRemove.name}</strong>?</p>
-                  <p className="text-muted mb-0">Shops in this zone will be unassigned from the zone. This action cannot be undone.</p>
-                </div>
-                <div className="modal-footer">
-                  <button type="button" className="btn btn-secondary" onClick={closeRemoveModal}>Cancel</button>
-                  <button type="button" className="btn btn-danger" onClick={confirmDeleteZone}>Delete Zone</button>
-                </div>
+          <button
+            type="button"
+            className={`fixed inset-0 z-40 bg-black/40 transition-opacity ${showRemoveModalAnimation ? 'opacity-100' : 'opacity-0'}`}
+            aria-label="Close"
+            onClick={closeRemoveModal}
+            disabled={isDeleting}
+          />
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-none">
+            <div
+              className={`pointer-events-auto w-full max-w-md rounded-2xl border border-[#E5E7EB] bg-white p-6 shadow-xl transition-all ${
+                showRemoveModalAnimation ? 'translate-y-0 opacity-100' : 'translate-y-2 opacity-0'
+              }`}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="delete-zone-title"
+            >
+              <h4 id="delete-zone-title" className="text-lg font-bold text-[#102059]">
+                Delete zone
+              </h4>
+              <p className="mt-3 text-sm text-[#6B7280]">
+                Are you sure you want to delete{' '}
+                <strong className="text-[#1F2937]">{zoneToRemove.name}</strong>?
+              </p>
+              <p className="mt-2 text-sm text-[#6B7280]">
+                Shops in this zone will be unassigned. This action cannot be undone.
+              </p>
+              <div className="mt-6 flex justify-end gap-3">
+                <button
+                  type="button"
+                  className="rounded-full border border-[#E5E7EB] bg-white px-5 py-2 text-sm font-medium text-[#374151] transition-colors hover:bg-[#F3F4F6] disabled:opacity-60"
+                  onClick={closeRemoveModal}
+                  disabled={isDeleting}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="rounded-full bg-[#E20E28] px-5 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#c40b22] disabled:opacity-60"
+                  onClick={confirmDeleteZone}
+                  disabled={isDeleting}
+                >
+                  {isDeleting ? 'Deleting…' : 'Delete Zone'}
+                </button>
               </div>
             </div>
           </div>

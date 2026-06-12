@@ -56,6 +56,7 @@ trait ManagesShopOrders
             ->leftJoin('addresses', 'order_details.address_id', '=', 'addresses.id')
             ->select(
                 'orders.id',
+                'orders.user_id',
                 'orders.ordered_at',
                 'order_details.delivery_method_id as order_delivery_method_id',
                 'delivery_method.description as delivery_method_name',
@@ -87,9 +88,12 @@ trait ManagesShopOrders
             ->select(
                 'order_items.order_id',
                 'order_items.id',
+                'order_items.item_name_at_purchase',
                 'items.item_name',
                 'order_items.quantity',
                 'order_items.price_at_purchase',
+                'order_items.original_price',
+                'order_items.discount_percent_at_purchase',
                 'order_items.item_status as item_status_id',
                 'order_item_status.stat_description as item_status_description',
                 'items.item_images',
@@ -130,6 +134,10 @@ trait ManagesShopOrders
             ->groupBy('order_id')
             ->map(fn ($rows) => $rows->pluck('shop_id')->map(fn ($id) => (int) $id)->values()->all());
 
+        $shopNameById = DB::table('shops')
+            ->whereIn('id', $shopIds)
+            ->pluck('shop_name', 'id');
+
         $declineByOrder = collect();
         if (Schema::hasTable('order_logs')) {
             $declineByOrder = DB::table('order_logs')
@@ -141,16 +149,18 @@ trait ManagesShopOrders
                 ->keyBy('order_id');
         }
 
-        return $orderRows->map(function ($row) use ($itemsByOrder, $ridersByOrder, $proofByOrder, $shopIdsByOrder, $declineByOrder, $deliveryMethodNames, $deliveryMethodInfos, $preparingItemStatusId) {
+        return $orderRows->map(function ($row) use ($itemsByOrder, $ridersByOrder, $proofByOrder, $shopIdsByOrder, $shopNameById, $declineByOrder, $deliveryMethodNames, $deliveryMethodInfos, $preparingItemStatusId) {
             $statusMeta = $this->mapShopOrderStatus($row->status_description ?? '');
             $products = ($itemsByOrder->get($row->id) ?? collect())->map(function ($item) {
                 $thumbnail = $this->firstItemImageUrl($item->item_images);
 
                 return [
                     'id'           => (int) $item->id,
-                    'name'         => $item->item_name,
+                    'name'         => $item->item_name_at_purchase ?: $item->item_name,
                     'quantity'     => (int) $item->quantity,
                     'price'        => (float) $item->price_at_purchase,
+                    'originalPrice' => (float) ($item->original_price ?? $item->price_at_purchase),
+                    'discount'     => (float) ($item->discount_percent_at_purchase ?? 0),
                     'thumbnail'    => $thumbnail,
                     'itemStatusId' => (int) $item->item_status_id,
                     'itemStatus'   => $item->item_status_description ?? 'Unknown',
@@ -184,10 +194,19 @@ trait ManagesShopOrders
             $deliveryMethodInfo = $row->delivery_method_info
                 ?? ($deliveryMethodId ? ($deliveryMethodInfos[$deliveryMethodId] ?? null) : null);
 
+            $orderShopIds = $shopIdsByOrder->get($row->id, []);
+            $orderShopNames = collect($orderShopIds)
+                ->map(fn (int $shopId) => $shopNameById[$shopId] ?? null)
+                ->filter()
+                ->values()
+                ->all();
+
             $payload = [
                 'id'                     => (int) $row->id,
                 'orderNumber'            => 'ORD-'.$row->id,
-                'shopIds'                => $shopIdsByOrder->get($row->id, []),
+                'shopIds'                => $orderShopIds,
+                'shopNames'              => $orderShopNames,
+                'customerId'             => (int) $row->user_id,
                 'customerName'           => trim(($row->first_name ?? '').' '.($row->last_name ?? '')),
                 'customerPhone'          => $customerPhone,
                 'customerProfilePicture' => $row->profile_image_url ?: $row->avatar,
@@ -200,6 +219,7 @@ trait ManagesShopOrders
                     'province' => $row->province ?? '',
                 ],
                 'status'                 => $statusMeta['status'],
+                'statusDescription'      => $row->status_description ?? null,
                 'deliveryMethodId'       => $deliveryMethodId,
                 'deliveryMethodName'     => $deliveryMethodName,
                 'deliveryMethod'         => $deliveryMethodId ? [

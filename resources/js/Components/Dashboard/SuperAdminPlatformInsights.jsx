@@ -3,10 +3,10 @@ import {
     Bike,
     Building2,
     Package,
+    Shield,
     ShoppingCart,
     Star,
     Store,
-    Stethoscope,
     TrendingUp,
     UserCog,
     Users,
@@ -16,7 +16,6 @@ const defaultUserStats = {
     admins: { total: 0, active: 0, inactive: 0 },
     agrivets: { total: 0, active: 0, inactive: 0 },
     vendors: { total: 0, active: 0, inactive: 0 },
-    veterinarians: { total: 0, active: 0, inactive: 0 },
     riders: { total: 0, active: 0, inactive: 0 },
 }
 
@@ -79,11 +78,14 @@ export function SuperAdminPlatformInsights({
     topStores = [],
     topRiders = [],
 }) {
+    const showSuperAdminStats = userStatsProp?.superAdmins != null
     const userStats = {
+        superAdmins: showSuperAdminStats
+            ? normalizeRoleStats(userStatsProp.superAdmins, defaultUserStats.admins)
+            : null,
         admins: normalizeRoleStats(userStatsProp?.admins, defaultUserStats.admins),
         agrivets: normalizeRoleStats(userStatsProp?.agrivets, defaultUserStats.agrivets),
         vendors: normalizeRoleStats(userStatsProp?.vendors, defaultUserStats.vendors),
-        veterinarians: normalizeRoleStats(userStatsProp?.veterinarians, defaultUserStats.veterinarians),
         riders: normalizeRoleStats(userStatsProp?.riders, defaultUserStats.riders),
     }
     const orderMetrics = { ...defaultOrderMetrics, ...orderMetricsProp }
@@ -108,7 +110,21 @@ export function SuperAdminPlatformInsights({
                     </div>
                 </div>
 
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-5">
+                <div
+                    className={`grid grid-cols-1 gap-4 md:grid-cols-2 ${
+                        showSuperAdminStats ? 'lg:grid-cols-3 xl:grid-cols-5' : 'lg:grid-cols-4'
+                    }`}
+                >
+                    {showSuperAdminStats && (
+                        <UserRoleCard
+                            title="Super Admin"
+                            total={userStats.superAdmins.total}
+                            active={userStats.superAdmins.active}
+                            inactive={userStats.superAdmins.inactive}
+                            icon={Shield}
+                            iconBg="bg-[#244693]"
+                        />
+                    )}
                     <UserRoleCard
                         title="Admins"
                         total={userStats.admins.total}
@@ -132,14 +148,6 @@ export function SuperAdminPlatformInsights({
                         inactive={userStats.vendors.inactive}
                         icon={Store}
                         iconBg="bg-[#D3A218]"
-                    />
-                    <UserRoleCard
-                        title="Veterinarians"
-                        total={userStats.veterinarians.total}
-                        active={userStats.veterinarians.active}
-                        inactive={userStats.veterinarians.inactive}
-                        icon={Stethoscope}
-                        iconBg="bg-[#102059]"
                     />
                     <UserRoleCard
                         title="Rider"

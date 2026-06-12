@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useForm, router } from '@inertiajs/react'
 import SuperAdminOrAdminLayout from '../../Layouts/SuperAdminOrAdminLayout'
+import PasswordInput from '../../Components/PasswordInput'
 
 export default function UserManagement({ auth, users = [], flash }) {
   const [showAddModal, setShowAddModal] = useState(false)
@@ -489,8 +490,8 @@ export default function UserManagement({ auth, users = [], flash }) {
                     <div className="col-md-6">
                       <div className="form-group">
                         <label>Password <span className="text-danger">*</span></label>
-                        <input
-                          type="password"
+                        <PasswordInput
+                          variant="bootstrap"
                           className={`form-control ${addForm.errors.password ? 'is-invalid' : ''}`}
                           value={addForm.data.password}
                           onChange={(e) => addForm.setData('password', e.target.value)}
@@ -504,8 +505,8 @@ export default function UserManagement({ auth, users = [], flash }) {
                     <div className="col-md-6">
                       <div className="form-group">
                         <label>Confirm Password <span className="text-danger">*</span></label>
-                        <input
-                          type="password"
+                        <PasswordInput
+                          variant="bootstrap"
                           className={`form-control ${addForm.errors.password_confirmation ? 'is-invalid' : ''}`}
                           value={addForm.data.password_confirmation}
                           onChange={(e) => addForm.setData('password_confirmation', e.target.value)}
@@ -692,8 +693,8 @@ export default function UserManagement({ auth, users = [], flash }) {
                     <div className="col-md-6">
                       <div className="form-group">
                         <label>Password (leave blank to keep current)</label>
-                        <input
-                          type="password"
+                        <PasswordInput
+                          variant="bootstrap"
                           className={`form-control ${editForm.errors.password ? 'is-invalid' : ''}`}
                           value={editForm.data.password}
                           onChange={(e) => editForm.setData('password', e.target.value)}
@@ -707,8 +708,8 @@ export default function UserManagement({ auth, users = [], flash }) {
                     <div className="col-md-6">
                       <div className="form-group">
                         <label>Confirm Password</label>
-                        <input
-                          type="password"
+                        <PasswordInput
+                          variant="bootstrap"
                           className={`form-control ${editForm.errors.password_confirmation ? 'is-invalid' : ''}`}
                           value={editForm.data.password_confirmation}
                           onChange={(e) => editForm.setData('password_confirmation', e.target.value)}

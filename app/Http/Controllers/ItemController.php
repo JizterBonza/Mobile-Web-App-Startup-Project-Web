@@ -97,9 +97,13 @@ class ItemController extends Controller
         // Get item data without the rating_reviews relationship
         $itemData = $item->only([
             'id', 'shop_id', 'item_name', 'item_description', 'item_price',
+            'discount_percent', 'discount_type', 'discount_expires_at',
             'item_quantity', 'category', 'item_images', 'item_status',
             'average_rating', 'total_reviews', 'sold_count', 'created_at', 'updated_at'
         ]);
+
+        $itemData['effective_price'] = $item->getEffectivePrice();
+        $itemData['active_discount_percent'] = $item->getActiveDiscountPercent();
         
         // Add reviews
         $itemData['reviews'] = $item->ratingReviews->map(function ($review) {
