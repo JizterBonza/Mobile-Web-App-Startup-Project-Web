@@ -117,6 +117,7 @@ Route::middleware(['auth', 'session.valid', 'user.type:super_admin'])->prefix('d
 Route::middleware(['auth', 'session.valid', 'user.type:super_admin'])->prefix('dashboard/super-admin/categories')->name('dashboard.super-admin.categories.')->group(function () {
     Route::get('/', [CategoryController::class, 'dashboardIndex'])->name('index');
     Route::post('/', [CategoryController::class, 'store'])->name('store');
+    Route::get('/{id}/rate-history', [CategoryController::class, 'rateHistory'])->name('rate-history');
     Route::put('/{id}', [CategoryController::class, 'update'])->name('update');
     Route::delete('/{id}', [CategoryController::class, 'destroy'])->name('destroy');
 });
@@ -253,6 +254,7 @@ Route::middleware(['auth', 'session.valid', 'user.type:admin'])->prefix('dashboa
 Route::middleware(['auth', 'session.valid', 'user.type:admin'])->prefix('dashboard/admin/categories')->name('dashboard.admin.categories.')->group(function () {
     Route::get('/', [CategoryController::class, 'dashboardIndex'])->name('index');
     Route::post('/', [CategoryController::class, 'store'])->name('store');
+    Route::get('/{id}/rate-history', [CategoryController::class, 'rateHistory'])->name('rate-history');
     Route::put('/{id}', [CategoryController::class, 'update'])->name('update');
     Route::delete('/{id}', [CategoryController::class, 'destroy'])->name('destroy');
 });

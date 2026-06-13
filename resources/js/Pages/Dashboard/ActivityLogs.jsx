@@ -17,6 +17,7 @@ function actionBadgeClass(action) {
     case 'created': return 'bg-[#DCFCE7] text-[#15803D]'
     case 'updated': return 'bg-[#DBEAFE] text-[#1D4ED8]'
     case 'deleted': return 'bg-[#FEE2E2] text-[#B91C1C]'
+    case 'category_rate_changed': return 'bg-[#FEF3C7] text-[#B45309]'
     default: return 'bg-[#F3F4F6] text-[#6B7280]'
   }
 }

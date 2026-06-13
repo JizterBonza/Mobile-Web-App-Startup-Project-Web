@@ -25,6 +25,7 @@ class Category extends Model
         'category_name',
         'category_description',
         'category_image_url',
+        'category_rate',
         'status',
     ];
 
@@ -36,6 +37,7 @@ class Category extends Model
     protected function casts(): array
     {
         return [
+            'category_rate' => 'decimal:2',
             'created_at' => 'datetime',
             'updated_at' => 'datetime',
         ];
@@ -47,6 +49,14 @@ class Category extends Model
     public function items()
     {
         return $this->hasMany(Item::class, 'category');
+    }
+
+    /**
+     * Get rate change history for this category.
+     */
+    public function rateLogs()
+    {
+        return $this->hasMany(CategoryRateLog::class)->orderByDesc('created_at');
     }
 }
 

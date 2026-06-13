@@ -8,6 +8,11 @@ use App\Models\UserDetail;
 use App\Models\UserCredential;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+<<<<<<< HEAD
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Crypt;
+=======
+>>>>>>> 7b90743d8b66fdac123379e29246cebe22df0bd2
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Http;
@@ -17,14 +22,40 @@ use Laravel\Socialite\Facades\Socialite;
 class SocialAuthController extends Controller
 {
     /**
+<<<<<<< HEAD
+     * Redirect to provider's OAuth page.
+     *
+     * Mobile clients may pass a `redirect_uri` query param (e.g. `klasmeyt://auth`).
+     * When present, it is encrypted into the OAuth `state` parameter and used by
+     * the callback to deep-link back into the app with the issued token.
+=======
      * Redirect to provider's OAuth page (web / browser flow).
+>>>>>>> 7b90743d8b66fdac123379e29246cebe22df0bd2
      */
-    public function redirect($provider)
+    public function redirect(Request $request, $provider)
     {
         $this->validateProvider($provider);
 
+<<<<<<< HEAD
+        $driver = Socialite::driver($provider)->stateless();
+
+        if ($redirectUri = $request->query('redirect_uri')) {
+            $this->validateMobileRedirectUri($redirectUri);
+
+            $state = Crypt::encryptString(json_encode([
+                'redirect_uri' => $redirectUri,
+                'nonce' => Str::random(16),
+            ]));
+
+            $driver = $driver->with(['state' => $state]);
+        }
+
+        return response()->json([
+            'url' => $driver->redirect()->getTargetUrl(),
+=======
         return response()->json([
             'url' => Socialite::driver($provider)->stateless()->redirect()->getTargetUrl(),
+>>>>>>> 7b90743d8b66fdac123379e29246cebe22df0bd2
         ]);
     }
 
@@ -35,6 +66,8 @@ class SocialAuthController extends Controller
     {
         $this->validateProvider($provider);
 
+        $mobileRedirectUri = $this->extractMobileRedirectUri($request);
+
         try {
             if (app()->environment('local')) {
                 $socialUser = Socialite::driver($provider)
@@ -44,6 +77,102 @@ class SocialAuthController extends Controller
             } else {
                 $socialUser = Socialite::driver($provider)->stateless()->user();
             }
+
+            $userDetail = UserDetail::where('email', $socialUser->getEmail())->first();
+
+            if (!$userDetail) {
+                DB::beginTransaction();
+
+                try {
+                    $nameParts = $this->parseName($socialUser->getName());
+
+                    $userDetail = UserDetail::create([
+                        'first_name' => $nameParts['first_name'],
+                        'middle_name' => $nameParts['middle_name'],
+                        'last_name' => $nameParts['last_name'],
+                        'email' => $socialUser->getEmail(),
+                        'email_confirmed' => true,
+                        'mobile_number' => null,
+                        'shipping_address' => null,
+                        'profile_image_url' => $socialUser->getAvatar(),
+                        'avatar' => $socialUser->getAvatar(),
+                        'provider' => $provider,
+                        'provider_id' => $socialUser->getId(),
+                    ]);
+
+                    $username = $this->generateUsername($socialUser->getEmail(), $provider);
+
+                    $userCredential = UserCredential::create([
+                        'username' => $username,
+                        'password_hash' => Hash::make(Str::random(32)),
+                    ]);
+
+                    $user = User::create([
+                        'user_detail_id' => $userDetail->id,
+                        'user_credential_id' => $userCredential->id,
+                        'status' => 'active',
+                        'user_type' => 'customer',
+                    ]);
+
+                    $user->load(['userDetail', 'userCredential']);
+
+                    DB::commit();
+
+                    $isNewUser = true;
+                } catch (\Exception $e) {
+                    DB::rollBack();
+                    throw $e;
+                }
+            } else {
+                $user = User::where('user_detail_id', $userDetail->id)->first();
+
+                if (!$user) {
+                    return $this->failureResponse(
+                        $mobileRedirectUri,
+                        'User data inconsistency detected',
+                        'data_inconsistency',
+                        500
+                    );
+                }
+
+                $userDetail->update([
+                    'profile_image_url' => $socialUser->getAvatar() ?? $userDetail->profile_image_url,
+                    'avatar' => $socialUser->getAvatar() ?? $userDetail->avatar,
+                    'email_confirmed' => true,
+                    'provider' => $provider,
+                    'provider_id' => $socialUser->getId(),
+                ]);
+
+                $user->load(['userDetail', 'userCredential']);
+
+                $isNewUser = false;
+            }
+
+            $token = $user->createToken('mobile-token')->plainTextToken;
+            $profileComplete = $this->isProfileComplete($userDetail);
+
+            if ($mobileRedirectUri) {
+                return redirect()->away($this->appendQuery($mobileRedirectUri, [
+                    'token' => $token,
+                    'is_new_user' => $isNewUser ? '1' : '0',
+                    'profile_complete' => $profileComplete ? '1' : '0',
+                ]));
+            }
+
+            return response()->json([
+                'success' => true,
+                'token' => $token,
+                'user' => $user,
+                'is_new_user' => $isNewUser,
+                'profile_complete' => $profileComplete,
+            ]);
+        } catch (\Exception $e) {
+            return $this->failureResponse(
+                $mobileRedirectUri,
+                'Failed to authenticate with ' . $provider,
+                $e->getMessage(),
+                401
+            );
 
             $result = $this->authenticateSocialUser(
                 $provider,
@@ -75,6 +204,77 @@ class SocialAuthController extends Controller
     }
 
     /**
+     * Decode `redirect_uri` from the encrypted OAuth `state` parameter, if any.
+     */
+    protected function extractMobileRedirectUri(Request $request): ?string
+    {
+        $state = $request->query('state');
+
+        if (!$state) {
+            return null;
+        }
+
+        try {
+            $payload = json_decode(Crypt::decryptString($state), true);
+        } catch (\Throwable $e) {
+            return null;
+        }
+
+        if (!is_array($payload) || empty($payload['redirect_uri'])) {
+            return null;
+        }
+
+        $candidate = (string) $payload['redirect_uri'];
+
+        return $this->isAllowedMobileRedirectUri($candidate) ? $candidate : null;
+    }
+
+    /**
+     * Whitelist of allowed mobile deep-link schemes.
+     */
+    protected function isAllowedMobileRedirectUri(string $uri): bool
+    {
+        return Str::startsWith($uri, 'klasmeyt://');
+    }
+
+    protected function validateMobileRedirectUri(string $uri): void
+    {
+        if (!$this->isAllowedMobileRedirectUri($uri)) {
+            abort(422, 'Invalid redirect_uri');
+        }
+    }
+
+    /**
+     * Append query parameters to a URI, preserving any existing query string.
+     */
+    protected function appendQuery(string $uri, array $params): string
+    {
+        $separator = str_contains($uri, '?') ? '&' : '?';
+
+        return $uri . $separator . http_build_query($params);
+    }
+
+    /**
+     * Build a failure response, redirecting to the mobile app when applicable.
+     */
+    protected function failureResponse(?string $mobileRedirectUri, string $message, string $error, int $status)
+    {
+        if ($mobileRedirectUri) {
+            return redirect()->away($this->appendQuery($mobileRedirectUri, [
+                'error' => $error,
+                'message' => $message,
+            ]));
+        }
+
+        return response()->json([
+            'success' => false,
+            'message' => $message,
+            'error' => $error,
+        ], $status);
+    }
+
+    /**
+     * Validate provider
      * Native mobile Google sign-in (Flutter google_sign_in ID token).
      */
     public function googleToken(Request $request): JsonResponse
