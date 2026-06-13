@@ -98,6 +98,14 @@ class Item extends Model
     protected $appends = ['shop_name', 'effective_price', 'active_discount_percent'];
 
     /**
+     * Scope to product bundle items.
+     */
+    public function scopeBundled($query)
+    {
+        return $query->where('is_bundle', true);
+    }
+
+    /**
      * Scope to items with a discount that is not yet expired.
      */
     public function scopeWithActiveDiscount($query)

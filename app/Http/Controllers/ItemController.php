@@ -128,6 +128,41 @@ class ItemController extends Controller
     }
 
     /**
+     * Fetch product bundle items.
+     *
+     * @param Request $request
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function bundled(Request $request)
+    {
+        $query = Item::query()->bundled();
+
+        if ($request->has('status')) {
+            $query->where('item_status', $request->status);
+        } else {
+            $query->where('item_status', 'active');
+        }
+
+        if ($request->has('shop_id')) {
+            $query->where('shop_id', $request->shop_id);
+        }
+
+        if ($request->has('category')) {
+            $query->where('category', $request->category);
+        }
+
+        $query->orderBy('created_at', 'desc');
+
+        $items = $query->get();
+
+        return response()->json([
+            'success' => true,
+            'data' => $items,
+            'count' => $items->count(),
+        ]);
+    }
+
+    /**
      * Fetch items with active (non-expired) discounts.
      *
      * @param Request $request
