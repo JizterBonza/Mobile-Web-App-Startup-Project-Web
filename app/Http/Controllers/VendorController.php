@@ -106,6 +106,14 @@ class VendorController extends Controller
         return app(AgrivetController::class)->showStoreInformation($shop->agrivet->id, $shop->id);
     }
 
+    public function support()
+    {
+        return Inertia::render('Dashboard/VendorSupport', [
+            'tickets' => SupportTicketController::ticketsForUser((int) auth()->id()),
+            'submitTicketUrl' => route('dashboard.vendor.support.tickets.store'),
+        ]);
+    }
+
     /**
      * Add a shop listing from the product catalog (vendor's assigned shop).
      */

@@ -12,6 +12,7 @@ use App\Models\ActivityLog;
 use App\Models\Category;
 use App\Models\ProductCatalog;
 use App\Models\SubCategory;
+use App\Http\Controllers\SupportTicketController;
 
 class DashboardController extends Controller
 {
@@ -450,6 +451,14 @@ class DashboardController extends Controller
             'orders'                => $orders,
             'deliveryMethods'       => $deliveryMethods,
             'preparingItemStatusId' => $preparingItemStatusId ?: null,
+        ]);
+    }
+
+    public function ownerManagerSupport()
+    {
+        return Inertia::render('Dashboard/OwnerManagerSupport', [
+            'tickets' => SupportTicketController::ticketsForUser((int) auth()->id()),
+            'submitTicketUrl' => route('dashboard.owner-manager.support.tickets.store'),
         ]);
     }
 
