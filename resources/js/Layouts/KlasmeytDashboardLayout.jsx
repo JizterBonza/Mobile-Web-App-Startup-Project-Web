@@ -72,18 +72,6 @@ function SuperAdminNav({ productOpen, setProductOpen }) {
                     <SubNavLink href="/dashboard/super-admin/sub-categories">Sub-Categories</SubNavLink>
                 </div>
             )}
-            <NavLink href="/dashboard/super-admin/activity-logs" iconClass="fas fa-history">
-                Activity Logs
-            </NavLink>
-            <NavLink href="/dashboard/super-admin/payment-methods" iconClass="fas fa-credit-card">
-                Payment Methods
-            </NavLink>
-            <NavLink href="/dashboard/super-admin/delivery-methods" iconClass="fas fa-truck">
-                Delivery Methods
-            </NavLink>
-            <NavLink href="/dashboard/super-admin/zones" iconClass="fas fa-map-marked-alt">
-                Zones
-            </NavLink>
         </>
     )
 }
@@ -117,18 +105,6 @@ function AdminNav({ productOpen, setProductOpen }) {
                     <SubNavLink href="/dashboard/admin/sub-categories">Sub-Categories</SubNavLink>
                 </div>
             )}
-            <NavLink href="/dashboard/admin/activity-logs" iconClass="fas fa-history">
-                Activity Logs
-            </NavLink>
-            <NavLink href="/dashboard/admin/payment-methods" iconClass="fas fa-credit-card">
-                Payment Methods
-            </NavLink>
-            <NavLink href="/dashboard/admin/delivery-methods" iconClass="fas fa-truck">
-                Delivery Methods
-            </NavLink>
-            <NavLink href="/dashboard/admin/zones" iconClass="fas fa-map-marked-alt">
-                Zones
-            </NavLink>
         </>
     )
 }
@@ -307,6 +283,34 @@ export default function KlasmeytDashboardLayout({
                                 >
                                     Profile
                                 </Link>
+                                {['super_admin', 'admin'].includes(userType) && (
+                                    <>
+                                        <Link
+                                            href={`${home}/activity-logs`}
+                                            className="block rounded-md px-3 py-2 text-sm text-white/90 hover:bg-white/10"
+                                        >
+                                            Activity Logs
+                                        </Link>
+                                        <Link
+                                            href={`${home}/payment-methods`}
+                                            className="block rounded-md px-3 py-2 text-sm text-white/90 hover:bg-white/10"
+                                        >
+                                            Payment Methods
+                                        </Link>
+                                        <Link
+                                            href={`${home}/delivery-methods`}
+                                            className="block rounded-md px-3 py-2 text-sm text-white/90 hover:bg-white/10"
+                                        >
+                                            Delivery Methods
+                                        </Link>
+                                        <Link
+                                            href={`${home}/zones`}
+                                            className="block rounded-md px-3 py-2 text-sm text-white/90 hover:bg-white/10"
+                                        >
+                                            Zones
+                                        </Link>
+                                    </>
+                                )}
                                 <Link
                                     href="/settings"
                                     className="block rounded-md px-3 py-2 text-sm text-white/90 hover:bg-white/10"

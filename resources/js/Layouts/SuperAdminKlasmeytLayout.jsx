@@ -1,6 +1,6 @@
 import { Menu, PanelLeftClose } from 'lucide-react'
 import KlasmeytDashboardLayout from './KlasmeytDashboardLayout'
-import { DashboardHeader, SUPER_ADMIN_HEADER_NAV } from '../Components/Dashboard/DashboardHeader'
+import { DashboardHeader, SUPER_ADMIN_DROPDOWN_NAV, SUPER_ADMIN_HEADER_NAV } from '../Components/Dashboard/DashboardHeader'
 
 /**
  * Klasmeyt sidebar + header (same shell as the Super Admin dashboard home page).
@@ -43,6 +43,7 @@ export default function SuperAdminKlasmeytLayout({
                         ) : null
                     }
                     navigationItems={SUPER_ADMIN_HEADER_NAV}
+                    dropdownNavItems={SUPER_ADMIN_DROPDOWN_NAV}
                     notificationCount={notificationCount}
                     userName={auth.user.name}
                     userEmail={auth.user.email}

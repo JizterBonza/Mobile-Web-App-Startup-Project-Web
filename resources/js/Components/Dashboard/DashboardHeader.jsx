@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useForm, usePage } from '@inertiajs/react'
-import { Bell, ChevronDown, LogOut, Settings } from 'lucide-react'
+import { Bell, ChevronDown, CreditCard, History, LogOut, Map, Settings, Truck } from 'lucide-react'
 import primaryLogo from '../../../../Logo/Primary Logo.png'
 
 /**
@@ -43,6 +43,7 @@ export function DashboardHeader({
     /** Shown next to the menu toggle when the sidebar is open (e.g. desktop collapse control). */
     sidebarHideToggle = null,
     navigationItems = [],
+    dropdownNavItems = [],
     /** When false, only logo and account actions are shown (e.g. vendor dashboard). */
     showNav = true,
     /** Narrower centered nav for dashboards with few links (e.g. owner/manager). */
@@ -186,6 +187,21 @@ export function DashboardHeader({
                                     onClick={() => setShowUserDropdown(false)}
                                 />
                                 <div className="absolute right-0 z-20 mt-2 w-56 overflow-hidden rounded-lg border border-[#E5E7EB] bg-white">
+                                    {dropdownNavItems.map((item, index) => (
+                                        <Fragment key={item.href}>
+                                            {index > 0 && <div className="border-t border-[#E5E7EB]" />}
+                                            <Link
+                                                href={item.href}
+                                                onClick={() => setShowUserDropdown(false)}
+                                                className="flex w-full items-center gap-3 px-4 py-3 text-sm text-[#1F2937] transition-colors hover:bg-[#F3F4F6]"
+                                                style={{ fontFamily: 'Inter Condensed, sans-serif' }}
+                                            >
+                                                <item.Icon className="h-4 w-4 text-[#6B7280]" />
+                                                {item.label}
+                                            </Link>
+                                        </Fragment>
+                                    ))}
+                                    {dropdownNavItems.length > 0 && <div className="border-t border-[#E5E7EB]" />}
                                     <Link
                                         href="/settings"
                                         onClick={() => setShowUserDropdown(false)}
@@ -271,26 +287,13 @@ export const SUPER_ADMIN_HEADER_NAV = [
             '/dashboard/super-admin/sub-categories',
         ],
     },
-    {
-        label: 'Activity Logs',
-        id: 'activity-logs',
-        href: '/dashboard/super-admin/activity-logs',
-    },
-    {
-        label: 'Payment Methods',
-        id: 'payment-methods',
-        href: '/dashboard/super-admin/payment-methods',
-    },
-    {
-        label: 'Delivery Methods',
-        id: 'delivery-methods',
-        href: '/dashboard/super-admin/delivery-methods',
-    },
-    {
-        label: 'Zones',
-        id: 'zones',
-        href: '/dashboard/super-admin/zones',
-    },
+]
+
+export const SUPER_ADMIN_DROPDOWN_NAV = [
+    { label: 'Activity Logs', href: '/dashboard/super-admin/activity-logs', Icon: History },
+    { label: 'Payment Methods', href: '/dashboard/super-admin/payment-methods', Icon: CreditCard },
+    { label: 'Delivery Methods', href: '/dashboard/super-admin/delivery-methods', Icon: Truck },
+    { label: 'Zones', href: '/dashboard/super-admin/zones', Icon: Map },
 ]
 
 export const ADMIN_HEADER_NAV = [
@@ -307,24 +310,11 @@ export const ADMIN_HEADER_NAV = [
             '/dashboard/admin/sub-categories',
         ],
     },
-    {
-        label: 'Activity Logs',
-        id: 'activity-logs',
-        href: '/dashboard/admin/activity-logs',
-    },
-    {
-        label: 'Payment Methods',
-        id: 'payment-methods',
-        href: '/dashboard/admin/payment-methods',
-    },
-    {
-        label: 'Delivery Methods',
-        id: 'delivery-methods',
-        href: '/dashboard/admin/delivery-methods',
-    },
-    {
-        label: 'Zones',
-        id: 'zones',
-        href: '/dashboard/admin/zones',
-    },
+]
+
+export const ADMIN_DROPDOWN_NAV = [
+    { label: 'Activity Logs', href: '/dashboard/admin/activity-logs', Icon: History },
+    { label: 'Payment Methods', href: '/dashboard/admin/payment-methods', Icon: CreditCard },
+    { label: 'Delivery Methods', href: '/dashboard/admin/delivery-methods', Icon: Truck },
+    { label: 'Zones', href: '/dashboard/admin/zones', Icon: Map },
 ]
