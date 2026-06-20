@@ -28,6 +28,22 @@ class SupportTicketController extends Controller
     }
 
     /**
+     * All tickets for admin/super-admin views — includes sender name, store name, and initials.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public static function ticketsForAdmin(): array
+    {
+        return SupportTicket::query()
+            ->with(['messages.attachments', 'user.userDetail', 'user.shops'])
+            ->orderByDesc('created_at')
+            ->get()
+            ->map(fn (SupportTicket $ticket) => self::formatTicketForAdmin($ticket))
+            ->values()
+            ->all();
+    }
+
+    /**
      * @return array<string, mixed>
      */
     public static function formatTicket(SupportTicket $ticket): array
@@ -59,6 +75,120 @@ class SupportTicketController extends Controller
                 ];
             })->values()->all(),
         ];
+    }
+
+    /**
+     * Format a ticket for admin/super-admin views (shows real sender names, store name, and initials).
+     *
+     * @return array<string, mixed>
+     */
+    public static function formatTicketForAdmin(SupportTicket $ticket): array
+    {
+        $evidenceCount = $ticket->messages
+            ->flatMap(fn (SupportTicketMessage $message) => $message->attachments)
+            ->count();
+
+        $user = $ticket->user;
+        $firstName = $user?->userDetail?->first_name ?? '';
+        $lastName = $user?->userDetail?->last_name ?? '';
+        $senderName = trim("{$firstName} {$lastName}");
+        if ($senderName === '') {
+            $senderName = $ticket->messages->first()?->sender_name ?? 'Vendor';
+        }
+
+        $storeName = $user?->shops?->first()?->shop_name ?? '—';
+
+        $initials = collect(explode(' ', $senderName))
+            ->filter()
+            ->map(fn ($part) => strtoupper(substr($part, 0, 1)))
+            ->take(2)
+            ->join('');
+
+        return [
+            'id' => $ticket->ticket_number,
+            'title' => $ticket->title,
+            'description' => $ticket->description,
+            'category' => $ticket->category,
+            'status' => $ticket->status,
+            'createdAt' => $ticket->created_at?->toIso8601String(),
+            'updatedAt' => $ticket->updated_at?->toIso8601String(),
+            'evidenceCount' => $evidenceCount,
+            'reopenCount' => (int) $ticket->reopen_count,
+            'senderName' => $senderName,
+            'storeName' => $storeName,
+            'senderAvatar' => $initials ?: '?',
+            'thread' => $ticket->messages->map(function (SupportTicketMessage $message) {
+                return [
+                    'id' => (string) $message->id,
+                    'sender' => $message->sender_type,
+                    'senderName' => $message->sender_name,
+                    'body' => $message->body,
+                    'timestamp' => $message->created_at?->toIso8601String(),
+                    'attachmentCount' => $message->attachments->count() ?: null,
+                ];
+            })->values()->all(),
+        ];
+    }
+
+    /** Accept an open ticket (admin action — moves to Awaiting Review). */
+    public function adminAccept(int $id): \Illuminate\Http\RedirectResponse
+    {
+        $ticket = SupportTicket::findOrFail($id);
+
+        if ($ticket->status === SupportTicket::STATUS_OPEN) {
+            $ticket->update(['status' => SupportTicket::STATUS_AWAITING_REVIEW]);
+        }
+
+        return redirect()->back()->with('success', 'Ticket accepted.');
+    }
+
+    /** Move ticket to In Progress (admin action). */
+    public function adminProgress(int $id): \Illuminate\Http\RedirectResponse
+    {
+        $ticket = SupportTicket::findOrFail($id);
+
+        if ($ticket->status === SupportTicket::STATUS_AWAITING_REVIEW) {
+            $ticket->update(['status' => SupportTicket::STATUS_IN_PROGRESS]);
+        }
+
+        return redirect()->back()->with('success', 'Ticket moved to In Progress.');
+    }
+
+    /** Add an admin message and optionally change status. */
+    public function adminMessage(Request $request, int $id): \Illuminate\Http\RedirectResponse
+    {
+        $validated = $request->validate([
+            'body' => ['required', 'string', 'max:5000'],
+            'type' => ['required', 'string', Rule::in(['info', 'follow-up', 'resolve'])],
+        ]);
+
+        $ticket = SupportTicket::with('messages.attachments')->findOrFail($id);
+        $admin = $request->user();
+        $admin->loadMissing('userDetail');
+        $firstName = $admin->userDetail?->first_name ?? '';
+        $lastName = $admin->userDetail?->last_name ?? '';
+        $adminName = trim("{$firstName} {$lastName}") ?: 'Support Team';
+
+        $body = $validated['type'] === 'resolve'
+            ? '[Resolution] '.$validated['body']
+            : $validated['body'];
+
+        SupportTicketMessage::create([
+            'support_ticket_id' => $ticket->id,
+            'sender_type' => 'admin',
+            'sender_user_id' => $admin->id,
+            'sender_name' => $adminName,
+            'body' => $body,
+        ]);
+
+        $newStatus = match ($validated['type']) {
+            'resolve' => SupportTicket::STATUS_RESOLVED,
+            default => SupportTicket::STATUS_INFO_REQUESTED,
+        };
+
+        $ticket->update(['status' => $newStatus]);
+
+        return redirect()->back()->with('success', 'Message sent.');
     }
 
     public function store(Request $request)

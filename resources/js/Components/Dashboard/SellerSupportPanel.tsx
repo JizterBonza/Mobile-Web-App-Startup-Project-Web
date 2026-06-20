@@ -1550,10 +1550,10 @@ function TicketRow({ ticket, onOpen }: { ticket: Ticket; onOpen: () => void }) {
   return (
     <button
       onClick={onOpen}
-      className={`w-full text-left bg-white border rounded-xl p-5 flex items-start gap-4 hover:border-[#244693] transition-all group ${
+      className={`w-full text-left bg-white border rounded-xl flex items-start gap-4 hover:border-[#244693] transition-all group ${
         needsAction ? "border-orange-200 bg-orange-50/30" : "border-[#E5E7EB]"
       }`}
-      style={{ marginBottom: "20px" , borderRadius: "20px" }}
+      style={{ marginBottom: "20px" , borderRadius: "20px", padding: "25px" }}
     >
       {/* ID + Category */}
       <div className="flex flex-col items-start gap-1.5 min-w-[110px]">

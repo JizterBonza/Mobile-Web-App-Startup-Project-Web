@@ -462,6 +462,20 @@ class DashboardController extends Controller
         ]);
     }
 
+    public function superAdminSupport()
+    {
+        return Inertia::render('Dashboard/SuperAdminSupport', [
+            'tickets' => SupportTicketController::ticketsForAdmin(),
+        ]);
+    }
+
+    public function adminSupport()
+    {
+        return Inertia::render('Dashboard/AdminSupport', [
+            'tickets' => SupportTicketController::ticketsForAdmin(),
+        ]);
+    }
+
     public function ownerManagerAcceptOrder(int $orderId)
     {
         $shopIds = $this->ownerManagerShopIdsOrAbort();

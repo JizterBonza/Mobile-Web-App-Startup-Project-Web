@@ -287,6 +287,7 @@ export const SUPER_ADMIN_HEADER_NAV = [
             '/dashboard/super-admin/sub-categories',
         ],
     },
+    { label: 'Support', id: 'support', href: '/dashboard/super-admin/support' },
 ]
 
 export const SUPER_ADMIN_DROPDOWN_NAV = [
@@ -310,6 +311,7 @@ export const ADMIN_HEADER_NAV = [
             '/dashboard/admin/sub-categories',
         ],
     },
+    { label: 'Support', id: 'support', href: '/dashboard/admin/support' },
 ]
 
 export const ADMIN_DROPDOWN_NAV = [

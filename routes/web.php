@@ -161,6 +161,11 @@ Route::middleware(['auth', 'session.valid', 'user.type:super_admin'])->prefix('d
     Route::delete('/{id}', [ZoneController::class, 'destroy'])->name('destroy');
 });
 
+// Super Admin Support
+Route::get('/dashboard/super-admin/support', [DashboardController::class, 'superAdminSupport'])
+    ->middleware(['auth', 'session.valid', 'user.type:super_admin'])
+    ->name('dashboard.super-admin.support');
+
 Route::middleware(['auth', 'session.valid', 'user.type:owner_manager'])->prefix('dashboard/owner-manager')->name('dashboard.owner-manager.')->group(function () {
     Route::get('/', [DashboardController::class, 'ownerManager'])->name('index');
     Route::get('/stores', [DashboardController::class, 'ownerManagerStores'])->name('stores');
@@ -298,6 +303,14 @@ Route::middleware(['auth', 'session.valid', 'user.type:admin'])->prefix('dashboa
     Route::post('/', [ZoneController::class, 'store'])->name('store');
     Route::put('/{id}', [ZoneController::class, 'update'])->name('update');
     Route::delete('/{id}', [ZoneController::class, 'destroy'])->name('destroy');
+});
+
+// Admin Support
+Route::middleware(['auth', 'session.valid', 'user.type:admin'])->prefix('dashboard/admin/support')->name('dashboard.admin.support.')->group(function () {
+    Route::get('/', [DashboardController::class, 'adminSupport'])->name('index');
+    Route::patch('/{id}/accept', [SupportTicketController::class, 'adminAccept'])->name('accept');
+    Route::patch('/{id}/progress', [SupportTicketController::class, 'adminProgress'])->name('progress');
+    Route::post('/{id}/messages', [SupportTicketController::class, 'adminMessage'])->name('messages.store');
 });
 
 Route::get('/dashboard/vendor', [VendorController::class, 'index'])
