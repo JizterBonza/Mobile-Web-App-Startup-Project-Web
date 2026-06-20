@@ -46,8 +46,6 @@ export function DashboardHeader({
     dropdownNavItems = [],
     /** When false, only logo and account actions are shown (e.g. vendor dashboard). */
     showNav = true,
-    /** Narrower centered nav for dashboards with few links (e.g. owner/manager). */
-    compactNav = false,
     notificationCount = 0,
     userName,
     userEmail,
@@ -100,17 +98,11 @@ export function DashboardHeader({
 
                 {showNav && navigationItems.length > 0 && (
                     <nav
-                        className={`absolute left-1/2 hidden -translate-x-1/2 md:flex ${
-                            compactNav
-                                ? 'w-auto max-w-[min(22rem,calc(100vw-20rem))]'
-                                : 'w-[min(980px,calc(100vw-20rem))]'
-                        }`}
+                        className="absolute left-1/2 hidden -translate-x-1/2 md:flex w-auto max-w-[calc(100vw-20rem)]"
                         style={{ paddingLeft: '0px', paddingRight: '0px' }}
                     >
                         <div
-                            className={`flex items-center gap-0.5 overflow-x-auto rounded-full border border-[#E5E7EB] p-0.5 backdrop-blur-sm ${
-                                compactNav ? 'w-auto' : 'w-full'
-                            }`}
+                            className="flex items-center gap-0.5 overflow-x-auto rounded-full border border-[#E5E7EB] p-0.5 backdrop-blur-sm w-auto"
                         >
                             {navigationItems.map((item) => (
                                 <Link
