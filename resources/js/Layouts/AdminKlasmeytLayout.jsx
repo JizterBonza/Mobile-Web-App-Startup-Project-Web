@@ -1,6 +1,6 @@
 import { Menu, PanelLeftClose } from 'lucide-react'
 import KlasmeytDashboardLayout from './KlasmeytDashboardLayout'
-import { DashboardHeader, ADMIN_HEADER_NAV } from '../Components/Dashboard/DashboardHeader'
+import { ADMIN_DROPDOWN_NAV, DashboardHeader, ADMIN_HEADER_NAV } from '../Components/Dashboard/DashboardHeader'
 
 export default function AdminKlasmeytLayout({
     children,
@@ -40,6 +40,7 @@ export default function AdminKlasmeytLayout({
                         ) : null
                     }
                     navigationItems={ADMIN_HEADER_NAV}
+                    dropdownNavItems={ADMIN_DROPDOWN_NAV}
                     notificationCount={notificationCount}
                     userName={auth.user.name}
                     userEmail={auth.user.email}

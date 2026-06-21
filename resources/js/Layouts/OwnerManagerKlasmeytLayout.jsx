@@ -1,4 +1,5 @@
 import { Head } from '@inertiajs/react'
+import { ContactSupportFab } from '../Components/Dashboard/ContactSupportFab'
 import { DashboardHeader } from '../Components/Dashboard/DashboardHeader'
 import { useDashboardSession } from '../hooks/useDashboardSession'
 
@@ -43,6 +44,7 @@ export default function OwnerManagerKlasmeytLayout({
                     notificationCount={notificationCount}
                 />
                 <main className={`relative w-full min-w-0 ${mainClassName}`.trim()}>{children}</main>
+                <ContactSupportFab href="/dashboard/owner-manager/support" />
             </div>
         </>
     )
