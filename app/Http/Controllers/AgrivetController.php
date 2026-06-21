@@ -703,7 +703,7 @@ class AgrivetController extends Controller
             ->get();
 
         $bundleCatalogIds = $shopItems
-            ->filter(fn ($item) => ($item->metric ?? '') === 'Bundle')
+            ->filter(fn ($item) => (bool) ($item->is_bundle ?? false))
             ->flatMap(function ($item) {
                 $ids = $item->bundle_catalog_ids ? json_decode($item->bundle_catalog_ids, true) : [];
 
@@ -756,6 +756,7 @@ class AgrivetController extends Controller
                     'item_quantity' => $item->item_quantity,
                     'weight' => $item->weight,
                     'metric' => $item->metric,
+                    'is_bundle' => (bool) ($item->is_bundle ?? false),
                     'bundle_catalog_ids' => $item->bundle_catalog_ids
                         ? json_decode($item->bundle_catalog_ids, true)
                         : [],
@@ -996,6 +997,7 @@ class AgrivetController extends Controller
         $bundleProductNames = $catalogProducts->pluck('product_name')->join(', ');
         $description = $validated['description']
             ?: "Bundle containing: {$bundleProductNames}";
+        ['weight' => $bundleWeight, 'metric' => $bundleMetric] = $this->computeBundleWeightAndMetric($catalogProducts);
 
         DB::table('items')->insert([
             'shop_id' => $shop->id,
@@ -1003,8 +1005,9 @@ class AgrivetController extends Controller
             'item_description' => $description,
             'item_price' => $validated['item_price'],
             'item_quantity' => $validated['item_quantity'],
-            'weight' => null,
-            'metric' => 'Bundle',
+            'weight' => $bundleWeight,
+            'metric' => $bundleMetric,
+            'is_bundle' => true,
             'bundle_catalog_ids' => json_encode(array_values($validated['product_catalog_ids'])),
             'category' => $firstProduct->category_id,
             'sub_category_id' => $firstProduct->sub_category_id,
@@ -1456,7 +1459,7 @@ class AgrivetController extends Controller
      */
     private function mapBundleProductsForItem(object $item, $catalogById): array
     {
-        if (($item->metric ?? '') !== 'Bundle') {
+        if (! ($item->is_bundle ?? false)) {
             return [];
         }
 
@@ -1506,6 +1509,58 @@ class AgrivetController extends Controller
         }
 
         return $products;
+    }
+
+    /**
+     * @param  \Illuminate\Support\Collection<int, \App\Models\ProductCatalog>  $catalogProducts
+     * @return array{weight: ?float, metric: ?string}
+     */
+    private function computeBundleWeightAndMetric($catalogProducts): array
+    {
+        $withWeight = $catalogProducts->filter(fn ($p) => $p->weight !== null);
+
+        $metric = $catalogProducts->first(fn ($p) => ! empty($p->unit))?->unit;
+
+        if ($withWeight->isEmpty()) {
+            return ['weight' => null, 'metric' => $metric];
+        }
+
+        $units = $withWeight
+            ->pluck('unit')
+            ->map(fn ($u) => strtolower(trim($u ?? '')))
+            ->unique()
+            ->filter()
+            ->values();
+
+        if ($units->count() === 1) {
+            return [
+                'weight' => round($withWeight->sum(fn ($p) => (float) $p->weight), 2),
+                'metric' => $withWeight->first()->unit ?? $metric,
+            ];
+        }
+
+        $totalWeightKg = $withWeight->sum(
+            fn ($p) => $this->convertCatalogWeightToKg((float) $p->weight, $p->unit)
+        );
+
+        return [
+            'weight' => round($totalWeightKg, 2),
+            'metric' => 'kg',
+        ];
+    }
+
+    private function convertCatalogWeightToKg(float $weight, ?string $metric): float
+    {
+        return match (strtolower(trim($metric ?? 'kg'))) {
+            'g' => $weight / 1000,
+            'mg' => $weight / 1_000_000,
+            'lb', 'lbs' => $weight * 0.453592,
+            'oz' => $weight * 0.0283495,
+            'ml' => $weight / 1000,
+            'l' => $weight,
+            'kg' => $weight,
+            default => $weight,
+        };
     }
 
     /**

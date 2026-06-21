@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use App\Services\PaymongoService;
 use App\Models\Payment;
+use Illuminate\Support\Facades\Log;
 
 class PaymentController extends Controller
 {
@@ -40,25 +41,45 @@ class PaymentController extends Controller
 
     public function paymentSuccess(Request $request)
     {
-        $paymentIntentId = $request->payment_intent_id;
+        $paymentIntentId = $request->query('payment_intent_id') ?? $request->payment_intent_id;
+
+        // Checkout sessions redirect here without a payment_intent_id; payment
+        // confirmation is handled by the PayMongo webhook instead.
+        if (empty($paymentIntentId)) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Payment received. Your order will be updated shortly.',
+            ]);
+        }
 
         $payment = $this->paymongo->retrievePaymentIntent($paymentIntentId);
+
+        if (! is_array($payment) || empty($payment['data']['attributes'])) {
+            Log::error('PayMongo retrieve payment intent failed', [
+                'payment_intent_id' => $paymentIntentId,
+                'response' => $payment,
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Unable to verify payment status.',
+            ], 422);
+        }
 
         $status = $payment['data']['attributes']['status'];
 
         if ($status === 'succeeded') {
-
-            // update order as paid
-
             return response()->json([
+                'success' => true,
                 'message' => 'Payment successful',
-                'payment_intent_id' => $paymentIntentId
+                'payment_intent_id' => $paymentIntentId,
             ]);
         }
 
         return response()->json([
+            'success' => false,
             'message' => 'Payment not completed',
-            'status' => $status
+            'status' => $status,
         ]);
     }
 
@@ -68,9 +89,35 @@ class PaymentController extends Controller
 
         $session = $this->paymongo->createCheckoutSession($amount);
 
+        if (! is_array($session) || ! empty($session['errors'])) {
+            Log::error('PayMongo checkout session creation failed', [
+                'response' => $session,
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to create payment checkout session.',
+            ], 422);
+        }
+
+        $sessionId = $session['data']['id'] ?? null;
+        $checkoutUrl = $session['data']['attributes']['checkout_url'] ?? null;
+
+        if (! $sessionId || ! $checkoutUrl) {
+            Log::error('PayMongo checkout session response malformed', [
+                'response' => $session,
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Invalid payment checkout response.',
+            ], 422);
+        }
+
         return response()->json([
-            'checkout_url' => $session['data']['attributes']['checkout_url'],
-            'session_id' => $session['data']['id']
+            'success' => true,
+            'checkout_url' => $checkoutUrl,
+            'session_id' => $sessionId,
         ]);
     }
 

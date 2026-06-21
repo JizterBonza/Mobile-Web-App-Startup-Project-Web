@@ -8,11 +8,6 @@ use App\Models\UserDetail;
 use App\Models\UserCredential;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-<<<<<<< HEAD
-use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Crypt;
-=======
->>>>>>> 7b90743d8b66fdac123379e29246cebe22df0bd2
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Http;
@@ -22,40 +17,14 @@ use Laravel\Socialite\Facades\Socialite;
 class SocialAuthController extends Controller
 {
     /**
-<<<<<<< HEAD
-     * Redirect to provider's OAuth page.
-     *
-     * Mobile clients may pass a `redirect_uri` query param (e.g. `klasmeyt://auth`).
-     * When present, it is encrypted into the OAuth `state` parameter and used by
-     * the callback to deep-link back into the app with the issued token.
-=======
      * Redirect to provider's OAuth page (web / browser flow).
->>>>>>> 7b90743d8b66fdac123379e29246cebe22df0bd2
      */
     public function redirect(Request $request, $provider)
     {
         $this->validateProvider($provider);
 
-<<<<<<< HEAD
-        $driver = Socialite::driver($provider)->stateless();
-
-        if ($redirectUri = $request->query('redirect_uri')) {
-            $this->validateMobileRedirectUri($redirectUri);
-
-            $state = Crypt::encryptString(json_encode([
-                'redirect_uri' => $redirectUri,
-                'nonce' => Str::random(16),
-            ]));
-
-            $driver = $driver->with(['state' => $state]);
-        }
-
-        return response()->json([
-            'url' => $driver->redirect()->getTargetUrl(),
-=======
         return response()->json([
             'url' => Socialite::driver($provider)->stateless()->redirect()->getTargetUrl(),
->>>>>>> 7b90743d8b66fdac123379e29246cebe22df0bd2
         ]);
     }
 

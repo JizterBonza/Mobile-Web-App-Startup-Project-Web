@@ -90,16 +90,17 @@ class MobileAuthController extends Controller
     public function login(Request $request)
     {
         $data = $request->validate([
-            'email' => 'required_without:username|email',
-            'username' => 'required_without:email|string',
-            'password' => 'required'
+            'email' => 'required_without_all:username,mobile_number|nullable|email',
+            'username' => 'required_without_all:email,mobile_number|nullable|string',
+            'mobile_number' => 'required_without_all:email,username|nullable|string|max:20',
+            'password' => 'required',
         ]);
 
         $user = null;
+        $loginField = null;
 
-        // Check if login is by email or username
-        if (isset($data['email'])) {
-            // Login by email
+        if (! empty($data['email'])) {
+            $loginField = 'email';
             $userDetail = UserDetail::where('email', $data['email'])->first();
 
             if (! $userDetail) {
@@ -108,7 +109,6 @@ class MobileAuthController extends Controller
                 ]);
             }
 
-            // Find User through UserDetail
             $user = User::where('user_detail_id', $userDetail->id)->first();
 
             if (! $user) {
@@ -116,8 +116,8 @@ class MobileAuthController extends Controller
                     'email' => ['The provided credentials are incorrect.'],
                 ]);
             }
-        } else {
-            // Login by username
+        } elseif (! empty($data['username'])) {
+            $loginField = 'username';
             $userCredential = UserCredential::where('username', $data['username'])->first();
 
             if (! $userCredential) {
@@ -126,7 +126,6 @@ class MobileAuthController extends Controller
                 ]);
             }
 
-            // Find User through UserCredential
             $user = User::where('user_credential_id', $userCredential->id)->first();
 
             if (! $user) {
@@ -134,15 +133,30 @@ class MobileAuthController extends Controller
                     'username' => ['The provided credentials are incorrect.'],
                 ]);
             }
+        } else {
+            $loginField = 'mobile_number';
+            $userDetail = UserDetail::where('mobile_number', $data['mobile_number'])->first();
+
+            if (! $userDetail) {
+                throw ValidationException::withMessages([
+                    'mobile_number' => ['The provided credentials are incorrect.'],
+                ]);
+            }
+
+            $user = User::where('user_detail_id', $userDetail->id)->first();
+
+            if (! $user) {
+                throw ValidationException::withMessages([
+                    'mobile_number' => ['The provided credentials are incorrect.'],
+                ]);
+            }
         }
 
-        // Load UserCredential to check password
         $user->load('userCredential');
 
         if (! $user->userCredential || ! Hash::check($data['password'], $user->userCredential->password_hash)) {
-            $field = isset($data['email']) ? 'email' : 'username';
             throw ValidationException::withMessages([
-                $field => ['The provided credentials are incorrect.'],
+                $loginField => ['The provided credentials are incorrect.'],
             ]);
         }
 
