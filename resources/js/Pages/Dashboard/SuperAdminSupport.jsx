@@ -586,8 +586,7 @@ export default function SuperAdminSupport({ tickets = [] }) {
                                                     className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${
                                                         statusFilter === s ? `${cfg.bg} ${cfg.text} border-current` : 'bg-white text-[#6B7280] border-[#E5E7EB] hover:border-[#9CA3AF]'
                                                     }`}
-                                                    style={{ fontFamily: 'Inter Condensed, sans-serif' }}
-                                                    style={{ borderRadius: '20px' }}
+                                                    style={{ fontFamily: 'Inter Condensed, sans-serif', borderRadius: '20px' }}
                                                 >
                                                     <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />{s} ({count})
                                                 </button>
