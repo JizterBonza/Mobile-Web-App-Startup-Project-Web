@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useForm, usePage } from '@inertiajs/react'
-import { Bell, ChevronDown, CreditCard, History, LogOut, Map, Settings, Truck } from 'lucide-react'
+import { Bell, ChevronDown, CreditCard, History, LogOut, Map, Settings, SlidersHorizontal, Truck } from 'lucide-react'
 import primaryLogo from '../../../../Logo/Primary Logo.png'
 
 /**
@@ -9,6 +9,9 @@ import primaryLogo from '../../../../Logo/Primary Logo.png'
  */
 
 function pathMatchesItem(normalized, item) {
+    if (item.exactMatch) {
+        return normalized === item.href
+    }
     if (item.matchPaths?.length) {
         return item.matchPaths.some(
             (p) => normalized === p || normalized.startsWith(`${p}/`),
@@ -21,7 +24,7 @@ export function getActiveNavId(pathname, items) {
     const normalized = pathname.split('?')[0]
     const matches = items.filter((i) => pathMatchesItem(normalized, i))
     if (!matches.length) {
-        return items[0]?.id ?? 'dashboard'
+        return null
     }
     const rank = (i) => Math.max(i.href.length, ...(i.matchPaths ?? []).map((p) => p.length))
     return matches.reduce((a, b) => (rank(a) >= rank(b) ? a : b)).id
@@ -266,7 +269,7 @@ export function DashboardHeader({
 
 /** Matches SuperAdminDashboard.tsx navigationItems, wired to Laravel routes. */
 export const SUPER_ADMIN_HEADER_NAV = [
-    { label: 'Dashboard', id: 'dashboard', href: '/dashboard/super-admin' },
+    { label: 'Dashboard', id: 'dashboard', href: '/dashboard/super-admin', exactMatch: true },
     { label: 'Accounts', id: 'accounts', href: '/dashboard/super-admin/users' },
     { label: 'Agrivets', id: 'agrivets', href: '/dashboard/super-admin/agrivets' },
     {
@@ -286,11 +289,12 @@ export const SUPER_ADMIN_DROPDOWN_NAV = [
     { label: 'Activity Logs', href: '/dashboard/super-admin/activity-logs', Icon: History },
     { label: 'Payment Methods', href: '/dashboard/super-admin/payment-methods', Icon: CreditCard },
     { label: 'Delivery Methods', href: '/dashboard/super-admin/delivery-methods', Icon: Truck },
+    { label: 'Delivery Revenue Settings', href: '/dashboard/super-admin/delivery-revenue-settings', Icon: SlidersHorizontal },
     { label: 'Zones', href: '/dashboard/super-admin/zones', Icon: Map },
 ]
 
 export const ADMIN_HEADER_NAV = [
-    { label: 'Dashboard', id: 'dashboard', href: '/dashboard/admin' },
+    { label: 'Dashboard', id: 'dashboard', href: '/dashboard/admin', exactMatch: true },
     { label: 'Accounts', id: 'accounts', href: '/dashboard/admin/users' },
     { label: 'Agrivets', id: 'agrivets', href: '/dashboard/admin/agrivets' },
     {
@@ -310,5 +314,6 @@ export const ADMIN_DROPDOWN_NAV = [
     { label: 'Activity Logs', href: '/dashboard/admin/activity-logs', Icon: History },
     { label: 'Payment Methods', href: '/dashboard/admin/payment-methods', Icon: CreditCard },
     { label: 'Delivery Methods', href: '/dashboard/admin/delivery-methods', Icon: Truck },
+    { label: 'Delivery Revenue Settings', href: '/dashboard/admin/delivery-revenue-settings', Icon: SlidersHorizontal },
     { label: 'Zones', href: '/dashboard/admin/zones', Icon: Map },
 ]

@@ -10,6 +10,7 @@ use App\Http\Controllers\SubCategoryController;
 use App\Http\Controllers\ActivityLogController;
 use App\Http\Controllers\PaymentMethodController;
 use App\Http\Controllers\DeliveryMethodController;
+use App\Http\Controllers\DeliveryRevenueSettingController;
 use App\Http\Controllers\ZoneController;
 use App\Http\Controllers\SuperAdminProductController;
 use App\Http\Controllers\ProductCatalogRequestController;
@@ -151,6 +152,15 @@ Route::middleware(['auth', 'session.valid', 'user.type:super_admin'])->prefix('d
     Route::post('/', [DeliveryMethodController::class, 'store'])->name('store');
     Route::put('/{id}', [DeliveryMethodController::class, 'update'])->name('update');
     Route::delete('/{id}', [DeliveryMethodController::class, 'destroy'])->name('destroy');
+});
+
+// Super Admin Delivery Revenue Settings
+Route::middleware(['auth', 'session.valid', 'user.type:super_admin'])->prefix('dashboard/super-admin/delivery-revenue-settings')->name('dashboard.super-admin.delivery-revenue-settings.')->group(function () {
+    Route::get('/', [DeliveryRevenueSettingController::class, 'index'])->name('index');
+    Route::post('/', [DeliveryRevenueSettingController::class, 'store'])->name('store');
+    Route::put('/{id}', [DeliveryRevenueSettingController::class, 'update'])->name('update');
+    Route::post('/{id}/activate', [DeliveryRevenueSettingController::class, 'activate'])->name('activate');
+    Route::delete('/{id}', [DeliveryRevenueSettingController::class, 'destroy'])->name('destroy');
 });
 
 // Super Admin Zones
@@ -295,6 +305,15 @@ Route::middleware(['auth', 'session.valid', 'user.type:admin'])->prefix('dashboa
     Route::post('/', [DeliveryMethodController::class, 'store'])->name('store');
     Route::put('/{id}', [DeliveryMethodController::class, 'update'])->name('update');
     Route::delete('/{id}', [DeliveryMethodController::class, 'destroy'])->name('destroy');
+});
+
+// Admin Delivery Revenue Settings
+Route::middleware(['auth', 'session.valid', 'user.type:admin'])->prefix('dashboard/admin/delivery-revenue-settings')->name('dashboard.admin.delivery-revenue-settings.')->group(function () {
+    Route::get('/', [DeliveryRevenueSettingController::class, 'index'])->name('index');
+    Route::post('/', [DeliveryRevenueSettingController::class, 'store'])->name('store');
+    Route::put('/{id}', [DeliveryRevenueSettingController::class, 'update'])->name('update');
+    Route::post('/{id}/activate', [DeliveryRevenueSettingController::class, 'activate'])->name('activate');
+    Route::delete('/{id}', [DeliveryRevenueSettingController::class, 'destroy'])->name('destroy');
 });
 
 // Admin Zones
