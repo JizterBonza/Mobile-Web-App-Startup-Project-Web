@@ -29,6 +29,7 @@ class OrderItem extends Model
         'quantity',
         'price_at_purchase',
         'original_price',
+        'platform_fee',
         'discount_percent_at_purchase',
         'item_status',
     ];
@@ -44,6 +45,7 @@ class OrderItem extends Model
             'quantity' => 'integer',
             'price_at_purchase' => 'decimal:2',
             'original_price' => 'decimal:2',
+            'platform_fee' => 'decimal:2',
             'discount_percent_at_purchase' => 'decimal:2',
             'created_at' => 'datetime',
             'updated_at' => 'datetime',
@@ -83,6 +85,19 @@ class OrderItem extends Model
     public function getLineTotalPaidAttribute(): float
     {
         return round((float) $this->price_at_purchase * (int) $this->quantity, 2);
+    }
+
+    /**
+     * Platform fee for a line item based on category rate at purchase time.
+     */
+    public static function calculatePlatformFee(float $unitPrice, int $quantity, ?float $categoryRate): float
+    {
+        $rate = (float) ($categoryRate ?? 0);
+        if ($rate <= 0) {
+            return 0.0;
+        }
+
+        return round($unitPrice * $quantity * ($rate / 100), 2);
     }
 
     /**

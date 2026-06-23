@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use App\Services\PaymongoService;
 use App\Models\Payment;
+use App\Models\Notification;
 use Illuminate\Support\Facades\Log;
 
 class PaymentController extends Controller
@@ -126,7 +127,12 @@ class PaymentController extends Controller
         $rawBody = $request->getContent();
         $signatureHeader = $request->header('Paymongo-Signature');
 
-        if (!$this->verifyWebhookSignature($rawBody, $signatureHeader)) {
+        if (! $this->verifyWebhookSignature($rawBody, $signatureHeader)) {
+            Log::warning('PayMongo webhook: invalid signature', [
+                'has_signature_header' => ! empty($signatureHeader),
+                'body_length' => strlen($rawBody),
+            ]);
+
             return response()->json(['error' => 'Invalid signature'], 401);
         }
 
@@ -134,13 +140,34 @@ class PaymentController extends Controller
         $eventType = $payload['data']['attributes']['type'] ?? null;
         $data = $payload['data']['attributes']['data'] ?? null;
 
-        switch ($eventType) {
-            case 'checkout_session.payment.paid':
-                $this->handleCheckoutPaid($data);
-                break;
-            case 'checkout_session.payment.failed':
-                // handle failed payment if needed
-                break;
+        if (! is_array($data)) {
+            Log::warning('PayMongo webhook: event payload missing data', [
+                'event_type' => $eventType,
+            ]);
+
+            return response()->json(['received' => true]);
+        }
+
+        try {
+            switch ($eventType) {
+                case 'checkout_session.payment.paid':
+                    $this->handleCheckoutPaid($data);
+                    break;
+                case 'checkout_session.payment.failed':
+                    $this->handleCheckoutFailed($data);
+                    break;
+                case 'payment.paid':
+                    $this->handlePaymentPaid($data);
+                    break;
+                case 'payment.failed':
+                    $this->handlePaymentFailed($data);
+                    break;
+            }
+        } catch (\Throwable $e) {
+            Log::error('PayMongo webhook: handler failed', [
+                'event_type' => $eventType,
+                'message' => $e->getMessage(),
+            ]);
         }
 
         return response()->json(['received' => true]);
@@ -148,7 +175,16 @@ class PaymentController extends Controller
 
     private function verifyWebhookSignature(string $rawBody, ?string $signatureHeader): bool
     {
-        if (!$signatureHeader) return false;
+        if (! $signatureHeader || $rawBody === '') {
+            return false;
+        }
+
+        $secret = config('services.paymongo.webhook_secret');
+        if (! $secret) {
+            Log::error('PayMongo webhook: PAYMONGO_WEBHOOK_SECRET is not configured');
+
+            return false;
+        }
 
         $parts = [];
         foreach (explode(',', $signatureHeader) as $part) {
@@ -160,23 +196,33 @@ class PaymentController extends Controller
         $testSig = $parts['te'] ?? null;
         $liveSig = $parts['li'] ?? null;
 
-        if (!$timestamp) return false;
+        if (! $timestamp) {
+            return false;
+        }
 
-        $message = $timestamp . '.' . $rawBody;
-        $secret = config('services.paymongo.webhook_secret');
-        $computed = hash_hmac('sha256', $message, $secret);
+        $computed = hash_hmac('sha256', $timestamp . '.' . $rawBody, $secret);
 
-        $expectedSig = app()->environment('production') ? $liveSig : $testSig;
+        // PayMongo sends te for test-mode events and li for live-mode events.
+        // Match whichever signature is present — do not rely on APP_ENV.
+        if ($testSig && hash_equals($computed, $testSig)) {
+            return true;
+        }
 
-        return hash_equals($computed, $expectedSig ?? '');
+        if ($liveSig && hash_equals($computed, $liveSig)) {
+            return true;
+        }
+
+        return false;
     }
 
     private function handleCheckoutPaid(array $data): void
     {
-        $sessionId = $data['id'] ?? null;
-        $payment = Payment::where('checkout_session_id', $sessionId)->first();
+        $payment = $this->resolvePaymentFromCheckoutSession($data);
+        if (! $payment) {
+            return;
+        }
 
-        if (!$payment) {
+        if ($payment->status === 'paid') {
             return;
         }
 
@@ -189,12 +235,214 @@ class PaymentController extends Controller
             ?? $paymentAttrs['payment_method_used']
             ?? null;
 
+        $paymentIntentId = $data['attributes']['payment_intent']['id']
+            ?? $paymentAttrs['payment_intent_id']
+            ?? null;
+
+        $this->markPaymentPaid(
+            $payment,
+            $paymongoPayment['id'] ?? null,
+            $paymentMethod,
+            $data,
+            $paymentIntentId
+        );
+    }
+
+    private function handleCheckoutFailed(array $data): void
+    {
+        $payment = $this->resolvePaymentFromCheckoutSession($data);
+        if (! $payment) {
+            return;
+        }
+
+        $paymongoPayment = $data['attributes']['payments'][0] ?? null;
+        $paymentAttrs = $paymongoPayment['attributes'] ?? [];
+        $paymentIntentId = $data['attributes']['payment_intent']['id']
+            ?? $paymentAttrs['payment_intent_id']
+            ?? null;
+
+        $this->markPaymentFailed(
+            $payment,
+            $data,
+            $paymongoPayment['id'] ?? null,
+            $paymentIntentId
+        );
+    }
+
+    private function handlePaymentPaid(array $data): void
+    {
+        $payment = $this->resolvePaymentFromPaymongoPayment($data);
+        if (! $payment) {
+            return;
+        }
+
+        if ($payment->status === 'paid') {
+            return;
+        }
+
+        $attrs = $data['attributes'] ?? [];
+        $paymentMethod = $attrs['source']['type'] ?? null;
+
+        $this->markPaymentPaid(
+            $payment,
+            $data['id'] ?? null,
+            $paymentMethod,
+            $data,
+            $attrs['payment_intent_id'] ?? null
+        );
+    }
+
+    private function handlePaymentFailed(array $data): void
+    {
+        $payment = $this->resolvePaymentFromPaymongoPayment($data);
+        if (! $payment) {
+            return;
+        }
+
+        $attrs = $data['attributes'] ?? [];
+
+        $this->markPaymentFailed(
+            $payment,
+            $data,
+            $data['id'] ?? null,
+            $attrs['payment_intent_id'] ?? null
+        );
+    }
+
+    private function markPaymentPaid(
+        Payment $payment,
+        ?string $paymongoPaymentId,
+        ?string $paymentMethod,
+        array $metadata,
+        ?string $paymentIntentId = null
+    ): void {
         $payment->update([
             'status' => 'paid',
             'payment_method' => $paymentMethod,
-            'payment_id' => $paymongoPayment['id'] ?? $payment->payment_id,
-            'metadata' => $data,
+            'payment_id' => $paymongoPaymentId ?? $payment->payment_id,
+            'payment_intent_id' => $paymentIntentId ?? $payment->payment_intent_id,
+            'metadata' => $metadata,
         ]);
+
+        $payment->order?->orderDetail?->update(['payment_status' => 'paid']);
+
+        $order = $payment->order;
+        $orderDetail = $order?->orderDetail;
+        if ($order && $orderDetail) {
+            Notification::createForUser(
+                $order->user_id,
+                'payment_confirmed',
+                'Payment Confirmed',
+                "Your payment for order {$orderDetail->order_code} has been confirmed. Amount: ₱" . number_format($payment->amount, 2),
+                Notification::CATEGORY_PAYMENT,
+                $order,
+                [
+                    'order_id' => $order->id,
+                    'order_code' => $orderDetail->order_code,
+                    'amount' => $payment->amount,
+                    'payment_method' => $paymentMethod,
+                ],
+                "/orders/{$order->id}"
+            );
+        }
+    }
+
+    private function markPaymentFailed(
+        Payment $payment,
+        array $metadata,
+        ?string $paymongoPaymentId = null,
+        ?string $paymentIntentId = null
+    ): void {
+        if (in_array($payment->status, ['paid', 'failed'], true)) {
+            return;
+        }
+
+        $payment->update([
+            'status' => 'failed',
+            'payment_id' => $paymongoPaymentId ?? $payment->payment_id,
+            'payment_intent_id' => $paymentIntentId ?? $payment->payment_intent_id,
+            'metadata' => $metadata,
+        ]);
+
+        $payment->order?->orderDetail?->update(['payment_status' => 'failed']);
+
+        $order = $payment->order;
+        $orderDetail = $order?->orderDetail;
+        if ($order && $orderDetail) {
+            Notification::createForUser(
+                $order->user_id,
+                'payment_failed',
+                'Payment Failed',
+                "Your payment for order {$orderDetail->order_code} was not completed. You can retry from your order details.",
+                Notification::CATEGORY_PAYMENT,
+                $order,
+                [
+                    'order_id' => $order->id,
+                    'order_code' => $orderDetail->order_code,
+                    'amount' => $payment->amount,
+                ],
+                "/orders/{$order->id}"
+            );
+        }
+    }
+
+    private function resolvePaymentFromCheckoutSession(array $data): ?Payment
+    {
+        $sessionId = $data['id'] ?? null;
+
+        if (! $sessionId) {
+            Log::warning('PayMongo webhook: checkout session event missing session id', [
+                'data' => $data,
+            ]);
+
+            return null;
+        }
+
+        $payment = Payment::with('order.orderDetail')
+            ->where('checkout_session_id', $sessionId)
+            ->first();
+
+        if (! $payment) {
+            Log::warning('PayMongo webhook: no payment found for checkout session', [
+                'checkout_session_id' => $sessionId,
+            ]);
+        }
+
+        return $payment;
+    }
+
+    private function resolvePaymentFromPaymongoPayment(array $data): ?Payment
+    {
+        $paymongoPaymentId = $data['id'] ?? null;
+        $attrs = $data['attributes'] ?? [];
+        $paymentIntentId = $attrs['payment_intent_id'] ?? null;
+
+        if ($paymongoPaymentId) {
+            $payment = Payment::with('order.orderDetail')
+                ->where('payment_id', $paymongoPaymentId)
+                ->first();
+
+            if ($payment) {
+                return $payment;
+            }
+        }
+
+        if ($paymentIntentId) {
+            $payment = Payment::with('order.orderDetail')
+                ->where('payment_intent_id', $paymentIntentId)
+                ->first();
+
+            if ($payment) {
+                return $payment;
+            }
+        }
+
+        Log::warning('PayMongo webhook: no payment found for PayMongo payment resource', [
+            'payment_id' => $paymongoPaymentId,
+            'payment_intent_id' => $paymentIntentId,
+        ]);
+
+        return null;
     }
 
     /**

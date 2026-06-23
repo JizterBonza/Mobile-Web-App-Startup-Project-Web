@@ -113,6 +113,8 @@ class PaymongoService
     public function registerWebhook(string $url, array $events = [
         'checkout_session.payment.paid',
         'checkout_session.payment.failed',
+        'payment.paid',
+        'payment.failed',
     ])
     {
         $response = $this->client()->post($this->baseUrl . '/webhooks', [
