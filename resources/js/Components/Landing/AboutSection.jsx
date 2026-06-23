@@ -13,10 +13,9 @@ export function AboutSection() {
           <p className="text-sm font-bold tracking-wide text-white sm:text-[15px]">About</p>
 
           <h2
-            className="mx-auto mt-8 max-w-[60rem] px-2 leading-[1.15] sm:mt-10 sm:leading-tight lg:mt-12 lg:leading-[1.1] xl:max-w-[64rem] xl:leading-[1.08]"
+            className="mx-auto mt-8 max-w-[60rem] px-2 text-[1.75rem] leading-[1.15] sm:mt-10 sm:text-4xl sm:leading-tight lg:mt-12 lg:text-5xl lg:leading-[1.1] xl:max-w-[64rem] xl:text-[3rem] xl:leading-[1.08]"
             style={{
               color: headlineRed,
-              fontSize: '3rem',
               fontWeight: 'bold',
             }}
           >

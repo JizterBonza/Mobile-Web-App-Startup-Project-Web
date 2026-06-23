@@ -59,7 +59,7 @@ export function ContactSection() {
         <div className="grid gap-12 lg:grid-cols-2 lg:gap-16 xl:gap-20 lg:items-start">
           <div className="max-w-xl">
             <p className="text-base font-medium text-white sm:text-lg">Get in Touch</p>
-            <h2 className="mt-4 text-3xl font-bold uppercase leading-tight tracking-tight text-white sm:text-4xl lg:text-[3rem]" style={{ fontWeight: 'bold', fontSize: '3rem' }}>
+            <h2 className="mt-4 text-[1.75rem] font-bold uppercase leading-tight tracking-tight text-white sm:text-4xl lg:text-[3rem]" style={{ fontWeight: 'bold' }}>
               We&apos;d love to connect
             </h2>
             <p className="mt-6 text-base leading-relaxed text-white/90 sm:text-lg">
@@ -126,7 +126,7 @@ export function ContactSection() {
                 rows={6}
                 className="w-full resize-y rounded-[10px] border-0 bg-white px-4 py-3 text-sm text-[#0B132B] outline-none ring-1 ring-white/10 transition-shadow placeholder:text-gray-400 focus:ring-2 focus:ring-white/40"
                 placeholder=""
-                style={{ borderRadius: '0px' }}
+                style={{ borderRadius: '10px' }}
               />
             </div>
             <button

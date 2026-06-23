@@ -5,7 +5,6 @@ const sellerSubtitle = '#2E4A9E'
 const featureSectionH2Style = {
   color: navy,
   fontWeight: 'bold',
-  fontSize: '3.5rem',
 }
 
 const buyerFeatures = [
@@ -71,7 +70,7 @@ export function FeatureSection() {
               For Breeders, Enthusiasts, and Farmers
             </p>
             <h2
-              className="mt-4 uppercase leading-tight tracking-tight"
+              className="mt-4 text-[1.75rem] uppercase leading-tight tracking-tight sm:text-4xl lg:text-5xl xl:text-[3.5rem]"
               style={featureSectionH2Style}
             >
               Find the supplies you need
@@ -103,7 +102,7 @@ export function FeatureSection() {
               For Agrivet and Gamefowl Supply Stores
             </p>
             <h2
-              className="mt-4 uppercase leading-tight tracking-tight"
+              className="mt-4 text-[1.75rem] uppercase leading-tight tracking-tight sm:text-4xl lg:text-5xl xl:text-[3.5rem]"
               style={featureSectionH2Style}
             >
               Sell directly to community
