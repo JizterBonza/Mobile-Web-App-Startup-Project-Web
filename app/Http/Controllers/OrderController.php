@@ -8,11 +8,12 @@ use App\Models\OrderItem;
 use App\Models\OrderShop;
 use App\Models\Item;
 use App\Models\Cart;
-use App\Models\HandlingFeeSetting;
 use App\Models\Notification;
 use App\Models\ProofOfDelivery;
 use App\Models\OrderStatus;
 use App\Models\Payment;
+use App\Models\User;
+use App\Services\DeliveryFeeService;
 use App\Services\PaymongoService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
@@ -26,9 +27,12 @@ class OrderController extends Controller
 {
     protected $paymongo;
 
-    public function __construct(PaymongoService $paymongo)
+    protected DeliveryFeeService $deliveryFeeService;
+
+    public function __construct(PaymongoService $paymongo, DeliveryFeeService $deliveryFeeService)
     {
         $this->paymongo = $paymongo;
+        $this->deliveryFeeService = $deliveryFeeService;
     }
     /**
      * Fetch all orders
@@ -277,7 +281,6 @@ class OrderController extends Controller
             // Order detail fields
             'order_code' => 'nullable|string|max:100|unique:order_details,order_code',
             'subtotal' => 'required|numeric|min:0',
-            'shipping_fee' => 'nullable|numeric|min:0',
             'total_amount' => 'required|numeric|min:0',
             'shipping_address' => 'required|string',
             'shipping_address_id' => 'required|exists:addresses,id',
@@ -315,11 +318,10 @@ class OrderController extends Controller
         return DB::transaction(function () use ($data, $paymentMethod) {
             // Check inventory availability inside transaction to prevent race conditions
             $lockedItems = [];
-            $serverTotalWeightKg = 0.0;
             $serverSubtotal = 0.0;
             foreach ($data['items'] as $item) {
                 // Lock the item row for update to prevent concurrent modifications
-                $itemModel = Item::lockForUpdate()->find($item['item_id']);
+                $itemModel = Item::with('categoryRelation')->lockForUpdate()->find($item['item_id']);
                 
                 if (!$itemModel) {
                     return response()->json([
@@ -359,12 +361,6 @@ class OrderController extends Controller
 
                 $serverSubtotal += $serverUnitPrice * $orderedQuantity;
 
-                // Accumulate total weight from server-side item data so the handling
-                // fee check cannot be bypassed by client-supplied weights.
-                if ($itemModel->weight !== null) {
-                    $serverTotalWeightKg += $this->convertToKg((float) $itemModel->weight, $itemModel->metric) * $orderedQuantity;
-                }
-
                 // Store locked item for later update
                 $originalPrice = round((float) $itemModel->item_price, 2);
                 $discountPercent = round($itemModel->getActiveDiscountPercent(), 2);
@@ -376,6 +372,7 @@ class OrderController extends Controller
                     'original_price' => $originalPrice,
                     'discount_percent_at_purchase' => $discountPercent,
                     'item_name_at_purchase' => $itemModel->item_name,
+                    'category_rate' => $itemModel->categoryRelation?->category_rate,
                 ];
             }
 
@@ -390,19 +387,40 @@ class OrderController extends Controller
                 ], 422);
             }
 
-            // Validate that the client's total_amount covers the DB-configured
-            // handling fee for this cart's weight. We allow the client to include
-            // extra (e.g. shipping) on top of subtotal+handling, but not less.
-            $serverHandlingFee = $this->calculateHandlingFee($serverTotalWeightKg);
-            $clientTotal = (float) ($data['total_amount'] ?? 0);
-            $minTotal = $serverSubtotal + $serverHandlingFee;
-            if ($clientTotal + 0.01 < $minTotal) {
+            $itemIds = array_column($data['items'], 'item_id');
+            $itemsById = Item::whereIn('id', $itemIds)->get()->keyBy('id');
+            $lineItems = $this->deliveryFeeService->buildLineItems($data['items'], $itemsById);
+
+            $shopIds = array_values(array_unique(array_column($data['items'], 'shop_id')));
+            $shops = Shop::whereIn('id', $shopIds)->get()->keyBy('id');
+
+            $user = User::find($data['user_id']);
+            $settings = $this->deliveryFeeService->resolveSettings();
+
+            $feeResult = $this->deliveryFeeService->calculate(
+                $settings,
+                $lineItems,
+                $shops,
+                (int) $data['delivery_method_id'],
+                $user,
+            );
+
+            if ($feeResult['success'] !== true) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Total amount is below the required handling fee for this order.',
-                    'expected_minimum_total' => round($minTotal, 2),
-                    'server_handling_fee' => round($serverHandlingFee, 2),
-                    'server_total_weight_kg' => round($serverTotalWeightKg, 2),
+                    'message' => $feeResult['message'] ?? 'Unable to calculate delivery fees.',
+                ], 422);
+            }
+
+            $clientTotal = round((float) ($data['total_amount'] ?? 0), 2);
+            $expectedTotal = (float) $feeResult['total_amount'];
+            if (abs($clientTotal - $expectedTotal) > 0.01) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Total amount does not match server-calculated delivery fees.',
+                    'expected_total' => $expectedTotal,
+                    'received_total' => $clientTotal,
+                    'fee_breakdown' => $feeResult,
                 ], 422);
             }
 
@@ -410,8 +428,17 @@ class OrderController extends Controller
             $orderDetailData = [
                 'order_code' => $data['order_code'] ?? '#ORD-' . strtoupper(Str::random(10)),
                 'subtotal' => $serverSubtotal,
-                'shipping_fee' => $data['shipping_fee'] ?? 0.00,
-                'total_amount' => $data['total_amount'],
+                'shipping_fee' => $feeResult['shipping_fee'],
+                'delivery_base_fee' => $feeResult['delivery_base_fee'],
+                'delivery_km_fee' => $feeResult['delivery_km_fee'],
+                'delivery_distance_km' => $feeResult['delivery_distance_km'],
+                'is_reduced_base' => $feeResult['is_reduced_base'],
+                'heavy_surcharge' => $feeResult['heavy_surcharge'],
+                'heavy_surcharge_units' => $feeResult['heavy_surcharge_units'],
+                'total_weight_kg' => $feeResult['total_weight_kg'],
+                'multi_store_fee' => $feeResult['multi_store_fee'],
+                'mov_penalty_fee' => $feeResult['mov_penalty_fee'],
+                'total_amount' => $expectedTotal,
                 'address_id' => $data['shipping_address_id'],
                 'shipping_address' => Address::find($data['shipping_address_id'])->full_address,//get the shipping address from the addresses table
                 'order_instruction' => $data['order_instruction'] ?? null,
@@ -447,14 +474,18 @@ class OrderController extends Controller
                         ?? Item::find($item['item_id'])?->item_name
                         ?? '';
 
+                    $quantity = (int) $item['quantity'];
+                    $categoryRate = $locked['category_rate'] ?? null;
+
                     OrderItem::create([
                         'order_id' => $order->id,
                         'item_id' => (int) $item['item_id'],
                         'shop_id' => (int) $item['shop_id'],
                         'item_name_at_purchase' => $itemName,
-                        'quantity' => (int) $item['quantity'],
+                        'quantity' => $quantity,
                         'price_at_purchase' => (float) $unitPrice,
                         'original_price' => (float) $originalPrice,
+                        'platform_fee' => OrderItem::calculatePlatformFee((float) $unitPrice, $quantity, $categoryRate),
                         'discount_percent_at_purchase' => (float) $discountPercent,
                         'item_status' => 1,
                     ]);
@@ -567,94 +598,19 @@ class OrderController extends Controller
     }
 
     /**
-     * Convert a weight value from any supported metric unit to kilograms.
-     */
-    private function convertToKg(float $weight, ?string $metric): float
-    {
-        // Default to 'kg' when metric is null, then normalize to lowercase
-        return match (strtolower(trim($metric ?? 'kg'))) {
-            'g'   => $weight / 1000,          // grams to kilograms
-            'mg'  => $weight / 1_000_000,      // milligrams to kilograms
-            'lb', 'lbs' => $weight * 0.453592, // pounds to kilograms
-            'oz'  => $weight * 0.0283495,      // ounces to kilograms
-            'ml'  => $weight / 1000,           // milliliters to kilograms (assumes water density ~1 kg/L)
-            'l'   => $weight,                  // liters to kilograms (assumes water density ~1 kg/L)
-            'kg'  => $weight,
-            default => $weight,                // unknown metric — treat as kg
-        };
-    }
-
-    /**
-     * Compute the handling fee given a total weight in kilograms, using the
-     * currently active row from `handling_fee_settings`.
-     *
-     * Tiers (values come from DB, defaults shown):
-     *   - W ≤ free_until_kg              : free
-     *   - free_until_kg < W ≤ increment_threshold_kg : base_fee
-     *   - W > increment_threshold_kg     : base_fee + ceil((W - threshold) / block_kg) * fee_per_block
-     *   - Final result is capped at max_fee.
-     */
-    private function calculateHandlingFee(float $totalWeightKg): float
-    {
-        $settings = $this->getHandlingFeeSettings();
-
-        $freeUntilKg = (float) $settings->free_until_kg;
-
-        if ($totalWeightKg <= $freeUntilKg) {
-            return 0.00;
-        }
-
-        $fee = (float) $settings->base_fee;
-        $threshold = (float) $settings->increment_threshold_kg;
-
-        if ($totalWeightKg > $threshold) {
-            $blockKg = max((float) $settings->increment_block_kg, 0.0001);
-            $extraBlocks = (int) ceil(($totalWeightKg - $threshold) / $blockKg);
-            $fee += $extraBlocks * (float) $settings->increment_fee_per_block;
-        }
-
-        return (float) min($fee, (float) $settings->max_fee);
-    }
-
-    /**
-     * Resolve the active handling-fee configuration. Falls back to the legacy
-     * hardcoded tiers if no active row exists, so fee calculation never fails.
-     */
-    private function getHandlingFeeSettings(): HandlingFeeSetting
-    {
-        $active = HandlingFeeSetting::getActive();
-
-        if ($active) {
-            return $active;
-        }
-
-        Log::warning('No active handling_fee_settings row found; using hardcoded fallback.');
-
-        return new HandlingFeeSetting([
-            'free_until_kg' => 25.000,
-            'base_fee' => 50.00,
-            'increment_threshold_kg' => 100.000,
-            'increment_block_kg' => 10.000,
-            'increment_fee_per_block' => 15.00,
-            'max_fee' => 150.00,
-            'status' => HandlingFeeSetting::STATUS_ACTIVE,
-        ]);
-    }
-
-    /**
-     * Calculate order fees without persisting anything.
-     *
-     * Handling fee tiers are loaded from the active `handling_fee_settings`
-     * row, so values can be updated in the database without a code change.
-     * See `calculateHandlingFee()` for the algorithm.
+     * Calculate order delivery fees without persisting anything.
      */
     public function calculateFee(Request $request)
     {
         $data = $request->all();
 
         $validator = Validator::make($data, [
+            'user_id' => 'required|exists:users,id',
+            'delivery_method_id' => 'required|exists:delivery_method,id',
+            'shipping_address_id' => 'required|exists:addresses,id',
             'items' => 'required|array|min:1',
             'items.*.item_id' => 'required|exists:items,id',
+            'items.*.shop_id' => 'required|exists:shops,id',
             'items.*.quantity' => 'required|integer|min:1',
             'items.*.price_at_purchase' => 'required|numeric|min:0',
         ]);
@@ -663,19 +619,14 @@ class OrderController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Validation error',
-                'errors' => $validator->errors()
+                'errors' => $validator->errors(),
             ], 422);
         }
 
-        $subtotal = 0;
-        $totalWeightKg = 0;
-
-        // Batch-fetch all items to avoid N+1 queries, keyed by id for fast lookup
         $itemIds = array_column($data['items'], 'item_id');
         $items = Item::whereIn('id', $itemIds)->get()->keyBy('id');
 
         foreach ($data['items'] as $entry) {
-            $quantity = (int) $entry['quantity'];
             $itemModel = $items->get($entry['item_id']);
             $unitPrice = $itemModel ? $itemModel->getEffectivePrice() : (float) $entry['price_at_purchase'];
 
@@ -688,28 +639,31 @@ class OrderController extends Controller
                     'received_price' => (float) $entry['price_at_purchase'],
                 ], 422);
             }
-
-            $subtotal += $unitPrice * $quantity;
-
-            // Look up item's weight & metric, convert to kg, and multiply by quantity
-            if ($itemModel && $itemModel->weight !== null) {
-                $totalWeightKg += $this->convertToKg((float) $itemModel->weight, $itemModel->metric) * $quantity;
-            }
         }
 
-        $settings = $this->getHandlingFeeSettings();
-        $handlingFee = $this->calculateHandlingFee($totalWeightKg);
+        $lineItems = $this->deliveryFeeService->buildLineItems($data['items'], $items);
+        $shopIds = array_values(array_unique(array_column($data['items'], 'shop_id')));
+        $shops = Shop::whereIn('id', $shopIds)->get()->keyBy('id');
 
-        $totalAmount = $subtotal + $handlingFee;
+        $user = User::find($data['user_id']);
+        $settings = $this->deliveryFeeService->resolveSettings();
 
-        return response()->json([
-            'success' => true,
-            'subtotal' => round($subtotal, 2),
-            'total_weight_kg' => round($totalWeightKg, 2),
-            'handling_fee' => round($handlingFee, 2),
-            'handling_fee_waived' => $totalWeightKg <= (float) $settings->free_until_kg,
-            'total_amount' => round($totalAmount, 2),
-        ]);
+        $feeResult = $this->deliveryFeeService->calculate(
+            $settings,
+            $lineItems,
+            $shops,
+            (int) $data['delivery_method_id'],
+            $user,
+        );
+
+        if ($feeResult['success'] !== true) {
+            return response()->json([
+                'success' => false,
+                'message' => $feeResult['message'] ?? 'Unable to calculate delivery fees.',
+            ], 422);
+        }
+
+        return response()->json($feeResult);
     }
 
     /**
