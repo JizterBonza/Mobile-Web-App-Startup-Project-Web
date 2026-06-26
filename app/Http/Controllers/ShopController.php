@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Shop;
 use App\Models\Zone;
 use App\Models\RatingReview;
+use App\Support\GeoDistance;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 
@@ -390,6 +391,78 @@ class ShopController extends Controller
             'message' => 'Review created successfully',
             'data' => $review
         ], 201);
+    }
+
+    /**
+     * Fetch active shops ordered by distance from the user's location.
+     *
+     * @param Request $request
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function nearby(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'lat' => 'required|numeric|between:-90,90',
+            'long' => 'required|numeric|between:-180,180',
+            'limit' => 'nullable|integer|min:1|max:50',
+            'radius_km' => 'nullable|numeric|min:0.1|max:500',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation error',
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        $userLat = (float) $request->lat;
+        $userLong = (float) $request->long;
+        $limit = (int) $request->input('limit', 20);
+        $radiusKm = $request->filled('radius_km') ? (float) $request->radius_km : null;
+
+        $shops = Shop::query()
+            ->where('shop_status', 'active')
+            ->whereNotNull('shop_lat')
+            ->whereNotNull('shop_long')
+            ->get()
+            ->map(function (Shop $shop) use ($userLat, $userLong) {
+                $distanceKm = GeoDistance::kmBetween(
+                    $userLat,
+                    $userLong,
+                    (float) $shop->shop_lat,
+                    (float) $shop->shop_long
+                );
+
+                $shopData = $shop->toArray();
+                $shopData['distance_km'] = $distanceKm !== null ? round($distanceKm, 3) : null;
+
+                return $shopData;
+            })
+            ->filter(function (array $shop) use ($radiusKm) {
+                if ($shop['distance_km'] === null) {
+                    return false;
+                }
+
+                if ($radiusKm !== null && $shop['distance_km'] > $radiusKm) {
+                    return false;
+                }
+
+                return true;
+            })
+            ->sortBy('distance_km')
+            ->values()
+            ->take($limit);
+
+        return response()->json([
+            'success' => true,
+            'data' => $shops,
+            'count' => $shops->count(),
+            'location' => [
+                'lat' => $userLat,
+                'long' => $userLong,
+            ],
+        ]);
     }
 
     /**
