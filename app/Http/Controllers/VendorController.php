@@ -111,6 +111,7 @@ class VendorController extends Controller
         return Inertia::render('Dashboard/VendorSupport', [
             'tickets' => SupportTicketController::ticketsForUser((int) auth()->id()),
             'submitTicketUrl' => route('dashboard.vendor.support.tickets.store'),
+            'ticketActionsBaseUrl' => url('/dashboard/vendor/support/tickets'),
         ]);
     }
 

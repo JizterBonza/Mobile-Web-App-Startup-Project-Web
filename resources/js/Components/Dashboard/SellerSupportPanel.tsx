@@ -140,6 +140,10 @@ const ALL_STATUSES: TicketStatus[] = [
   "Closed",
 ];
 
+function numericTicketId(ticketId: string): number {
+  return parseInt(ticketId.replace(/\D/g, ""), 10);
+}
+
 function parseTicket(raw: TicketPayload): Ticket {
   return {
     ...raw,
@@ -207,11 +211,13 @@ export function SellerSupportPanel({
   pageTitle = "Seller Support",
   initialTickets = [],
   submitTicketUrl = "",
+  ticketActionsBaseUrl = "",
 }: {
   backHref?: string;
   pageTitle?: string;
   initialTickets?: TicketPayload[];
   submitTicketUrl?: string;
+  ticketActionsBaseUrl?: string;
 }) {
   const [view, setView] = useState<"list" | "new" | "detail">("list");
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
@@ -250,6 +256,9 @@ export function SellerSupportPanel({
   const replyFileRef = useRef<HTMLInputElement>(null);
   const [showReplyConfirm, setShowReplyConfirm] = useState(false);
   const [showReplySuccess, setShowReplySuccess] = useState(false);
+  const [isReplying, setIsReplying] = useState(false);
+  const [isAccepting, setIsAccepting] = useState(false);
+  const [isReopening, setIsReopening] = useState(false);
 
   // ── Detail view — resolve actions ──
   const [showAcceptConfirm, setShowAcceptConfirm] = useState(false);
@@ -274,11 +283,6 @@ export function SellerSupportPanel({
       const diff = b.createdAt.getTime() - a.createdAt.getTime();
       return sortOrder === "newest" ? diff : -diff;
     });
-
-  function updateTicket(updated: Ticket) {
-    setTickets((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
-    setSelectedTicket(updated);
-  }
 
   // ── File handling (new ticket) ──
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -415,6 +419,25 @@ export function SellerSupportPanel({
     setView("list");
   }
 
+  function handleTicketActionError(
+    error: unknown,
+    fallbackMessage: string,
+    onRetry?: () => void
+  ) {
+    const axiosError = error as {
+      response?: { status?: number; data?: { message?: string } };
+    };
+
+    if (axiosError.response?.status === 419) {
+      setReplyError("Your session expired. Refresh the page and try again.");
+    } else {
+      const message = axiosError.response?.data?.message ?? fallbackMessage;
+      setReplyError(message);
+    }
+
+    onRetry?.();
+  }
+
   // ── Reply to Info Requested ──
   function handleReplySubmit() {
     if (!replyText.trim()) {
@@ -425,42 +448,89 @@ export function SellerSupportPanel({
     setShowReplyConfirm(true);
   }
 
-  function handleConfirmReply() {
+  async function handleConfirmReply() {
     if (!selectedTicket) return;
+    if (!ticketActionsBaseUrl) {
+      setReplyError("Support ticket actions are not configured.");
+      return;
+    }
+
     setShowReplyConfirm(false);
-    const now = new Date();
-    const newMsg: ThreadMessage = {
-      id: `m${selectedTicket.thread.length + 1}`,
-      sender: "vendor",
-      senderName: "You",
-      body: replyText,
-      timestamp: now,
-      attachmentCount: replyFiles.length || undefined,
-    };
-    const updated: Ticket = {
-      ...selectedTicket,
-      status: "Awaiting Review",
-      updatedAt: now,
-      thread: [...selectedTicket.thread, newMsg],
-    };
-    updateTicket(updated);
-    setReplyText("");
-    setReplyFiles([]);
-    setShowReplySuccess(true);
+    setIsReplying(true);
+    setReplyError("");
+
+    const fd = new FormData();
+    fd.append("body", replyText.trim());
+    replyFiles.forEach((f, i) => {
+      fd.append(`attachments[${i}]`, f.file);
+    });
+
+    try {
+      const response = await axios.post(
+        `${ticketActionsBaseUrl}/${numericTicketId(selectedTicket.id)}/reply`,
+        fd,
+        { headers: { Accept: "application/json" } }
+      );
+
+      const { ticket, tickets: updatedTickets } = response.data as {
+        ticket: TicketPayload;
+        tickets: TicketPayload[];
+      };
+
+      const parsedTicket = parseTicket(ticket);
+      setTickets(updatedTickets.map(parseTicket));
+      setSelectedTicket(parsedTicket);
+      setReplyText("");
+      setReplyFiles([]);
+      setShowReplySuccess(true);
+    } catch (error: unknown) {
+      handleTicketActionError(
+        error,
+        "Unable to send your reply. Please try again.",
+        () => setShowReplyConfirm(true)
+      );
+    } finally {
+      setIsReplying(false);
+    }
   }
 
   // ── Accept resolved ticket ──
-  function handleConfirmAccept() {
+  async function handleConfirmAccept() {
     if (!selectedTicket) return;
+    if (!ticketActionsBaseUrl) {
+      setReplyError("Support ticket actions are not configured.");
+      return;
+    }
+
     setShowAcceptConfirm(false);
-    const now = new Date();
-    const updated: Ticket = {
-      ...selectedTicket,
-      status: "Closed",
-      updatedAt: now,
-    };
-    updateTicket(updated);
-    setShowAcceptSuccess(true);
+    setIsAccepting(true);
+    setReplyError("");
+
+    try {
+      const response = await axios.patch(
+        `${ticketActionsBaseUrl}/${numericTicketId(selectedTicket.id)}/accept`,
+        {},
+        { headers: { Accept: "application/json" } }
+      );
+
+      const { ticket, tickets: updatedTickets } = response.data as {
+        ticket: TicketPayload;
+        tickets: TicketPayload[];
+      };
+
+      const parsedTicket = parseTicket(ticket);
+      setTickets(updatedTickets.map(parseTicket));
+      setSelectedTicket(parsedTicket);
+      setShowAcceptSuccess(true);
+    } catch (error: unknown) {
+      handleTicketActionError(
+        error,
+        "Unable to close this ticket. Please try again.",
+        () => setShowAcceptConfirm(true)
+      );
+    } finally {
+      setIsAccepting(false);
+    }
   }
 
   // ── Reopen resolved ticket ──
@@ -473,27 +543,51 @@ export function SellerSupportPanel({
     setShowReopenConfirm(true);
   }
 
-  function handleConfirmReopen() {
+  async function handleConfirmReopen() {
     if (!selectedTicket) return;
+    if (!ticketActionsBaseUrl) {
+      setReopenError("Support ticket actions are not configured.");
+      return;
+    }
+
     setShowReopenConfirm(false);
-    const now = new Date();
-    const newMsg: ThreadMessage = {
-      id: `m${selectedTicket.thread.length + 1}`,
-      sender: "vendor",
-      senderName: "You",
-      body: `[Reopened] ${reopenReason}`,
-      timestamp: now,
-    };
-    const updated: Ticket = {
-      ...selectedTicket,
-      status: "Open",
-      updatedAt: now,
-      reopenCount: selectedTicket.reopenCount + 1,
-      thread: [...selectedTicket.thread, newMsg],
-    };
-    updateTicket(updated);
-    setReopenReason("");
-    setShowReopenSuccess(true);
+    setIsReopening(true);
+    setReopenError("");
+
+    try {
+      const response = await axios.post(
+        `${ticketActionsBaseUrl}/${numericTicketId(selectedTicket.id)}/reopen`,
+        { body: reopenReason.trim() },
+        { headers: { Accept: "application/json" } }
+      );
+
+      const { ticket, tickets: updatedTickets } = response.data as {
+        ticket: TicketPayload;
+        tickets: TicketPayload[];
+      };
+
+      const parsedTicket = parseTicket(ticket);
+      setTickets(updatedTickets.map(parseTicket));
+      setSelectedTicket(parsedTicket);
+      setReopenReason("");
+      setShowReopenSuccess(true);
+    } catch (error: unknown) {
+      const axiosError = error as {
+        response?: { status?: number; data?: { message?: string } };
+      };
+
+      if (axiosError.response?.status === 419) {
+        setReopenError("Your session expired. Refresh the page and try again.");
+      } else {
+        setReopenError(
+          axiosError.response?.data?.message ??
+            "Unable to reopen this ticket. Please try again."
+        );
+      }
+      setShowReopenConfirm(true);
+    } finally {
+      setIsReopening(false);
+    }
   }
 
   return (
@@ -664,10 +758,11 @@ export function SellerSupportPanel({
           iconBg="bg-[#EFF6FF]"
           title="Send your reply?"
           body="Your reply will be sent to the support team and the ticket will re-enter review."
-          confirmLabel="Send Reply"
+          confirmLabel={isReplying ? "Sending..." : "Send Reply"}
           confirmClass="bg-[#244693] hover:bg-[#1e3a7a]"
           onConfirm={handleConfirmReply}
           onCancel={() => setShowReplyConfirm(false)}
+          confirmDisabled={isReplying}
         />
       )}
 
@@ -689,10 +784,11 @@ export function SellerSupportPanel({
           iconBg="bg-green-50"
           title="Accept the resolution?"
           body="This will mark the ticket as Closed. You can still reopen it later if the issue reoccurs."
-          confirmLabel="Accept & Close"
+          confirmLabel={isAccepting ? "Closing..." : "Accept & Close"}
           confirmClass="bg-green-600 hover:bg-green-700"
           onConfirm={handleConfirmAccept}
           onCancel={() => setShowAcceptConfirm(false)}
+          confirmDisabled={isAccepting}
         />
       )}
 
@@ -714,10 +810,11 @@ export function SellerSupportPanel({
           iconBg="bg-orange-50"
           title="Reopen this ticket?"
           body="The ticket will be sent back for review with your explanation."
-          confirmLabel="Yes, Reopen"
+          confirmLabel={isReopening ? "Reopening..." : "Yes, Reopen"}
           confirmClass="bg-[#E20E28] hover:bg-[#c00b22]"
           onConfirm={handleConfirmReopen}
           onCancel={() => setShowReopenConfirm(false)}
+          confirmDisabled={isReopening}
         />
       )}
 
@@ -826,7 +923,7 @@ function TicketDetail({
             <ShieldAlert className="w-4 h-4 text-orange-600" />
             <p
               className="text-sm font-bold text-orange-700"
-              style={{ fontFamily: "Inter Condensed, sans-serif" }}
+              style={{ fontFamily: "Inter Condensed, sans-serif", marginBottom: "0px" }}
             >
               Additional information requested
             </p>

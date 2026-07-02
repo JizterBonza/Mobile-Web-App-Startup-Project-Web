@@ -193,6 +193,9 @@ Route::middleware(['auth', 'session.valid', 'user.type:owner_manager'])->prefix(
     Route::get('/orders', [DashboardController::class, 'ownerManagerOrders'])->name('orders');
     Route::get('/support', [DashboardController::class, 'ownerManagerSupport'])->name('support');
     Route::post('/support/tickets', [SupportTicketController::class, 'store'])->name('support.tickets.store');
+    Route::post('/support/tickets/{id}/reply', [SupportTicketController::class, 'vendorReply'])->name('support.tickets.reply');
+    Route::patch('/support/tickets/{id}/accept', [SupportTicketController::class, 'vendorAccept'])->name('support.tickets.accept');
+    Route::post('/support/tickets/{id}/reopen', [SupportTicketController::class, 'vendorReopen'])->name('support.tickets.reopen');
     Route::patch('/orders/{orderId}/accept', [DashboardController::class, 'ownerManagerAcceptOrder'])->name('orders.accept');
     Route::patch('/orders/{orderId}/decline', [DashboardController::class, 'ownerManagerDeclineOrder'])->name('orders.decline');
     Route::patch('/orders/{orderId}/ready', [DashboardController::class, 'ownerManagerMarkOrderReady'])->name('orders.ready');
@@ -369,6 +372,9 @@ Route::middleware(['auth', 'session.valid', 'user.type:vendor'])->prefix('dashbo
     Route::get('/orders', [VendorController::class, 'ordersIndex'])->name('orders.index');
     Route::get('/support', [VendorController::class, 'support'])->name('support');
     Route::post('/support/tickets', [SupportTicketController::class, 'store'])->name('support.tickets.store');
+    Route::post('/support/tickets/{id}/reply', [SupportTicketController::class, 'vendorReply'])->name('support.tickets.reply');
+    Route::patch('/support/tickets/{id}/accept', [SupportTicketController::class, 'vendorAccept'])->name('support.tickets.accept');
+    Route::post('/support/tickets/{id}/reopen', [SupportTicketController::class, 'vendorReopen'])->name('support.tickets.reopen');
     Route::get('/orders/{orderId}/items', [VendorController::class, 'orderItemsIndex'])->name('orders.items.index');
     Route::put('/orders/{id}', [VendorController::class, 'ordersUpdate'])->name('orders.update');
 

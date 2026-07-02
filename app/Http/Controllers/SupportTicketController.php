@@ -191,6 +191,162 @@ class SupportTicketController extends Controller
         return redirect()->back()->with('success', 'Message sent.');
     }
 
+    /** Vendor reply when additional information was requested. */
+    public function vendorReply(Request $request, int $id)
+    {
+        $validated = $request->validate([
+            'body' => ['required', 'string', 'max:5000'],
+            'attachments' => ['nullable', 'array', 'max:10'],
+            'attachments.*' => [
+                'file',
+                'max:20480',
+                'mimes:jpg,jpeg,png,mp4,pdf,docx',
+            ],
+        ]);
+
+        $user = $request->user();
+        $ticket = $this->findOwnedTicket((int) $user->id, $id);
+
+        if ($ticket->status !== SupportTicket::STATUS_INFO_REQUESTED) {
+            return $this->vendorActionError($request, 'This ticket is not awaiting a reply.');
+        }
+
+        $ticketPayload = DB::transaction(function () use ($validated, $request, $user, $ticket) {
+            $message = SupportTicketMessage::create([
+                'support_ticket_id' => $ticket->id,
+                'sender_type' => 'vendor',
+                'sender_user_id' => $user->id,
+                'sender_name' => $this->vendorSenderName($user),
+                'body' => $validated['body'],
+            ]);
+
+            /** @var array<int, \Illuminate\Http\UploadedFile> $files */
+            $files = $request->file('attachments', []);
+            $this->storeMessageAttachments($message, $ticket->id, $files);
+
+            $ticket->update(['status' => SupportTicket::STATUS_AWAITING_REVIEW]);
+
+            return $ticket->fresh(['messages.attachments']);
+        });
+
+        if ($request->wantsJson()) {
+            return response()->json([
+                'ticket' => self::formatTicket($ticketPayload),
+                'tickets' => self::ticketsForUser((int) $user->id),
+            ]);
+        }
+
+        return redirect()->back()->with('success', 'Reply sent successfully.');
+    }
+
+    /** Vendor accepts a resolved ticket (closes it). */
+    public function vendorAccept(Request $request, int $id)
+    {
+        $user = $request->user();
+        $ticket = $this->findOwnedTicket((int) $user->id, $id);
+
+        if ($ticket->status !== SupportTicket::STATUS_RESOLVED) {
+            return $this->vendorActionError($request, 'Only resolved tickets can be accepted.');
+        }
+
+        $ticket->update(['status' => SupportTicket::STATUS_CLOSED]);
+        $ticket = $ticket->fresh(['messages.attachments']);
+
+        if ($request->wantsJson()) {
+            return response()->json([
+                'ticket' => self::formatTicket($ticket),
+                'tickets' => self::ticketsForUser((int) $user->id),
+            ]);
+        }
+
+        return redirect()->back()->with('success', 'Ticket closed successfully.');
+    }
+
+    /** Vendor reopens a resolved ticket. */
+    public function vendorReopen(Request $request, int $id)
+    {
+        $validated = $request->validate([
+            'body' => ['required', 'string', 'max:5000'],
+        ]);
+
+        $user = $request->user();
+        $ticket = $this->findOwnedTicket((int) $user->id, $id);
+
+        if ($ticket->status !== SupportTicket::STATUS_RESOLVED) {
+            return $this->vendorActionError($request, 'Only resolved tickets can be reopened.');
+        }
+
+        $ticketPayload = DB::transaction(function () use ($validated, $user, $ticket) {
+            SupportTicketMessage::create([
+                'support_ticket_id' => $ticket->id,
+                'sender_type' => 'vendor',
+                'sender_user_id' => $user->id,
+                'sender_name' => $this->vendorSenderName($user),
+                'body' => '[Reopened] '.$validated['body'],
+            ]);
+
+            $ticket->update([
+                'status' => SupportTicket::STATUS_OPEN,
+                'reopen_count' => (int) $ticket->reopen_count + 1,
+            ]);
+
+            return $ticket->fresh(['messages.attachments']);
+        });
+
+        if ($request->wantsJson()) {
+            return response()->json([
+                'ticket' => self::formatTicket($ticketPayload),
+                'tickets' => self::ticketsForUser((int) $user->id),
+            ]);
+        }
+
+        return redirect()->back()->with('success', 'Ticket reopened successfully.');
+    }
+
+    private function findOwnedTicket(int $userId, int $id): SupportTicket
+    {
+        return SupportTicket::where('user_id', $userId)->findOrFail($id);
+    }
+
+    private function vendorSenderName($user): string
+    {
+        $user->loadMissing('userDetail');
+        $senderName = trim(($user->userDetail->first_name ?? '').' '.($user->userDetail->last_name ?? ''));
+
+        return $senderName !== '' ? $senderName : ($user->userDetail->email ?? 'Seller');
+    }
+
+    /**
+     * @param  array<int, \Illuminate\Http\UploadedFile>  $files
+     */
+    private function storeMessageAttachments(SupportTicketMessage $message, int $ticketId, array $files): void
+    {
+        foreach ($files as $file) {
+            if (! $file) {
+                continue;
+            }
+
+            $path = $file->store("support-tickets/{$ticketId}", 'public');
+
+            SupportTicketAttachment::create([
+                'support_ticket_message_id' => $message->id,
+                'file_name' => $file->getClientOriginalName(),
+                'file_path' => $path,
+                'file_size' => $file->getSize(),
+                'mime_type' => $file->getClientMimeType(),
+            ]);
+        }
+    }
+
+    private function vendorActionError(Request $request, string $message)
+    {
+        if ($request->wantsJson()) {
+            return response()->json(['message' => $message], 422);
+        }
+
+        return redirect()->back()->withErrors(['error' => $message]);
+    }
+
     public function store(Request $request)
     {
         $validated = $request->validate([
@@ -206,11 +362,7 @@ class SupportTicketController extends Controller
         ]);
 
         $user = $request->user();
-        $user->loadMissing('userDetail');
-        $senderName = trim(($user->userDetail->first_name ?? '').' '.($user->userDetail->last_name ?? ''));
-        if ($senderName === '') {
-            $senderName = $user->userDetail->email ?? 'Seller';
-        }
+        $senderName = $this->vendorSenderName($user);
 
         $ticketPayload = DB::transaction(function () use ($validated, $request, $user, $senderName) {
             $ticket = SupportTicket::create([
@@ -231,22 +383,7 @@ class SupportTicketController extends Controller
 
             /** @var array<int, \Illuminate\Http\UploadedFile> $files */
             $files = $request->file('attachments', []);
-
-            foreach ($files as $file) {
-                if (! $file) {
-                    continue;
-                }
-
-                $path = $file->store("support-tickets/{$ticket->id}", 'public');
-
-                SupportTicketAttachment::create([
-                    'support_ticket_message_id' => $message->id,
-                    'file_name' => $file->getClientOriginalName(),
-                    'file_path' => $path,
-                    'file_size' => $file->getSize(),
-                    'mime_type' => $file->getClientMimeType(),
-                ]);
-            }
+            $this->storeMessageAttachments($message, $ticket->id, $files);
 
             return $ticket->fresh(['messages.attachments']);
         });

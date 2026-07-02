@@ -459,6 +459,7 @@ class DashboardController extends Controller
         return Inertia::render('Dashboard/OwnerManagerSupport', [
             'tickets' => SupportTicketController::ticketsForUser((int) auth()->id()),
             'submitTicketUrl' => route('dashboard.owner-manager.support.tickets.store'),
+            'ticketActionsBaseUrl' => url('/dashboard/owner-manager/support/tickets'),
         ]);
     }
 

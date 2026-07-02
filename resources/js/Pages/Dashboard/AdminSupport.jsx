@@ -381,7 +381,7 @@ function AdminTicketDetail({ ticket, replyText, setReplyText, replyError, setRep
                 <div className="bg-orange-50 border border-orange-200 rounded-xl p-5">
                     <div className="flex items-center gap-2 mb-2">
                         <ShieldAlert className="w-4 h-4 text-orange-600" />
-                        <p className="text-sm font-bold text-orange-700" style={{ fontFamily: 'Inter Condensed, sans-serif' }}>Waiting for vendor's response</p>
+                        <p className="text-sm font-bold text-orange-700" style={{ fontFamily: 'Inter Condensed, sans-serif', marginBottom: '0px' }}>Waiting for vendor's response</p>
                     </div>
                     <p className="text-xs text-orange-600 mb-4">The vendor has been asked for additional information. You can send a follow-up while waiting.</p>
                     <button
@@ -418,7 +418,7 @@ function AdminTicketDetail({ ticket, replyText, setReplyText, replyError, setRep
                 <div className="bg-purple-50 border border-purple-200 rounded-xl p-5">
                     <div className="flex items-center gap-2 mb-2">
                         <Loader2 className="w-4 h-4 text-purple-600" />
-                        <p className="text-sm font-bold text-purple-700" style={{ fontFamily: 'Inter Condensed, sans-serif' }}>Ticket In Progress</p>
+                        <p className="text-sm font-bold text-purple-700" style={{ fontFamily: 'Inter Condensed, sans-serif', marginBottom: '0px' }}>Ticket In Progress</p>
                     </div>
                     <p className="text-xs text-purple-600 mb-4">You are actively working on this issue. Request more info or mark as resolved once a solution is found.</p>
                     <div className="flex flex-col sm:flex-row gap-3">

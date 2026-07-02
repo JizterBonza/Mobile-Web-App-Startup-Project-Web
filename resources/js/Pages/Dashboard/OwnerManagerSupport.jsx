@@ -2,7 +2,7 @@ import { Head } from '@inertiajs/react'
 import { SellerSupportPanel } from '../../Components/Dashboard/SellerSupportPanel'
 import { useDashboardSession } from '../../hooks/useDashboardSession'
 
-export default function OwnerManagerSupport({ tickets = [], submitTicketUrl = '' }) {
+export default function OwnerManagerSupport({ tickets = [], submitTicketUrl = '', ticketActionsBaseUrl = '' }) {
     useDashboardSession()
 
     return (
@@ -14,6 +14,7 @@ export default function OwnerManagerSupport({ tickets = [], submitTicketUrl = ''
                     pageTitle="Seller Support"
                     initialTickets={tickets}
                     submitTicketUrl={submitTicketUrl}
+                    ticketActionsBaseUrl={ticketActionsBaseUrl}
                 />
             </div>
         </>
