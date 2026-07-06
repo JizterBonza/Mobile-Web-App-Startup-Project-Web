@@ -16,6 +16,7 @@ use App\Http\Controllers\SuperAdminProductController;
 use App\Http\Controllers\ProductCatalogRequestController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\SupportTicketController;
+use App\Http\Controllers\VoucherController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
@@ -169,6 +170,14 @@ Route::middleware(['auth', 'session.valid', 'user.type:super_admin'])->prefix('d
     Route::post('/', [ZoneController::class, 'store'])->name('store');
     Route::put('/{id}', [ZoneController::class, 'update'])->name('update');
     Route::delete('/{id}', [ZoneController::class, 'destroy'])->name('destroy');
+});
+
+// Super Admin Vouchers
+Route::middleware(['auth', 'session.valid', 'user.type:super_admin'])->prefix('dashboard/super-admin/vouchers')->name('dashboard.super-admin.vouchers.')->group(function () {
+    Route::get('/', [VoucherController::class, 'index'])->name('index');
+    Route::post('/', [VoucherController::class, 'store'])->name('store');
+    Route::put('/{id}', [VoucherController::class, 'update'])->name('update');
+    Route::delete('/{id}', [VoucherController::class, 'destroy'])->name('destroy');
 });
 
 // Super Admin Support
@@ -325,6 +334,14 @@ Route::middleware(['auth', 'session.valid', 'user.type:admin'])->prefix('dashboa
     Route::post('/', [ZoneController::class, 'store'])->name('store');
     Route::put('/{id}', [ZoneController::class, 'update'])->name('update');
     Route::delete('/{id}', [ZoneController::class, 'destroy'])->name('destroy');
+});
+
+// Admin Vouchers
+Route::middleware(['auth', 'session.valid', 'user.type:admin'])->prefix('dashboard/admin/vouchers')->name('dashboard.admin.vouchers.')->group(function () {
+    Route::get('/', [VoucherController::class, 'index'])->name('index');
+    Route::post('/', [VoucherController::class, 'store'])->name('store');
+    Route::put('/{id}', [VoucherController::class, 'update'])->name('update');
+    Route::delete('/{id}', [VoucherController::class, 'destroy'])->name('destroy');
 });
 
 // Admin Support

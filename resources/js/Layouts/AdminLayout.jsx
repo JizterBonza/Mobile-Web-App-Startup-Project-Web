@@ -261,6 +261,12 @@ export default function AdminLayout({ children, auth, title = 'Dashboard' }) {
                       </Link>
                     </li>
                     <li className="nav-item">
+                      <Link href="/dashboard/admin/vouchers" className="nav-link">
+                        <i className="nav-icon fas fa-ticket-alt"></i>
+                        <p>Vouchers</p>
+                      </Link>
+                    </li>
+                    <li className="nav-item">
                       <Link href="/dashboard/admin/payment-methods" className="nav-link">
                         <i className="nav-icon fas fa-credit-card"></i>
                         <p>Payment Methods</p>

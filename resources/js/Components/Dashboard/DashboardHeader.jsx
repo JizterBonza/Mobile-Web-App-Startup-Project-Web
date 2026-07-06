@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useForm, usePage } from '@inertiajs/react'
-import { Bell, ChevronDown, CreditCard, History, LogOut, Map, Settings, SlidersHorizontal, Truck } from 'lucide-react'
+import { Bell, ChevronDown, CreditCard, History, LogOut, Map, Settings, SlidersHorizontal, Ticket, Truck } from 'lucide-react'
 import primaryLogo from '../../../../Logo/Primary Logo.png'
 
 /**
@@ -287,6 +287,7 @@ export const SUPER_ADMIN_HEADER_NAV = [
 
 export const SUPER_ADMIN_DROPDOWN_NAV = [
     { label: 'Activity Logs', href: '/dashboard/super-admin/activity-logs', Icon: History },
+    { label: 'Vouchers', href: '/dashboard/super-admin/vouchers', Icon: Ticket },
     { label: 'Payment Methods', href: '/dashboard/super-admin/payment-methods', Icon: CreditCard },
     { label: 'Delivery Methods', href: '/dashboard/super-admin/delivery-methods', Icon: Truck },
     { label: 'Delivery Revenue Settings', href: '/dashboard/super-admin/delivery-revenue-settings', Icon: SlidersHorizontal },
@@ -312,6 +313,7 @@ export const ADMIN_HEADER_NAV = [
 
 export const ADMIN_DROPDOWN_NAV = [
     { label: 'Activity Logs', href: '/dashboard/admin/activity-logs', Icon: History },
+    { label: 'Vouchers', href: '/dashboard/admin/vouchers', Icon: Ticket },
     { label: 'Payment Methods', href: '/dashboard/admin/payment-methods', Icon: CreditCard },
     { label: 'Delivery Methods', href: '/dashboard/admin/delivery-methods', Icon: Truck },
     { label: 'Delivery Revenue Settings', href: '/dashboard/admin/delivery-revenue-settings', Icon: SlidersHorizontal },
