@@ -103,6 +103,7 @@ Route::middleware(['auth', 'session.valid', 'user.type:super_admin'])->prefix('d
     Route::delete('/{id}/shops/{shopId}', [AgrivetController::class, 'removeShop'])->name('shops.remove');
     Route::get('/{id}/shops/{shopId}/store-information', [AgrivetController::class, 'showStoreInformation'])->name('shops.store-information');
     Route::post('/{id}/shops/{shopId}/cover-photo', [AgrivetController::class, 'updateShopCoverPhoto'])->name('shops.cover-photo');
+    Route::post('/{id}/shops/{shopId}/permit-photo', [AgrivetController::class, 'updateShopPermitPhoto'])->name('shops.permit-photo');
 
     // Shop Vendors Routes
     Route::get('/{id}/shops/{shopId}/vendors', [AgrivetController::class, 'showVendors'])->name('shops.vendors.index');
@@ -191,6 +192,7 @@ Route::middleware(['auth', 'session.valid', 'user.type:owner_manager'])->prefix(
     Route::get('/stores/{shopId}/store-information', [DashboardController::class, 'ownerManagerStoreInformation'])->name('stores.store-information');
     Route::put('/stores/{shopId}', [DashboardController::class, 'ownerManagerUpdateShop'])->name('stores.update');
     Route::post('/stores/{shopId}/cover-photo', [DashboardController::class, 'ownerManagerUpdateShopCoverPhoto'])->name('stores.cover-photo');
+    Route::post('/stores/{shopId}/permit-photo', [DashboardController::class, 'ownerManagerUpdateShopPermitPhoto'])->name('stores.permit-photo');
     Route::post('/stores/{shopId}/listings', [DashboardController::class, 'ownerManagerStoreShopListing'])->name('stores.listings.store');
     Route::put('/stores/{shopId}/listings/{itemId}', [DashboardController::class, 'ownerManagerUpdateShopListing'])->name('stores.listings.update');
     Route::post('/stores/{shopId}/bundles', [DashboardController::class, 'ownerManagerStoreShopBundle'])->name('stores.bundles.store');
@@ -267,6 +269,7 @@ Route::middleware(['auth', 'session.valid', 'user.type:admin'])->prefix('dashboa
     Route::delete('/{id}/shops/{shopId}', [AgrivetController::class, 'removeShop'])->name('shops.remove');
     Route::get('/{id}/shops/{shopId}/store-information', [AgrivetController::class, 'showStoreInformation'])->name('shops.store-information');
     Route::post('/{id}/shops/{shopId}/cover-photo', [AgrivetController::class, 'updateShopCoverPhoto'])->name('shops.cover-photo');
+    Route::post('/{id}/shops/{shopId}/permit-photo', [AgrivetController::class, 'updateShopPermitPhoto'])->name('shops.permit-photo');
 
     // Shop Vendors Routes
     Route::get('/{id}/shops/{shopId}/vendors', [AgrivetController::class, 'showVendors'])->name('shops.vendors.index');

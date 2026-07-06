@@ -65,6 +65,9 @@ export default function AgrivetShops({ auth, agrivet, zones = [], shops = [], fl
     store_image: null,
     permit_image: null,
     shop_status: 'active',
+    bank_name: '',
+    account_name: '',
+    account_number: '',
   })
 
   const editForm = useForm({
@@ -78,6 +81,9 @@ export default function AgrivetShops({ auth, agrivet, zones = [], shops = [], fl
     shop_long: '',
     contact_number: '',
     shop_status: 'active',
+    bank_name: '',
+    account_name: '',
+    account_number: '',
   })
 
   // Handle add modal animation
@@ -242,6 +248,9 @@ export default function AgrivetShops({ auth, agrivet, zones = [], shops = [], fl
       shop_long: shop.shop_long || '',
       contact_number: shop.contact_number || '',
       shop_status: shop.shop_status || 'active',
+      bank_name: shop.bank_name || '',
+      account_name: shop.account_name || '',
+      account_number: shop.account_number || '',
     })
     setShowEditModal(true)
     setShowEditModalAnimation(false)
@@ -624,6 +633,7 @@ export default function AgrivetShops({ auth, agrivet, zones = [], shops = [], fl
                               if (loc.province) addForm.setData('shop_province', loc.province)
                               if (loc.postal_code) addForm.setData('shop_postal_code', loc.postal_code)
                               if (loc.address) addForm.setData('street', loc.address)
+                              if (loc.barangay) addForm.setData('barangay', loc.barangay)
                             }}
                           />
                         </div>
@@ -813,6 +823,57 @@ export default function AgrivetShops({ auth, agrivet, zones = [], shops = [], fl
                       </div>
                     </div>
 
+                    <div className="row">
+                      <div className="col-md-12">
+                        <h6 className="text-muted mb-3">Bank Details <span className="text-muted">(optional)</span></h6>
+                      </div>
+                      <div className="col-md-4">
+                        <div className="form-group">
+                          <label>Bank Name</label>
+                          <input
+                            type="text"
+                            className={`form-control ${addForm.errors.bank_name ? 'is-invalid' : ''}`}
+                            value={addForm.data.bank_name}
+                            onChange={(e) => addForm.setData('bank_name', e.target.value)}
+                            placeholder="e.g. BDO, BPI"
+                          />
+                          {addForm.errors.bank_name && (
+                            <div className="invalid-feedback">{addForm.errors.bank_name}</div>
+                          )}
+                        </div>
+                      </div>
+                      <div className="col-md-4">
+                        <div className="form-group">
+                          <label>Account Name</label>
+                          <input
+                            type="text"
+                            className={`form-control ${addForm.errors.account_name ? 'is-invalid' : ''}`}
+                            value={addForm.data.account_name}
+                            onChange={(e) => addForm.setData('account_name', e.target.value)}
+                            placeholder="Account holder name"
+                          />
+                          {addForm.errors.account_name && (
+                            <div className="invalid-feedback">{addForm.errors.account_name}</div>
+                          )}
+                        </div>
+                      </div>
+                      <div className="col-md-4">
+                        <div className="form-group">
+                          <label>Account Number</label>
+                          <input
+                            type="text"
+                            className={`form-control ${addForm.errors.account_number ? 'is-invalid' : ''}`}
+                            value={addForm.data.account_number}
+                            onChange={(e) => addForm.setData('account_number', e.target.value)}
+                            placeholder="Account number"
+                          />
+                          {addForm.errors.account_number && (
+                            <div className="invalid-feedback">{addForm.errors.account_number}</div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
                     <div className="form-group">
                       <label>Store front photo <span className="text-danger">*</span></label>
                       <div
@@ -987,6 +1048,7 @@ export default function AgrivetShops({ auth, agrivet, zones = [], shops = [], fl
                         <div className="form-group">
                           <label>Pin Location</label>
                           <PinLocationMap
+                            key={`edit-shop-map-${selectedShop.id}`}
                             initialLat={editForm.data.shop_lat ? parseFloat(editForm.data.shop_lat) : undefined}
                             initialLng={editForm.data.shop_long ? parseFloat(editForm.data.shop_long) : undefined}
                             zones={zonesForMap}
@@ -1120,6 +1182,56 @@ export default function AgrivetShops({ auth, agrivet, zones = [], shops = [], fl
                           />
                           {editForm.errors.contact_number && (
                             <div className="invalid-feedback">{editForm.errors.contact_number}</div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="row">
+                      <div className="col-md-12">
+                        <h6 className="text-muted mb-3">Bank Details</h6>
+                      </div>
+                      <div className="col-md-4">
+                        <div className="form-group">
+                          <label>Bank Name</label>
+                          <input
+                            type="text"
+                            className={`form-control ${editForm.errors.bank_name ? 'is-invalid' : ''}`}
+                            value={editForm.data.bank_name}
+                            onChange={(e) => editForm.setData('bank_name', e.target.value)}
+                            placeholder="e.g. BDO, BPI"
+                          />
+                          {editForm.errors.bank_name && (
+                            <div className="invalid-feedback">{editForm.errors.bank_name}</div>
+                          )}
+                        </div>
+                      </div>
+                      <div className="col-md-4">
+                        <div className="form-group">
+                          <label>Account Name</label>
+                          <input
+                            type="text"
+                            className={`form-control ${editForm.errors.account_name ? 'is-invalid' : ''}`}
+                            value={editForm.data.account_name}
+                            onChange={(e) => editForm.setData('account_name', e.target.value)}
+                            placeholder="Account holder name"
+                          />
+                          {editForm.errors.account_name && (
+                            <div className="invalid-feedback">{editForm.errors.account_name}</div>
+                          )}
+                        </div>
+                      </div>
+                      <div className="col-md-4">
+                        <div className="form-group">
+                          <label>Account Number</label>
+                          <input
+                            type="text"
+                            className={`form-control ${editForm.errors.account_number ? 'is-invalid' : ''}`}
+                            value={editForm.data.account_number}
+                            onChange={(e) => editForm.setData('account_number', e.target.value)}
+                            placeholder="Account number"
+                          />
+                          {editForm.errors.account_number && (
+                            <div className="invalid-feedback">{editForm.errors.account_number}</div>
                           )}
                         </div>
                       </div>

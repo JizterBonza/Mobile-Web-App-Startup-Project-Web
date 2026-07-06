@@ -445,6 +445,9 @@ class AgrivetController extends Controller
                 'shop_status' => $shop->shop_status,
                 'operating_days' => $shop->operating_days,
                 'operating_hours' => $shop->operating_hours,
+                'bank_name' => $shop->bank_name,
+                'account_name' => $shop->account_name,
+                'account_number' => $shop->account_number,
                 'logo_url' => $shop->logo_url,
                 'vendors_count' => $shop->vendors()->count(),
                 'created_at' => $shop->created_at->format('Y-m-d H:i:s'),
@@ -487,6 +490,9 @@ class AgrivetController extends Controller
             'zone_id' => 'nullable|exists:zones,id',
             'store_image' => 'required|file|mimes:jpeg,jpg,png,webp|max:10240',
             'permit_image' => 'required|file|mimes:jpeg,jpg,png,webp,pdf|max:10240',
+            'bank_name' => 'nullable|string|max:150',
+            'account_name' => 'nullable|string|max:150',
+            'account_number' => 'nullable|string|max:50',
         ]);
 
         // If shop has coordinates, set zone_id to the zone whose boundary contains this point
@@ -522,6 +528,9 @@ class AgrivetController extends Controller
                 'permit_url' => $permitPath,
                 'operating_days' => $validated['operating_days'],
                 'operating_hours' => $operatingHours,
+                'bank_name' => $validated['bank_name'] ?? null,
+                'account_name' => $validated['account_name'] ?? null,
+                'account_number' => $validated['account_number'] ?? null,
             ]);
 
             ActivityLog::log('created', "Shop created: {$shop->shop_name} (Agrivet: {$agrivet->name})", $shop, null, $shop->toArray());
@@ -563,33 +572,54 @@ class AgrivetController extends Controller
             'zone_id' => 'nullable|exists:zones,id',
             'operating_days' => 'nullable|string|max:255',
             'operating_hours' => 'nullable|string|max:100',
+            'bank_name' => 'nullable|string|max:150',
+            'account_name' => 'nullable|string|max:150',
+            'account_number' => 'nullable|string|max:50',
         ]);
 
         // If shop has coordinates, set zone_id to the zone whose boundary contains this point
-        $zoneId = $request->zone_id;
+        $zoneId = $shop->zone_id;
+        if ($request->has('zone_id')) {
+            $zoneId = $request->zone_id;
+        }
         if ($request->filled('shop_lat') && $request->filled('shop_long')) {
             $zone = Zone::findZoneContainingPoint((float) $request->shop_lat, (float) $request->shop_long);
-            if ($zone) {
-                $zoneId = $zone->id;
-            }
+            $zoneId = $zone?->id;
         }
 
         try {
-            $shop->update([
+            $updateData = [
                 'shop_name' => $request->shop_name,
-                'shop_description' => $request->shop_description ?? null,
-                'shop_address' => $request->shop_address ?? null,
-                'shop_city' => $request->shop_city ?? null,
-                'shop_postal_code' => $request->shop_postal_code ?? null,
-                'shop_province' => $request->shop_province ?? null,
-                'shop_lat' => $request->shop_lat ?? null,
-                'shop_long' => $request->shop_long ?? null,
-                'contact_number' => $request->contact_number ?? null,
-                'shop_status' => $request->shop_status ?? $shop->shop_status,
-                'zone_id' => $zoneId,
-                'operating_days' => $request->operating_days ?? $shop->operating_days,
-                'operating_hours' => $request->operating_hours ?? $shop->operating_hours,
-            ]);
+                'shop_status' => $request->has('shop_status') ? $request->shop_status : $shop->shop_status,
+            ];
+
+            $optionalFields = [
+                'shop_description',
+                'shop_address',
+                'shop_city',
+                'shop_postal_code',
+                'shop_province',
+                'contact_number',
+                'operating_days',
+                'operating_hours',
+                'bank_name',
+                'account_name',
+                'account_number',
+            ];
+
+            foreach ($optionalFields as $field) {
+                if ($request->has($field)) {
+                    $updateData[$field] = $request->input($field);
+                }
+            }
+
+            if ($request->has('shop_lat') || $request->has('shop_long')) {
+                $updateData['shop_lat'] = $request->filled('shop_lat') ? $request->shop_lat : null;
+                $updateData['shop_long'] = $request->filled('shop_long') ? $request->shop_long : null;
+                $updateData['zone_id'] = $zoneId;
+            }
+
+            $shop->update($updateData);
 
             ActivityLog::log('updated', "Shop updated: {$shop->shop_name}", $shop, $oldShopValues, $shop->fresh()->toArray());
 
@@ -621,6 +651,27 @@ class AgrivetController extends Controller
 
         return $this->redirectToStoreInformation($id, $shopId)
             ->with('success', 'Cover photo updated successfully.');
+    }
+
+    /**
+     * Update shop business permit document.
+     */
+    public function updateShopPermitPhoto(Request $request, $id, $shopId)
+    {
+        $agrivet = Agrivet::findOrFail($id);
+        $shop = Shop::where('agrivet_id', $agrivet->id)->findOrFail($shopId);
+
+        $request->validate([
+            'permit_image' => 'required|file|mimes:jpeg,jpg,png,webp,pdf|max:10240',
+        ]);
+
+        $path = $request->file('permit_image')->store('shops/permits', 'public');
+        $shop->update(['permit_url' => $path]);
+
+        ActivityLog::log('updated', "Shop business permit updated: {$shop->shop_name}", $shop);
+
+        return $this->redirectToStoreInformation($id, $shopId)
+            ->with('success', 'Business permit updated successfully.');
     }
 
     /**
@@ -829,6 +880,12 @@ class AgrivetController extends Controller
             $deliveryMethods = $this->activeDeliveryMethods();
         }
 
+        $zones = Zone::where('status', true)->orderBy('name')->get(['id', 'name', 'boundary']);
+        $mapShops = Shop::where('agrivet_id', $agrivet->id)
+            ->whereNotNull('shop_lat')
+            ->whereNotNull('shop_long')
+            ->get(['id', 'shop_name', 'shop_lat', 'shop_long']);
+
         return Inertia::render('Dashboard/AgrivetStoreInformation', [
             'agrivet' => [
                 'id' => $agrivet->id,
@@ -858,6 +915,9 @@ class AgrivetController extends Controller
                 'permit_url' => $shop->permit_url,
                 'operating_days' => $shop->operating_days,
                 'operating_hours' => $shop->operating_hours,
+                'bank_name' => $shop->bank_name,
+                'account_name' => $shop->account_name,
+                'account_number' => $shop->account_number,
                 'created_at' => $shop->created_at->format('Y-m-d H:i:s'),
             ],
             'vendors' => $vendors,
@@ -868,6 +928,8 @@ class AgrivetController extends Controller
             'orders' => $orders,
             'deliveryMethods' => $deliveryMethods,
             'preparingItemStatusId' => $preparingItemStatusId,
+            'zones' => $zones->map(fn ($z) => ['id' => $z->id, 'name' => $z->name, 'boundary' => $z->boundary]),
+            'mapShops' => $mapShops,
         ]);
     }
 

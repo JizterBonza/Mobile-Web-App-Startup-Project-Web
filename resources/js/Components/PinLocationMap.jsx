@@ -9,7 +9,7 @@ import { useState, useEffect, useRef } from 'react'
  * Props:
  * - initialLat, initialLng: Optional initial center / pin position
  * - initialAddress, initialCity, initialProvince, initialPostalCode: Optional display values
- * - onLocationSelect: Callback when a location is pinned: ({ address, city, province, postal_code, latitude, longitude })
+ * - onLocationSelect: Callback when a location is pinned: ({ address, barangay, city, province, postal_code, latitude, longitude })
  * - apiKey: Optional; falls back to window.GOOGLE_MAPS_API_KEY
  * - height: Map container height (default: 320px)
  * - className: Extra CSS classes for the wrapper
@@ -227,6 +227,7 @@ export default function PinLocationMap({
       if (status !== 'OK' || !results || results.length === 0) {
         onLocationSelectRef.current?.({
           address: '',
+          barangay: '',
           city: '',
           province: '',
           postal_code: '',
@@ -237,23 +238,33 @@ export default function PinLocationMap({
       }
 
       const r = results[0]
+      let barangay = ''
       let city = ''
       let province = ''
       let postal_code = ''
 
       if (r.address_components) {
         for (const comp of r.address_components) {
+          const name = comp.long_name || comp.short_name || ''
+          if (!barangay && (
+            comp.types.includes('sublocality_level_1') ||
+            comp.types.includes('sublocality') ||
+            comp.types.includes('neighborhood') ||
+            comp.types.includes('administrative_area_level_3')
+          )) {
+            barangay = name
+          }
           if (comp.types.includes('locality')) {
-            city = comp.long_name || comp.short_name || ''
+            city = name
           }
           if (comp.types.includes('postal_code')) {
-            postal_code = comp.long_name || comp.short_name || ''
+            postal_code = name
           }
           if (comp.types.includes('administrative_area_level_1')) {
-            province = comp.long_name || comp.short_name || ''
+            province = name
           }
           if (!city && comp.types.includes('administrative_area_level_2')) {
-            city = comp.long_name || comp.short_name || ''
+            city = name
           }
         }
       }
@@ -262,6 +273,7 @@ export default function PinLocationMap({
 
       onLocationSelectRef.current?.({
         address,
+        barangay,
         city,
         province,
         postal_code,

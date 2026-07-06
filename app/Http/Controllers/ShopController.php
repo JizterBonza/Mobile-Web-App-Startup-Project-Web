@@ -143,6 +143,9 @@ class ShopController extends Controller
             'shop_long' => 'nullable|numeric',
             'contact_number' => 'nullable|string|max:20',
             'shop_status' => 'nullable|string|max:50',
+            'bank_name' => 'nullable|string|max:150',
+            'account_name' => 'nullable|string|max:150',
+            'account_number' => 'nullable|string|max:50',
         ]);
 
         if ($validator->fails()) {
@@ -175,6 +178,9 @@ class ShopController extends Controller
             'shop_long' => $request->shop_long,
             'contact_number' => $request->contact_number,
             'shop_status' => $request->shop_status ?? 'active',
+            'bank_name' => $request->bank_name,
+            'account_name' => $request->account_name,
+            'account_number' => $request->account_number,
         ]);
 
         return response()->json([
@@ -214,6 +220,9 @@ class ShopController extends Controller
             'shop_long' => 'nullable|numeric',
             'contact_number' => 'nullable|string|max:20',
             'shop_status' => 'nullable|string|max:50',
+            'bank_name' => 'nullable|string|max:150',
+            'account_name' => 'nullable|string|max:150',
+            'account_number' => 'nullable|string|max:50',
         ]);
 
         if ($validator->fails()) {
@@ -236,6 +245,9 @@ class ShopController extends Controller
             'shop_long',
             'contact_number',
             'shop_status',
+            'bank_name',
+            'account_name',
+            'account_number',
         ]);
 
         // If shop coordinates are provided, set zone_id to the zone whose boundary contains this point

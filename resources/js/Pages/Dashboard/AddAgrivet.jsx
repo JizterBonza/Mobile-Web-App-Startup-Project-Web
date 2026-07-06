@@ -598,6 +598,9 @@ export default function AddAgrivet({ auth, zones = [], flash }) {
                                                     if (loc.address) {
                                                         form.setData('street', loc.address)
                                                     }
+                                                    if (loc.barangay) {
+                                                        form.setData('barangay', loc.barangay)
+                                                    }
                                                 }}
                                             />
                                         </div>
