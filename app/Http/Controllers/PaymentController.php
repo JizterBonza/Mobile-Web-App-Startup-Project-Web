@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use App\Services\PaymongoService;
+use App\Models\Order;
 use App\Models\Payment;
 use App\Models\Notification;
 use Illuminate\Support\Facades\Log;
@@ -472,6 +473,39 @@ class PaymentController extends Controller
         return response()->json([
             'success' => true,
             'checkout_url' => $payment->checkout_url,
+        ]);
+    }
+
+    /**
+     * Check whether an order's payment has been completed.
+     *
+     * @param int $orderId
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function getPaymentStatusByOrderId($orderId)
+    {
+        $order = Order::with(['orderDetail', 'payment'])->find($orderId);
+
+        if (! $order) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Order not found',
+            ], 404);
+        }
+
+        $paymentStatus = $order->orderDetail?->payment_status ?? 'pending';
+
+        return response()->json([
+            'success' => true,
+            'order_id' => $order->id,
+            'is_paid' => $paymentStatus === 'paid',
+            'payment_status' => $paymentStatus,
+            'payment' => $order->payment ? [
+                'id' => $order->payment->id,
+                'status' => $order->payment->status,
+                'payment_method' => $order->payment->payment_method,
+                'amount' => $order->payment->amount,
+            ] : null,
         ]);
     }
 }

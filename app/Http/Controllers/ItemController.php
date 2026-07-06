@@ -2,8 +2,11 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Category;
 use App\Models\Item;
+use App\Models\OrderItem;
 use App\Models\RatingReview;
+use App\Models\Shop;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 
@@ -51,6 +54,61 @@ class ItemController extends Controller
             'success' => true,
             'data' => $items,
             'count' => $items->count()
+        ]);
+    }
+
+    /**
+     * Fetch items by shop and category.
+     *
+     * @param int $shopId
+     * @param int $categoryId
+     * @param Request $request
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function getByShopAndCategory($shopId, $categoryId, Request $request)
+    {
+        $shop = Shop::find($shopId);
+
+        if (!$shop) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Shop not found',
+            ], 404);
+        }
+
+        $category = Category::find($categoryId);
+
+        if (!$category) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Category not found',
+            ], 404);
+        }
+
+        $query = Item::query()
+            ->where('shop_id', $shopId)
+            ->where('category', $categoryId);
+
+        if ($request->has('status')) {
+            $query->where('item_status', $request->status);
+        } else {
+            $query->where('item_status', 'active');
+        }
+
+        $items = $query->orderBy('created_at', 'desc')->get();
+
+        return response()->json([
+            'success' => true,
+            'data' => $items,
+            'count' => $items->count(),
+            'shop' => [
+                'id' => $shop->id,
+                'shop_name' => $shop->shop_name,
+            ],
+            'category' => [
+                'id' => $category->id,
+                'category_name' => $category->category_name,
+            ],
         ]);
     }
 
@@ -124,6 +182,46 @@ class ItemController extends Controller
         return response()->json([
             'success' => true,
             'data' => $itemData
+        ]);
+    }
+
+    /**
+     * Fetch items the user has previously ordered (distinct), with full item details.
+     *
+     * @param int $userId
+     * @param Request $request
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function getOrderedByUser($userId, Request $request)
+    {
+        $limit = max((int) $request->input('limit', 10), 10);
+
+        $itemIds = OrderItem::query()
+            ->select('order_items.item_id')
+            ->selectRaw('MAX(order_items.created_at) as last_ordered_at')
+            ->join('orders', 'order_items.order_id', '=', 'orders.id')
+            ->where('orders.user_id', $userId)
+            ->groupBy('order_items.item_id')
+            ->orderByDesc('last_ordered_at')
+            ->limit($limit)
+            ->pluck('item_id');
+
+        if ($itemIds->isEmpty()) {
+            return response()->json([
+                'success' => true,
+                'data' => [],
+                'count' => 0,
+            ]);
+        }
+
+        $items = Item::whereIn('id', $itemIds)
+            ->orderByRaw('FIELD(id, ' . $itemIds->implode(',') . ')')
+            ->get();
+
+        return response()->json([
+            'success' => true,
+            'data' => $items,
+            'count' => $items->count(),
         ]);
     }
 
@@ -221,8 +319,18 @@ class ItemController extends Controller
             $query->where('category', $request->category);
         }
 
-        // Get 10 random items
-        $items = $query->inRandomOrder()->limit(10)->get();
+        // Get 10 random items with shop name for each
+        $items = $query->with('shop:id,shop_name')
+            ->inRandomOrder()
+            ->limit(10)
+            ->get()
+            ->map(function (Item $item) {
+                $data = $item->makeHidden(['shop'])->toArray();
+                $data['sold'] = $item->sold_count;
+                $data['shop_name'] = $item->shop?->shop_name;
+
+                return $data;
+            });
 
         return response()->json([
             'success' => true,

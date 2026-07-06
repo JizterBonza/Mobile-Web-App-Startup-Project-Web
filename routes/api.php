@@ -16,10 +16,12 @@ use App\Http\Controllers\MobileController;
 use App\Http\Controllers\PaymentMethodController;
 use App\Http\Controllers\ActivityLogController;
 use App\Http\Controllers\PaymentController;
+use App\Http\Controllers\SearchController;
 use Illuminate\Http\Request;
 
 Route::post('register', [MobileAuthController::class, 'register']);
 Route::post('login', [MobileAuthController::class, 'login']);
+Route::post('refresh', [MobileAuthController::class, 'refresh']);
 Route::post('auth/google/token', [SocialAuthController::class, 'googleToken']);
 
 Route::middleware('auth:sanctum')->group(function () {
@@ -37,6 +39,9 @@ Route::prefix('auth')->group(function () {
     Route::get('{provider}/callback', [SocialAuthController::class, 'callback']);
 });
 
+// Search routes
+Route::get('search', [SearchController::class, 'index']);
+
 // Category routes
 Route::get('categories', [CategoryController::class, 'index']);
 Route::get('categories/{id}', [CategoryController::class, 'show']);
@@ -47,6 +52,8 @@ Route::get('items', [ItemController::class, 'index']);
 Route::get('items/random', [ItemController::class, 'random']);
 Route::get('items/on-sale', [ItemController::class, 'onSale']);
 Route::get('items/bundled', [ItemController::class, 'bundled']);
+Route::get('items/shop/{shopId}/category/{categoryId}', [ItemController::class, 'getByShopAndCategory']);
+Route::get('items/ordered/user/{userId}', [ItemController::class, 'getOrderedByUser']);
 Route::get('items/{id}/reviews', [ItemController::class, 'getItemWithReviews']);
 Route::get('items/{id}', [ItemController::class, 'show']);
 Route::post('items', [ItemController::class, 'store']);
@@ -145,4 +152,5 @@ Route::post('/payment/attach', [PaymentController::class,'attachPayment']);
 Route::get('/payment-success', [PaymentController::class, 'paymentSuccess']);
 Route::post('/payment/checkout', [PaymentController::class,'checkout']);
 Route::get('/payment/checkout-url/{orderId}', [PaymentController::class, 'getCheckoutUrlByOrderId']);
+Route::get('/payment/status/{orderId}', [PaymentController::class, 'getPaymentStatusByOrderId']);
 Route::post('/payment/webhook', [PaymentController::class, 'handleWebhook']);

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Cart;
+use App\Models\DiscountLog;
 use App\Models\Item;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
@@ -19,14 +20,85 @@ class CartController extends Controller
     private const SHOP_SELECT = ['id', 'agrivet_id', 'zone_id', 'shop_name', 'shop_description', 'shop_address', 'shop_city', 'shop_postal_code', 'shop_province', 'shop_lat', 'shop_long', 'contact_number', 'average_rating', 'total_reviews'];
 
     /** Eager load for cart response with constrained columns */
-    private function cartWith(): array
+    private function cartWith(bool $includeUser = true): array
     {
-        return [
+        $with = [
             'item:' . implode(',', self::ITEM_SELECT),
             'item.shop:' . implode(',', self::SHOP_SELECT),
             'item.shop.zone:id,name,is_cod',
-            'user',
+            'item.activeDiscountLog',
         ];
+
+        if ($includeUser) {
+            $with[] = 'user';
+        }
+
+        return $with;
+    }
+
+    private function ensureDiscountLogIsValid(Item $item): ?DiscountLog
+    {
+        if (!$item->relationLoaded('activeDiscountLog') || !$item->activeDiscountLog) {
+            return null;
+        }
+
+        return $item->activeDiscountLog->deactivateIfExpired()
+            ? $item->activeDiscountLog
+            : null;
+    }
+
+    private function buildDiscountDetails(Item $item): ?array
+    {
+        $log = $this->ensureDiscountLogIsValid($item);
+
+        if ($item->getActiveDiscountPercent() <= 0 || !$log) {
+            return null;
+        }
+
+        return [
+            'original_price' => $log->original_price,
+            'actual_discount' => $log->actual_discount,
+            'discounted_price' => $log->discounted_price,
+            'discount_percent' => $log->discount_percent,
+            'discount_type' => $log->discount_type,
+            'discount_expires_at' => $log->discount_expires_at,
+        ];
+    }
+
+    private function formatCart(Cart $cart): array
+    {
+        $item = $cart->relationLoaded('item') ? $cart->item : null;
+        $discountedPrice = $item ? $item->getEffectivePrice() : null;
+        $discountDetails = $item ? $this->buildDiscountDetails($item) : null;
+        $discountStatus = $discountDetails !== null ? 'active' : 'inactive';
+
+        $data = [
+            'id' => $cart->id,
+            'user_id' => $cart->user_id,
+            'item_id' => $cart->item_id,
+            'quantity' => $cart->quantity,
+            'price_snapshot' => $cart->price_snapshot,
+            'discounted_price' => $discountedPrice,
+            'discount_status' => $discountStatus,
+            'discount_details' => $discountDetails,
+        ];
+
+        if ($item) {
+            $itemData = $item->toArray();
+            unset($itemData['active_discount_log']);
+            $data['item'] = $itemData;
+        }
+
+        if ($cart->relationLoaded('user') && $cart->user) {
+            $data['user'] = $cart->user->toArray();
+        }
+
+        return $data;
+    }
+
+    private function formatCarts($carts): array
+    {
+        return $carts->map(fn (Cart $cart) => $this->formatCart($cart))->values()->all();
     }
 
     /**
@@ -60,7 +132,7 @@ class CartController extends Controller
 
         return response()->json([
             'success' => true,
-            'data' => $carts,
+            'data' => $this->formatCarts($carts),
             'count' => $carts->count()
         ]);
     }
@@ -86,7 +158,7 @@ class CartController extends Controller
 
         return response()->json([
             'success' => true,
-            'data' => $cart
+            'data' => $this->formatCart($cart)
         ]);
     }
 
@@ -99,11 +171,7 @@ class CartController extends Controller
     public function getByUser($userId)
     {
         $carts = Cart::select(self::CART_SELECT)
-            ->with([
-                'item:' . implode(',', self::ITEM_SELECT),
-                'item.shop:' . implode(',', self::SHOP_SELECT),
-                'item.shop.zone:id,name,is_cod',
-            ])
+            ->with($this->cartWith(false))
             ->where('user_id', $userId)
             ->where('status', 'active')
             ->orderBy('created_at', 'desc')
@@ -111,7 +179,7 @@ class CartController extends Controller
 
         return response()->json([
             'success' => true,
-            'data' => $carts,
+            'data' => $this->formatCarts($carts),
             'count' => $carts->count()
         ]);
     }
@@ -161,11 +229,10 @@ class CartController extends Controller
             $existingCart->save();
 
             $existingCart->load($this->cartWith());
-            $existingCart->makeHidden(['status', 'created_at', 'updated_at']);
             return response()->json([
                 'success' => true,
                 'message' => 'Cart item quantity updated successfully',
-                'data' => $existingCart
+                'data' => $this->formatCart($existingCart)
             ]);
         }
 
@@ -180,11 +247,10 @@ class CartController extends Controller
         ]);
 
         $cart->load($this->cartWith());
-        $cart->makeHidden(['status', 'created_at', 'updated_at']);
         return response()->json([
             'success' => true,
             'message' => 'Item added to cart successfully',
-            'data' => $cart
+            'data' => $this->formatCart($cart)
         ], 201);
     }
 
@@ -230,11 +296,10 @@ class CartController extends Controller
         $cart->update($request->only(['quantity', 'status']));
 
         $cart->load($this->cartWith());
-        $cart->makeHidden(['status', 'created_at', 'updated_at']);
         return response()->json([
             'success' => true,
             'message' => 'Cart item updated successfully',
-            'data' => $cart
+            'data' => $this->formatCart($cart)
         ]);
     }
 
