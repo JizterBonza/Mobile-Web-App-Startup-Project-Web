@@ -42,6 +42,7 @@ class AgrivetController extends Controller
                     'email' => $agrivet->email,
                     'permits' => $agrivet->permits,
                     'logo_url' => $agrivet->logo_url,
+                    'banner_url' => $agrivet->banner_url,
                     'status' => $agrivet->status,
                     'created_at' => $agrivet->created_at->format('Y-m-d H:i:s'),
                     'updated_at' => $agrivet->updated_at->format('Y-m-d H:i:s'),
@@ -84,6 +85,9 @@ class AgrivetController extends Controller
             'password' => 'required|string|min:6|confirmed',
             'phone_number' => 'required|string|max:30',
             'agrivet_name' => 'required|string|max:150',
+            'description' => 'nullable|string',
+            'logo' => 'nullable|image|mimes:jpeg,png,jpg,gif,webp|max:5120',
+            'banner' => 'nullable|image|mimes:jpeg,png,jpg,gif,webp|max:10240',
             'store_name' => 'required|string|max:150',
             'street' => 'required|string|max:255',
             'barangay' => 'required|string|max:255',
@@ -109,11 +113,17 @@ class AgrivetController extends Controller
 
         try {
             DB::transaction(function () use ($request, $validated, &$ownerManager, &$ownerUsername) {
-                $storePath = $request->file('store_image')->store('agrivets/wizard', 'public');
-                $permitPath = $request->file('permit_image')->store('agrivets/wizard', 'public');
+                $storePath = $request->file('store_image')->store('shops/covers', 'public');
+                $permitPath = $request->file('permit_image')->store('shops/permits', 'public');
+
+                $logoUrl = $request->hasFile('logo')
+                    ? $this->storeAgrivetImage($request->file('logo'), 'logos')
+                    : null;
+                $bannerUrl = $request->hasFile('banner')
+                    ? $this->storeAgrivetImage($request->file('banner'), 'banners')
+                    : null;
 
                 $disk = Storage::disk('public');
-                $storePhotoPublicUrl = $disk->url($storePath);
                 $permitPublicUrl = $disk->url($permitPath);
 
                 $ownerParts = array_filter([
@@ -136,11 +146,12 @@ class AgrivetController extends Controller
                     'name' => $validated['agrivet_name'],
                     'registered_business_name' => $validated['agrivet_name'],
                     'owner_name' => $ownerName,
-                    'description' => null,
+                    'description' => $validated['description'] ?? null,
                     'contact_number' => $validated['phone_number'],
                     'email' => $validated['email'],
                     'permits' => $permitsPayload,
-                    'logo_url' => mb_substr($storePhotoPublicUrl, 0, 255),
+                    'logo_url' => $logoUrl,
+                    'banner_url' => $bannerUrl,
                     'status' => 'active',
                 ]);
 
@@ -170,6 +181,10 @@ class AgrivetController extends Controller
                     'average_rating' => 0.00,
                     'total_reviews' => 0,
                     'shop_status' => 'active',
+                    'logo_url' => $storePath,
+                    'permit_url' => $permitPath,
+                    'operating_days' => $daysLabel,
+                    'operating_hours' => $hoursLabel,
                 ]);
 
                 $ownerUsername = explode('@', $validated['email'])[0].'_'.time();
@@ -262,11 +277,19 @@ class AgrivetController extends Controller
             'contact_number' => 'nullable|string|max:20',
             'email' => 'nullable|string|email|max:255',
             'permits' => 'nullable|string',
-            'logo_url' => 'nullable|string|max:255',
+            'logo' => 'nullable|image|mimes:jpeg,png,jpg,gif,webp|max:5120',
+            'banner' => 'nullable|image|mimes:jpeg,png,jpg,gif,webp|max:10240',
             'status' => 'nullable|string|in:active,inactive',
         ]);
 
         try {
+            $logoUrl = $request->hasFile('logo')
+                ? $this->storeAgrivetImage($request->file('logo'), 'logos')
+                : null;
+            $bannerUrl = $request->hasFile('banner')
+                ? $this->storeAgrivetImage($request->file('banner'), 'banners')
+                : null;
+
             $agrivet = Agrivet::create([
                 'name' => $request->name,
                 'registered_business_name' => $request->registered_business_name ?? null,
@@ -275,7 +298,8 @@ class AgrivetController extends Controller
                 'contact_number' => $request->contact_number ?? null,
                 'email' => $request->email ?? null,
                 'permits' => $request->permits ?? null,
-                'logo_url' => $request->logo_url ?? null,
+                'logo_url' => $logoUrl,
+                'banner_url' => $bannerUrl,
                 'status' => $request->status ?? 'active',
             ]);
 
@@ -312,12 +336,15 @@ class AgrivetController extends Controller
             'contact_number' => 'nullable|string|max:20',
             'email' => 'nullable|string|email|max:255',
             'permits' => 'nullable|string',
+            'logo' => 'nullable|image|mimes:jpeg,png,jpg,gif,webp|max:5120',
+            'banner' => 'nullable|image|mimes:jpeg,png,jpg,gif,webp|max:10240',
             'logo_url' => 'nullable|string|max:255',
+            'banner_url' => 'nullable|string|max:255',
             'status' => 'nullable|string|in:active,inactive',
         ]);
 
         try {
-            $agrivet->update([
+            $updateData = [
                 'name' => $request->name,
                 'registered_business_name' => $request->registered_business_name ?? null,
                 'owner_name' => $request->owner_name ?? null,
@@ -325,9 +352,26 @@ class AgrivetController extends Controller
                 'contact_number' => $request->contact_number ?? null,
                 'email' => $request->email ?? null,
                 'permits' => $request->permits ?? null,
-                'logo_url' => $request->logo_url ?? null,
                 'status' => $request->status ?? $agrivet->status,
-            ]);
+            ];
+
+            if ($request->hasFile('logo')) {
+                $updateData['logo_url'] = $this->storeAgrivetImage($request->file('logo'), 'logos');
+            } elseif ($request->has('logo_url')) {
+                $updateData['logo_url'] = $request->logo_url;
+            } else {
+                $updateData['logo_url'] = $agrivet->logo_url;
+            }
+
+            if ($request->hasFile('banner')) {
+                $updateData['banner_url'] = $this->storeAgrivetImage($request->file('banner'), 'banners');
+            } elseif ($request->has('banner_url')) {
+                $updateData['banner_url'] = $request->banner_url;
+            } else {
+                $updateData['banner_url'] = $agrivet->banner_url;
+            }
+
+            $agrivet->update($updateData);
 
             ActivityLog::log('updated', "Agrivet updated: {$agrivet->name}", $agrivet, $oldAgrivetValues, $agrivet->fresh()->toArray());
 
@@ -1618,5 +1662,10 @@ class AgrivetController extends Controller
 
             return '/storage/'.ltrim($image, '/');
         }, array_filter($images, fn ($image) => is_string($image) && $image !== '')));
+    }
+
+    private function storeAgrivetImage(\Illuminate\Http\UploadedFile $file, string $folder): string
+    {
+        return $file->store("agrivets/{$folder}", 'public');
     }
 }

@@ -17,6 +17,7 @@ class Agrivet extends Model
         'email',
         'permits',
         'logo_url',
+        'banner_url',
         'status',
     ];
 

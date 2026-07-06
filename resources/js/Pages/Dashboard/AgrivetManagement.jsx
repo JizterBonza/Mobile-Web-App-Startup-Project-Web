@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useForm, router } from '@inertiajs/react'
-import { Search, Trash2, Pencil, Store } from 'lucide-react'
+import { Search, Trash2, Pencil, Store, Upload, X } from 'lucide-react'
 import SuperAdminOrAdminLayout from '../../Layouts/SuperAdminOrAdminLayout'
 
 function getInitials(name) {
@@ -10,6 +10,62 @@ function getInitials(name) {
     return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase()
   }
   return name.slice(0, 2).toUpperCase()
+}
+
+function agrivetImageUrl(imageUrl) {
+  if (!imageUrl) return null
+  if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://') || imageUrl.startsWith('/')) {
+    return imageUrl
+  }
+  return `/storage/${imageUrl}`
+}
+
+function parseAgrivetPermits(permits) {
+  if (!permits || typeof permits !== 'string') {
+    return { type: 'text', notes: '' }
+  }
+
+  const trimmed = permits.trim()
+  if (!trimmed.startsWith('{')) {
+    return { type: 'text', notes: permits }
+  }
+
+  try {
+    const parsed = JSON.parse(trimmed)
+    if (parsed && typeof parsed === 'object') {
+      const hasStructured =
+        'permit_document_url' in parsed ||
+        'operating_days' in parsed ||
+        'operating_hours' in parsed
+
+      if (hasStructured) {
+        return {
+          type: 'structured',
+          permitDocumentUrl: parsed.permit_document_url || null,
+          operatingDays: parsed.operating_days || '',
+          operatingHours: parsed.operating_hours || '',
+          notes: parsed.notes || '',
+        }
+      }
+    }
+  } catch {
+    // Not valid JSON — treat as plain text.
+  }
+
+  return { type: 'text', notes: permits }
+}
+
+function serializeAgrivetPermits(structured, notes) {
+  return JSON.stringify({
+    permit_document_url: structured.permitDocumentUrl,
+    operating_days: structured.operatingDays,
+    operating_hours: structured.operatingHours,
+    notes: notes || '',
+  })
+}
+
+function isPermitPdf(url) {
+  return Boolean(url && /\.pdf(\?|$)/i.test(url))
 }
 
 export default function AgrivetManagement({ auth, agrivets = [], flash }) {
@@ -23,6 +79,11 @@ export default function AgrivetManagement({ auth, agrivets = [], flash }) {
   const [showRemoveModalAnimation, setShowRemoveModalAnimation] = useState(false)
   const [selectedAgrivet, setSelectedAgrivet] = useState(null)
   const [agrivetToRemove, setAgrivetToRemove] = useState(null)
+  const [addLogoPreview, setAddLogoPreview] = useState(null)
+  const [addBannerPreview, setAddBannerPreview] = useState(null)
+  const [editLogoPreview, setEditLogoPreview] = useState(null)
+  const [editBannerPreview, setEditBannerPreview] = useState(null)
+  const [editPermitsStructured, setEditPermitsStructured] = useState(null)
 
   const [searchQuery, setSearchQuery] = useState('')
   const [sortBy, setSortBy] = useState('name')
@@ -38,7 +99,8 @@ export default function AgrivetManagement({ auth, agrivets = [], flash }) {
     contact_number: '',
     email: '',
     permits: '',
-    logo_url: '',
+    logo: null,
+    banner: null,
     status: 'active',
   })
 
@@ -50,7 +112,8 @@ export default function AgrivetManagement({ auth, agrivets = [], flash }) {
     contact_number: '',
     email: '',
     permits: '',
-    logo_url: '',
+    logo: null,
+    banner: null,
     status: 'active',
   })
 
@@ -63,6 +126,7 @@ export default function AgrivetManagement({ auth, agrivets = [], flash }) {
     email: '',
     permits: '',
     logo_url: '',
+    banner_url: '',
     status: 'active',
   })
 
@@ -104,6 +168,8 @@ export default function AgrivetManagement({ auth, agrivets = [], flash }) {
     setTimeout(() => {
       setShowAddModal(false)
       addForm.reset()
+      setAddLogoPreview(null)
+      setAddBannerPreview(null)
     }, 300)
   }
 
@@ -113,6 +179,9 @@ export default function AgrivetManagement({ auth, agrivets = [], flash }) {
       setShowEditModal(false)
       setSelectedAgrivet(null)
       editForm.reset()
+      setEditLogoPreview(null)
+      setEditBannerPreview(null)
+      setEditPermitsStructured(null)
     }, 300)
   }
 
@@ -193,6 +262,7 @@ export default function AgrivetManagement({ auth, agrivets = [], flash }) {
       email: agrivet.email || '',
       permits: agrivet.permits || '',
       logo_url: agrivet.logo_url || '',
+      banner_url: agrivet.banner_url || '',
       status: newStatus,
     })
     statusToggleForm.put(`${getBaseRoute()}/${agrivet.id}`, {
@@ -204,14 +274,27 @@ export default function AgrivetManagement({ auth, agrivets = [], flash }) {
     e.preventDefault()
     addForm.post(getBaseRoute(), {
       preserveScroll: true,
+      forceFormData: true,
       onSuccess: () => {
         addForm.reset()
+        setAddLogoPreview(null)
+        setAddBannerPreview(null)
       },
     })
   }
 
+  const handleImageUpload = (form, field, file, setPreview) => {
+    if (!file) return
+    form.setData(field, file)
+    const reader = new FileReader()
+    reader.onloadend = () => setPreview(reader.result)
+    reader.readAsDataURL(file)
+  }
+
   const handleEditAgrivet = (agrivet) => {
+    const parsedPermits = parseAgrivetPermits(agrivet.permits)
     setSelectedAgrivet(agrivet)
+    setEditPermitsStructured(parsedPermits.type === 'structured' ? parsedPermits : null)
     editForm.setData({
       name: agrivet.name,
       registered_business_name: agrivet.registered_business_name || '',
@@ -219,20 +302,37 @@ export default function AgrivetManagement({ auth, agrivets = [], flash }) {
       description: agrivet.description || '',
       contact_number: agrivet.contact_number || '',
       email: agrivet.email || '',
-      permits: agrivet.permits || '',
-      logo_url: agrivet.logo_url || '',
+      permits: parsedPermits.notes,
+      logo: null,
+      banner: null,
       status: agrivet.status,
     })
+    setEditLogoPreview(agrivetImageUrl(agrivet.logo_url))
+    setEditBannerPreview(agrivetImageUrl(agrivet.banner_url))
     setShowEditModal(true)
     setShowEditModalAnimation(false)
   }
 
   const handleUpdateAgrivet = (e) => {
     e.preventDefault()
+    const hasNewImages = !!(editForm.data.logo || editForm.data.banner)
+    editForm.transform((data) => {
+      if (editPermitsStructured) {
+        return {
+          ...data,
+          permits: serializeAgrivetPermits(editPermitsStructured, data.permits),
+        }
+      }
+      return data
+    })
     editForm.put(`${getBaseRoute()}/${selectedAgrivet.id}`, {
       preserveScroll: true,
+      forceFormData: hasNewImages,
       onSuccess: () => {
         closeEditModal()
+      },
+      onFinish: () => {
+        editForm.transform((data) => data)
       },
     })
   }
@@ -257,6 +357,54 @@ export default function AgrivetManagement({ auth, agrivets = [], flash }) {
 
   const filterSelectClass =
     'text-sm border border-[#E5E7EB] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#102059] focus:border-transparent px-[20px] py-[8px] bg-[#ffffff]'
+
+  const modalInputClass =
+    'w-full rounded-lg border border-[#E5E7EB] bg-[#F8F9FB] px-4 py-2.5 text-sm text-[#102059] outline-none transition-all focus:border-[#244693] focus:ring-2 focus:ring-[#244693]/20'
+
+  const modalLabelClass = 'mb-2 block text-xs font-semibold uppercase tracking-wide text-[#6B7280]'
+
+  const modalSectionClass = 'rounded-lg border border-[#E5E7EB] bg-white p-8'
+
+  const modalSectionTitleClass = 'mb-4 border-b border-[#E5E7EB] pb-3 text-sm font-semibold text-[#102059]'
+
+  const renderImageUpload = ({
+    id,
+    label,
+    hint,
+    preview,
+    error,
+    onChange,
+  }) => (
+    <div>
+      <label className={modalLabelClass} htmlFor={id}>
+        {label}
+      </label>
+      <div className="cursor-pointer rounded-xl border-2 border-dashed border-[#E5E7EB] bg-[#F8F9FB] p-6 text-center transition-colors hover:border-[#244693] hover:bg-[#F3F4F6]">
+        <input id={id} type="file" accept="image/*" className="hidden" onChange={onChange} />
+        <label htmlFor={id} className="mb-0 block w-full cursor-pointer">
+          {preview ? (
+            <div>
+              <img
+                src={preview}
+                alt={`${label} preview`}
+                className={`mx-auto mb-3 rounded-lg object-cover ${
+                  label === 'Banner' ? 'h-32 w-full' : 'h-28 w-28'
+                }`}
+              />
+              <p className="text-xs font-medium text-[#244693]">Click to replace image</p>
+            </div>
+          ) : (
+            <div className="py-2">
+              <Upload className="mx-auto mb-3 h-9 w-9 text-[#9CA3AF]" />
+              <p className="mb-1 text-sm font-medium text-[#102059]">Upload {label.toLowerCase()}</p>
+              <p className="text-xs text-[#9CA3AF]">{hint}</p>
+            </div>
+          )}
+        </label>
+      </div>
+      {error && <p className="mt-2 text-xs text-[#E20E28]">{error}</p>}
+    </div>
+  )
 
   return (
     <SuperAdminOrAdminLayout auth={auth} title="Agrivet Management">
@@ -687,18 +835,85 @@ export default function AgrivetManagement({ auth, agrivets = [], flash }) {
                       </div>
                     </div>
                     <div className="row">
-                      <div className="col-md-12">
+                      <div className="col-md-6">
                         <div className="form-group">
-                          <label>Logo URL</label>
-                          <input
-                            type="text"
-                            className={`form-control ${addForm.errors.logo_url ? 'is-invalid' : ''}`}
-                            value={addForm.data.logo_url}
-                            onChange={(e) => addForm.setData('logo_url', e.target.value)}
-                            placeholder="https://example.com/logo.png"
-                          />
-                          {addForm.errors.logo_url && (
-                            <div className="invalid-feedback">{addForm.errors.logo_url}</div>
+                          <label>Logo</label>
+                          <div
+                            className="rounded border border-dashed bg-light p-4 text-center"
+                            style={{ cursor: 'pointer' }}
+                          >
+                            <input
+                              id="add_agrivet_logo"
+                              type="file"
+                              accept="image/*"
+                              className="d-none"
+                              onChange={(e) =>
+                                handleImageUpload(addForm, 'logo', e.target.files?.[0], setAddLogoPreview)
+                              }
+                            />
+                            <label htmlFor="add_agrivet_logo" className="mb-0 w-100" style={{ cursor: 'pointer' }}>
+                              {addLogoPreview ? (
+                                <div>
+                                  <img
+                                    src={addLogoPreview}
+                                    alt="Logo preview"
+                                    className="img-fluid rounded mb-3"
+                                    style={{ maxHeight: '10rem' }}
+                                  />
+                                  <p className="text-muted small mb-0">Click to change logo</p>
+                                </div>
+                              ) : (
+                                <div>
+                                  <Upload className="mx-auto mb-2 text-muted" size={32} />
+                                  <p className="mb-1">Upload logo</p>
+                                  <p className="text-muted small mb-0">PNG, JPG, WEBP up to 5MB</p>
+                                </div>
+                              )}
+                            </label>
+                          </div>
+                          {addForm.errors.logo && (
+                            <div className="text-danger small mt-1">{addForm.errors.logo}</div>
+                          )}
+                        </div>
+                      </div>
+                      <div className="col-md-6">
+                        <div className="form-group">
+                          <label>Banner</label>
+                          <div
+                            className="rounded border border-dashed bg-light p-4 text-center"
+                            style={{ cursor: 'pointer' }}
+                          >
+                            <input
+                              id="add_agrivet_banner"
+                              type="file"
+                              accept="image/*"
+                              className="d-none"
+                              onChange={(e) =>
+                                handleImageUpload(addForm, 'banner', e.target.files?.[0], setAddBannerPreview)
+                              }
+                            />
+                            <label htmlFor="add_agrivet_banner" className="mb-0 w-100" style={{ cursor: 'pointer' }}>
+                              {addBannerPreview ? (
+                                <div>
+                                  <img
+                                    src={addBannerPreview}
+                                    alt="Banner preview"
+                                    className="img-fluid rounded mb-3"
+                                    style={{ maxHeight: '10rem' }}
+                                  />
+                                  <p className="text-muted small mb-0">Click to change banner</p>
+                                </div>
+                              ) : (
+                                <div>
+                                  <Upload className="mx-auto mb-2 text-muted" size={32} />
+                                  <p className="mb-1">Upload banner</p>
+                                  <p className="text-muted small mb-0">PNG, JPG, WEBP up to 10MB</p>
+                                </div>
+                              )}
+                            </label>
+                          </div>
+                          {addForm.errors.banner && (
+                            <div className="text-danger small mt-1">{addForm.errors.banner}</div>
                           )}
                         </div>
                       </div>
@@ -733,179 +948,307 @@ export default function AgrivetManagement({ auth, agrivets = [], flash }) {
         <>
           <div className={`modal-backdrop fade ${showEditModalAnimation ? 'show' : ''}`} onClick={closeEditModal}></div>
           <div className={`modal fade ${showEditModalAnimation ? 'show' : ''} d-block`} tabIndex="-1" style={{ zIndex: 1050 }}>
-            <div className="modal-dialog modal-dialog-centered modal-dialog-scrollable">
-              <div className="modal-content">
-                <div className="modal-header">
-                  <h4 className="modal-title">Edit Agrivet</h4>
-                  <button
-                    type="button"
-                    className="close"
-                    onClick={closeEditModal}
-                  >
-                    <span>&times;</span>
-                  </button>
-                </div>
-                <form onSubmit={handleUpdateAgrivet}>
-                  <div className="modal-body">
-                    <div className="row">
-                      <div className="col-md-6">
-                        <div className="form-group">
-                          <label>Store Name <span className="text-danger">*</span></label>
-                          <input
-                            type="text"
-                            className={`form-control ${editForm.errors.name ? 'is-invalid' : ''}`}
-                            value={editForm.data.name}
-                            onChange={(e) => editForm.setData('name', e.target.value)}
-                            required
-                          />
-                          {editForm.errors.name && (
-                            <div className="invalid-feedback">{editForm.errors.name}</div>
-                          )}
-                        </div>
-                      </div>
-                      <div className="col-md-6">
-                        <div className="form-group">
-                          <label>Registered Business Name</label>
-                          <input
-                            type="text"
-                            className={`form-control ${editForm.errors.registered_business_name ? 'is-invalid' : ''}`}
-                            value={editForm.data.registered_business_name}
-                            onChange={(e) => editForm.setData('registered_business_name', e.target.value)}
-                          />
-                          {editForm.errors.registered_business_name && (
-                            <div className="invalid-feedback">{editForm.errors.registered_business_name}</div>
-                          )}
-                        </div>
-                      </div>
+            <div className="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+              <div className="modal-content overflow-hidden border-0 shadow-lg">
+                <div className="border-b border-[#E5E7EB] bg-[#F8F9FB] px-6" style={{ paddingTop: '10px', paddingBottom: '10px' }}>
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <h4 className="mb-1 text-xl font-semibold text-[#102059]">Edit Agrivet</h4>
+                      <p className="mb-0 text-sm text-[#6B7280]">
+                        Update business profile for <span className="font-medium text-[#102059]">{selectedAgrivet.name}</span>
+                      </p>
                     </div>
-                    <div className="row">
-                      <div className="col-md-6">
-                        <div className="form-group">
-                          <label>Owner/Point of Contact Person Name</label>
-                          <input
-                            type="text"
-                            className={`form-control ${editForm.errors.owner_name ? 'is-invalid' : ''}`}
-                            value={editForm.data.owner_name}
-                            onChange={(e) => editForm.setData('owner_name', e.target.value)}
-                          />
-                          {editForm.errors.owner_name && (
-                            <div className="invalid-feedback">{editForm.errors.owner_name}</div>
-                          )}
-                        </div>
-                      </div>
-                      <div className="col-md-6">
-                        <div className="form-group">
-                          <label>Status <span className="text-danger">*</span></label>
-                          <select
-                            className={`form-control ${editForm.errors.status ? 'is-invalid' : ''}`}
-                            value={editForm.data.status}
-                            onChange={(e) => editForm.setData('status', e.target.value)}
-                            required
-                          >
-                            <option value="active">Active</option>
-                            <option value="inactive">Inactive</option>
-                          </select>
-                          {editForm.errors.status && (
-                            <div className="invalid-feedback">{editForm.errors.status}</div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                    <div className="row">
-                      <div className="col-md-12">
-                        <div className="form-group">
-                          <label>Description</label>
-                          <textarea
-                            className={`form-control ${editForm.errors.description ? 'is-invalid' : ''}`}
-                            value={editForm.data.description}
-                            onChange={(e) => editForm.setData('description', e.target.value)}
-                            rows="2"
-                          />
-                          {editForm.errors.description && (
-                            <div className="invalid-feedback">{editForm.errors.description}</div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                    <div className="row">
-                      <div className="col-md-6">
-                        <div className="form-group">
-                          <label>Contact Number</label>
-                          <input
-                            type="text"
-                            className={`form-control ${editForm.errors.contact_number ? 'is-invalid' : ''}`}
-                            value={editForm.data.contact_number}
-                            onChange={(e) => editForm.setData('contact_number', e.target.value)}
-                          />
-                          {editForm.errors.contact_number && (
-                            <div className="invalid-feedback">{editForm.errors.contact_number}</div>
-                          )}
-                        </div>
-                      </div>
-                      <div className="col-md-6">
-                        <div className="form-group">
-                          <label>Email</label>
-                          <input
-                            type="email"
-                            className={`form-control ${editForm.errors.email ? 'is-invalid' : ''}`}
-                            value={editForm.data.email}
-                            onChange={(e) => editForm.setData('email', e.target.value)}
-                          />
-                          {editForm.errors.email && (
-                            <div className="invalid-feedback">{editForm.errors.email}</div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                    <div className="row">
-                      <div className="col-md-12">
-                        <div className="form-group">
-                          <label>Necessary Permits for Operation</label>
-                          <textarea
-                            className={`form-control ${editForm.errors.permits ? 'is-invalid' : ''}`}
-                            value={editForm.data.permits}
-                            onChange={(e) => editForm.setData('permits', e.target.value)}
-                            rows="3"
-                            placeholder="List all necessary permits (e.g., Business Permit, DTI Registration, etc.)"
-                          />
-                          {editForm.errors.permits && (
-                            <div className="invalid-feedback">{editForm.errors.permits}</div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                    <div className="row">
-                      <div className="col-md-12">
-                        <div className="form-group">
-                          <label>Logo URL</label>
-                          <input
-                            type="text"
-                            className={`form-control ${editForm.errors.logo_url ? 'is-invalid' : ''}`}
-                            value={editForm.data.logo_url}
-                            onChange={(e) => editForm.setData('logo_url', e.target.value)}
-                            placeholder="https://example.com/logo.png"
-                          />
-                          {editForm.errors.logo_url && (
-                            <div className="invalid-feedback">{editForm.errors.logo_url}</div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                    <div className="alert alert-info mt-3 mb-0">
-                      <i className="fas fa-info-circle mr-2"></i>
-                      To manage shops for this agrivet, use the "View Shops" button in the agrivet list.
-                    </div>
-                  </div>
-                  <div className="modal-footer">
                     <button
                       type="button"
-                      className="btn btn-secondary"
                       onClick={closeEditModal}
+                      className="rounded-lg border border-[#E5E7EB] bg-white p-2 text-[#6B7280] transition-colors hover:bg-[#F3F4F6] hover:text-[#102059]"
+                      aria-label="Close"
+                    >
+                      <X className="h-5 w-5" />
+                    </button>
+                  </div>
+                </div>
+
+                <form onSubmit={handleUpdateAgrivet}>
+                  <div className="modal-body bg-[#F8F9FB] px-6 py-6">
+                    <div className="space-y-5">
+                      <section className={modalSectionClass}>
+                        <h5 className={modalSectionTitleClass}>Business Details</h5>
+                        <div className="grid gap-5 md:grid-cols-2">
+                          <div>
+                            <label className={modalLabelClass} htmlFor="edit_agrivet_name">
+                              Store Name <span className="text-[#E20E28]">*</span>
+                            </label>
+                            <input
+                              id="edit_agrivet_name"
+                              type="text"
+                              className={`${modalInputClass} ${editForm.errors.name ? 'border-[#E20E28] ring-1 ring-[#E20E28]/20' : ''}`}
+                              value={editForm.data.name}
+                              onChange={(e) => editForm.setData('name', e.target.value)}
+                              required
+                            />
+                            {editForm.errors.name && (
+                              <p className="mt-2 text-xs text-[#E20E28]">{editForm.errors.name}</p>
+                            )}
+                          </div>
+                          <div>
+                            <label className={modalLabelClass} htmlFor="edit_registered_business_name">
+                              Registered Business Name
+                            </label>
+                            <input
+                              id="edit_registered_business_name"
+                              type="text"
+                              className={`${modalInputClass} ${editForm.errors.registered_business_name ? 'border-[#E20E28] ring-1 ring-[#E20E28]/20' : ''}`}
+                              value={editForm.data.registered_business_name}
+                              onChange={(e) => editForm.setData('registered_business_name', e.target.value)}
+                            />
+                            {editForm.errors.registered_business_name && (
+                              <p className="mt-2 text-xs text-[#E20E28]">{editForm.errors.registered_business_name}</p>
+                            )}
+                          </div>
+                          <div>
+                            <label className={modalLabelClass} htmlFor="edit_owner_name">
+                              Owner / Point of Contact
+                            </label>
+                            <input
+                              id="edit_owner_name"
+                              type="text"
+                              className={`${modalInputClass} ${editForm.errors.owner_name ? 'border-[#E20E28] ring-1 ring-[#E20E28]/20' : ''}`}
+                              value={editForm.data.owner_name}
+                              onChange={(e) => editForm.setData('owner_name', e.target.value)}
+                            />
+                            {editForm.errors.owner_name && (
+                              <p className="mt-2 text-xs text-[#E20E28]">{editForm.errors.owner_name}</p>
+                            )}
+                          </div>
+                          <div>
+                            <label className={modalLabelClass} htmlFor="edit_status">
+                              Status <span className="text-[#E20E28]">*</span>
+                            </label>
+                            <select
+                              id="edit_status"
+                              className={`${modalInputClass} ${editForm.errors.status ? 'border-[#E20E28] ring-1 ring-[#E20E28]/20' : ''}`}
+                              value={editForm.data.status}
+                              onChange={(e) => editForm.setData('status', e.target.value)}
+                              required
+                            >
+                              <option value="active">Active</option>
+                              <option value="inactive">Inactive</option>
+                            </select>
+                            {editForm.errors.status && (
+                              <p className="mt-2 text-xs text-[#E20E28]">{editForm.errors.status}</p>
+                            )}
+                          </div>
+                        </div>
+                      </section>
+
+                      <section className={modalSectionClass}>
+                        <h5 className={modalSectionTitleClass}>About the Business</h5>
+                        <div>
+                          <label className={modalLabelClass} htmlFor="edit_description">
+                            Business Description
+                          </label>
+                          <textarea
+                            id="edit_description"
+                            className={`${modalInputClass} min-h-[120px] resize-y ${editForm.errors.description ? 'border-[#E20E28] ring-1 ring-[#E20E28]/20' : ''}`}
+                            value={editForm.data.description}
+                            onChange={(e) => editForm.setData('description', e.target.value)}
+                            rows={4}
+                            placeholder="Describe the agrivet, its products, and services..."
+                          />
+                          {editForm.errors.description && (
+                            <p className="mt-2 text-xs text-[#E20E28]">{editForm.errors.description}</p>
+                          )}
+                        </div>
+                      </section>
+
+                      <section className={modalSectionClass}>
+                        <h5 className={modalSectionTitleClass}>Contact Information</h5>
+                        <div className="grid gap-5 md:grid-cols-2">
+                          <div>
+                            <label className={modalLabelClass} htmlFor="edit_contact_number">
+                              Contact Number
+                            </label>
+                            <input
+                              id="edit_contact_number"
+                              type="text"
+                              className={`${modalInputClass} ${editForm.errors.contact_number ? 'border-[#E20E28] ring-1 ring-[#E20E28]/20' : ''}`}
+                              value={editForm.data.contact_number}
+                              onChange={(e) => editForm.setData('contact_number', e.target.value)}
+                              placeholder="e.g. 0917 123 4567"
+                            />
+                            {editForm.errors.contact_number && (
+                              <p className="mt-2 text-xs text-[#E20E28]">{editForm.errors.contact_number}</p>
+                            )}
+                          </div>
+                          <div>
+                            <label className={modalLabelClass} htmlFor="edit_email">
+                              Email Address
+                            </label>
+                            <input
+                              id="edit_email"
+                              type="email"
+                              className={`${modalInputClass} ${editForm.errors.email ? 'border-[#E20E28] ring-1 ring-[#E20E28]/20' : ''}`}
+                              value={editForm.data.email}
+                              onChange={(e) => editForm.setData('email', e.target.value)}
+                              placeholder="business@example.com"
+                            />
+                            {editForm.errors.email && (
+                              <p className="mt-2 text-xs text-[#E20E28]">{editForm.errors.email}</p>
+                            )}
+                          </div>
+                        </div>
+                      </section>
+
+                      <section className={modalSectionClass}>
+                        <h5 className={modalSectionTitleClass}>Branding</h5>
+                        <p className="mb-5 text-sm text-[#6B7280]">
+                          Upload a square logo and a wide banner image for this agrivet profile.
+                        </p>
+                        <div className="grid gap-5 md:grid-cols-2">
+                          {renderImageUpload({
+                            id: 'edit_agrivet_logo',
+                            label: 'Logo',
+                            hint: 'PNG, JPG, WEBP up to 5MB',
+                            preview: editLogoPreview,
+                            error: editForm.errors.logo,
+                            onChange: (e) =>
+                              handleImageUpload(editForm, 'logo', e.target.files?.[0], setEditLogoPreview),
+                          })}
+                          {renderImageUpload({
+                            id: 'edit_agrivet_banner',
+                            label: 'Banner',
+                            hint: 'PNG, JPG, WEBP up to 10MB',
+                            preview: editBannerPreview,
+                            error: editForm.errors.banner,
+                            onChange: (e) =>
+                              handleImageUpload(editForm, 'banner', e.target.files?.[0], setEditBannerPreview),
+                          })}
+                        </div>
+                      </section>
+
+                      {/* <section className={modalSectionClass}>
+                        <h5 className={modalSectionTitleClass}>Compliance</h5>
+
+                        {editPermitsStructured ? (
+                          <div className="space-y-5">
+                            <div>
+                              <p className={modalLabelClass}>Business Permit Document</p>
+                              {editPermitsStructured.permitDocumentUrl ? (
+                                <div className="rounded-xl border border-[#E5E7EB] bg-[#F8F9FB] p-4">
+                                  {isPermitPdf(editPermitsStructured.permitDocumentUrl) ? (
+                                    <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                      <div>
+                                        <p className="text-sm font-medium text-[#102059]">PDF document on file</p>
+                                        <p className="text-xs text-[#6B7280]">Uploaded during registration</p>
+                                      </div>
+                                      <a
+                                        href={agrivetImageUrl(editPermitsStructured.permitDocumentUrl)}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="rounded-lg bg-[#102059] px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-[#244693]"
+                                      >
+                                        View permit
+                                      </a>
+                                    </div>
+                                  ) : (
+                                    <div className="space-y-3">
+                                      <img
+                                        src={agrivetImageUrl(editPermitsStructured.permitDocumentUrl)}
+                                        alt="Business permit"
+                                        className="mx-auto max-h-56 rounded-lg border border-[#E5E7EB] object-contain"
+                                      />
+                                      <div className="text-center">
+                                        <a
+                                          href={agrivetImageUrl(editPermitsStructured.permitDocumentUrl)}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="text-xs font-semibold text-[#244693] hover:underline"
+                                        >
+                                          Open full-size permit
+                                        </a>
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              ) : (
+                                <p className="text-sm text-[#9CA3AF]">No permit document uploaded.</p>
+                              )}
+                            </div>
+
+                            <div className="grid gap-5 md:grid-cols-2">
+                              <div className="rounded-xl border border-[#E5E7EB] bg-[#F8F9FB] px-4 py-3">
+                                <p className={modalLabelClass}>Operating Days</p>
+                                <p className="text-sm text-[#102059]">
+                                  {editPermitsStructured.operatingDays || '—'}
+                                </p>
+                              </div>
+                              <div className="rounded-xl border border-[#E5E7EB] bg-[#F8F9FB] px-4 py-3">
+                                <p className={modalLabelClass}>Operating Hours</p>
+                                <p className="text-sm text-[#102059]">
+                                  {editPermitsStructured.operatingHours || '—'}
+                                </p>
+                              </div>
+                            </div>
+
+                            <div>
+                              <label className={modalLabelClass} htmlFor="edit_permits_notes">
+                                Additional Permit Notes
+                              </label>
+                              <textarea
+                                id="edit_permits_notes"
+                                className={`${modalInputClass} min-h-[90px] resize-y ${editForm.errors.permits ? 'border-[#E20E28] ring-1 ring-[#E20E28]/20' : ''}`}
+                                value={editForm.data.permits}
+                                onChange={(e) => editForm.setData('permits', e.target.value)}
+                                rows={3}
+                                placeholder="Add notes about other permits (e.g., DTI Registration, Mayor's Permit)..."
+                              />
+                              {editForm.errors.permits && (
+                                <p className="mt-2 text-xs text-[#E20E28]">{editForm.errors.permits}</p>
+                              )}
+                            </div>
+                          </div>
+                        ) : (
+                          <div>
+                            <label className={modalLabelClass} htmlFor="edit_permits">
+                              Necessary Permits for Operation
+                            </label>
+                            <textarea
+                              id="edit_permits"
+                              className={`${modalInputClass} min-h-[110px] resize-y ${editForm.errors.permits ? 'border-[#E20E28] ring-1 ring-[#E20E28]/20' : ''}`}
+                              value={editForm.data.permits}
+                              onChange={(e) => editForm.setData('permits', e.target.value)}
+                              rows={4}
+                              placeholder="List all necessary permits (e.g., Business Permit, DTI Registration, etc.)"
+                            />
+                            {editForm.errors.permits && (
+                              <p className="mt-2 text-xs text-[#E20E28]">{editForm.errors.permits}</p>
+                            )}
+                          </div>
+                        )}
+                      </section> */}
+
+                      <div className="rounded-xl border border-[#DBEAFE] bg-[#EFF6FF] px-5 py-4 text-sm text-[#1E3A8A]">
+                        Shop addresses, operating hours, and branch management are handled separately. Open the agrivet
+                        from the list to manage its shops.
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col-reverse gap-3 border-t border-[#E5E7EB] bg-white px-6 sm:flex-row sm:justify-end" style={{ paddingTop: '10px', paddingBottom: '10px' }}>
+                    <button
+                      type="button"
+                      onClick={closeEditModal}
+                      className="rounded-lg border border-[#E5E7EB] px-5 py-2.5 text-sm font-semibold text-[#6B7280] transition-colors hover:border-[#102059] hover:text-[#102059]"
                     >
                       Cancel
                     </button>
-                    <button type="submit" className="btn btn-primary" disabled={editForm.processing}>
-                      {editForm.processing ? 'Updating...' : 'Update Agrivet'}
+                    <button
+                      type="submit"
+                      disabled={editForm.processing}
+                      className="rounded-lg bg-[#102059] px-6 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#244693] disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {editForm.processing ? 'Saving changes...' : 'Save Changes'}
                     </button>
                   </div>
                 </form>

@@ -24,6 +24,8 @@ export default function AddAgrivet({ auth, zones = [], flash }) {
     const [currentStep, setCurrentStep] = useState(1)
     const [storeImagePreview, setStoreImagePreview] = useState(null)
     const [permitImagePreview, setPermitImagePreview] = useState(null)
+    const [logoPreview, setLogoPreview] = useState(null)
+    const [bannerPreview, setBannerPreview] = useState(null)
     const [permitIsPdf, setPermitIsPdf] = useState(false)
     const [errorMessage, setErrorMessage] = useState(null)
     const [operatingDays, setOperatingDays] = useState([])
@@ -49,6 +51,9 @@ export default function AddAgrivet({ auth, zones = [], flash }) {
         password_confirmation: '',
         phone_number: '',
         agrivet_name: '',
+        description: '',
+        logo: null,
+        banner: null,
         store_name: '',
         street: '',
         barangay: '',
@@ -95,6 +100,14 @@ export default function AddAgrivet({ auth, zones = [], flash }) {
             reader.onloadend = () => setPermitImagePreview(reader.result)
             reader.readAsDataURL(file)
         }
+    }
+
+    const handleImageUpload = (field, file, setPreview) => {
+        if (!file) return
+        form.setData(field, file)
+        const reader = new FileReader()
+        reader.onloadend = () => setPreview(reader.result)
+        reader.readAsDataURL(file)
     }
 
     const handleSubmit = (e) => {
@@ -421,21 +434,119 @@ export default function AddAgrivet({ auth, zones = [], flash }) {
                                     <h2 className="mb-6 border-b border-[#E5E7EB] pb-4 text-sm font-semibold text-[#102059]">
                                         Business Information
                                     </h2>
-                                    <div>
-                                        <label className="mb-2 block text-xs text-[#6B7280]" htmlFor="agrivet_name">
-                                            Agrivet Name <span className="text-[#E20E28]">*</span>
-                                        </label>
-                                        <input
-                                            id="agrivet_name"
-                                            required
-                                            className={`${inputClass} ${form.errors.agrivet_name ? 'border-red-400' : ''}`}
-                                            value={form.data.agrivet_name}
-                                            onChange={(e) => form.setData('agrivet_name', e.target.value)}
-                                            style={{ boxShadow: 'none' }}
-                                        />
-                                        {form.errors.agrivet_name && (
-                                            <p className="mt-1 text-xs text-red-600">{form.errors.agrivet_name}</p>
-                                        )}
+                                    <div className="space-y-6">
+                                        <div>
+                                            <label className="mb-2 block text-xs text-[#6B7280]" htmlFor="agrivet_name">
+                                                Agrivet Name <span className="text-[#E20E28]">*</span>
+                                            </label>
+                                            <input
+                                                id="agrivet_name"
+                                                required
+                                                className={`${inputClass} ${form.errors.agrivet_name ? 'border-red-400' : ''}`}
+                                                value={form.data.agrivet_name}
+                                                onChange={(e) => form.setData('agrivet_name', e.target.value)}
+                                                style={{ boxShadow: 'none' }}
+                                            />
+                                            {form.errors.agrivet_name && (
+                                                <p className="mt-1 text-xs text-red-600">{form.errors.agrivet_name}</p>
+                                            )}
+                                        </div>
+
+                                        <div>
+                                            <label className="mb-2 block text-xs text-[#6B7280]" htmlFor="description">
+                                                Business Description
+                                            </label>
+                                            <textarea
+                                                id="description"
+                                                rows={4}
+                                                className={`${inputClass} ${form.errors.description ? 'border-red-400' : ''}`}
+                                                value={form.data.description}
+                                                onChange={(e) => form.setData('description', e.target.value)}
+                                                placeholder="Describe your agrivet business, products, and services..."
+                                                style={{ boxShadow: 'none' }}
+                                            />
+                                            {form.errors.description && (
+                                                <p className="mt-1 text-xs text-red-600">{form.errors.description}</p>
+                                            )}
+                                        </div>
+
+                                        <div className="grid gap-6 md:grid-cols-2">
+                                            <div>
+                                                <label className="mb-2 block text-xs text-[#6B7280]" htmlFor="logo">
+                                                    Logo
+                                                </label>
+                                                <div className="cursor-pointer rounded-lg border-2 border-dashed border-[#E5E7EB] bg-[#F8F9FB] p-6 text-center transition-colors hover:border-[#244693]">
+                                                    <input
+                                                        id="logo"
+                                                        type="file"
+                                                        accept="image/*"
+                                                        className="hidden"
+                                                        onChange={(e) =>
+                                                            handleImageUpload('logo', e.target.files?.[0], setLogoPreview)
+                                                        }
+                                                    />
+                                                    <label htmlFor="logo" className="cursor-pointer">
+                                                        {logoPreview ? (
+                                                            <div>
+                                                                <img
+                                                                    src={logoPreview}
+                                                                    alt="Logo preview"
+                                                                    className="mx-auto mb-3 max-h-40 rounded-lg"
+                                                                />
+                                                                <p className="text-xs text-[#6B7280]">Click to change logo</p>
+                                                            </div>
+                                                        ) : (
+                                                            <div>
+                                                                <Upload className="mx-auto mb-2 h-8 w-8 text-[#9CA3AF]" />
+                                                                <p className="mb-1 text-sm text-[#6B7280]">Upload logo</p>
+                                                                <p className="text-xs text-[#9CA3AF]">PNG, JPG, WEBP up to 5MB</p>
+                                                            </div>
+                                                        )}
+                                                    </label>
+                                                </div>
+                                                {form.errors.logo && (
+                                                    <p className="mt-1 text-xs text-red-600">{form.errors.logo}</p>
+                                                )}
+                                            </div>
+
+                                            <div>
+                                                <label className="mb-2 block text-xs text-[#6B7280]" htmlFor="banner">
+                                                    Banner
+                                                </label>
+                                                <div className="cursor-pointer rounded-lg border-2 border-dashed border-[#E5E7EB] bg-[#F8F9FB] p-6 text-center transition-colors hover:border-[#244693]">
+                                                    <input
+                                                        id="banner"
+                                                        type="file"
+                                                        accept="image/*"
+                                                        className="hidden"
+                                                        onChange={(e) =>
+                                                            handleImageUpload('banner', e.target.files?.[0], setBannerPreview)
+                                                        }
+                                                    />
+                                                    <label htmlFor="banner" className="cursor-pointer">
+                                                        {bannerPreview ? (
+                                                            <div>
+                                                                <img
+                                                                    src={bannerPreview}
+                                                                    alt="Banner preview"
+                                                                    className="mx-auto mb-3 max-h-40 w-full rounded-lg object-cover"
+                                                                />
+                                                                <p className="text-xs text-[#6B7280]">Click to change banner</p>
+                                                            </div>
+                                                        ) : (
+                                                            <div>
+                                                                <Upload className="mx-auto mb-2 h-8 w-8 text-[#9CA3AF]" />
+                                                                <p className="mb-1 text-sm text-[#6B7280]">Upload banner</p>
+                                                                <p className="text-xs text-[#9CA3AF]">PNG, JPG, WEBP up to 10MB</p>
+                                                            </div>
+                                                        )}
+                                                    </label>
+                                                </div>
+                                                {form.errors.banner && (
+                                                    <p className="mt-1 text-xs text-red-600">{form.errors.banner}</p>
+                                                )}
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
                             )}
@@ -780,9 +891,23 @@ export default function AddAgrivet({ auth, zones = [], flash }) {
                                         </div>
                                         <div>
                                             <h3 className="mb-3 text-xs font-semibold text-[#102059]">Business</h3>
-                                            <div className="rounded-lg border border-[#E5E7EB] bg-[#F8F9FB] p-4">
-                                                <p className="mb-1 text-xs text-[#9CA3AF]">Agrivet Name</p>
-                                                <p className="text-sm text-[#102059]">{form.data.agrivet_name}</p>
+                                            <div className="space-y-3 rounded-lg border border-[#E5E7EB] bg-[#F8F9FB] p-4">
+                                                <div>
+                                                    <p className="mb-1 text-xs text-[#9CA3AF]">Agrivet Name</p>
+                                                    <p className="text-sm text-[#102059]">{form.data.agrivet_name}</p>
+                                                </div>
+                                                <div>
+                                                    <p className="mb-1 text-xs text-[#9CA3AF]">Business Description</p>
+                                                    <p className="text-sm text-[#102059]">
+                                                        {form.data.description?.trim() ? form.data.description : '—'}
+                                                    </p>
+                                                </div>
+                                                <div>
+                                                    <p className="mb-1 text-xs text-[#9CA3AF]">Branding</p>
+                                                    <p className="text-sm text-[#102059]">
+                                                        Logo: {logoPreview ? '✓' : '—'} · Banner: {bannerPreview ? '✓' : '—'}
+                                                    </p>
+                                                </div>
                                             </div>
                                         </div>
                                         <div>
