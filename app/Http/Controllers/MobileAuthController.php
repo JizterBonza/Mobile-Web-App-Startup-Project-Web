@@ -7,6 +7,7 @@ use App\Models\User;
 use App\Models\UserDetail;
 use App\Models\UserCredential;
 use App\Models\Notification;
+use App\Services\AuthTokenService;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rules\Password;
@@ -14,6 +15,10 @@ use Illuminate\Validation\ValidationException;
 
 class MobileAuthController extends Controller
 {
+    public function __construct(private AuthTokenService $authTokenService)
+    {
+    }
+
     public function register(Request $request)
     {
         $data = $request->validate([
@@ -75,11 +80,13 @@ class MobileAuthController extends Controller
                 ]
             );
 
-            $token = $user->createToken('mobile-token')->plainTextToken;
+            $tokens = $this->authTokenService->createTokenPair($user);
 
             return response()->json([
                 'user' => $user,
-                'token' => $token
+                'token' => $tokens['token'],
+                'refresh_token' => $tokens['refresh_token'],
+                'expires_at' => $tokens['expires_at'],
             ], 201);
         } catch (\Exception $e) {
             DB::rollBack();
@@ -174,19 +181,40 @@ class MobileAuthController extends Controller
         // Optionally remove other tokens:
         //$user->tokens()->delete();
 
-        $token = $user->createToken('mobile-login-token')->plainTextToken;
+        $tokens = $this->authTokenService->createTokenPair($user, 'mobile-login-token');
 
         return response()->json([
             'user' => $user,
-            'token' => $token,
-            'default_address' => $defaultAddress
+            'token' => $tokens['token'],
+            'refresh_token' => $tokens['refresh_token'],
+            'expires_at' => $tokens['expires_at'],
+            'default_address' => $defaultAddress,
         ]);
+    }
+
+    public function refresh(Request $request)
+    {
+        $data = $request->validate([
+            'refresh_token' => 'required|string',
+        ]);
+
+        $tokens = $this->authTokenService->refresh($data['refresh_token']);
+
+        if (! $tokens) {
+            return response()->json([
+                'message' => 'Invalid or expired refresh token.',
+            ], 401);
+        }
+
+        return response()->json($tokens);
     }
 
     public function logout(Request $request)
     {
-        // revoke current token
-        $request->user()->currentAccessToken()->delete();
+        $accessToken = $request->user()->currentAccessToken();
+
+        $this->authTokenService->revokeByAccessTokenId($accessToken->id);
+        $accessToken->delete();
 
         return response()->json(['message' => 'Logged out.']);
     }

@@ -91,6 +91,16 @@ class Item extends Model
     }
 
     /**
+     * Get the currently active discount log for the item.
+     */
+    public function activeDiscountLog()
+    {
+        return $this->hasOne(DiscountLog::class)
+            ->where('is_active', true)
+            ->latest('id');
+    }
+
+    /**
      * The accessors to append to the model's array form.
      *
      * @var array<int, string>
@@ -113,10 +123,8 @@ class Item extends Model
         return $query
             ->where('discount_percent', '>', 0)
             ->where(function ($q) {
-                $q->where('discount_type', '!=', 'timed')
-                    ->orWhereNull('discount_type')
-                    ->orWhereNull('discount_expires_at')
-                    ->orWhere('discount_expires_at', '>', now());
+                $q->whereNull('discount_expires_at')
+                    ->orWhere('discount_expires_at', '>=', now());
             });
     }
 
