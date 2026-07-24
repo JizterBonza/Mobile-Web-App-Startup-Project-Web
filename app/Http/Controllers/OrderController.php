@@ -15,6 +15,7 @@ use App\Models\Payment;
 use App\Models\User;
 use App\Services\DeliveryFeeService;
 use App\Services\PaymongoService;
+use App\Services\VoucherService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\DB;
@@ -29,10 +30,16 @@ class OrderController extends Controller
 
     protected DeliveryFeeService $deliveryFeeService;
 
-    public function __construct(PaymongoService $paymongo, DeliveryFeeService $deliveryFeeService)
-    {
+    protected VoucherService $voucherService;
+
+    public function __construct(
+        PaymongoService $paymongo,
+        DeliveryFeeService $deliveryFeeService,
+        VoucherService $voucherService
+    ) {
         $this->paymongo = $paymongo;
         $this->deliveryFeeService = $deliveryFeeService;
+        $this->voucherService = $voucherService;
     }
     /**
      * Fetch all orders
@@ -288,6 +295,7 @@ class OrderController extends Controller
             'delivery_method_id' => 'required|exists:delivery_method,id',
             'payment_method' => 'nullable|string|max:50',
             'payment_status' => 'nullable|string|max:50',
+            'voucher_code' => 'nullable|string|max:50',
             
             // Order items
             'items' => 'required|array|min:1',
@@ -412,15 +420,35 @@ class OrderController extends Controller
                 ], 422);
             }
 
+            $voucherResult = $this->voucherService->apply(
+                $data['voucher_code'] ?? null,
+                (int) $data['user_id'],
+                $serverSubtotal,
+                $feeResult,
+            );
+
+            if ($voucherResult['success'] !== true) {
+                return response()->json([
+                    'success' => false,
+                    'message' => $voucherResult['message'] ?? 'Unable to apply voucher.',
+                ], 422);
+            }
+
             $clientTotal = round((float) ($data['total_amount'] ?? 0), 2);
-            $expectedTotal = (float) $feeResult['total_amount'];
+            $expectedTotal = (float) $voucherResult['total_amount'];
             if (abs($clientTotal - $expectedTotal) > 0.01) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Total amount does not match server-calculated delivery fees.',
                     'expected_total' => $expectedTotal,
                     'received_total' => $clientTotal,
-                    'fee_breakdown' => $feeResult,
+                    'fee_breakdown' => array_merge($feeResult, [
+                        'voucher_discount_amount' => $voucherResult['voucher_discount_amount'],
+                        'voucher_code' => $voucherResult['voucher_code'],
+                        'voucher_id' => $voucherResult['voucher_id'],
+                        'shipping_fee' => $voucherResult['shipping_fee'],
+                        'total_amount' => $voucherResult['total_amount'],
+                    ]),
                 ], 422);
             }
 
@@ -428,7 +456,7 @@ class OrderController extends Controller
             $orderDetailData = [
                 'order_code' => $data['order_code'] ?? '#ORD-' . strtoupper(Str::random(10)),
                 'subtotal' => $serverSubtotal,
-                'shipping_fee' => $feeResult['shipping_fee'],
+                'shipping_fee' => $voucherResult['shipping_fee'],
                 'delivery_base_fee' => $feeResult['delivery_base_fee'],
                 'delivery_km_fee' => $feeResult['delivery_km_fee'],
                 'delivery_distance_km' => $feeResult['delivery_distance_km'],
@@ -445,6 +473,9 @@ class OrderController extends Controller
                 'delivery_method_id' => $data['delivery_method_id'],
                 'payment_method' => $paymentMethod ?? null,
                 'payment_status' => $data['payment_status'] ?? 'pending',
+                'voucher_id' => $voucherResult['voucher_id'],
+                'voucher_code' => $voucherResult['voucher_code'],
+                'voucher_discount_amount' => $voucherResult['voucher_discount_amount'],
             ];
 
             $orderDetail = OrderDetail::create($orderDetailData);
@@ -460,6 +491,17 @@ class OrderController extends Controller
             ];
 
             $order = Order::create($orderData);
+
+            // COD has no delayed PayMongo gate — finalize usage at create.
+            // Online payments record usage only after successful payment.
+            if ($voucherResult['voucher'] !== null && $paymentMethod === 'cod') {
+                $this->voucherService->recordUsage(
+                    $voucherResult['voucher'],
+                    (int) $data['user_id'],
+                    $order->id,
+                    (float) $voucherResult['voucher_discount_amount'],
+                );
+            }
 
             // Create order items and update item inventory
             if (isset($data['items']) && is_array($data['items'])) {
@@ -558,7 +600,14 @@ class OrderController extends Controller
             ];
 
             if ($paymentMethod !== 'cod') {
-                $session = $this->paymongo->createCheckoutSession($orderDetail->total_amount);
+                $finalize = $this->voucherService->finalizeForCheckout(
+                    $orderDetail->fresh(),
+                    (int) $data['user_id'],
+                );
+                $orderDetail->refresh();
+                $order->setRelation('orderDetail', $orderDetail);
+
+                $session = $this->paymongo->createCheckoutSession($finalize['total_amount']);
 
                 // PayMongo returns an `errors` array (not `data`) on failure,
                 // and network/SSL issues can bubble up as an empty/null payload.
@@ -585,12 +634,25 @@ class OrderController extends Controller
                     'order_id' => $order->id,
                     'checkout_session_id' => $sessionId,
                     'checkout_url' => $checkoutUrl,
-                    'amount' => $orderDetail->total_amount,
+                    'amount' => $finalize['total_amount'],
                     'status' => 'pending',
                 ]);
 
                 $responseData['checkout_url'] = $checkoutUrl;
                 $responseData['session_id'] = $sessionId;
+                $responseData['total_amount'] = $finalize['total_amount'];
+
+                if (! empty($finalize['stripped'])) {
+                    $responseData['voucher_removed'] = true;
+                    $responseData['message'] = $finalize['message']
+                        ?? 'Voucher expired; total updated.';
+                    $responseData['data'] = $order->fresh([
+                        'user',
+                        'orderDetail',
+                        'orderItems',
+                        'orderShops',
+                    ]);
+                }
             }
 
             return response()->json($responseData, 201);
@@ -608,6 +670,7 @@ class OrderController extends Controller
             'user_id' => 'required|exists:users,id',
             'delivery_method_id' => 'required|exists:delivery_method,id',
             'shipping_address_id' => 'required|exists:addresses,id',
+            'voucher_code' => 'nullable|string|max:50',
             'items' => 'required|array|min:1',
             'items.*.item_id' => 'required|exists:items,id',
             'items.*.shop_id' => 'required|exists:shops,id',
@@ -663,7 +726,27 @@ class OrderController extends Controller
             ], 422);
         }
 
-        return response()->json($feeResult);
+        $voucherResult = $this->voucherService->apply(
+            $data['voucher_code'] ?? null,
+            (int) $data['user_id'],
+            (float) $feeResult['subtotal'],
+            $feeResult,
+        );
+
+        if ($voucherResult['success'] !== true) {
+            return response()->json([
+                'success' => false,
+                'message' => $voucherResult['message'] ?? 'Unable to apply voucher.',
+            ], 422);
+        }
+
+        return response()->json(array_merge($feeResult, [
+            'voucher_id' => $voucherResult['voucher_id'],
+            'voucher_code' => $voucherResult['voucher_code'],
+            'voucher_discount_amount' => $voucherResult['voucher_discount_amount'],
+            'shipping_fee' => $voucherResult['shipping_fee'],
+            'total_amount' => $voucherResult['total_amount'],
+        ]));
     }
 
     /**

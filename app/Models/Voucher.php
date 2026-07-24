@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Voucher extends Model
 {
@@ -47,6 +48,11 @@ class Voucher extends Model
     public function creator(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by');
+    }
+
+    public function usages(): HasMany
+    {
+        return $this->hasMany(VoucherUsage::class);
     }
 
     public static function resolveStatus(?string $status, $startDate, $endDate): string

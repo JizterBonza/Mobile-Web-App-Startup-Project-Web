@@ -110,6 +110,14 @@ class Order extends Model
     }
 
     /**
+     * Confirmed voucher redemptions for this order.
+     */
+    public function voucherUsages()
+    {
+        return $this->hasMany(VoucherUsage::class);
+    }
+
+    /**
      * Resolve order_status from order_shops (first shop's status) for API compatibility.
      */
     public function getOrderStatusAttribute($value)

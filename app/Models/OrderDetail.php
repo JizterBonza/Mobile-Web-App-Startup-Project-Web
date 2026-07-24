@@ -41,6 +41,9 @@ class OrderDetail extends Model
         'delivery_method_id',
         'payment_method',
         'payment_status',
+        'voucher_id',
+        'voucher_code',
+        'voucher_discount_amount',
     ];
 
     /**
@@ -63,6 +66,7 @@ class OrderDetail extends Model
             'multi_store_fee' => 'decimal:2',
             'mov_penalty_fee' => 'decimal:2',
             'total_amount' => 'decimal:2',
+            'voucher_discount_amount' => 'decimal:2',
             'created_at' => 'datetime',
             'updated_at' => 'datetime',
         ];
@@ -74,6 +78,14 @@ class OrderDetail extends Model
     public function orders()
     {
         return $this->hasMany(Order::class, 'order_detail_id');
+    }
+
+    /**
+     * Get the voucher applied to this order detail.
+     */
+    public function voucher()
+    {
+        return $this->belongsTo(Voucher::class);
     }
 
     /**

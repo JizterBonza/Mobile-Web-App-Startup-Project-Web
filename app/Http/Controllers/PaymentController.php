@@ -4,18 +4,24 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use App\Services\PaymongoService;
+use App\Services\VoucherService;
 use App\Models\Order;
 use App\Models\Payment;
 use App\Models\Notification;
+use App\Models\Voucher;
+use App\Models\VoucherUsage;
 use Illuminate\Support\Facades\Log;
 
 class PaymentController extends Controller
 {
     protected $paymongo;
 
-    public function __construct(PaymongoService $paymongo)
+    protected VoucherService $voucherService;
+
+    public function __construct(PaymongoService $paymongo, VoucherService $voucherService)
     {
         $this->paymongo = $paymongo;
+        $this->voucherService = $voucherService;
     }
 
     public function createIntent(Request $request)
@@ -330,6 +336,8 @@ class PaymentController extends Controller
         $order = $payment->order;
         $orderDetail = $order?->orderDetail;
         if ($order && $orderDetail) {
+            $this->recordVoucherUsageIfNeeded($order, $orderDetail);
+
             Notification::createForUser(
                 $order->user_id,
                 'payment_confirmed',
@@ -346,6 +354,34 @@ class PaymentController extends Controller
                 "/orders/{$order->id}"
             );
         }
+    }
+
+    private function recordVoucherUsageIfNeeded(Order $order, $orderDetail): void
+    {
+        if (! $orderDetail->voucher_id) {
+            return;
+        }
+
+        $alreadyRecorded = VoucherUsage::query()
+            ->where('order_id', $order->id)
+            ->where('voucher_id', $orderDetail->voucher_id)
+            ->exists();
+
+        if ($alreadyRecorded) {
+            return;
+        }
+
+        $voucher = Voucher::query()->find($orderDetail->voucher_id);
+        if (! $voucher) {
+            return;
+        }
+
+        $this->voucherService->recordUsage(
+            $voucher,
+            (int) $order->user_id,
+            (int) $order->id,
+            (float) $orderDetail->voucher_discount_amount,
+        );
     }
 
     private function markPaymentFailed(
@@ -448,32 +484,102 @@ class PaymentController extends Controller
 
     /**
      * Get checkout_url for an order by order_id.
+     * Re-validates voucher before returning; recreates PayMongo session if amount changed.
      *
      * @param int $orderId
      * @return \Illuminate\Http\JsonResponse
      */
     public function getCheckoutUrlByOrderId($orderId)
     {
-        $payment = Payment::where('order_id', $orderId)->first();
+        $order = Order::with('orderDetail')->find($orderId);
 
-        if (!$payment) {
+        if (! $order || ! $order->orderDetail) {
             return response()->json([
                 'success' => false,
-                'message' => 'Payment not found for this order',
+                'message' => 'Order not found',
             ], 404);
         }
 
-        if (empty($payment->checkout_url)) {
+        $orderDetail = $order->orderDetail;
+
+        if ($orderDetail->payment_status === 'paid') {
             return response()->json([
                 'success' => false,
-                'message' => 'Checkout URL not available for this order',
-            ], 404);
+                'message' => 'This order is already paid.',
+            ], 400);
         }
 
-        return response()->json([
+        $finalize = $this->voucherService->finalizeForCheckout(
+            $orderDetail,
+            (int) $order->user_id,
+        );
+        $orderDetail->refresh();
+
+        $payment = Payment::where('order_id', $order->id)->latest('id')->first();
+        $needsNewSession = ! $payment
+            || empty($payment->checkout_url)
+            || $payment->status !== 'pending'
+            || abs((float) $payment->amount - (float) $finalize['total_amount']) > 0.01
+            || ! empty($finalize['stripped']);
+
+        if ($needsNewSession) {
+            $session = $this->paymongo->createCheckoutSession($finalize['total_amount']);
+
+            if (! is_array($session) || ! empty($session['errors'])) {
+                Log::error('PayMongo checkout session creation failed on refresh', [
+                    'order_id' => $order->id,
+                    'response' => $session,
+                ]);
+
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Failed to create payment checkout session.',
+                ], 500);
+            }
+
+            $sessionId = $session['data']['id'] ?? null;
+            $checkoutUrl = $session['data']['attributes']['checkout_url'] ?? null;
+
+            if (! $sessionId || ! $checkoutUrl) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Invalid payment checkout response.',
+                ], 500);
+            }
+
+            if ($payment && $payment->status === 'pending') {
+                $payment->update([
+                    'checkout_session_id' => $sessionId,
+                    'checkout_url' => $checkoutUrl,
+                    'amount' => $finalize['total_amount'],
+                    'status' => 'pending',
+                ]);
+            } else {
+                $payment = Payment::create([
+                    'order_id' => $order->id,
+                    'checkout_session_id' => $sessionId,
+                    'checkout_url' => $checkoutUrl,
+                    'amount' => $finalize['total_amount'],
+                    'status' => 'pending',
+                ]);
+            }
+        }
+
+        $payment = $payment->fresh();
+
+        $response = [
             'success' => true,
             'checkout_url' => $payment->checkout_url,
-        ]);
+            'total_amount' => $finalize['total_amount'],
+            'session_id' => $payment->checkout_session_id,
+        ];
+
+        if (! empty($finalize['stripped'])) {
+            $response['voucher_removed'] = true;
+            $response['message'] = $finalize['message'] ?? 'Voucher expired; total updated.';
+        }
+
+        return response()->json($response);
     }
 
     /**
