@@ -20,141 +20,155 @@ use App\Http\Controllers\SearchController;
 use App\Http\Controllers\VoucherApiController;
 use Illuminate\Http\Request;
 
+/*
+|--------------------------------------------------------------------------
+| Public routes
+|--------------------------------------------------------------------------
+*/
+
 Route::post('register', [MobileAuthController::class, 'register']);
 Route::post('login', [MobileAuthController::class, 'login']);
 Route::post('refresh', [MobileAuthController::class, 'refresh']);
 Route::post('auth/google/token', [SocialAuthController::class, 'googleToken']);
-
-Route::middleware('auth:sanctum')->group(function () {
-    Route::post('logout', [MobileAuthController::class, 'logout']);
-    Route::get('profile', function (Request $request) {
-        return response()->json($request->user());
-    });
-    Route::put('profile/update', [UserController::class, 'updateMobile']);
-    Route::put('profile/change-password', [UserController::class, 'updatePasswordMobile']);
-    // add other protected routes here
-});
 
 Route::prefix('auth')->group(function () {
     Route::get('{provider}/redirect', [SocialAuthController::class, 'redirect']);
     Route::get('{provider}/callback', [SocialAuthController::class, 'callback']);
 });
 
-// Search routes
+// Catalog / search
 Route::get('search', [SearchController::class, 'index']);
 
-// Category routes
 Route::get('categories', [CategoryController::class, 'index']);
 Route::get('categories/{id}', [CategoryController::class, 'show']);
 
-// Item routes
 Route::get('/items/search', [ItemController::class, 'search']);
 Route::get('items', [ItemController::class, 'index']);
 Route::get('items/random', [ItemController::class, 'random']);
 Route::get('items/on-sale', [ItemController::class, 'onSale']);
 Route::get('items/bundled', [ItemController::class, 'bundled']);
 Route::get('items/shop/{shopId}/category/{categoryId}', [ItemController::class, 'getByShopAndCategory']);
-Route::get('items/ordered/user/{userId}', [ItemController::class, 'getOrderedByUser']);
+// Must be registered before items/{id} so "ordered" is not captured as an id
+Route::get('items/ordered/user/{userId}', [ItemController::class, 'getOrderedByUser'])
+    ->middleware('auth:sanctum');
 Route::get('items/{id}/reviews', [ItemController::class, 'getItemWithReviews']);
 Route::get('items/{id}', [ItemController::class, 'show']);
-Route::post('items', [ItemController::class, 'store']);
-Route::put('items/{id}', [ItemController::class, 'update']);
-Route::delete('items/{id}', [ItemController::class, 'destroy']);
 
-// Order routes
-Route::get('orders', [OrderController::class, 'index']);
-Route::get('orders/user/{userId}', [OrderController::class, 'getByUser']);
-Route::get('orders/rider/{riderId}', [OrderController::class, 'getByRider']);
-Route::get('orders/details/user/{userId}', [OrderController::class, 'getOrderDetailsByUser']);
-Route::get('orders/{id}', [OrderController::class, 'show']);
-Route::post('orders/calculate-fee', [OrderController::class, 'calculateFee']);
-Route::post('orders/create', [OrderController::class, 'store']);
-Route::put('orders/{id}', [OrderController::class, 'update']);
-Route::put('orders/{id}/status', [OrderController::class, 'updateStatus']);
-Route::delete('orders/{id}', [OrderController::class, 'destroy']);
-
-// Voucher routes
-Route::post('vouchers/validate', [VoucherApiController::class, 'validateCode']);
-
-// Proof of Delivery (POD) routes
-Route::post('pod/upload', [PODController::class, 'store']);
-Route::get('pod/order/{orderId}', [PODController::class, 'getByOrder']);
-Route::get('pod/rider/{riderId}', [PODController::class, 'getByRider']);
-Route::get('pod/show/{id}', [PODController::class, 'show']);
-Route::put('pod/update/{id}', [PODController::class, 'update']);
-Route::delete('pod/delete/{id}', [PODController::class, 'destroy']);
-
-// Cart routes
-Route::get('carts', [CartController::class, 'index']);
-Route::get('carts/user/{userId}', [CartController::class, 'getByUser']);
-Route::get('carts/{id}', [CartController::class, 'show']);
-Route::post('carts/add', [CartController::class, 'store']);
-Route::put('carts/{id}', [CartController::class, 'update']);
-Route::delete('carts/delete/{id}', [CartController::class, 'destroy']);
-Route::post('carts/clear', [CartController::class, 'clear']);
-
-// Favorite routes
-Route::get('favorites', [FavoriteController::class, 'index']);
-Route::get('favorites/user/{userId}', [FavoriteController::class, 'getByUser']);
-Route::get('favorites/{id}', [FavoriteController::class, 'show']);
-Route::post('favorites/add', [FavoriteController::class, 'store']);
-Route::delete('favorites/delete/{id}', [FavoriteController::class, 'destroy']);
-Route::post('favorites/remove', [FavoriteController::class, 'removeByUserAndItem']);
-Route::post('favorites/toggle', [FavoriteController::class, 'toggle']);
-Route::post('favorites/check', [FavoriteController::class, 'check']);
-
-// Address routes
-Route::get('addresses', [AddressController::class, 'index']);
-Route::get('addresses/user/{userId}', [AddressController::class, 'getByUser']);
-Route::get('addresses/user/{userId}/default', [AddressController::class, 'getDefault']);
-Route::get('addresses/types', [AddressController::class, 'getAddressTypes']);
-Route::get('addresses/{id}', [AddressController::class, 'show']);
-Route::post('addresses', [AddressController::class, 'store']);
-Route::put('addresses/{id}', [AddressController::class, 'update']);
-Route::put('addresses/{id}/set-default', [AddressController::class, 'setDefault']);
-Route::delete('addresses/{id}', [AddressController::class, 'destroy']);
-Route::post('addresses/{id}/restore', [AddressController::class, 'restore']);
-
-// Notification routes
-Route::get('/notifications', [NotificationController::class, 'index']);
-Route::get('/notifications/by-category', [NotificationController::class, 'byCategory']);
-Route::get('/notifications/unread-count', [NotificationController::class, 'unreadCount']);
-Route::post('/notifications/{id}/read', [NotificationController::class, 'markAsRead']);
-Route::post('/notifications/read-all', [NotificationController::class, 'markAllAsRead']);
-Route::delete('/notifications/{id}', [NotificationController::class, 'destroy']);
-Route::delete('/notifications/clear-read', [NotificationController::class, 'clearRead']);
-
-// Shop routes
 Route::get('shops/search', [ShopController::class, 'search']);
 Route::get('shops/nearby', [ShopController::class, 'nearby']);
 Route::get('shops', [ShopController::class, 'index']);
 Route::get('shops/agrivet/{agrivetId}', [ShopController::class, 'getByAgrivetId']);
 Route::get('shops/{id}/items', [ShopController::class, 'getShopWithItems']);
 Route::get('shops/{id}/reviews', [ShopController::class, 'getShopWithReviews']);
-Route::post('shops/{id}/reviews', [ShopController::class, 'storeReview']);
 Route::get('shops/{id}', [ShopController::class, 'show']);
-Route::post('shops', [ShopController::class, 'store']);
-Route::put('shops/{id}', [ShopController::class, 'update']);
-Route::delete('shops/{id}', [ShopController::class, 'destroy']);
 
-// Delivery method routes
+// Reference data
 Route::get('delivery-methods', [MobileController::class, 'getDeliveryMethods']);
-
-// Payment method routes
 Route::get('payment-methods/active', [PaymentMethodController::class, 'getActive']);
-
-// Order status routes
 Route::get('order-statuses', [MobileController::class, 'getOrderStatuses']);
+Route::get('addresses/types', [AddressController::class, 'getAddressTypes']);
 
-// Activity log routes (audit trail)
-Route::get('activity-logs', [ActivityLogController::class, 'index']);
-Route::get('activity-logs/{id}', [ActivityLogController::class, 'show']);
-
-//Paymongo routes
-Route::post('/payment/intent', [PaymentController::class,'createIntent']);
-Route::post('/payment/attach', [PaymentController::class,'attachPayment']);
+// PayMongo callbacks (signature / redirect — not bearer-auth)
 Route::get('/payment-success', [PaymentController::class, 'paymentSuccess']);
-Route::post('/payment/checkout', [PaymentController::class,'checkout']);
-Route::get('/payment/checkout-url/{orderId}', [PaymentController::class, 'getCheckoutUrlByOrderId']);
-Route::get('/payment/status/{orderId}', [PaymentController::class, 'getPaymentStatusByOrderId']);
+Route::get('/payment-cancel', [PaymentController::class, 'paymentCancel']);
 Route::post('/payment/webhook', [PaymentController::class, 'handleWebhook']);
+
+/*
+|--------------------------------------------------------------------------
+| Authenticated routes
+|--------------------------------------------------------------------------
+*/
+
+Route::middleware('auth:sanctum')->group(function () {
+    // Session / profile
+    Route::post('logout', [MobileAuthController::class, 'logout']);
+    Route::get('profile', function (Request $request) {
+        return response()->json($request->user());
+    });
+    Route::put('profile/update', [UserController::class, 'updateMobile']);
+    Route::put('profile/change-password', [UserController::class, 'updatePasswordMobile']);
+
+    // Vouchers / checkout
+    Route::post('vouchers/validate', [VoucherApiController::class, 'validateCode']);
+    Route::post('orders/calculate-fee', [OrderController::class, 'calculateFee']);
+    Route::post('orders/create', [OrderController::class, 'store']);
+
+    // Orders
+    Route::get('orders', [OrderController::class, 'index']);
+    Route::get('orders/user/{userId}', [OrderController::class, 'getByUser']);
+    Route::get('orders/rider/{riderId}', [OrderController::class, 'getByRider']);
+    Route::get('orders/details/user/{userId}', [OrderController::class, 'getOrderDetailsByUser']);
+    Route::get('orders/{id}', [OrderController::class, 'show']);
+    Route::put('orders/{id}', [OrderController::class, 'update']);
+    Route::put('orders/{id}/status', [OrderController::class, 'updateStatus']);
+    Route::delete('orders/{id}', [OrderController::class, 'destroy']);
+
+    // Item CRUD (vendor/admin — auth required; role checks can be added later)
+    Route::post('items', [ItemController::class, 'store']);
+    Route::put('items/{id}', [ItemController::class, 'update']);
+    Route::delete('items/{id}', [ItemController::class, 'destroy']);
+
+    // Shop reviews + shop CRUD
+    Route::post('shops/{id}/reviews', [ShopController::class, 'storeReview']);
+    Route::post('shops', [ShopController::class, 'store']);
+    Route::put('shops/{id}', [ShopController::class, 'update']);
+    Route::delete('shops/{id}', [ShopController::class, 'destroy']);
+
+    // Proof of Delivery
+    Route::post('pod/upload', [PODController::class, 'store']);
+    Route::get('pod/order/{orderId}', [PODController::class, 'getByOrder']);
+    Route::get('pod/rider/{riderId}', [PODController::class, 'getByRider']);
+    Route::get('pod/show/{id}', [PODController::class, 'show']);
+    Route::put('pod/update/{id}', [PODController::class, 'update']);
+    Route::delete('pod/delete/{id}', [PODController::class, 'destroy']);
+
+    // Cart
+    Route::get('carts', [CartController::class, 'index']);
+    Route::get('carts/user/{userId}', [CartController::class, 'getByUser']);
+    Route::get('carts/{id}', [CartController::class, 'show']);
+    Route::post('carts/add', [CartController::class, 'store']);
+    Route::put('carts/{id}', [CartController::class, 'update']);
+    Route::delete('carts/delete/{id}', [CartController::class, 'destroy']);
+    Route::post('carts/clear', [CartController::class, 'clear']);
+
+    // Favorites
+    Route::get('favorites', [FavoriteController::class, 'index']);
+    Route::get('favorites/user/{userId}', [FavoriteController::class, 'getByUser']);
+    Route::get('favorites/{id}', [FavoriteController::class, 'show']);
+    Route::post('favorites/add', [FavoriteController::class, 'store']);
+    Route::delete('favorites/delete/{id}', [FavoriteController::class, 'destroy']);
+    Route::post('favorites/remove', [FavoriteController::class, 'removeByUserAndItem']);
+    Route::post('favorites/toggle', [FavoriteController::class, 'toggle']);
+    Route::post('favorites/check', [FavoriteController::class, 'check']);
+
+    // Addresses
+    Route::get('addresses', [AddressController::class, 'index']);
+    Route::get('addresses/user/{userId}', [AddressController::class, 'getByUser']);
+    Route::get('addresses/user/{userId}/default', [AddressController::class, 'getDefault']);
+    Route::get('addresses/{id}', [AddressController::class, 'show']);
+    Route::post('addresses', [AddressController::class, 'store']);
+    Route::put('addresses/{id}', [AddressController::class, 'update']);
+    Route::put('addresses/{id}/set-default', [AddressController::class, 'setDefault']);
+    Route::delete('addresses/{id}', [AddressController::class, 'destroy']);
+    Route::post('addresses/{id}/restore', [AddressController::class, 'restore']);
+
+    // Notifications
+    Route::get('/notifications', [NotificationController::class, 'index']);
+    Route::get('/notifications/by-category', [NotificationController::class, 'byCategory']);
+    Route::get('/notifications/unread-count', [NotificationController::class, 'unreadCount']);
+    Route::post('/notifications/{id}/read', [NotificationController::class, 'markAsRead']);
+    Route::post('/notifications/read-all', [NotificationController::class, 'markAllAsRead']);
+    Route::delete('/notifications/{id}', [NotificationController::class, 'destroy']);
+    Route::delete('/notifications/clear-read', [NotificationController::class, 'clearRead']);
+
+    // Activity logs (admin audit trail)
+    Route::get('activity-logs', [ActivityLogController::class, 'index']);
+    Route::get('activity-logs/{id}', [ActivityLogController::class, 'show']);
+
+    // Payments (order-scoped / intent creation)
+    Route::post('/payment/intent', [PaymentController::class, 'createIntent']);
+    Route::post('/payment/attach', [PaymentController::class, 'attachPayment']);
+    Route::post('/payment/checkout', [PaymentController::class, 'checkout']);
+    Route::get('/payment/checkout-url/{orderId}', [PaymentController::class, 'getCheckoutUrlByOrderId']);
+    Route::get('/payment/status/{orderId}', [PaymentController::class, 'getPaymentStatusByOrderId']);
+});

@@ -2,12 +2,15 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\EnsuresApiOwnership;
 use App\Services\VoucherService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 
 class VoucherApiController extends Controller
 {
+    use EnsuresApiOwnership;
+
     public function __construct(protected VoucherService $voucherService)
     {
     }
@@ -19,10 +22,11 @@ class VoucherApiController extends Controller
     {
         $validator = Validator::make($request->all(), [
             'voucher_code' => 'required|string|max:50',
-            'user_id' => 'required|exists:users,id',
             'subtotal' => 'required|numeric|min:0',
             'shipping_fee' => 'nullable|numeric|min:0',
             'total_amount' => 'nullable|numeric|min:0',
+            // Optional: if sent, must match the authenticated user.
+            'user_id' => 'sometimes|integer',
         ]);
 
         if ($validator->fails()) {
@@ -33,7 +37,12 @@ class VoucherApiController extends Controller
             ], 422);
         }
 
+        if ($response = $this->rejectUserIdMismatch($request, $request->input('user_id'))) {
+            return $response;
+        }
+
         $data = $validator->validated();
+        $userId = $this->authUserId($request);
         $subtotal = round((float) $data['subtotal'], 2);
         $shippingFee = round((float) ($data['shipping_fee'] ?? 0), 2);
         $totalAmount = array_key_exists('total_amount', $data) && $data['total_amount'] !== null
@@ -42,7 +51,7 @@ class VoucherApiController extends Controller
 
         $result = $this->voucherService->apply(
             $data['voucher_code'],
-            (int) $data['user_id'],
+            $userId,
             $subtotal,
             [
                 'subtotal' => $subtotal,

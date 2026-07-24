@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\EnsuresApiOwnership;
 use App\Models\Category;
 use App\Models\Item;
 use App\Models\OrderItem;
@@ -12,6 +13,7 @@ use Illuminate\Support\Facades\Validator;
 
 class ItemController extends Controller
 {
+    use EnsuresApiOwnership;
     /**
      * Fetch all items
      *
@@ -194,6 +196,10 @@ class ItemController extends Controller
      */
     public function getOrderedByUser($userId, Request $request)
     {
+        if ($response = $this->ensureSelfOrStaff($request, $userId)) {
+            return $response;
+        }
+
         $limit = max((int) $request->input('limit', 10), 10);
 
         $itemIds = OrderItem::query()
@@ -347,6 +353,10 @@ class ItemController extends Controller
      */
     public function store(Request $request)
     {
+        if ($response = $this->ensureStaffOrVendor($request)) {
+            return $response;
+        }
+
         $validator = Validator::make($request->all(), [
             'shop_id' => 'required|exists:shops,id',
             'item_name' => 'required|string|max:150',
@@ -384,6 +394,10 @@ class ItemController extends Controller
      */
     public function update(Request $request, $id)
     {
+        if ($response = $this->ensureStaffOrVendor($request)) {
+            return $response;
+        }
+
         $item = Item::find($id);
 
         if (!$item) {
@@ -427,8 +441,12 @@ class ItemController extends Controller
      * @param int $id
      * @return \Illuminate\Http\JsonResponse
      */
-    public function destroy($id)
+    public function destroy(Request $request, $id)
     {
+        if ($response = $this->ensureStaffOrVendor($request)) {
+            return $response;
+        }
+
         $item = Item::find($id);
 
         if (!$item) {

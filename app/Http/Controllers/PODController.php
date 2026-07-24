@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\EnsuresApiOwnership;
 use App\Models\ProofOfDelivery;
 use App\Models\OrderDetail;
 use App\Models\Order;
@@ -13,6 +14,8 @@ use Illuminate\Support\Str;
 
 class PODController extends Controller
 {
+    use EnsuresApiOwnership;
+
     /**
      * Store a new proof of delivery.
      *
@@ -40,13 +43,21 @@ class PODController extends Controller
             ], 422);
         }
 
+        if ($response = $this->ensureRiderOrStaff($request)) {
+            return $response;
+        }
+
         // Find the order using orders.id sent by the app
-        $order = Order::find($request->orderId);
+        $order = Order::with('orderShops')->find($request->orderId);
         if (!$order) {
             return response()->json([
                 'success' => false,
                 'message' => 'Order not found'
             ], 404);
+        }
+
+        if ($response = $this->forbidUnlessOrderAccess($request, $order)) {
+            return $response;
         }
 
         // Find the order detail using order_detail_id from the order
@@ -58,13 +69,30 @@ class PODController extends Controller
             ], 404);
         }
 
-        // Get rider_id: prioritize request, then from order_shops for this order
-        $riderId = $request->riderId;
-        if (!$riderId) {
+        // Rider id: auth user for riders; optional override only for staff
+        $riderId = $this->authUserId($request);
+        if ($request->filled('riderId')) {
+            if ($response = $this->ensureSelfOrStaffOrSameRider($request, $request->riderId)) {
+                return $response;
+            }
+            $riderId = (int) $request->riderId;
+        } elseif (! $this->isStaff($request->user())) {
+            $assigned = DB::table('order_shops')
+                ->where('order_id', $order->id)
+                ->where('rider_id', $riderId)
+                ->exists();
+
+            if (! $assigned) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'You are not assigned to this order.',
+                ], 403);
+            }
+        } else {
             $riderId = DB::table('order_shops')
                 ->where('order_id', $order->id)
                 ->whereNotNull('rider_id')
-                ->value('rider_id');
+                ->value('rider_id') ?? $riderId;
         }
 
         try {
@@ -163,8 +191,21 @@ class PODController extends Controller
      * @param string $orderId
      * @return \Illuminate\Http\JsonResponse
      */
-    public function getByOrder($orderId)
+    public function getByOrder(Request $request, $orderId)
     {
+        $order = Order::with('orderShops')->find($orderId);
+
+        if (! $order) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Order not found',
+            ], 404);
+        }
+
+        if ($response = $this->forbidUnlessOrderAccess($request, $order)) {
+            return $response;
+        }
+
         $proofOfDeliveries = ProofOfDelivery::where('order_id', $orderId)
             ->with('order.orderDetail')
             ->orderBy('created_at', 'desc')
@@ -196,8 +237,12 @@ class PODController extends Controller
      * @param int $riderId
      * @return \Illuminate\Http\JsonResponse
      */
-    public function getByRider($riderId)
+    public function getByRider(Request $request, $riderId)
     {
+        if ($response = $this->ensureSelfOrStaffOrSameRider($request, $riderId)) {
+            return $response;
+        }
+
         $proofOfDeliveries = ProofOfDelivery::where('rider_id', $riderId)
             ->with('order.orderDetail')
             ->orderBy('created_at', 'desc')
@@ -229,15 +274,19 @@ class PODController extends Controller
      * @param int $id
      * @return \Illuminate\Http\JsonResponse
      */
-    public function show($id)
+    public function show(Request $request, $id)
     {
-        $proofOfDelivery = ProofOfDelivery::with('order.orderDetail')->find($id);
+        $proofOfDelivery = ProofOfDelivery::with(['order.orderDetail', 'order.orderShops'])->find($id);
 
         if (!$proofOfDelivery) {
             return response()->json([
                 'success' => false,
                 'message' => 'Proof of delivery not found'
             ], 404);
+        }
+
+        if ($proofOfDelivery->order && ($response = $this->forbidUnlessOrderAccess($request, $proofOfDelivery->order))) {
+            return $response;
         }
 
         return response()->json([
@@ -266,13 +315,21 @@ class PODController extends Controller
      */
     public function update(Request $request, $id)
     {
-        $proofOfDelivery = ProofOfDelivery::find($id);
+        $proofOfDelivery = ProofOfDelivery::with(['order.orderShops'])->find($id);
 
         if (!$proofOfDelivery) {
             return response()->json([
                 'success' => false,
                 'message' => 'Proof of delivery not found'
             ], 404);
+        }
+
+        if ($proofOfDelivery->order && ($response = $this->forbidUnlessOrderAccess($request, $proofOfDelivery->order))) {
+            return $response;
+        }
+
+        if ($response = $this->ensureRiderOrStaff($request)) {
+            return $response;
         }
 
         $validator = Validator::make($request->all(), [
@@ -361,15 +418,23 @@ class PODController extends Controller
      * @param int $id
      * @return \Illuminate\Http\JsonResponse
      */
-    public function destroy($id)
+    public function destroy(Request $request, $id)
     {
-        $proofOfDelivery = ProofOfDelivery::find($id);
+        $proofOfDelivery = ProofOfDelivery::with(['order.orderShops'])->find($id);
 
         if (!$proofOfDelivery) {
             return response()->json([
                 'success' => false,
                 'message' => 'Proof of delivery not found'
             ], 404);
+        }
+
+        if ($proofOfDelivery->order && ($response = $this->forbidUnlessOrderAccess($request, $proofOfDelivery->order))) {
+            return $response;
+        }
+
+        if ($response = $this->ensureRiderOrStaff($request)) {
+            return $response;
         }
 
         try {
