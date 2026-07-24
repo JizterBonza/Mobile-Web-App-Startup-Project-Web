@@ -17,6 +17,7 @@ use App\Http\Controllers\PaymentMethodController;
 use App\Http\Controllers\ActivityLogController;
 use App\Http\Controllers\PaymentController;
 use App\Http\Controllers\SearchController;
+use App\Http\Controllers\VoucherApiController;
 use Illuminate\Http\Request;
 
 Route::post('register', [MobileAuthController::class, 'register']);
@@ -71,6 +72,9 @@ Route::post('orders/create', [OrderController::class, 'store']);
 Route::put('orders/{id}', [OrderController::class, 'update']);
 Route::put('orders/{id}/status', [OrderController::class, 'updateStatus']);
 Route::delete('orders/{id}', [OrderController::class, 'destroy']);
+
+// Voucher routes
+Route::post('vouchers/validate', [VoucherApiController::class, 'validateCode']);
 
 // Proof of Delivery (POD) routes
 Route::post('pod/upload', [PODController::class, 'store']);
