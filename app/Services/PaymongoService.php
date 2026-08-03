@@ -78,33 +78,52 @@ class PaymongoService
         return $response->json();
     }
 
-    public function createCheckoutSession($amount, $description = "Order Payment")
+    public function retrieveCheckoutSession(string $sessionId)
     {
+        $response = $this->client()->get(
+            $this->baseUrl.'/checkout_sessions/'.$sessionId
+        );
+
+        return $response->json();
+    }
+
+    public function createCheckoutSession($amount, $description = "Order Payment", array $options = [])
+    {
+        $attributes = [
+            'send_email_receipt' => false,
+            'show_description' => true,
+            'show_line_items' => true,
+            'cancel_url' => $options['cancel_url'] ?? (config('app.url').'/api/payment-cancel'),
+            'success_url' => $options['success_url'] ?? (config('app.url').'/api/payment-success'),
+            'line_items' => [
+                [
+                    'currency' => 'PHP',
+                    'amount' => (int) round($amount * 100),
+                    'description' => $description,
+                    'name' => 'Order Payment',
+                    'quantity' => 1,
+                ],
+            ],
+            'payment_method_types' => [
+                'gcash',
+                'paymaya',
+                //'card',
+                //'qrph'
+            ],
+        ];
+
+        if (! empty($options['reference_number'])) {
+            $attributes['reference_number'] = (string) $options['reference_number'];
+        }
+
+        if (! empty($options['metadata']) && is_array($options['metadata'])) {
+            $attributes['metadata'] = $options['metadata'];
+        }
+
         $response = $this->client()->post($this->baseUrl.'/checkout_sessions', [
             'data' => [
-                'attributes' => [
-                    'send_email_receipt' => false,
-                    'show_description' => true,
-                    'show_line_items' => true,
-                    'cancel_url' => config('app.url').'/api/payment-cancel',
-                    'success_url' => config('app.url').'/api/payment-success',
-                    'line_items' => [
-                        [
-                            'currency' => 'PHP',
-                            'amount' => $amount * 100,
-                            'description' => $description,
-                            'name' => 'Order Payment',
-                            'quantity' => 1
-                        ]
-                    ],
-                    'payment_method_types' => [
-                        'gcash',
-                        'paymaya',
-                        //'card',
-                        //'qrph'
-                    ]
-                ]
-            ]
+                'attributes' => $attributes,
+            ],
         ]);
 
         return $response->json();

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\EnsuresApiOwnership;
 use App\Models\Order;
 use App\Models\OrderDetail;
 use App\Models\OrderItem;
@@ -15,6 +16,7 @@ use App\Models\Payment;
 use App\Models\User;
 use App\Services\DeliveryFeeService;
 use App\Services\PaymongoService;
+use App\Services\VoucherService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\DB;
@@ -25,14 +27,22 @@ use App\Models\Shop;
 
 class OrderController extends Controller
 {
+    use EnsuresApiOwnership;
+
     protected $paymongo;
 
     protected DeliveryFeeService $deliveryFeeService;
 
-    public function __construct(PaymongoService $paymongo, DeliveryFeeService $deliveryFeeService)
-    {
+    protected VoucherService $voucherService;
+
+    public function __construct(
+        PaymongoService $paymongo,
+        DeliveryFeeService $deliveryFeeService,
+        VoucherService $voucherService
+    ) {
         $this->paymongo = $paymongo;
         $this->deliveryFeeService = $deliveryFeeService;
+        $this->voucherService = $voucherService;
     }
     /**
      * Fetch all orders
@@ -42,21 +52,25 @@ class OrderController extends Controller
      */
     public function index(Request $request)
     {
+        if ($response = $this->rejectUserIdMismatch($request, $request->input('user_id'))) {
+            return $response;
+        }
+
         $query = Order::with(['user', 'orderDetail', 'orderItems', 'orderShops']);
 
-        // Filter by user_id if provided
-        if ($request->has('user_id')) {
+        // Customers only see their own orders; staff may list all or filter by user_id.
+        if (! $this->isStaff($request->user())) {
+            $query->where('user_id', $this->authUserId($request));
+        } elseif ($request->has('user_id')) {
             $query->where('user_id', $request->user_id);
         }
 
-        // Filter by order_status if provided (via order_shops)
         if ($request->has('order_status')) {
             $query->whereHas('orderShops', function ($q) use ($request) {
                 $q->where('order_status', $request->order_status);
             });
         }
 
-        // Order by ordered_at descending (newest first)
         $query->orderBy('ordered_at', 'desc');
 
         $orders = $query->get();
@@ -74,7 +88,7 @@ class OrderController extends Controller
      * @param int $id
      * @return \Illuminate\Http\JsonResponse
      */
-    public function show($id)
+    public function show(Request $request, $id)
     {
         $order = Order::with(['user', 'orderDetail', 'orderItems', 'orderShops'])->find($id);
 
@@ -83,6 +97,10 @@ class OrderController extends Controller
                 'success' => false,
                 'message' => 'Order not found'
             ], 404);
+        }
+
+        if ($response = $this->forbidUnlessOrderAccess($request, $order)) {
+            return $response;
         }
 
         return response()->json([
@@ -100,6 +118,10 @@ class OrderController extends Controller
      */
     public function getByUser($userId, Request $request)
     {
+        if ($response = $this->ensureSelfOrStaff($request, $userId)) {
+            return $response;
+        }
+
         $query = Order::with([
                 'user',
                 'orderDetail',
@@ -159,6 +181,10 @@ class OrderController extends Controller
      */
     public function getByRider($riderId, Request $request)
     {
+        if ($response = $this->ensureSelfOrStaffOrSameRider($request, $riderId)) {
+            return $response;
+        }
+
         $orderShopsQuery = OrderShop::where('rider_id', $riderId);
 
         if ($request->has('order_status')) {
@@ -225,6 +251,10 @@ class OrderController extends Controller
      */
     public function getOrderDetailsByUser($userId, Request $request)
     {
+        if ($response = $this->ensureSelfOrStaff($request, $userId)) {
+            return $response;
+        }
+
         $query = OrderDetail::join('orders', 'order_details.id', '=', 'orders.order_detail_id')
             ->where('orders.user_id', $userId)
             ->select(
@@ -271,10 +301,11 @@ class OrderController extends Controller
     public function store(Request $request)
     {
         $data = $request->all();
+        $user = $request->user();
 
         $validator = Validator::make($data, [
-            // Order fields
-            'user_id' => 'required|exists:users,id',
+            // Optional: if sent, must match the authenticated user.
+            'user_id' => 'sometimes|integer',
             'order_status' => 'nullable|integer|exists:order_status,id',
             'ordered_at' => 'nullable|date',
             
@@ -288,6 +319,7 @@ class OrderController extends Controller
             'delivery_method_id' => 'required|exists:delivery_method,id',
             'payment_method' => 'nullable|string|max:50',
             'payment_status' => 'nullable|string|max:50',
+            'voucher_code' => 'nullable|string|max:50',
             
             // Order items
             'items' => 'required|array|min:1',
@@ -306,6 +338,24 @@ class OrderController extends Controller
             ], 422);
         }
 
+        if ($response = $this->rejectUserIdMismatch($request, $data['user_id'] ?? null)) {
+            return $response;
+        }
+
+        $data['user_id'] = $this->authUserId($request);
+
+        $address = Address::query()
+            ->where('id', $data['shipping_address_id'])
+            ->where('user_id', $data['user_id'])
+            ->first();
+
+        if (! $address) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Shipping address not found for this user.',
+            ], 422);
+        }
+
         $paymentMethod = $data['payment_method'] ?? null;
         if ($paymentMethod === null || $paymentMethod === '') {
             $paymentMethod = null;
@@ -315,7 +365,19 @@ class OrderController extends Controller
         }
 
         // Use database transaction to ensure atomicity and prevent race conditions
-        return DB::transaction(function () use ($data, $paymentMethod) {
+        return DB::transaction(function () use ($data, $paymentMethod, $user, $address) {
+            $cartIds = array_column($data['items'], 'cart_id');
+            $ownedCartCount = Cart::where('user_id', $user->id)
+                ->whereIn('id', $cartIds)
+                ->count();
+
+            if ($ownedCartCount !== count(array_unique($cartIds))) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'One or more cart items do not belong to this user.',
+                ], 403);
+            }
+
             // Check inventory availability inside transaction to prevent race conditions
             $lockedItems = [];
             $serverSubtotal = 0.0;
@@ -394,7 +456,6 @@ class OrderController extends Controller
             $shopIds = array_values(array_unique(array_column($data['items'], 'shop_id')));
             $shops = Shop::whereIn('id', $shopIds)->get()->keyBy('id');
 
-            $user = User::find($data['user_id']);
             $settings = $this->deliveryFeeService->resolveSettings();
 
             $feeResult = $this->deliveryFeeService->calculate(
@@ -412,15 +473,35 @@ class OrderController extends Controller
                 ], 422);
             }
 
+            $voucherResult = $this->voucherService->apply(
+                $data['voucher_code'] ?? null,
+                (int) $user->id,
+                $serverSubtotal,
+                $feeResult,
+            );
+
+            if ($voucherResult['success'] !== true) {
+                return response()->json([
+                    'success' => false,
+                    'message' => $voucherResult['message'] ?? 'Unable to apply voucher.',
+                ], 422);
+            }
+
             $clientTotal = round((float) ($data['total_amount'] ?? 0), 2);
-            $expectedTotal = (float) $feeResult['total_amount'];
+            $expectedTotal = (float) $voucherResult['total_amount'];
             if (abs($clientTotal - $expectedTotal) > 0.01) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Total amount does not match server-calculated delivery fees.',
                     'expected_total' => $expectedTotal,
                     'received_total' => $clientTotal,
-                    'fee_breakdown' => $feeResult,
+                    'fee_breakdown' => array_merge($feeResult, [
+                        'voucher_discount_amount' => $voucherResult['voucher_discount_amount'],
+                        'voucher_code' => $voucherResult['voucher_code'],
+                        'voucher_id' => $voucherResult['voucher_id'],
+                        'shipping_fee' => $voucherResult['shipping_fee'],
+                        'total_amount' => $voucherResult['total_amount'],
+                    ]),
                 ], 422);
             }
 
@@ -428,7 +509,7 @@ class OrderController extends Controller
             $orderDetailData = [
                 'order_code' => $data['order_code'] ?? '#ORD-' . strtoupper(Str::random(10)),
                 'subtotal' => $serverSubtotal,
-                'shipping_fee' => $feeResult['shipping_fee'],
+                'shipping_fee' => $voucherResult['shipping_fee'],
                 'delivery_base_fee' => $feeResult['delivery_base_fee'],
                 'delivery_km_fee' => $feeResult['delivery_km_fee'],
                 'delivery_distance_km' => $feeResult['delivery_distance_km'],
@@ -439,12 +520,15 @@ class OrderController extends Controller
                 'multi_store_fee' => $feeResult['multi_store_fee'],
                 'mov_penalty_fee' => $feeResult['mov_penalty_fee'],
                 'total_amount' => $expectedTotal,
-                'address_id' => $data['shipping_address_id'],
-                'shipping_address' => Address::find($data['shipping_address_id'])->full_address,//get the shipping address from the addresses table
+                'address_id' => $address->id,
+                'shipping_address' => $address->full_address,
                 'order_instruction' => $data['order_instruction'] ?? null,
                 'delivery_method_id' => $data['delivery_method_id'],
                 'payment_method' => $paymentMethod ?? null,
                 'payment_status' => $data['payment_status'] ?? 'pending',
+                'voucher_id' => $voucherResult['voucher_id'],
+                'voucher_code' => $voucherResult['voucher_code'],
+                'voucher_discount_amount' => $voucherResult['voucher_discount_amount'],
             ];
 
             $orderDetail = OrderDetail::create($orderDetailData);
@@ -454,12 +538,23 @@ class OrderController extends Controller
             $pendingStatusId = $pendingStatus ? $pendingStatus->id : 1;
 
             $orderData = [
-                'user_id' => $data['user_id'],
+                'user_id' => $user->id,
                 'order_detail_id' => $orderDetail->id,
                 'ordered_at' => $data['ordered_at'] ?? now(),
             ];
 
             $order = Order::create($orderData);
+
+            // COD has no delayed PayMongo gate — finalize usage at create.
+            // Online payments record usage only after successful payment.
+            if ($voucherResult['voucher'] !== null && $paymentMethod === 'cod') {
+                $this->voucherService->recordUsage(
+                    $voucherResult['voucher'],
+                    (int) $user->id,
+                    $order->id,
+                    (float) $voucherResult['voucher_discount_amount'],
+                );
+            }
 
             // Create order items and update item inventory
             if (isset($data['items']) && is_array($data['items'])) {
@@ -525,7 +620,7 @@ class OrderController extends Controller
             $orderedItemIds = array_column($data['items'], 'item_id');
             
             // Update carts that match user_id, cart_id, and item_id
-            Cart::where('user_id', $data['user_id'])
+            Cart::where('user_id', $user->id)
                 ->whereIn('id', $cartIds)
                 ->whereIn('item_id', $orderedItemIds)
                 ->where('status', '!=', 'co')
@@ -536,7 +631,7 @@ class OrderController extends Controller
 
             // Create notification for the user
             Notification::createForUser(
-                $data['user_id'],
+                $user->id,
                 'order_placed',
                 'Order Placed Successfully',
                 "Your order {$orderDetail->order_code} has been placed successfully. Total amount: ₱" . number_format($orderDetail->total_amount, 2),
@@ -558,7 +653,26 @@ class OrderController extends Controller
             ];
 
             if ($paymentMethod !== 'cod') {
-                $session = $this->paymongo->createCheckoutSession($orderDetail->total_amount);
+                $finalize = $this->voucherService->finalizeForCheckout(
+                    $orderDetail->fresh(),
+                    (int) $user->id,
+                );
+                $orderDetail->refresh();
+                $order->setRelation('orderDetail', $orderDetail);
+
+                $session = $this->paymongo->createCheckoutSession(
+                    $finalize['total_amount'],
+                    'Order '.$orderDetail->order_code,
+                    [
+                        'reference_number' => (string) $order->id,
+                        'metadata' => [
+                            'order_id' => (string) $order->id,
+                            'order_code' => (string) $orderDetail->order_code,
+                        ],
+                        'success_url' => config('app.url').'/api/payment-success?order_id='.$order->id,
+                        'cancel_url' => config('app.url').'/api/payment-cancel?order_id='.$order->id,
+                    ],
+                );
 
                 // PayMongo returns an `errors` array (not `data`) on failure,
                 // and network/SSL issues can bubble up as an empty/null payload.
@@ -585,12 +699,29 @@ class OrderController extends Controller
                     'order_id' => $order->id,
                     'checkout_session_id' => $sessionId,
                     'checkout_url' => $checkoutUrl,
-                    'amount' => $orderDetail->total_amount,
+                    'amount' => $finalize['total_amount'],
                     'status' => 'pending',
+                    'metadata' => [
+                        'order_id' => (string) $order->id,
+                        'order_code' => (string) $orderDetail->order_code,
+                    ],
                 ]);
 
                 $responseData['checkout_url'] = $checkoutUrl;
                 $responseData['session_id'] = $sessionId;
+                $responseData['total_amount'] = $finalize['total_amount'];
+
+                if (! empty($finalize['stripped'])) {
+                    $responseData['voucher_removed'] = true;
+                    $responseData['message'] = $finalize['message']
+                        ?? 'Voucher expired; total updated.';
+                    $responseData['data'] = $order->fresh([
+                        'user',
+                        'orderDetail',
+                        'orderItems',
+                        'orderShops',
+                    ]);
+                }
             }
 
             return response()->json($responseData, 201);
@@ -603,11 +734,14 @@ class OrderController extends Controller
     public function calculateFee(Request $request)
     {
         $data = $request->all();
+        $user = $request->user();
 
         $validator = Validator::make($data, [
-            'user_id' => 'required|exists:users,id',
+            // Optional: if sent, must match the authenticated user.
+            'user_id' => 'sometimes|integer',
             'delivery_method_id' => 'required|exists:delivery_method,id',
             'shipping_address_id' => 'required|exists:addresses,id',
+            'voucher_code' => 'nullable|string|max:50',
             'items' => 'required|array|min:1',
             'items.*.item_id' => 'required|exists:items,id',
             'items.*.shop_id' => 'required|exists:shops,id',
@@ -620,6 +754,22 @@ class OrderController extends Controller
                 'success' => false,
                 'message' => 'Validation error',
                 'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        if ($response = $this->rejectUserIdMismatch($request, $data['user_id'] ?? null)) {
+            return $response;
+        }
+
+        $addressBelongsToUser = Address::query()
+            ->where('id', $data['shipping_address_id'])
+            ->where('user_id', $user->id)
+            ->exists();
+
+        if (! $addressBelongsToUser) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Shipping address not found for this user.',
             ], 422);
         }
 
@@ -645,7 +795,6 @@ class OrderController extends Controller
         $shopIds = array_values(array_unique(array_column($data['items'], 'shop_id')));
         $shops = Shop::whereIn('id', $shopIds)->get()->keyBy('id');
 
-        $user = User::find($data['user_id']);
         $settings = $this->deliveryFeeService->resolveSettings();
 
         $feeResult = $this->deliveryFeeService->calculate(
@@ -663,7 +812,27 @@ class OrderController extends Controller
             ], 422);
         }
 
-        return response()->json($feeResult);
+        $voucherResult = $this->voucherService->apply(
+            $data['voucher_code'] ?? null,
+            (int) $user->id,
+            (float) $feeResult['subtotal'],
+            $feeResult,
+        );
+
+        if ($voucherResult['success'] !== true) {
+            return response()->json([
+                'success' => false,
+                'message' => $voucherResult['message'] ?? 'Unable to apply voucher.',
+            ], 422);
+        }
+
+        return response()->json(array_merge($feeResult, [
+            'voucher_id' => $voucherResult['voucher_id'],
+            'voucher_code' => $voucherResult['voucher_code'],
+            'voucher_discount_amount' => $voucherResult['voucher_discount_amount'],
+            'shipping_fee' => $voucherResult['shipping_fee'],
+            'total_amount' => $voucherResult['total_amount'],
+        ]));
     }
 
     /**
@@ -675,13 +844,25 @@ class OrderController extends Controller
      */
     public function update(Request $request, $id)
     {
-        $order = Order::with('orderDetail')->find($id);
+        $order = Order::with(['orderDetail', 'orderShops'])->find($id);
 
         if (!$order) {
             return response()->json([
                 'success' => false,
                 'message' => 'Order not found'
             ], 404);
+        }
+
+        if ($response = $this->forbidUnlessOrderAccess($request, $order)) {
+            return $response;
+        }
+
+        // Only staff may reassign the order to another user.
+        if ($request->has('user_id') && ! $this->isStaff($request->user())) {
+            if ($response = $this->rejectUserIdMismatch($request, $request->input('user_id'))) {
+                return $response;
+            }
+            $request->request->remove('user_id');
         }
 
         $validator = Validator::make($request->all(), [
@@ -806,6 +987,10 @@ class OrderController extends Controller
             ], 404);
         }
 
+        if ($response = $this->forbidUnlessOrderAccess($request, $order)) {
+            return $response;
+        }
+
         $newStatus = $request->status;
 
         // Get the old status for the specific shop being updated (for POD trigger check)
@@ -871,15 +1056,19 @@ class OrderController extends Controller
      * @param int $id
      * @return \Illuminate\Http\JsonResponse
      */
-    public function destroy($id)
+    public function destroy(Request $request, $id)
     {
-        $order = Order::with('orderDetail')->find($id);
+        $order = Order::with(['orderDetail', 'orderShops'])->find($id);
 
         if (!$order) {
             return response()->json([
                 'success' => false,
                 'message' => 'Order not found'
             ], 404);
+        }
+
+        if ($response = $this->forbidUnlessOrderAccess($request, $order)) {
+            return $response;
         }
 
         // Update all order_shops for this order to Cancelled status

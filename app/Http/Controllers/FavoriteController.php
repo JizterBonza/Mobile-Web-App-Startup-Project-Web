@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\EnsuresApiOwnership;
 use App\Models\Favorite;
 use App\Models\Item;
 use Illuminate\Http\Request;
@@ -9,27 +10,21 @@ use Illuminate\Support\Facades\Validator;
 
 class FavoriteController extends Controller
 {
-    /**
-     * Fetch all favorites
-     *
-     * @param Request $request
-     * @return \Illuminate\Http\JsonResponse
-     */
+    use EnsuresApiOwnership;
+
     public function index(Request $request)
     {
-        $query = Favorite::with(['item', 'user']);
-
-        // Filter by user_id if provided
-        if ($request->has('user_id')) {
-            $query->where('user_id', $request->user_id);
+        if ($response = $this->rejectUserIdMismatch($request, $request->input('user_id'))) {
+            return $response;
         }
 
-        // Filter by item_id if provided
+        $query = Favorite::with(['item', 'user'])
+            ->where('user_id', $this->authUserId($request));
+
         if ($request->has('item_id')) {
             $query->where('item_id', $request->item_id);
         }
 
-        // Order by created_at descending (newest first)
         $query->orderBy('created_at', 'desc');
 
         $favorites = $query->get();
@@ -41,13 +36,7 @@ class FavoriteController extends Controller
         ]);
     }
 
-    /**
-     * Fetch a single favorite by ID
-     *
-     * @param int $id
-     * @return \Illuminate\Http\JsonResponse
-     */
-    public function show($id)
+    public function show(Request $request, $id)
     {
         $favorite = Favorite::with(['item', 'user'])->find($id);
 
@@ -58,20 +47,22 @@ class FavoriteController extends Controller
             ], 404);
         }
 
+        if ($response = $this->ensureResourceOwner($request, $favorite->user_id)) {
+            return $response;
+        }
+
         return response()->json([
             'success' => true,
             'data' => $favorite
         ]);
     }
 
-    /**
-     * Get favorites for a specific user
-     *
-     * @param int $userId
-     * @return \Illuminate\Http\JsonResponse
-     */
-    public function getByUser($userId)
+    public function getByUser(Request $request, $userId)
     {
+        if ($response = $this->ensureSelfOrStaff($request, $userId)) {
+            return $response;
+        }
+
         $favorites = Favorite::with(['item'])
             ->where('user_id', $userId)
             ->orderBy('created_at', 'desc')
@@ -84,16 +75,10 @@ class FavoriteController extends Controller
         ]);
     }
 
-    /**
-     * Add item to favorites
-     *
-     * @param Request $request
-     * @return \Illuminate\Http\JsonResponse
-     */
     public function store(Request $request)
     {
         $validator = Validator::make($request->all(), [
-            'user_id' => 'required|exists:users,id',
+            'user_id' => 'sometimes|integer',
             'item_id' => 'required|exists:items,id',
         ]);
 
@@ -105,7 +90,12 @@ class FavoriteController extends Controller
             ], 422);
         }
 
-        // Check if item exists
+        if ($response = $this->rejectUserIdMismatch($request, $request->input('user_id'))) {
+            return $response;
+        }
+
+        $userId = $this->authUserId($request);
+
         $item = Item::find($request->item_id);
         if (!$item) {
             return response()->json([
@@ -114,8 +104,7 @@ class FavoriteController extends Controller
             ], 404);
         }
 
-        // Check if item is already favorited by this user
-        $existingFavorite = Favorite::where('user_id', $request->user_id)
+        $existingFavorite = Favorite::where('user_id', $userId)
             ->where('item_id', $request->item_id)
             ->first();
 
@@ -127,9 +116,8 @@ class FavoriteController extends Controller
             ], 409);
         }
 
-        // Create new favorite
         $favorite = Favorite::create([
-            'user_id' => $request->user_id,
+            'user_id' => $userId,
             'item_id' => $request->item_id,
             'created_at' => now(),
         ]);
@@ -141,13 +129,7 @@ class FavoriteController extends Controller
         ], 201);
     }
 
-    /**
-     * Remove item from favorites
-     *
-     * @param int $id
-     * @return \Illuminate\Http\JsonResponse
-     */
-    public function destroy($id)
+    public function destroy(Request $request, $id)
     {
         $favorite = Favorite::find($id);
 
@@ -158,6 +140,10 @@ class FavoriteController extends Controller
             ], 404);
         }
 
+        if ($response = $this->ensureResourceOwner($request, $favorite->user_id)) {
+            return $response;
+        }
+
         $favorite->delete();
 
         return response()->json([
@@ -166,16 +152,10 @@ class FavoriteController extends Controller
         ]);
     }
 
-    /**
-     * Remove favorite by user_id and item_id
-     *
-     * @param Request $request
-     * @return \Illuminate\Http\JsonResponse
-     */
     public function removeByUserAndItem(Request $request)
     {
         $validator = Validator::make($request->all(), [
-            'user_id' => 'required|exists:users,id',
+            'user_id' => 'sometimes|integer',
             'item_id' => 'required|exists:items,id',
         ]);
 
@@ -187,7 +167,11 @@ class FavoriteController extends Controller
             ], 422);
         }
 
-        $favorite = Favorite::where('user_id', $request->user_id)
+        if ($response = $this->rejectUserIdMismatch($request, $request->input('user_id'))) {
+            return $response;
+        }
+
+        $favorite = Favorite::where('user_id', $this->authUserId($request))
             ->where('item_id', $request->item_id)
             ->first();
 
@@ -206,16 +190,10 @@ class FavoriteController extends Controller
         ]);
     }
 
-    /**
-     * Toggle favorite status (add if not exists, remove if exists)
-     *
-     * @param Request $request
-     * @return \Illuminate\Http\JsonResponse
-     */
     public function toggle(Request $request)
     {
         $validator = Validator::make($request->all(), [
-            'user_id' => 'required|exists:users,id',
+            'user_id' => 'sometimes|integer',
             'item_id' => 'required|exists:items,id',
         ]);
 
@@ -227,7 +205,12 @@ class FavoriteController extends Controller
             ], 422);
         }
 
-        // Check if item exists
+        if ($response = $this->rejectUserIdMismatch($request, $request->input('user_id'))) {
+            return $response;
+        }
+
+        $userId = $this->authUserId($request);
+
         $item = Item::find($request->item_id);
         if (!$item) {
             return response()->json([
@@ -236,45 +219,37 @@ class FavoriteController extends Controller
             ], 404);
         }
 
-        $favorite = Favorite::where('user_id', $request->user_id)
+        $favorite = Favorite::where('user_id', $userId)
             ->where('item_id', $request->item_id)
             ->first();
 
         if ($favorite) {
-            // Remove if exists
             $favorite->delete();
             return response()->json([
                 'success' => true,
                 'message' => 'Item removed from favorites',
                 'is_favorited' => false
             ]);
-        } else {
-            // Add if not exists
-            $favorite = Favorite::create([
-                'user_id' => $request->user_id,
-                'item_id' => $request->item_id,
-                'created_at' => now(),
-            ]);
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Item added to favorites',
-                'is_favorited' => true,
-                'data' => $favorite->load(['item', 'user'])
-            ], 201);
         }
+
+        $favorite = Favorite::create([
+            'user_id' => $userId,
+            'item_id' => $request->item_id,
+            'created_at' => now(),
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Item added to favorites',
+            'is_favorited' => true,
+            'data' => $favorite->load(['item', 'user'])
+        ], 201);
     }
 
-    /**
-     * Check if an item is favorited by a user
-     *
-     * @param Request $request
-     * @return \Illuminate\Http\JsonResponse
-     */
     public function check(Request $request)
     {
         $validator = Validator::make($request->all(), [
-            'user_id' => 'required|exists:users,id',
+            'user_id' => 'sometimes|integer',
             'item_id' => 'required|exists:items,id',
         ]);
 
@@ -286,7 +261,11 @@ class FavoriteController extends Controller
             ], 422);
         }
 
-        $isFavorited = Favorite::where('user_id', $request->user_id)
+        if ($response = $this->rejectUserIdMismatch($request, $request->input('user_id'))) {
+            return $response;
+        }
+
+        $isFavorited = Favorite::where('user_id', $this->authUserId($request))
             ->where('item_id', $request->item_id)
             ->exists();
 
@@ -296,4 +275,3 @@ class FavoriteController extends Controller
         ]);
     }
 }
-

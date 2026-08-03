@@ -2,43 +2,36 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\EnsuresApiOwnership;
 use App\Models\Address;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 
 class AddressController extends Controller
 {
-    /**
-     * Fetch all addresses
-     *
-     * @param Request $request
-     * @return \Illuminate\Http\JsonResponse
-     */
+    use EnsuresApiOwnership;
+
     public function index(Request $request)
     {
-        $query = Address::with(['user']);
-
-        // Filter by user_id if provided
-        if ($request->has('user_id')) {
-            $query->where('user_id', $request->user_id);
+        if ($response = $this->rejectUserIdMismatch($request, $request->input('user_id'))) {
+            return $response;
         }
 
-        // Filter by address_type if provided
+        $query = Address::with(['user'])
+            ->where('user_id', $this->authUserId($request));
+
         if ($request->has('address_type')) {
             $query->where('address_type', $request->address_type);
         }
 
-        // Filter by is_active if provided
         if ($request->has('is_active')) {
             $query->where('is_active', $request->is_active);
         }
 
-        // Filter by city_municipality if provided
         if ($request->has('city_municipality')) {
             $query->where('city_municipality', 'like', '%' . $request->city_municipality . '%');
         }
 
-        // Order by is_default first, then by created_at descending
         $query->orderBy('is_default', 'desc')->orderBy('created_at', 'desc');
 
         $addresses = $query->get();
@@ -50,13 +43,7 @@ class AddressController extends Controller
         ]);
     }
 
-    /**
-     * Fetch a single address by ID
-     *
-     * @param int $id
-     * @return \Illuminate\Http\JsonResponse
-     */
-    public function show($id)
+    public function show(Request $request, $id)
     {
         $address = Address::with(['user'])->find($id);
 
@@ -67,20 +54,22 @@ class AddressController extends Controller
             ], 404);
         }
 
+        if ($response = $this->ensureResourceOwner($request, $address->user_id)) {
+            return $response;
+        }
+
         return response()->json([
             'success' => true,
             'data' => $address
         ]);
     }
 
-    /**
-     * Get addresses for a specific user
-     *
-     * @param int $userId
-     * @return \Illuminate\Http\JsonResponse
-     */
-    public function getByUser($userId)
+    public function getByUser(Request $request, $userId)
     {
+        if ($response = $this->ensureSelfOrStaff($request, $userId)) {
+            return $response;
+        }
+
         $addresses = Address::where('user_id', $userId)
             ->where('is_active', true)
             ->orderBy('is_default', 'desc')
@@ -94,14 +83,12 @@ class AddressController extends Controller
         ]);
     }
 
-    /**
-     * Get default address for a specific user
-     *
-     * @param int $userId
-     * @return \Illuminate\Http\JsonResponse
-     */
-    public function getDefault($userId)
+    public function getDefault(Request $request, $userId)
     {
+        if ($response = $this->ensureSelfOrStaff($request, $userId)) {
+            return $response;
+        }
+
         $address = Address::where('user_id', $userId)
             ->where('is_default', true)
             ->where('is_active', true)
@@ -120,16 +107,10 @@ class AddressController extends Controller
         ]);
     }
 
-    /**
-     * Create a new address
-     *
-     * @param Request $request
-     * @return \Illuminate\Http\JsonResponse
-     */
     public function store(Request $request)
     {
         $validator = Validator::make($request->all(), [
-            'user_id' => 'required|exists:users,id',
+            'user_id' => 'sometimes|integer',
             'address_label' => 'required|string|max:50',
             'address_type' => 'nullable|in:home,work,farm,other',
             'recipient_name' => 'required|string|max:100',
@@ -156,17 +137,20 @@ class AddressController extends Controller
             ], 422);
         }
 
-        // If this is set as default, unset all other default addresses for this user
+        if ($response = $this->rejectUserIdMismatch($request, $request->input('user_id'))) {
+            return $response;
+        }
+
+        $userId = $this->authUserId($request);
+
         if ($request->is_default) {
-            Address::where('user_id', $request->user_id)
+            Address::where('user_id', $userId)
                 ->update(['is_default' => false]);
         }
 
-        // If this is the first address for the user, set it as default
-        $existingAddresses = Address::where('user_id', $request->user_id)->count();
+        $existingAddresses = Address::where('user_id', $userId)->count();
         $isDefault = $request->is_default ?? ($existingAddresses === 0);
 
-        // Build full_address from components if not provided
         $fullAddress = $request->full_address;
         if (!$fullAddress) {
             $parts = array_filter([
@@ -180,9 +164,8 @@ class AddressController extends Controller
             $fullAddress = implode(', ', $parts);
         }
 
-        // Create new address
         $address = Address::create([
-            'user_id' => $request->user_id,
+            'user_id' => $userId,
             'address_label' => $request->address_label,
             'address_type' => $request->address_type ?? 'home',
             'recipient_name' => $request->recipient_name,
@@ -208,13 +191,6 @@ class AddressController extends Controller
         ], 201);
     }
 
-    /**
-     * Update an address
-     *
-     * @param Request $request
-     * @param int $id
-     * @return \Illuminate\Http\JsonResponse
-     */
     public function update(Request $request, $id)
     {
         $address = Address::find($id);
@@ -224,6 +200,10 @@ class AddressController extends Controller
                 'success' => false,
                 'message' => 'Address not found'
             ], 404);
+        }
+
+        if ($response = $this->ensureResourceOwner($request, $address->user_id)) {
+            return $response;
         }
 
         $validator = Validator::make($request->all(), [
@@ -253,14 +233,12 @@ class AddressController extends Controller
             ], 422);
         }
 
-        // If setting as default, unset all other default addresses for this user
         if ($request->has('is_default') && $request->is_default) {
             Address::where('user_id', $address->user_id)
                 ->where('id', '!=', $id)
                 ->update(['is_default' => false]);
         }
 
-        // Get the data to update
         $updateData = $request->only([
             'address_label',
             'address_type',
@@ -280,10 +258,9 @@ class AddressController extends Controller
             'is_active',
         ]);
 
-        // Rebuild full_address if any address component was updated and full_address wasn't explicitly provided
         $addressComponents = ['street_address', 'barangay', 'city_municipality', 'province', 'region', 'postal_code'];
         $hasAddressUpdate = !empty(array_intersect(array_keys($updateData), $addressComponents));
-        
+
         if ($hasAddressUpdate && !$request->has('full_address')) {
             $parts = array_filter([
                 $request->street_address ?? $address->street_address,
@@ -305,13 +282,7 @@ class AddressController extends Controller
         ]);
     }
 
-    /**
-     * Set an address as default
-     *
-     * @param int $id
-     * @return \Illuminate\Http\JsonResponse
-     */
-    public function setDefault($id)
+    public function setDefault(Request $request, $id)
     {
         $address = Address::find($id);
 
@@ -322,7 +293,10 @@ class AddressController extends Controller
             ], 404);
         }
 
-        // Use the model's setAsDefault method
+        if ($response = $this->ensureResourceOwner($request, $address->user_id)) {
+            return $response;
+        }
+
         $address->setAsDefault();
 
         return response()->json([
@@ -332,13 +306,7 @@ class AddressController extends Controller
         ]);
     }
 
-    /**
-     * Delete an address (set is_active to false and soft delete)
-     *
-     * @param int $id
-     * @return \Illuminate\Http\JsonResponse
-     */
-    public function destroy($id)
+    public function destroy(Request $request, $id)
     {
         $address = Address::find($id);
 
@@ -349,19 +317,20 @@ class AddressController extends Controller
             ], 404);
         }
 
+        if ($response = $this->ensureResourceOwner($request, $address->user_id)) {
+            return $response;
+        }
+
         $wasDefault = $address->is_default;
         $userId = $address->user_id;
 
-        // Set is_active to false and remove default status
         $address->update([
             'is_active' => false,
             'is_default' => false,
         ]);
 
-        // Soft delete the address
         $address->delete();
 
-        // If deleted address was default, set another active address as default
         if ($wasDefault) {
             $newDefault = Address::where('user_id', $userId)
                 ->where('is_active', true)
@@ -379,13 +348,7 @@ class AddressController extends Controller
         ]);
     }
 
-    /**
-     * Restore a deleted address (restore soft delete and set is_active to true)
-     *
-     * @param int $id
-     * @return \Illuminate\Http\JsonResponse
-     */
-    public function restore($id)
+    public function restore(Request $request, $id)
     {
         $address = Address::withTrashed()->find($id);
 
@@ -396,6 +359,10 @@ class AddressController extends Controller
             ], 404);
         }
 
+        if ($response = $this->ensureResourceOwner($request, $address->user_id)) {
+            return $response;
+        }
+
         if (!$address->trashed() && $address->is_active) {
             return response()->json([
                 'success' => false,
@@ -403,12 +370,10 @@ class AddressController extends Controller
             ], 400);
         }
 
-        // Restore from soft delete if trashed
         if ($address->trashed()) {
             $address->restore();
         }
 
-        // Set is_active to true
         $address->update(['is_active' => true]);
 
         return response()->json([
@@ -418,11 +383,6 @@ class AddressController extends Controller
         ]);
     }
 
-    /**
-     * Get available address types
-     *
-     * @return \Illuminate\Http\JsonResponse
-     */
     public function getAddressTypes()
     {
         return response()->json([
@@ -431,4 +391,3 @@ class AddressController extends Controller
         ]);
     }
 }
-

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\EnsuresApiOwnership;
 use App\Models\ActivityLog;
 use App\Models\User;
 use Illuminate\Http\Request;
@@ -9,12 +10,18 @@ use Inertia\Inertia;
 
 class ActivityLogController extends Controller
 {
+    use EnsuresApiOwnership;
+
     /**
      * List activity logs with optional filters (paginated).
      * Renders the Activity Logs page for Superadmin/Admin dashboard.
      */
     public function index(Request $request)
     {
+        if ($response = $this->ensureStaff($request)) {
+            return $response;
+        }
+
         $request->validate([
             'user_id' => 'nullable|exists:users,id',
             'action' => 'nullable|string|max:64',
@@ -64,8 +71,12 @@ class ActivityLogController extends Controller
     /**
      * Get a single activity log by id (for API or detail modal).
      */
-    public function show($id)
+    public function show(Request $request, $id)
     {
+        if ($response = $this->ensureStaff($request)) {
+            return $response;
+        }
+
         $log = ActivityLog::with(['user:id,user_detail_id', 'user.userDetail:id,first_name,last_name,email'])->findOrFail($id);
         return response()->json($log);
     }

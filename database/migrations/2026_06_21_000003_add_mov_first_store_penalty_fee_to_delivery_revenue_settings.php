@@ -9,11 +9,13 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::table('delivery_revenue_settings', function (Blueprint $table) {
-            $table->decimal('mov_first_store_penalty_fee', 10, 2)
-                ->default(25.00)
-                ->after('mov_first_store');
-        });
+        if (! Schema::hasColumn('delivery_revenue_settings', 'mov_first_store_penalty_fee')) {
+            Schema::table('delivery_revenue_settings', function (Blueprint $table) {
+                $table->decimal('mov_first_store_penalty_fee', 10, 2)
+                    ->default(25.00)
+                    ->after('mov_first_store');
+            });
+        }
 
         DB::table('delivery_revenue_settings')->update([
             'mov_first_store_penalty_fee' => 25.00,
@@ -22,8 +24,10 @@ return new class extends Migration
 
     public function down(): void
     {
-        Schema::table('delivery_revenue_settings', function (Blueprint $table) {
-            $table->dropColumn('mov_first_store_penalty_fee');
-        });
+        if (Schema::hasColumn('delivery_revenue_settings', 'mov_first_store_penalty_fee')) {
+            Schema::table('delivery_revenue_settings', function (Blueprint $table) {
+                $table->dropColumn('mov_first_store_penalty_fee');
+            });
+        }
     }
 };

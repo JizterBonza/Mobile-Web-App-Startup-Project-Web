@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\EnsuresApiOwnership;
 use App\Models\Shop;
 use App\Models\Zone;
 use App\Models\RatingReview;
@@ -11,6 +12,7 @@ use Illuminate\Support\Facades\Validator;
 
 class ShopController extends Controller
 {
+    use EnsuresApiOwnership;
     /**
      * Fetch all shops
      *
@@ -132,6 +134,10 @@ class ShopController extends Controller
      */
     public function store(Request $request)
     {
+        if ($response = $this->ensureStaffOrVendor($request)) {
+            return $response;
+        }
+
         $validator = Validator::make($request->all(), [
             'agrivet_id' => 'required|exists:agrivets,id',
             'shop_name' => 'required|string|max:150',
@@ -200,6 +206,10 @@ class ShopController extends Controller
      */
     public function update(Request $request, $id)
     {
+        if ($response = $this->ensureStaffOrVendor($request)) {
+            return $response;
+        }
+
         $shop = Shop::find($id);
 
         if (!$shop) {
@@ -272,8 +282,12 @@ class ShopController extends Controller
      * @param int $id
      * @return \Illuminate\Http\JsonResponse
      */
-    public function destroy($id)
+    public function destroy(Request $request, $id)
     {
+        if ($response = $this->ensureStaffOrVendor($request)) {
+            return $response;
+        }
+
         $shop = Shop::find($id);
 
         if (!$shop) {
@@ -361,7 +375,7 @@ class ShopController extends Controller
         }
 
         $validator = Validator::make($request->all(), [
-            'user_id' => 'required|exists:users,id',
+            'user_id' => 'sometimes|integer',
             'item_id' => 'nullable|exists:items,id',
             'order_id' => 'nullable|exists:orders,id',
             'rating' => 'required|integer|min:1|max:5',
@@ -378,9 +392,15 @@ class ShopController extends Controller
             ], 422);
         }
 
+        if ($response = $this->rejectUserIdMismatch($request, $request->input('user_id'))) {
+            return $response;
+        }
+
+        $userId = $this->authUserId($request);
+
         // Create the review
         $review = RatingReview::create([
-            'user_id' => $request->user_id,
+            'user_id' => $userId,
             'shop_id' => $id,
             'item_id' => $request->item_id,
             'order_id' => $request->order_id,

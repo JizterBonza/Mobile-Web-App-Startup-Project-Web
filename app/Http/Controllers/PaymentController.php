@@ -3,19 +3,28 @@
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
+use App\Http\Controllers\Concerns\EnsuresApiOwnership;
 use App\Services\PaymongoService;
+use App\Services\VoucherService;
 use App\Models\Order;
 use App\Models\Payment;
 use App\Models\Notification;
+use App\Models\Voucher;
+use App\Models\VoucherUsage;
 use Illuminate\Support\Facades\Log;
 
 class PaymentController extends Controller
 {
+    use EnsuresApiOwnership;
+
     protected $paymongo;
 
-    public function __construct(PaymongoService $paymongo)
+    protected VoucherService $voucherService;
+
+    public function __construct(PaymongoService $paymongo, VoucherService $voucherService)
     {
         $this->paymongo = $paymongo;
+        $this->voucherService = $voucherService;
     }
 
     public function createIntent(Request $request)
@@ -43,10 +52,39 @@ class PaymentController extends Controller
 
     public function paymentSuccess(Request $request)
     {
-        $paymentIntentId = $request->query('payment_intent_id') ?? $request->payment_intent_id;
+        $orderId = $request->query('order_id') ?? $request->input('order_id');
+        $paymentIntentId = $request->query('payment_intent_id') ?? $request->input('payment_intent_id');
+
+        // Prefer syncing by order when returning from hosted checkout.
+        if (! empty($orderId)) {
+            $payment = Payment::with('order.orderDetail')
+                ->where('order_id', $orderId)
+                ->latest('id')
+                ->first();
+
+            if ($payment) {
+                $this->syncPendingPaymentFromPaymongo($payment);
+                $payment->refresh();
+                $payment->load('order.orderDetail');
+
+                $paymentStatus = $payment->order?->orderDetail?->payment_status
+                    ?? $payment->status
+                    ?? 'pending';
+
+                return response()->json([
+                    'success' => $paymentStatus === 'paid',
+                    'message' => $paymentStatus === 'paid'
+                        ? 'Payment successful'
+                        : 'Payment received. Your order will be updated shortly.',
+                    'order_id' => (int) $orderId,
+                    'payment_status' => $paymentStatus,
+                    'is_paid' => $paymentStatus === 'paid',
+                ]);
+            }
+        }
 
         // Checkout sessions redirect here without a payment_intent_id; payment
-        // confirmation is handled by the PayMongo webhook instead.
+        // confirmation is handled by the PayMongo webhook / sync above.
         if (empty($paymentIntentId)) {
             return response()->json([
                 'success' => true,
@@ -82,6 +120,58 @@ class PaymentController extends Controller
             'success' => false,
             'message' => 'Payment not completed',
             'status' => $status,
+        ]);
+    }
+
+    /**
+     * PayMongo cancel_url landing page.
+     * Do NOT cancel the order here — user may have completed payment in the wallet app.
+     * Sync from PayMongo first; only report cancelled when still unpaid.
+     */
+    public function paymentCancel(Request $request)
+    {
+        $orderId = $request->query('order_id') ?? $request->input('order_id');
+
+        if (empty($orderId)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Payment was cancelled.',
+                'payment_status' => 'cancelled',
+                'is_paid' => false,
+            ]);
+        }
+
+        $payment = Payment::with('order.orderDetail')
+            ->where('order_id', $orderId)
+            ->latest('id')
+            ->first();
+
+        if ($payment) {
+            $this->syncPendingPaymentFromPaymongo($payment);
+            $payment->refresh();
+            $payment->load('order.orderDetail');
+        }
+
+        $paymentStatus = $payment?->order?->orderDetail?->payment_status
+            ?? $payment?->status
+            ?? 'pending';
+
+        if ($paymentStatus === 'paid') {
+            return response()->json([
+                'success' => true,
+                'message' => 'Payment successful',
+                'order_id' => (int) $orderId,
+                'payment_status' => 'paid',
+                'is_paid' => true,
+            ]);
+        }
+
+        return response()->json([
+            'success' => false,
+            'message' => 'Payment was not completed.',
+            'order_id' => (int) $orderId,
+            'payment_status' => $paymentStatus,
+            'is_paid' => false,
         ]);
     }
 
@@ -317,19 +407,34 @@ class PaymentController extends Controller
         array $metadata,
         ?string $paymentIntentId = null
     ): void {
-        $payment->update([
+        if ($payment->status === 'paid') {
+            return;
+        }
+
+        // If this webhook is for an older rotated session, still mark paid and
+        // restore the session id that actually completed payment when present.
+        $sessionIdFromPayload = $metadata['id'] ?? null;
+        $update = [
             'status' => 'paid',
             'payment_method' => $paymentMethod,
             'payment_id' => $paymongoPaymentId ?? $payment->payment_id,
             'payment_intent_id' => $paymentIntentId ?? $payment->payment_intent_id,
             'metadata' => $metadata,
-        ]);
+        ];
+
+        if (is_string($sessionIdFromPayload) && str_starts_with($sessionIdFromPayload, 'cs_')) {
+            $update['checkout_session_id'] = $sessionIdFromPayload;
+        }
+
+        $payment->update($update);
 
         $payment->order?->orderDetail?->update(['payment_status' => 'paid']);
 
         $order = $payment->order;
         $orderDetail = $order?->orderDetail;
         if ($order && $orderDetail) {
+            $this->recordVoucherUsageIfNeeded($order, $orderDetail);
+
             Notification::createForUser(
                 $order->user_id,
                 'payment_confirmed',
@@ -346,6 +451,34 @@ class PaymentController extends Controller
                 "/orders/{$order->id}"
             );
         }
+    }
+
+    private function recordVoucherUsageIfNeeded(Order $order, $orderDetail): void
+    {
+        if (! $orderDetail->voucher_id) {
+            return;
+        }
+
+        $alreadyRecorded = VoucherUsage::query()
+            ->where('order_id', $order->id)
+            ->where('voucher_id', $orderDetail->voucher_id)
+            ->exists();
+
+        if ($alreadyRecorded) {
+            return;
+        }
+
+        $voucher = Voucher::query()->find($orderDetail->voucher_id);
+        if (! $voucher) {
+            return;
+        }
+
+        $this->voucherService->recordUsage(
+            $voucher,
+            (int) $order->user_id,
+            (int) $order->id,
+            (float) $orderDetail->voucher_discount_amount,
+        );
     }
 
     private function markPaymentFailed(
@@ -390,26 +523,62 @@ class PaymentController extends Controller
     private function resolvePaymentFromCheckoutSession(array $data): ?Payment
     {
         $sessionId = $data['id'] ?? null;
+        $attrs = $data['attributes'] ?? [];
+        $referenceNumber = $attrs['reference_number'] ?? null;
+        $metadataOrderId = $attrs['metadata']['order_id'] ?? null;
 
-        if (! $sessionId) {
-            Log::warning('PayMongo webhook: checkout session event missing session id', [
-                'data' => $data,
-            ]);
+        if ($sessionId) {
+            $payment = Payment::with('order.orderDetail')
+                ->where('checkout_session_id', $sessionId)
+                ->first();
 
-            return null;
+            if ($payment) {
+                return $payment;
+            }
+
+            // Session may have been rotated locally; check previous IDs.
+            $payment = Payment::with('order.orderDetail')
+                ->whereJsonContains('metadata->previous_checkout_session_ids', $sessionId)
+                ->latest('id')
+                ->first();
+
+            if ($payment) {
+                return $payment;
+            }
         }
 
-        $payment = Payment::with('order.orderDetail')
-            ->where('checkout_session_id', $sessionId)
-            ->first();
+        $orderId = is_numeric($referenceNumber)
+            ? (int) $referenceNumber
+            : (is_numeric($metadataOrderId) ? (int) $metadataOrderId : null);
 
-        if (! $payment) {
-            Log::warning('PayMongo webhook: no payment found for checkout session', [
-                'checkout_session_id' => $sessionId,
-            ]);
+        if ($orderId) {
+            $paid = Payment::with('order.orderDetail')
+                ->where('order_id', $orderId)
+                ->where('status', 'paid')
+                ->latest('id')
+                ->first();
+
+            if ($paid) {
+                return $paid;
+            }
+
+            $payment = Payment::with('order.orderDetail')
+                ->where('order_id', $orderId)
+                ->latest('id')
+                ->first();
+
+            if ($payment) {
+                return $payment;
+            }
         }
 
-        return $payment;
+        Log::warning('PayMongo webhook: no payment found for checkout session', [
+            'checkout_session_id' => $sessionId,
+            'reference_number' => $referenceNumber,
+            'metadata_order_id' => $metadataOrderId,
+        ]);
+
+        return null;
     }
 
     private function resolvePaymentFromPaymongoPayment(array $data): ?Payment
@@ -417,6 +586,7 @@ class PaymentController extends Controller
         $paymongoPaymentId = $data['id'] ?? null;
         $attrs = $data['attributes'] ?? [];
         $paymentIntentId = $attrs['payment_intent_id'] ?? null;
+        $metadataOrderId = $attrs['metadata']['order_id'] ?? null;
 
         if ($paymongoPaymentId) {
             $payment = Payment::with('order.orderDetail')
@@ -438,9 +608,21 @@ class PaymentController extends Controller
             }
         }
 
+        if (is_numeric($metadataOrderId)) {
+            $payment = Payment::with('order.orderDetail')
+                ->where('order_id', (int) $metadataOrderId)
+                ->latest('id')
+                ->first();
+
+            if ($payment) {
+                return $payment;
+            }
+        }
+
         Log::warning('PayMongo webhook: no payment found for PayMongo payment resource', [
             'payment_id' => $paymongoPaymentId,
             'payment_intent_id' => $paymentIntentId,
+            'metadata_order_id' => $metadataOrderId,
         ]);
 
         return null;
@@ -448,32 +630,135 @@ class PaymentController extends Controller
 
     /**
      * Get checkout_url for an order by order_id.
+     * Re-validates voucher before returning; recreates PayMongo session if amount changed.
      *
      * @param int $orderId
      * @return \Illuminate\Http\JsonResponse
      */
-    public function getCheckoutUrlByOrderId($orderId)
+    public function getCheckoutUrlByOrderId(Request $request, $orderId)
     {
-        $payment = Payment::where('order_id', $orderId)->first();
+        $order = Order::with(['orderDetail', 'orderShops'])->find($orderId);
 
-        if (!$payment) {
+        if (! $order || ! $order->orderDetail) {
             return response()->json([
                 'success' => false,
-                'message' => 'Payment not found for this order',
+                'message' => 'Order not found',
             ], 404);
         }
 
-        if (empty($payment->checkout_url)) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Checkout URL not available for this order',
-            ], 404);
+        if ($response = $this->forbidUnlessOrderAccess($request, $order)) {
+            return $response;
         }
 
-        return response()->json([
+        $orderDetail = $order->orderDetail;
+
+        if ($orderDetail->payment_status === 'paid') {
+            return response()->json([
+                'success' => false,
+                'message' => 'This order is already paid.',
+            ], 400);
+        }
+
+        $finalize = $this->voucherService->finalizeForCheckout(
+            $orderDetail,
+            (int) $order->user_id,
+        );
+        $orderDetail->refresh();
+
+        $payment = Payment::where('order_id', $order->id)->latest('id')->first();
+        $needsNewSession = ! $payment
+            || empty($payment->checkout_url)
+            || $payment->status !== 'pending'
+            || abs((float) $payment->amount - (float) $finalize['total_amount']) > 0.01
+            || ! empty($finalize['stripped']);
+
+        if ($needsNewSession) {
+            $session = $this->paymongo->createCheckoutSession(
+                $finalize['total_amount'],
+                'Order '.$orderDetail->order_code,
+                [
+                    'reference_number' => (string) $order->id,
+                    'metadata' => [
+                        'order_id' => (string) $order->id,
+                        'order_code' => (string) $orderDetail->order_code,
+                    ],
+                    'success_url' => config('app.url').'/api/payment-success?order_id='.$order->id,
+                    'cancel_url' => config('app.url').'/api/payment-cancel?order_id='.$order->id,
+                ],
+            );
+
+            if (! is_array($session) || ! empty($session['errors'])) {
+                Log::error('PayMongo checkout session creation failed on refresh', [
+                    'order_id' => $order->id,
+                    'response' => $session,
+                ]);
+
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Failed to create payment checkout session.',
+                ], 500);
+            }
+
+            $sessionId = $session['data']['id'] ?? null;
+            $checkoutUrl = $session['data']['attributes']['checkout_url'] ?? null;
+
+            if (! $sessionId || ! $checkoutUrl) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Invalid payment checkout response.',
+                ], 500);
+            }
+
+            if ($payment && $payment->status === 'pending') {
+                $metadata = is_array($payment->metadata) ? $payment->metadata : [];
+                $previousIds = $metadata['previous_checkout_session_ids'] ?? [];
+                if (! empty($payment->checkout_session_id)
+                    && $payment->checkout_session_id !== $sessionId
+                ) {
+                    $previousIds[] = $payment->checkout_session_id;
+                }
+
+                $payment->update([
+                    'checkout_session_id' => $sessionId,
+                    'checkout_url' => $checkoutUrl,
+                    'amount' => $finalize['total_amount'],
+                    'status' => 'pending',
+                    'metadata' => array_merge($metadata, [
+                        'previous_checkout_session_ids' => array_values(array_unique($previousIds)),
+                        'order_id' => (string) $order->id,
+                        'order_code' => (string) $orderDetail->order_code,
+                    ]),
+                ]);
+            } else {
+                $payment = Payment::create([
+                    'order_id' => $order->id,
+                    'checkout_session_id' => $sessionId,
+                    'checkout_url' => $checkoutUrl,
+                    'amount' => $finalize['total_amount'],
+                    'status' => 'pending',
+                    'metadata' => [
+                        'order_id' => (string) $order->id,
+                        'order_code' => (string) $orderDetail->order_code,
+                    ],
+                ]);
+            }
+        }
+
+        $payment = $payment->fresh();
+
+        $response = [
             'success' => true,
             'checkout_url' => $payment->checkout_url,
-        ]);
+            'total_amount' => $finalize['total_amount'],
+            'session_id' => $payment->checkout_session_id,
+        ];
+
+        if (! empty($finalize['stripped'])) {
+            $response['voucher_removed'] = true;
+            $response['message'] = $finalize['message'] ?? 'Voucher expired; total updated.';
+        }
+
+        return response()->json($response);
     }
 
     /**
@@ -482,9 +767,9 @@ class PaymentController extends Controller
      * @param int $orderId
      * @return \Illuminate\Http\JsonResponse
      */
-    public function getPaymentStatusByOrderId($orderId)
+    public function getPaymentStatusByOrderId(Request $request, $orderId)
     {
-        $order = Order::with(['orderDetail', 'payment'])->find($orderId);
+        $order = Order::with(['orderDetail', 'payment', 'orderShops'])->find($orderId);
 
         if (! $order) {
             return response()->json([
@@ -492,6 +777,16 @@ class PaymentController extends Controller
                 'message' => 'Order not found',
             ], 404);
         }
+
+        if ($response = $this->forbidUnlessOrderAccess($request, $order)) {
+            return $response;
+        }
+
+        // Localhost / missed webhooks: sync from PayMongo when still pending.
+        $this->syncPendingPaymentFromPaymongo($order->payment);
+
+        $order->refresh();
+        $order->load(['orderDetail', 'payment']);
 
         $paymentStatus = $order->orderDetail?->payment_status ?? 'pending';
 
@@ -507,5 +802,79 @@ class PaymentController extends Controller
                 'amount' => $order->payment->amount,
             ] : null,
         ]);
+    }
+
+    /**
+     * If a webhook never arrived (common on localhost), ask PayMongo for the
+     * checkout session status and mark the local payment paid when appropriate.
+     */
+    private function syncPendingPaymentFromPaymongo(?Payment $payment): void
+    {
+        if (! $payment || $payment->status === 'paid' || empty($payment->checkout_session_id)) {
+            return;
+        }
+
+        $session = $this->paymongo->retrieveCheckoutSession($payment->checkout_session_id);
+
+        if (! is_array($session) || empty($session['data'])) {
+            Log::warning('PayMongo sync: unable to retrieve checkout session', [
+                'payment_id' => $payment->id,
+                'checkout_session_id' => $payment->checkout_session_id,
+                'response' => $session,
+            ]);
+
+            return;
+        }
+
+        $data = $session['data'];
+        $attrs = $data['attributes'] ?? [];
+        $payments = $attrs['payments'] ?? [];
+
+        // Session status is only active/expired — paid is indicated by payments[].
+        $paymongoPayment = null;
+        if (is_array($payments)) {
+            foreach ($payments as $candidate) {
+                if (($candidate['attributes']['status'] ?? null) === 'paid') {
+                    $paymongoPayment = $candidate;
+                    break;
+                }
+            }
+        }
+
+        $isPaid = $paymongoPayment !== null
+            || ! empty($attrs['paid_at']);
+
+        if (! $isPaid) {
+            return;
+        }
+
+        // If paid_at is set but payments list is empty/unpaid, still sync with whatever we have.
+        if ($paymongoPayment === null && is_array($payments) && count($payments) > 0) {
+            $paymongoPayment = $payments[0];
+        }
+
+        $paymentMethod = $paymongoPayment['attributes']['source']['type']
+            ?? $paymongoPayment['attributes']['payment_method_used']
+            ?? $attrs['payment_method_used']
+            ?? null;
+
+        $paymentIntentId = $attrs['payment_intent']['id']
+            ?? $paymongoPayment['attributes']['payment_intent_id']
+            ?? null;
+
+        Log::info('PayMongo sync: marking local payment paid from checkout session', [
+            'payment_id' => $payment->id,
+            'checkout_session_id' => $payment->checkout_session_id,
+            'session_status' => $attrs['status'] ?? null,
+            'paid_at' => $attrs['paid_at'] ?? null,
+        ]);
+
+        $this->markPaymentPaid(
+            $payment->fresh(['order.orderDetail']),
+            $paymongoPayment['id'] ?? null,
+            $paymentMethod,
+            $data,
+            $paymentIntentId
+        );
     }
 }
