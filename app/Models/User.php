@@ -159,4 +159,12 @@ class User extends Authenticatable
     {
         return $this->hasMany(Notification::class)->where('read', false);
     }
+
+    /**
+     * Shop conversations where this user is the customer.
+     */
+    public function shopConversations()
+    {
+        return $this->hasMany(ShopConversation::class, 'customer_user_id');
+    }
 }

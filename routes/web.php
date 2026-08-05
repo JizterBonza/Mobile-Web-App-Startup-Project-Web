@@ -15,6 +15,7 @@ use App\Http\Controllers\ZoneController;
 use App\Http\Controllers\SuperAdminProductController;
 use App\Http\Controllers\ProductCatalogRequestController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\ShopMessageController;
 use App\Http\Controllers\SupportTicketController;
 use App\Http\Controllers\VoucherController;
 use Illuminate\Support\Facades\Route;
@@ -203,9 +204,10 @@ Route::middleware(['auth', 'session.valid', 'user.type:owner_manager'])->prefix(
     Route::get('/vendor-registration', [UserController::class, 'vendorRegistration'])->name('vendor-registration');
     Route::post('/stores/{shopId}/vendors', [DashboardController::class, 'ownerManagerStoreVendor'])->name('stores.vendors.store');
     Route::get('/orders', [DashboardController::class, 'ownerManagerOrders'])->name('orders');
-    Route::get('/messages', [DashboardController::class, 'ownerManagerMessages'])->name('messages');
-    Route::get('/messages/{shopId}', [DashboardController::class, 'ownerManagerBranchChat'])->name('messages.branch');
-    Route::get('/messages/{shopId}/{conversationId}', [DashboardController::class, 'ownerManagerConversation'])->name('messages.conversation');
+    Route::get('/messages', [ShopMessageController::class, 'ownerManagerIndex'])->name('messages');
+    Route::get('/messages/{shopId}', [ShopMessageController::class, 'ownerManagerBranch'])->name('messages.branch');
+    Route::get('/messages/{shopId}/{conversationId}', [ShopMessageController::class, 'ownerManagerConversation'])->name('messages.conversation');
+    Route::post('/messages/{shopId}/{conversationId}', [ShopMessageController::class, 'ownerManagerSend'])->name('messages.send');
     Route::get('/support', [DashboardController::class, 'ownerManagerSupport'])->name('support');
     Route::post('/support/tickets', [SupportTicketController::class, 'store'])->name('support.tickets.store');
     Route::post('/support/tickets/{id}/reply', [SupportTicketController::class, 'vendorReply'])->name('support.tickets.reply');
@@ -394,8 +396,9 @@ Route::middleware(['auth', 'session.valid', 'user.type:vendor'])->prefix('dashbo
     
     // Orders
     Route::get('/orders', [VendorController::class, 'ordersIndex'])->name('orders.index');
-    Route::get('/messages', [VendorController::class, 'messages'])->name('messages');
-    Route::get('/messages/{conversationId}', [VendorController::class, 'conversation'])->name('messages.conversation');
+    Route::get('/messages', [ShopMessageController::class, 'vendorIndex'])->name('messages');
+    Route::get('/messages/{conversationId}', [ShopMessageController::class, 'vendorConversation'])->name('messages.conversation');
+    Route::post('/messages/{conversationId}', [ShopMessageController::class, 'vendorSend'])->name('messages.send');
     Route::get('/support', [VendorController::class, 'support'])->name('support');
     Route::post('/support/tickets', [SupportTicketController::class, 'store'])->name('support.tickets.store');
     Route::post('/support/tickets/{id}/reply', [SupportTicketController::class, 'vendorReply'])->name('support.tickets.reply');

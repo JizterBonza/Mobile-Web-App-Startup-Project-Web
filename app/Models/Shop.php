@@ -103,5 +103,13 @@ class Shop extends Model
     {
         return $this->hasMany(RatingReview::class);
     }
+
+    /**
+     * Customer conversations for this shop.
+     */
+    public function conversations()
+    {
+        return $this->hasMany(ShopConversation::class);
+    }
 }
 

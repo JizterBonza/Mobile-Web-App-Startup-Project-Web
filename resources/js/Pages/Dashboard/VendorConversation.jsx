@@ -37,19 +37,49 @@ function MessageMeta({ message }) {
     )
 }
 
-function ImagePlaceholders() {
+function ImageGrid({ images = [] }) {
+    const urls = (images || []).filter(Boolean)
+
+    if (urls.length === 0) {
+        return (
+            <div className="grid h-40 grid-cols-2 gap-1.5 overflow-hidden rounded-lg">
+                <div className="row-span-2 bg-[#D1D5DB]" />
+                <div className="bg-[#D1D5DB]" />
+                <div className="bg-[#D1D5DB]" />
+            </div>
+        )
+    }
+
+    if (urls.length === 1) {
+        return (
+            <div className="overflow-hidden rounded-lg">
+                <img src={urls[0]} alt="" className="max-h-56 w-full object-cover" />
+            </div>
+        )
+    }
+
     return (
         <div className="grid h-40 grid-cols-2 gap-1.5 overflow-hidden rounded-lg">
-            <div className="row-span-2 bg-[#D1D5DB]" />
-            <div className="bg-[#D1D5DB]" />
-            <div className="bg-[#D1D5DB]" />
+            <div className="row-span-2">
+                <img src={urls[0]} alt="" className="h-full w-full object-cover" />
+            </div>
+            <div>
+                <img src={urls[1]} alt="" className="h-full w-full object-cover" />
+            </div>
+            {urls[2] ? (
+                <div>
+                    <img src={urls[2]} alt="" className="h-full w-full object-cover" />
+                </div>
+            ) : (
+                <div className="bg-[#D1D5DB]" />
+            )}
         </div>
     )
 }
 
 function FileAttachment({ message }) {
-    return (
-        <div className="w-full max-w-[260px] overflow-hidden rounded-xl">
+    const content = (
+        <>
             <div className="flex items-center gap-3 bg-[#5B7CBA] px-3 py-3 text-white">
                 <Film className="h-5 w-5 shrink-0" />
                 <span className="min-w-0 flex-1 truncate text-sm font-medium">
@@ -63,7 +93,24 @@ function FileAttachment({ message }) {
                 <span>{message.file_label || 'Document File'}</span>
                 <span className="text-[#6B7280]">{message.file_size}</span>
             </div>
-        </div>
+        </>
+    )
+
+    if (message.file_url) {
+        return (
+            <a
+                href={message.file_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="block w-full max-w-[260px] overflow-hidden rounded-xl"
+            >
+                {content}
+            </a>
+        )
+    }
+
+    return (
+        <div className="w-full max-w-[260px] overflow-hidden rounded-xl">{content}</div>
     )
 }
 
@@ -90,7 +137,7 @@ function ChatBubble({ message }) {
                     >
                         {message.type === 'images' && (
                             <div className="mb-2">
-                                <ImagePlaceholders />
+                                <ImageGrid images={message.images} />
                             </div>
                         )}
                         <p>{message.type === 'images' ? message.caption : message.body}</p>
@@ -101,10 +148,17 @@ function ChatBubble({ message }) {
     )
 }
 
-export default function VendorConversation({ auth, conversation, messages = [] }) {
+export default function VendorConversation({
+    auth,
+    conversation,
+    messages = [],
+    sendUrl,
+}) {
     const [draft, setDraft] = useState('')
+    const [sending, setSending] = useState(false)
     const [attachMenuOpen, setAttachMenuOpen] = useState(false)
     const attachMenuRef = useRef(null)
+    const fileInputRef = useRef(null)
 
     useEffect(() => {
         if (!attachMenuOpen) return undefined
@@ -130,17 +184,45 @@ export default function VendorConversation({ auth, conversation, messages = [] }
         }
     }, [attachMenuOpen])
 
+    const postMessage = (payload) => {
+        if (!sendUrl || sending) return
+
+        setSending(true)
+        router.post(sendUrl, payload, {
+            forceFormData: Boolean(payload.attachments?.length),
+            preserveScroll: true,
+            onFinish: () => {
+                setSending(false)
+                setDraft('')
+                setAttachMenuOpen(false)
+            },
+        })
+    }
+
     const handleSend = (e) => {
         e.preventDefault()
         if (!draft.trim()) return
-        setDraft('')
-        setAttachMenuOpen(false)
+        postMessage({ body: draft.trim() })
     }
 
     const handleAttachmentSelect = (optionId) => {
         setAttachMenuOpen(false)
-        // Placeholder actions until gallery/camera/product flows are wired up
-        void optionId
+        if (optionId === 'gallery' || optionId === 'camera') {
+            fileInputRef.current?.click()
+            return
+        }
+        // Products picker to be wired in a follow-up
+    }
+
+    const handleFilesSelected = (event) => {
+        const files = Array.from(event.target.files || [])
+        event.target.value = ''
+        if (files.length === 0) return
+
+        postMessage({
+            body: draft.trim(),
+            attachments: files,
+        })
     }
 
     return (
@@ -187,21 +269,35 @@ export default function VendorConversation({ auth, conversation, messages = [] }
                 </div>
 
                 <div className="flex-1 space-y-4 overflow-y-auto px-4 py-5 sm:px-6">
-                    {messages.map((message) =>
-                        message.type === 'date' ? (
-                            <div
-                                key={message.id}
-                                className="py-1 text-center text-sm font-bold text-[#4B5563]"
-                            >
-                                {message.label}
-                            </div>
-                        ) : (
-                            <ChatBubble key={message.id} message={message} />
-                        ),
+                    {messages.length === 0 ? (
+                        <div className="py-12 text-center text-sm text-[#6B7280]">
+                            No messages yet. Say hello to start the conversation.
+                        </div>
+                    ) : (
+                        messages.map((message) =>
+                            message.type === 'date' ? (
+                                <div
+                                    key={message.id}
+                                    className="py-1 text-center text-sm font-bold text-[#4B5563]"
+                                >
+                                    {message.label}
+                                </div>
+                            ) : (
+                                <ChatBubble key={message.id} message={message} />
+                            ),
+                        )
                     )}
                 </div>
 
                 <div className="sticky bottom-0 border-t border-[#E5E7EB] bg-white px-4 py-3 sm:px-6">
+                    <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept="image/*,video/mp4,.pdf,.docx"
+                        multiple
+                        className="hidden"
+                        onChange={handleFilesSelected}
+                    />
                     <form
                         onSubmit={handleSend}
                         className="relative flex items-center gap-2 rounded-full border border-[#D1D5DB] bg-[#F3F4F6] px-3 py-2"
@@ -253,11 +349,13 @@ export default function VendorConversation({ auth, conversation, messages = [] }
                             onChange={(e) => setDraft(e.target.value)}
                             onFocus={() => setAttachMenuOpen(false)}
                             placeholder="Type Here..."
-                            className="min-w-0 flex-1 border-0 bg-transparent text-sm text-[#1F2937] placeholder:text-[#9CA3AF] outline-none"
+                            disabled={sending || !sendUrl}
+                            className="min-w-0 flex-1 border-0 bg-transparent text-sm text-[#1F2937] placeholder:text-[#9CA3AF] outline-none disabled:opacity-60"
                         />
                         <button
                             type="submit"
-                            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[#102059] transition-colors hover:bg-[#EFF6FF]"
+                            disabled={sending || !draft.trim() || !sendUrl}
+                            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[#102059] transition-colors hover:bg-[#EFF6FF] disabled:opacity-40"
                             aria-label="Send message"
                         >
                             <SendHorizontal className="h-5 w-5" />
