@@ -190,6 +190,7 @@ Route::middleware(['auth', 'session.valid', 'user.type:owner_manager'])->prefix(
     Route::get('/', [DashboardController::class, 'ownerManager'])->name('index');
     Route::get('/stores', [DashboardController::class, 'ownerManagerStores'])->name('stores');
     Route::get('/stores/{shopId}/store-information', [DashboardController::class, 'ownerManagerStoreInformation'])->name('stores.store-information');
+    Route::get('/stores/{shopId}/income', [DashboardController::class, 'ownerManagerStoreIncome'])->name('stores.income');
     Route::put('/stores/{shopId}', [DashboardController::class, 'ownerManagerUpdateShop'])->name('stores.update');
     Route::post('/stores/{shopId}/cover-photo', [DashboardController::class, 'ownerManagerUpdateShopCoverPhoto'])->name('stores.cover-photo');
     Route::post('/stores/{shopId}/permit-photo', [DashboardController::class, 'ownerManagerUpdateShopPermitPhoto'])->name('stores.permit-photo');
@@ -202,6 +203,9 @@ Route::middleware(['auth', 'session.valid', 'user.type:owner_manager'])->prefix(
     Route::get('/vendor-registration', [UserController::class, 'vendorRegistration'])->name('vendor-registration');
     Route::post('/stores/{shopId}/vendors', [DashboardController::class, 'ownerManagerStoreVendor'])->name('stores.vendors.store');
     Route::get('/orders', [DashboardController::class, 'ownerManagerOrders'])->name('orders');
+    Route::get('/messages', [DashboardController::class, 'ownerManagerMessages'])->name('messages');
+    Route::get('/messages/{shopId}', [DashboardController::class, 'ownerManagerBranchChat'])->name('messages.branch');
+    Route::get('/messages/{shopId}/{conversationId}', [DashboardController::class, 'ownerManagerConversation'])->name('messages.conversation');
     Route::get('/support', [DashboardController::class, 'ownerManagerSupport'])->name('support');
     Route::post('/support/tickets', [SupportTicketController::class, 'store'])->name('support.tickets.store');
     Route::post('/support/tickets/{id}/reply', [SupportTicketController::class, 'vendorReply'])->name('support.tickets.reply');
@@ -390,6 +394,8 @@ Route::middleware(['auth', 'session.valid', 'user.type:vendor'])->prefix('dashbo
     
     // Orders
     Route::get('/orders', [VendorController::class, 'ordersIndex'])->name('orders.index');
+    Route::get('/messages', [VendorController::class, 'messages'])->name('messages');
+    Route::get('/messages/{conversationId}', [VendorController::class, 'conversation'])->name('messages.conversation');
     Route::get('/support', [VendorController::class, 'support'])->name('support');
     Route::post('/support/tickets', [SupportTicketController::class, 'store'])->name('support.tickets.store');
     Route::post('/support/tickets/{id}/reply', [SupportTicketController::class, 'vendorReply'])->name('support.tickets.reply');

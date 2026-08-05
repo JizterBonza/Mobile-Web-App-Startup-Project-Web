@@ -115,6 +115,116 @@ class VendorController extends Controller
         ]);
     }
 
+    public function messages()
+    {
+        $shop = $this->getVendorShop();
+
+        // Sample conversation until vendor messaging is wired up.
+        $conversations = [
+            [
+                'id' => 'sample-jerry',
+                'name' => 'Jerry Gabutan',
+                'avatar_url' => null,
+                'last_message' => 'Maayong adlaw, Klasmeyt! 👋 Salamat sa pag-message. Available pa among poultry fence. Lig-on ni ug maayo pang kulong sa mga manok. Naa mi availa...',
+                'timestamp' => '10:24 PM',
+                'unread' => true,
+            ],
+        ];
+
+        return Inertia::render('Dashboard/VendorMessages', [
+            'shop' => $shop ? [
+                'id' => $shop->id,
+                'shop_name' => $shop->shop_name,
+            ] : null,
+            'conversations' => $conversations,
+        ]);
+    }
+
+    public function conversation($conversationId)
+    {
+        $shop = $this->getVendorShop();
+
+        // Sample thread until vendor messaging is wired up.
+        if ($conversationId !== 'sample-jerry') {
+            abort(404);
+        }
+
+        $staffName = auth()->user()->name ?? 'Vendor';
+
+        return Inertia::render('Dashboard/VendorConversation', [
+            'shop' => $shop ? [
+                'id' => $shop->id,
+                'shop_name' => $shop->shop_name,
+            ] : null,
+            'conversation' => [
+                'id' => 'sample-jerry',
+                'name' => 'Jerry Gabutan',
+                'avatar_url' => null,
+                'last_seen' => 'Last seen 2 hours ago',
+            ],
+            'messages' => [
+                [
+                    'id' => 1,
+                    'type' => 'date',
+                    'label' => 'Saturday',
+                ],
+                [
+                    'id' => 2,
+                    'type' => 'text',
+                    'side' => 'incoming',
+                    'body' => 'Maayong adlaw, Klasmeyt! 👋 okay ra ba ni nga fence para sa akong mga bulik?',
+                    'time' => '10.24 PM',
+                ],
+                [
+                    'id' => 3,
+                    'type' => 'text',
+                    'side' => 'outgoing',
+                    'body' => 'Pwede kaayo, Klasmeyt. Para makasiguro ta, pwede nimo i-send ang actual setup sa imong kulongan?',
+                    'time' => '10.24 PM',
+                    'sent_by' => $staffName,
+                    'status' => 'read',
+                ],
+                [
+                    'id' => 4,
+                    'type' => 'images',
+                    'side' => 'incoming',
+                    'caption' => 'Mao ni akong kulongan.',
+                    'images' => [null, null, null],
+                    'time' => '10.24 PM',
+                ],
+                [
+                    'id' => 5,
+                    'type' => 'text',
+                    'side' => 'outgoing',
+                    'body' => 'Salamat, Klasmeyt. Nakita nako ang imong setup. Murag okay ra ni, pero mas maayo ang 1.5m nga fence para dili kalabang ang mga manok.',
+                    'time' => '10.24 PM',
+                    'sent_by' => $staffName,
+                    'status' => 'read',
+                ],
+                [
+                    'id' => 6,
+                    'type' => 'file',
+                    'side' => 'outgoing',
+                    'file_name' => 'video.mp4',
+                    'file_label' => 'Document File',
+                    'file_size' => '2mb',
+                    'time' => '10.25 PM',
+                    'sent_by' => $staffName,
+                    'status' => 'read',
+                ],
+                [
+                    'id' => 7,
+                    'type' => 'text',
+                    'side' => 'outgoing',
+                    'body' => 'Mao ni ang actual video, boss. Ing-ani ang hitsura niya kung nakataod na para makita nimo ang kalig-on ug taas sa fence.',
+                    'time' => '10.25 PM',
+                    'sent_by' => $staffName,
+                    'status' => 'read',
+                ],
+            ],
+        ]);
+    }
+
     /**
      * Add a shop listing from the product catalog (vendor's assigned shop).
      */

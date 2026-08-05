@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useForm, usePage } from '@inertiajs/react'
-import { Bell, ChevronDown, CreditCard, History, LogOut, Map, Settings, SlidersHorizontal, Ticket, Truck } from 'lucide-react'
+import { Bell, ChevronDown, CreditCard, History, LogOut, Map, MessageSquareMore, Settings, SlidersHorizontal, Ticket, Truck } from 'lucide-react'
 import primaryLogo from '../../../../Logo/Primary Logo.png'
 
 /**
@@ -49,7 +49,12 @@ export function DashboardHeader({
     dropdownNavItems = [],
     /** When false, only logo and account actions are shown (e.g. vendor dashboard). */
     showNav = true,
+    /** Owner managers and vendors: show messaging icon beside notifications. */
+    showMessaging = false,
+    /** When set, messaging icon navigates here instead of opening a dropdown. */
+    messagingHref = null,
     notificationCount = 0,
+    messageCount = 0,
     userName,
     userEmail,
     userInitials,
@@ -58,6 +63,7 @@ export function DashboardHeader({
     const { post } = useForm()
     const [showUserDropdown, setShowUserDropdown] = useState(false)
     const [showNotifications, setShowNotifications] = useState(false)
+    const [showMessages, setShowMessages] = useState(false)
     const activeNavItemRef = useRef(null)
 
     const activeTab = useMemo(
@@ -135,17 +141,57 @@ export function DashboardHeader({
                     </Link> */}
                     <button
                         type="button"
-                        onClick={() => setShowNotifications(!showNotifications)}
-                        className="relative rounded-lg text-[#6B7280] transition-colors hover:bg-[#F3F4F6]"
+                        onClick={() => {
+                            setShowNotifications(!showNotifications)
+                            setShowMessages(false)
+                        }}
+                        className="relative rounded-lg p-1.5 text-[#6B7280] transition-colors hover:bg-[#F3F4F6]"
                         aria-label="Notifications"
                     >
                         <Bell className="h-5 w-5" />
                         {notificationCount > 0 && (
-                            <span className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-[#E20E28] text-xs font-bold text-white">
+                            <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-[#E20E28] px-1 text-[10px] font-bold leading-none text-white">
                                 {notificationCount > 9 ? '9+' : notificationCount}
                             </span>
                         )}
                     </button>
+
+                    {showMessaging &&
+                        (messagingHref ? (
+                            <Link
+                                href={messagingHref}
+                                className="relative rounded-lg p-1.5 text-[#6B7280] transition-colors hover:bg-[#F3F4F6]"
+                                aria-label="Messages"
+                            >
+                                <MessageSquareMore className="h-5 w-5" />
+                                {messageCount > 0 && (
+                                    <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-[#E20E28] px-1 text-[10px] font-bold leading-none text-white">
+                                        {messageCount > 9 ? '9+' : messageCount}
+                                    </span>
+                                )}
+                            </Link>
+                        ) : (
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setShowMessages(!showMessages)
+                                    setShowNotifications(false)
+                                }}
+                                className="relative rounded-lg p-1.5 text-[#6B7280] transition-colors hover:bg-[#F3F4F6]"
+                                aria-label="Messages"
+                            >
+                                <MessageSquareMore className="h-5 w-5" />
+                                {messageCount > 0 && (
+                                    <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-[#E20E28] px-1 text-[10px] font-bold leading-none text-white">
+                                        {messageCount > 9 ? '9+' : messageCount}
+                                    </span>
+                                )}
+                            </button>
+                        ))}
+
+                    {showMessaging && (
+                        <div className="hidden h-6 w-px bg-[#E5E7EB] sm:block" aria-hidden="true" />
+                    )}
 
                     <div className="relative">
                         <button
@@ -257,6 +303,47 @@ export function DashboardHeader({
                             ) : (
                                 <div className="p-8 text-center">
                                     <p className="text-sm text-[#6B7280]">No new notifications</p>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </>
+            )}
+
+            {showMessaging && showMessages && (
+                <>
+                    <button
+                        type="button"
+                        className="fixed inset-0 z-10 cursor-default bg-transparent"
+                        aria-label="Close messages"
+                        onClick={() => setShowMessages(false)}
+                    />
+                    <div className="absolute right-4 top-14 z-20 w-80 overflow-hidden rounded-lg border border-[#E5E7EB] bg-white shadow-lg sm:right-6 sm:top-16">
+                        <div className="border-b border-[#E5E7EB] p-4">
+                            <h3
+                                className="text-sm font-bold uppercase tracking-wide text-[#102059]"
+                                style={{ fontFamily: 'Inter Condensed, sans-serif' }}
+                            >
+                                Messages
+                            </h3>
+                        </div>
+                        <div className="max-h-80 overflow-y-auto">
+                            {messageCount > 0 ? (
+                                <div className="divide-y divide-[#E5E7EB]">
+                                    {Array.from({ length: Math.min(messageCount, 10) }).map((_, index) => (
+                                        <div key={index} className="p-4 transition-colors hover:bg-[#F9FAFB]">
+                                            <p className="mb-1 text-sm font-semibold text-[#102059]">
+                                                New message {index + 1}
+                                            </p>
+                                            <p className="text-xs text-[#6B7280]">
+                                                {index === 0 ? 'Just now' : `${index * 5} mins ago`}
+                                            </p>
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : (
+                                <div className="p-8 text-center">
+                                    <p className="text-sm text-[#6B7280]">No new messages</p>
                                 </div>
                             )}
                         </div>

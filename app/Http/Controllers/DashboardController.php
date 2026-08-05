@@ -298,6 +298,82 @@ class DashboardController extends Controller
         return app(AgrivetController::class)->showStoreInformation($agrivet->id, $shopId);
     }
 
+    public function ownerManagerStoreIncome(Request $request, $shopId)
+    {
+        $agrivet = auth()->user()->managedAgrivet;
+        if (! $agrivet) {
+            return redirect()->route('dashboard.owner-manager.stores');
+        }
+
+        $shop = $agrivet->shops()->where('id', $shopId)->firstOrFail();
+
+        $month = (int) $request->input('month', now()->month);
+        $year = (int) $request->input('year', now()->year);
+
+        if ($month < 1 || $month > 12) {
+            $month = (int) now()->month;
+        }
+
+        if ($year < 2000 || $year > 2100) {
+            $year = (int) now()->year;
+        }
+
+        $accountNumber = $shop->account_number ?? '';
+        $maskedAccount = $accountNumber !== ''
+            ? substr($accountNumber, 0, max(0, strlen($accountNumber) - 4)).'****'
+            : '—';
+
+        $payoutMethod = $shop->bank_name ?: 'GCash';
+
+        $incomeRows = DB::table('order_items')
+            ->where('shop_id', $shop->id)
+            ->where('item_status', 'delivered')
+            ->whereYear('created_at', $year)
+            ->whereMonth('created_at', $month)
+            ->select(
+                DB::raw('DATE(created_at) as income_date'),
+                DB::raw('MAX(created_at) as transferred_at'),
+                DB::raw('COALESCE(SUM(quantity * price_at_purchase), 0) as amount'),
+                DB::raw('COUNT(*) as item_count'),
+            )
+            ->groupBy(DB::raw('DATE(created_at)'))
+            ->orderByDesc('income_date')
+            ->get();
+
+        $incomes = $incomeRows->map(function ($row, $index) use ($payoutMethod, $maskedAccount) {
+            return [
+                'id' => $index + 1,
+                'transferred_at' => $row->transferred_at,
+                'amount' => (float) $row->amount,
+                'method' => 'Transfer to '.$payoutMethod,
+                'account_number' => $maskedAccount,
+                'item_count' => (int) $row->item_count,
+            ];
+        })->values()->toArray();
+
+        $fullAddress = collect([
+            $shop->shop_address,
+            $shop->shop_city,
+            $shop->shop_province,
+            $shop->shop_postal_code,
+        ])->filter()->implode(', ');
+
+        return Inertia::render('Dashboard/OwnerManagerStoreIncome', [
+            'shop' => [
+                'id' => $shop->id,
+                'shop_name' => $shop->shop_name,
+                'shop_address' => $fullAddress,
+                'bank_name' => $shop->bank_name,
+                'account_number' => $maskedAccount,
+            ],
+            'incomes' => $incomes,
+            'filters' => [
+                'month' => $month,
+                'year' => $year,
+            ],
+        ]);
+    }
+
     public function ownerManagerUpdateShop(Request $request, $shopId)
     {
         $agrivet = auth()->user()->managedAgrivet;
@@ -435,6 +511,155 @@ class DashboardController extends Controller
             'categories' => $categories,
             'subCategories' => $subCategories,
         ];
+    }
+
+    public function ownerManagerMessages()
+    {
+        $user = auth()->user();
+        $agrivet = $user->managedAgrivet;
+        $shops = $agrivet
+            ? $agrivet->shops()->orderBy('shop_name')->get()->map(function ($shop) {
+                $address = collect([
+                    $shop->shop_address,
+                    $shop->shop_city,
+                    $shop->shop_province,
+                    $shop->shop_postal_code,
+                ])->filter()->implode(', ');
+
+                return [
+                    'id' => $shop->id,
+                    'shop_name' => $shop->shop_name,
+                    'shop_address' => $address,
+                    // Placeholder until branch messaging unread counts are wired up.
+                    'unread_count' => 0,
+                ];
+            })
+            : collect();
+
+        return Inertia::render('Dashboard/OwnerManagerMessages', [
+            'agrivet' => $agrivet,
+            'branches' => $shops,
+        ]);
+    }
+
+    public function ownerManagerBranchChat($shopId)
+    {
+        $agrivet = auth()->user()->managedAgrivet;
+        if (! $agrivet) {
+            return redirect()->route('dashboard.owner-manager.messages');
+        }
+
+        $shop = $agrivet->shops()->where('id', $shopId)->firstOrFail();
+
+        // Sample conversation until branch messaging is wired up.
+        $conversations = [
+            [
+                'id' => 'sample-jerry',
+                'name' => 'Jerry Gabutan',
+                'avatar_url' => null,
+                'last_message' => 'Maayong adlaw, Klasmeyt! 👋 Salamat sa pag-message. Available pa among poultry fence. Lig-on ni ug maayo pang kulong sa mga manok. Naa mi availa...',
+                'timestamp' => '10:24 PM',
+                'unread' => true,
+            ],
+        ];
+
+        return Inertia::render('Dashboard/OwnerManagerBranchChat', [
+            'shop' => [
+                'id' => $shop->id,
+                'shop_name' => $shop->shop_name,
+            ],
+            'conversations' => $conversations,
+        ]);
+    }
+
+    public function ownerManagerConversation($shopId, $conversationId)
+    {
+        $agrivet = auth()->user()->managedAgrivet;
+        if (! $agrivet) {
+            return redirect()->route('dashboard.owner-manager.messages');
+        }
+
+        $shop = $agrivet->shops()->where('id', $shopId)->firstOrFail();
+
+        // Sample thread until branch messaging is wired up.
+        if ($conversationId !== 'sample-jerry') {
+            abort(404);
+        }
+
+        $staffName = auth()->user()->name ?? 'James';
+
+        return Inertia::render('Dashboard/OwnerManagerConversation', [
+            'shop' => [
+                'id' => $shop->id,
+                'shop_name' => $shop->shop_name,
+            ],
+            'conversation' => [
+                'id' => 'sample-jerry',
+                'name' => 'Jerry Gabutan',
+                'avatar_url' => null,
+                'last_seen' => 'Last seen 2 hours ago',
+            ],
+            'messages' => [
+                [
+                    'id' => 1,
+                    'type' => 'date',
+                    'label' => 'Saturday',
+                ],
+                [
+                    'id' => 2,
+                    'type' => 'text',
+                    'side' => 'incoming',
+                    'body' => 'Maayong adlaw, Klasmeyt! 👋 okay ra ba ni nga fence para sa akong mga bulik?',
+                    'time' => '10.24 PM',
+                ],
+                [
+                    'id' => 3,
+                    'type' => 'text',
+                    'side' => 'outgoing',
+                    'body' => 'Pwede kaayo, Klasmeyt. Para makasiguro ta, pwede nimo i-send ang actual setup sa imong kulongan?',
+                    'time' => '10.24 PM',
+                    'sent_by' => $staffName,
+                    'status' => 'read',
+                ],
+                [
+                    'id' => 4,
+                    'type' => 'images',
+                    'side' => 'incoming',
+                    'caption' => 'Mao ni akong kulongan.',
+                    'images' => [null, null, null],
+                    'time' => '10.24 PM',
+                ],
+                [
+                    'id' => 5,
+                    'type' => 'text',
+                    'side' => 'outgoing',
+                    'body' => 'Salamat, Klasmeyt. Nakita nako ang imong setup. Murag okay ra ni, pero mas maayo ang 1.5m nga fence para dili kalabang ang mga manok.',
+                    'time' => '10.24 PM',
+                    'sent_by' => $staffName,
+                    'status' => 'read',
+                ],
+                [
+                    'id' => 6,
+                    'type' => 'file',
+                    'side' => 'outgoing',
+                    'file_name' => 'video.mp4',
+                    'file_label' => 'Document File',
+                    'file_size' => '2mb',
+                    'time' => '10.25 PM',
+                    'sent_by' => $staffName,
+                    'status' => 'read',
+                ],
+                [
+                    'id' => 7,
+                    'type' => 'text',
+                    'side' => 'outgoing',
+                    'body' => 'Mao ni ang actual video, boss. Ing-ani ang hitsura niya kung nakataod na para makita nimo ang kalig-on ug taas sa fence.',
+                    'time' => '10.25 PM',
+                    'sent_by' => $staffName,
+                    'status' => 'read',
+                ],
+            ],
+        ]);
     }
 
     public function ownerManagerOrders()
