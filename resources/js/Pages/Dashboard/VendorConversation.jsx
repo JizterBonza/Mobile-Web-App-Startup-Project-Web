@@ -158,6 +158,7 @@ export default function VendorConversation({ auth, conversation, messages = [] }
                         className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#D1D5DB] text-[#4B5563] transition-colors hover:bg-[#9CA3AF] hover:text-white"
                         title="Back to conversations"
                         aria-label="Back to conversations"
+                        style={{ borderRadius: '20px'}}
                     >
                         <ChevronLeft className="h-5 w-5" strokeWidth={2.5} />
                     </button>

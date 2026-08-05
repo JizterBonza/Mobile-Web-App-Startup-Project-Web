@@ -31,6 +31,7 @@ export default function OwnerManagerBranchChat({ auth, shop, conversations = [] 
                         className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#9CA3AF] text-white transition-colors hover:bg-[#6B7280]"
                         title="Back to Branches"
                         aria-label="Back to Branches"
+                        style={{ borderRadius: '20px'}}
                     >
                         <ChevronLeft className="h-5 w-5" strokeWidth={2.5} />
                     </button>
