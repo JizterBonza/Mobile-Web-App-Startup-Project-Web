@@ -2,20 +2,22 @@ import { useMemo, useState } from 'react'
 import { router } from '@inertiajs/react'
 import { ChevronLeft, Search, User } from 'lucide-react'
 import OwnerManagerKlasmeytLayout from '../../Layouts/OwnerManagerKlasmeytLayout'
+import { useShopConversationsList } from '../../hooks/useShopConversationsList'
 
 export default function OwnerManagerBranchChat({ auth, shop, conversations = [] }) {
     const [query, setQuery] = useState('')
+    const liveConversations = useShopConversationsList(shop?.id, conversations, auth?.user)
 
     const filteredConversations = useMemo(() => {
         const term = query.trim().toLowerCase()
-        if (!term) return conversations
+        if (!term) return liveConversations
 
-        return conversations.filter((conversation) => {
+        return liveConversations.filter((conversation) => {
             const name = (conversation.name || '').toLowerCase()
             const preview = (conversation.last_message || '').toLowerCase()
             return name.includes(term) || preview.includes(term)
         })
-    }, [conversations, query])
+    }, [liveConversations, query])
 
     return (
         <OwnerManagerKlasmeytLayout

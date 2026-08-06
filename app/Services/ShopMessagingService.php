@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Events\ShopMessageSent;
 use App\Models\Notification;
 use App\Models\Shop;
 use App\Models\ShopConversation;
@@ -163,8 +164,81 @@ class ShopMessagingService
         });
 
         $this->notifyCounterpart($conversation, $sender, $message);
+        $this->broadcastMessage($conversation->fresh(), $message);
 
         return $message;
+    }
+
+    /**
+     * Viewer-neutral payload for WebSocket clients (side resolved on the client).
+     *
+     * @return array<string, mixed>
+     */
+    public function formatBroadcastPayload(
+        ShopConversation $conversation,
+        ShopConversationMessage $message
+    ): array {
+        $message->loadMissing(['attachments', 'sender.userDetail']);
+        $conversation->loadMissing(['customer.userDetail']);
+
+        $createdAt = $message->created_at ?? now();
+
+        $formatted = [
+            'id' => $message->id,
+            'type' => $message->type,
+            'sender_user_id' => (int) $message->sender_user_id,
+            'sender_role' => $message->sender_role,
+            'sent_by' => $this->displayName($message->sender),
+            'time' => $createdAt->format('g.i A'),
+            'created_at' => $createdAt->toIso8601String(),
+            'date_key' => $createdAt->toDateString(),
+            'date_label' => $this->dateSeparatorLabel($createdAt),
+        ];
+
+        $attachments = $message->attachments ?? collect();
+
+        if ($message->type === ShopConversationMessage::TYPE_IMAGES) {
+            $formatted['caption'] = $message->body ?? '';
+            $formatted['images'] = $attachments
+                ->filter(fn (ShopConversationAttachment $a) => $a->isImage())
+                ->map(fn (ShopConversationAttachment $a) => $a->url)
+                ->values()
+                ->all();
+        } elseif ($message->type === ShopConversationMessage::TYPE_FILE) {
+            $file = $attachments->first();
+            $formatted['file_name'] = $file?->file_name ?? 'Attachment';
+            $formatted['file_label'] = $this->fileLabel($file?->mime_type);
+            $formatted['file_size'] = $this->humanFileSize((int) ($file?->file_size ?? 0));
+            $formatted['file_url'] = $file?->url;
+        } elseif ($message->type === ShopConversationMessage::TYPE_PRODUCT) {
+            $formatted['body'] = $message->body ?? ($message->metadata['product_name'] ?? 'Shared a product');
+            $formatted['product'] = $message->metadata;
+        } else {
+            $formatted['body'] = $message->body ?? '';
+        }
+
+        return [
+            'conversation_id' => (int) $conversation->id,
+            'shop_id' => (int) $conversation->shop_id,
+            'message' => $formatted,
+            'preview' => [
+                'name' => $this->displayName($conversation->customer),
+                'avatar_url' => $this->avatarUrl($conversation->customer),
+                'last_message' => $conversation->last_message_preview ?: 'New message',
+                'timestamp' => $this->listTimestamp($conversation->last_message_at),
+            ],
+        ];
+    }
+
+    private function broadcastMessage(
+        ShopConversation $conversation,
+        ShopConversationMessage $message
+    ): void {
+        broadcast(new ShopMessageSent(
+            $conversation,
+            $message,
+            $this->formatBroadcastPayload($conversation, $message),
+        ));
     }
 
     public function markRead(ShopConversation $conversation, User $user): void

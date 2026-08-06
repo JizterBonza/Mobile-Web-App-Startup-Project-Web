@@ -3,8 +3,11 @@ import { ArrowLeft, MessageSquareMore, Store } from 'lucide-react'
 import OwnerManagerKlasmeytLayout, {
     OwnerManagerNoAgrivetAlert,
 } from '../../Layouts/OwnerManagerKlasmeytLayout'
+import { useShopBranchUnread } from '../../hooks/useShopBranchUnread'
 
 export default function OwnerManagerMessages({ auth, agrivet, branches = [] }) {
+    useShopBranchUnread(branches)
+
     const openBranchChat = (branchId) => {
         router.visit(`/dashboard/owner-manager/messages/${branchId}`)
     }

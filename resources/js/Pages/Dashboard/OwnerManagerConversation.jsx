@@ -11,8 +11,11 @@ import {
     SendHorizontal,
     ShoppingBag,
     User,
+    X,
 } from 'lucide-react'
 import OwnerManagerKlasmeytLayout from '../../Layouts/OwnerManagerKlasmeytLayout'
+import CameraCaptureModal from '../../Components/CameraCaptureModal'
+import { useShopConversationMessages } from '../../hooks/useShopConversationMessages'
 
 const ATTACHMENT_OPTIONS = [
     { id: 'gallery', label: 'Gallery', icon: ImageIcon },
@@ -156,10 +159,36 @@ export default function OwnerManagerConversation({
     sendUrl,
 }) {
     const [draft, setDraft] = useState('')
+    const [pendingAttachments, setPendingAttachments] = useState([])
     const [sending, setSending] = useState(false)
     const [attachMenuOpen, setAttachMenuOpen] = useState(false)
+    const [cameraOpen, setCameraOpen] = useState(false)
     const attachMenuRef = useRef(null)
     const fileInputRef = useRef(null)
+    const threadRef = useRef(null)
+    const pendingAttachmentsRef = useRef([])
+    const liveMessages = useShopConversationMessages(
+        conversation?.id,
+        messages,
+        auth?.user,
+    )
+
+    useEffect(() => {
+        pendingAttachmentsRef.current = pendingAttachments
+    }, [pendingAttachments])
+
+    useEffect(() => {
+        if (!threadRef.current) return
+        threadRef.current.scrollTop = threadRef.current.scrollHeight
+    }, [liveMessages])
+
+    useEffect(() => {
+        return () => {
+            pendingAttachmentsRef.current.forEach((item) => {
+                if (item.previewUrl) URL.revokeObjectURL(item.previewUrl)
+            })
+        }
+    }, [])
 
     useEffect(() => {
         if (!attachMenuOpen) return undefined
@@ -185,6 +214,23 @@ export default function OwnerManagerConversation({
         }
     }, [attachMenuOpen])
 
+    const clearPendingAttachments = () => {
+        setPendingAttachments((prev) => {
+            prev.forEach((item) => {
+                if (item.previewUrl) URL.revokeObjectURL(item.previewUrl)
+            })
+            return []
+        })
+    }
+
+    const removePendingAttachment = (id) => {
+        setPendingAttachments((prev) => {
+            const target = prev.find((item) => item.id === id)
+            if (target?.previewUrl) URL.revokeObjectURL(target.previewUrl)
+            return prev.filter((item) => item.id !== id)
+        })
+    }
+
     const postMessage = (payload) => {
         if (!sendUrl || sending) return
 
@@ -195,6 +241,7 @@ export default function OwnerManagerConversation({
             onFinish: () => {
                 setSending(false)
                 setDraft('')
+                clearPendingAttachments()
                 setAttachMenuOpen(false)
             },
         })
@@ -202,29 +249,52 @@ export default function OwnerManagerConversation({
 
     const handleSend = (e) => {
         e.preventDefault()
-        if (!draft.trim()) return
-        postMessage({ body: draft.trim() })
+        const body = draft.trim()
+        const files = pendingAttachments.map((item) => item.file)
+        if (!body && files.length === 0) return
+
+        postMessage({
+            body,
+            ...(files.length > 0 ? { attachments: files } : {}),
+        })
     }
 
     const handleAttachmentSelect = (optionId) => {
         setAttachMenuOpen(false)
-        if (optionId === 'gallery' || optionId === 'camera') {
+        if (optionId === 'gallery') {
             fileInputRef.current?.click()
+            return
+        }
+        if (optionId === 'camera') {
+            setCameraOpen(true)
             return
         }
         // Products picker to be wired in a follow-up
     }
 
+    const appendPendingFiles = (files) => {
+        if (!files?.length) return
+
+        const next = files.map((file) => ({
+            id: `${file.name}-${file.size}-${file.lastModified}-${Math.random().toString(36).slice(2)}`,
+            file,
+            previewUrl: file.type.startsWith('image/') ? URL.createObjectURL(file) : null,
+        }))
+
+        setPendingAttachments((prev) => [...prev, ...next])
+    }
+
     const handleFilesSelected = (event) => {
         const files = Array.from(event.target.files || [])
         event.target.value = ''
-        if (files.length === 0) return
-
-        postMessage({
-            body: draft.trim(),
-            attachments: files,
-        })
+        appendPendingFiles(files)
     }
+
+    const handleCameraCapture = (file) => {
+        appendPendingFiles([file])
+    }
+
+    const canSend = Boolean(sendUrl) && !sending && (draft.trim() || pendingAttachments.length > 0)
 
     return (
         <OwnerManagerKlasmeytLayout
@@ -271,13 +341,16 @@ export default function OwnerManagerConversation({
                     </div>
                 </div>
 
-                <div className="flex-1 space-y-4 overflow-y-auto px-4 py-5 sm:px-6">
-                    {messages.length === 0 ? (
+                <div
+                    ref={threadRef}
+                    className="flex-1 space-y-4 overflow-y-auto px-4 py-5 sm:px-6"
+                >
+                    {liveMessages.length === 0 ? (
                         <div className="py-12 text-center text-sm text-[#6B7280]">
                             No messages yet. Say hello to start the conversation.
                         </div>
                     ) : (
-                        messages.map((message) =>
+                        liveMessages.map((message) =>
                             message.type === 'date' ? (
                                 <div
                                     key={message.id}
@@ -301,6 +374,39 @@ export default function OwnerManagerConversation({
                         className="hidden"
                         onChange={handleFilesSelected}
                     />
+                    {pendingAttachments.length > 0 && (
+                        <div className="mb-2 flex gap-2 overflow-x-auto pb-1">
+                            {pendingAttachments.map((item) => (
+                                <div
+                                    key={item.id}
+                                    className="relative h-16 w-16 shrink-0 overflow-hidden rounded-lg border border-[#D1D5DB] bg-[#F3F4F6]"
+                                >
+                                    {item.previewUrl ? (
+                                        <img
+                                            src={item.previewUrl}
+                                            alt=""
+                                            className="h-full w-full object-cover"
+                                        />
+                                    ) : (
+                                        <div className="flex h-full w-full flex-col items-center justify-center gap-0.5 px-1 text-center">
+                                            <Film className="h-4 w-4 text-[#6B7280]" />
+                                            <span className="truncate text-[9px] leading-tight text-[#6B7280]">
+                                                {item.file.name}
+                                            </span>
+                                        </div>
+                                    )}
+                                    <button
+                                        type="button"
+                                        onClick={() => removePendingAttachment(item.id)}
+                                        className="absolute right-0.5 top-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-black/60 text-white transition-colors hover:bg-black/80"
+                                        aria-label={`Remove ${item.file.name}`}
+                                    >
+                                        <X className="h-3 w-3" strokeWidth={2.5} />
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
+                    )}
                     <form
                         onSubmit={handleSend}
                         className="relative flex items-center gap-2 rounded-full border border-[#D1D5DB] bg-[#F3F4F6] px-3 py-2"
@@ -357,7 +463,7 @@ export default function OwnerManagerConversation({
                         />
                         <button
                             type="submit"
-                            disabled={sending || !draft.trim() || !sendUrl}
+                            disabled={!canSend}
                             className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[#102059] transition-colors hover:bg-[#EFF6FF] disabled:opacity-40"
                             aria-label="Send message"
                         >
@@ -366,6 +472,12 @@ export default function OwnerManagerConversation({
                     </form>
                 </div>
             </div>
+
+            <CameraCaptureModal
+                open={cameraOpen}
+                onClose={() => setCameraOpen(false)}
+                onCapture={handleCameraCapture}
+            />
         </OwnerManagerKlasmeytLayout>
     )
 }

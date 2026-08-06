@@ -2,20 +2,22 @@ import { useMemo, useState } from 'react'
 import { router } from '@inertiajs/react'
 import { ChevronLeft, Search, User } from 'lucide-react'
 import VendorKlasmeytLayout from '../../Layouts/VendorKlasmeytLayout'
+import { useShopConversationsList } from '../../hooks/useShopConversationsList'
 
 export default function VendorMessages({ auth, shop, conversations = [] }) {
     const [query, setQuery] = useState('')
+    const liveConversations = useShopConversationsList(shop?.id, conversations, auth?.user)
 
     const filteredConversations = useMemo(() => {
         const term = query.trim().toLowerCase()
-        if (!term) return conversations
+        if (!term) return liveConversations
 
-        return conversations.filter((conversation) => {
+        return liveConversations.filter((conversation) => {
             const name = (conversation.name || '').toLowerCase()
             const preview = (conversation.last_message || '').toLowerCase()
             return name.includes(term) || preview.includes(term)
         })
-    }, [conversations, query])
+    }, [liveConversations, query])
 
     const title = shop?.shop_name ? `Chat — ${shop.shop_name}` : 'Chat'
 
