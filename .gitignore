@@ -21,3 +21,4 @@ yarn-error.log
 /Klasmeyt Business Interface
 /Klasmeyt Business Interface - Ticketing Update
 database/migrations/2026_08_05_000001_seed_shop_9_conversation_customer.php
+database/migrations/2026_08_06_000001_seed_agrivet_shop_messaging_demo.php
