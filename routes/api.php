@@ -29,6 +29,8 @@ use Illuminate\Http\Request;
 Route::post('register', [MobileAuthController::class, 'register']);
 Route::post('login', [MobileAuthController::class, 'login']);
 Route::post('refresh', [MobileAuthController::class, 'refresh']);
+Route::post('forgot-password', [MobileAuthController::class, 'forgotPassword']);
+Route::post('reset-password', [MobileAuthController::class, 'resetPassword']);
 Route::post('auth/google/token', [SocialAuthController::class, 'googleToken']);
 
 Route::prefix('auth')->group(function () {
