@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Item;
 use App\Models\Shop;
 use App\Models\User;
 use App\Services\ShopMessagingService;
@@ -70,6 +71,22 @@ class ShopMessageController extends Controller
                 'shopId' => $shop->id,
                 'conversationId' => $conversation->id,
             ]),
+            'productsUrl' => route('dashboard.owner-manager.messages.products', [
+                'shopId' => $shop->id,
+            ]),
+        ]);
+    }
+
+    public function ownerManagerProducts(Request $request, int $shopId)
+    {
+        $user = auth()->user();
+        $shop = $this->messaging->assertOwnerManagerShopAccess($user, $shopId);
+
+        return response()->json([
+            'products' => $this->messaging->listShopProductsForPicker(
+                $shop,
+                $request->string('search')->toString()
+            ),
         ]);
     }
 
@@ -127,6 +144,26 @@ class ShopMessageController extends Controller
             'sendUrl' => route('dashboard.vendor.messages.send', [
                 'conversationId' => $conversation->id,
             ]),
+            'productsUrl' => route('dashboard.vendor.messages.products'),
+        ]);
+    }
+
+    public function vendorProducts(Request $request)
+    {
+        $user = auth()->user();
+        $shop = $this->resolveVendorShop($user);
+
+        if (! $shop) {
+            return response()->json(['products' => []]);
+        }
+
+        $this->messaging->assertVendorShopAccess($user, $shop);
+
+        return response()->json([
+            'products' => $this->messaging->listShopProductsForPicker(
+                $shop,
+                $request->string('search')->toString()
+            ),
         ]);
     }
 
@@ -149,6 +186,7 @@ class ShopMessageController extends Controller
     {
         $validated = $request->validate([
             'body' => ['nullable', 'string', 'max:5000'],
+            'item_id' => ['nullable', 'integer', 'exists:items,id'],
             'attachments' => ['nullable', 'array', 'max:10'],
             'attachments.*' => [
                 'file',
@@ -159,6 +197,23 @@ class ShopMessageController extends Controller
 
         $files = array_values(array_filter($request->file('attachments', []) ?? []));
         $body = trim((string) ($validated['body'] ?? ''));
+        $itemId = $validated['item_id'] ?? null;
+
+        if ($itemId) {
+            $item = Item::query()
+                ->where('id', $itemId)
+                ->where('shop_id', $conversation->shop_id)
+                ->where('item_status', 'active')
+                ->first();
+
+            if (! $item) {
+                return redirect()->back()->withErrors(['item_id' => 'Product not found in this shop.']);
+            }
+
+            $this->messaging->sendProductMessage($conversation, $user, $item, $body);
+
+            return redirect()->back()->with('success', 'Message sent.');
+        }
 
         if ($body === '' && $files === []) {
             return redirect()->back()->withErrors(['body' => 'Message cannot be empty.']);

@@ -206,6 +206,7 @@ Route::middleware(['auth', 'session.valid', 'user.type:owner_manager'])->prefix(
     Route::get('/orders', [DashboardController::class, 'ownerManagerOrders'])->name('orders');
     Route::get('/messages', [ShopMessageController::class, 'ownerManagerIndex'])->name('messages');
     Route::get('/messages/{shopId}', [ShopMessageController::class, 'ownerManagerBranch'])->name('messages.branch');
+    Route::get('/messages/{shopId}/products', [ShopMessageController::class, 'ownerManagerProducts'])->name('messages.products');
     Route::get('/messages/{shopId}/{conversationId}', [ShopMessageController::class, 'ownerManagerConversation'])->name('messages.conversation');
     Route::post('/messages/{shopId}/{conversationId}', [ShopMessageController::class, 'ownerManagerSend'])->name('messages.send');
     Route::get('/support', [DashboardController::class, 'ownerManagerSupport'])->name('support');
@@ -397,6 +398,7 @@ Route::middleware(['auth', 'session.valid', 'user.type:vendor'])->prefix('dashbo
     // Orders
     Route::get('/orders', [VendorController::class, 'ordersIndex'])->name('orders.index');
     Route::get('/messages', [ShopMessageController::class, 'vendorIndex'])->name('messages');
+    Route::get('/messages/products', [ShopMessageController::class, 'vendorProducts'])->name('messages.products');
     Route::get('/messages/{conversationId}', [ShopMessageController::class, 'vendorConversation'])->name('messages.conversation');
     Route::post('/messages/{conversationId}', [ShopMessageController::class, 'vendorSend'])->name('messages.send');
     Route::get('/support', [VendorController::class, 'support'])->name('support');

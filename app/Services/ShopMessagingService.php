@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Events\ShopMessageSent;
+use App\Models\Item;
 use App\Models\Notification;
 use App\Models\Shop;
 use App\Models\ShopConversation;
@@ -170,6 +171,156 @@ class ShopMessagingService
     }
 
     /**
+     * Share a shop listing as a product message (snapshot stored in metadata).
+     */
+    public function sendProductMessage(
+        ShopConversation $conversation,
+        User $sender,
+        Item $item,
+        string $body = ''
+    ): ShopConversationMessage {
+        if ((int) $item->shop_id !== (int) $conversation->shop_id) {
+            abort(422, 'Product does not belong to this shop.');
+        }
+
+        $sender->loadMissing('userDetail');
+        $role = $this->senderRole($sender);
+        $trimmedBody = trim($body);
+        $metadata = $this->productMetadataFromItem($item);
+
+        $message = DB::transaction(function () use ($conversation, $sender, $role, $trimmedBody, $metadata) {
+            $message = ShopConversationMessage::create([
+                'shop_conversation_id' => $conversation->id,
+                'sender_user_id' => $sender->id,
+                'sender_role' => $role,
+                'type' => ShopConversationMessage::TYPE_PRODUCT,
+                'body' => $trimmedBody !== '' ? $trimmedBody : null,
+                'metadata' => $metadata,
+            ]);
+
+            $preview = $this->buildPreview($message, $trimmedBody);
+            $conversation->update([
+                'last_message_at' => now(),
+                'last_message_preview' => $preview,
+            ]);
+
+            $this->markRead($conversation, $sender);
+
+            return $message->fresh(['attachments', 'sender.userDetail']);
+        });
+
+        $this->notifyCounterpart($conversation, $sender, $message);
+        $this->broadcastMessage($conversation->fresh(), $message);
+
+        return $message;
+    }
+
+    /**
+     * Active shop listings for the messaging product picker.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function listShopProductsForPicker(Shop $shop, ?string $search = null): array
+    {
+        $query = Item::query()
+            ->where('shop_id', $shop->id)
+            ->where('item_status', 'active')
+            ->orderBy('item_name');
+
+        $term = trim((string) $search);
+        if ($term !== '') {
+            $query->where('item_name', 'like', '%'.$term.'%');
+        }
+
+        return $query->get()->map(function (Item $item) {
+            $metadata = $this->productMetadataFromItem($item);
+
+            return [
+                'id' => $item->id,
+                'item_name' => $metadata['product_name'],
+                'item_price' => $metadata['item_price'],
+                'effective_price' => $metadata['effective_price'],
+                'active_discount_percent' => $metadata['active_discount_percent'],
+                'image_url' => $metadata['image_url'],
+                'unit_label' => $metadata['unit_label'],
+                'weight' => $metadata['weight'],
+                'metric' => $metadata['metric'],
+                'item_quantity' => $metadata['item_quantity'],
+            ];
+        })->values()->all();
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function productMetadataFromItem(Item $item): array
+    {
+        $itemPrice = round((float) $item->item_price, 2);
+        $effectivePrice = $item->getEffectivePrice();
+        $discount = $item->getActiveDiscountPercent();
+
+        return [
+            'item_id' => (int) $item->id,
+            'product_name' => (string) $item->item_name,
+            'item_price' => $itemPrice,
+            'effective_price' => $effectivePrice,
+            'active_discount_percent' => $discount,
+            'image_url' => $this->itemImageUrl($item),
+            'unit_label' => $this->itemUnitLabel($item),
+            'weight' => $item->weight !== null ? (float) $item->weight : null,
+            'metric' => $item->metric,
+            'item_quantity' => (int) $item->item_quantity,
+            'item_status' => $item->item_status,
+            'is_bundle' => (bool) $item->is_bundle,
+        ];
+    }
+
+    private function itemImageUrl(Item $item): ?string
+    {
+        $images = $item->item_images;
+        if (is_string($images)) {
+            $decoded = json_decode($images, true);
+            $images = is_array($decoded) ? $decoded : [];
+        }
+        if (! is_array($images) || $images === []) {
+            return null;
+        }
+
+        $image = $images[0] ?? null;
+        if (! is_string($image) || $image === '') {
+            return null;
+        }
+
+        if (preg_match('/^https?:\/\//', $image)) {
+            return $image;
+        }
+
+        if (str_starts_with($image, '/storage/')) {
+            return $image;
+        }
+
+        if (str_contains($image, 'products/')) {
+            return '/storage/'.ltrim($image, '/');
+        }
+
+        return '/storage/products/'.basename($image);
+    }
+
+    private function itemUnitLabel(Item $item): ?string
+    {
+        $weight = $item->weight;
+        $metric = is_string($item->metric) ? trim($item->metric) : '';
+
+        if ($weight === null || $weight === '' || (float) $weight <= 0) {
+            return $metric !== '' ? $metric : null;
+        }
+
+        $formatted = rtrim(rtrim(number_format((float) $weight, 2, '.', ''), '0'), '.');
+
+        return $metric !== '' ? $formatted.$metric : $formatted;
+    }
+
+    /**
      * Viewer-neutral payload for WebSocket clients (side resolved on the client).
      *
      * @return array<string, mixed>
@@ -211,7 +362,7 @@ class ShopMessagingService
             $formatted['file_size'] = $this->humanFileSize((int) ($file?->file_size ?? 0));
             $formatted['file_url'] = $file?->url;
         } elseif ($message->type === ShopConversationMessage::TYPE_PRODUCT) {
-            $formatted['body'] = $message->body ?? ($message->metadata['product_name'] ?? 'Shared a product');
+            $formatted['body'] = $message->body ?? '';
             $formatted['product'] = $message->metadata;
         } else {
             $formatted['body'] = $message->body ?? '';
@@ -356,7 +507,7 @@ class ShopMessagingService
         }
 
         if ($message->type === ShopConversationMessage::TYPE_PRODUCT) {
-            $base['body'] = $message->body ?? ($message->metadata['product_name'] ?? 'Shared a product');
+            $base['body'] = $message->body ?? '';
             $base['product'] = $message->metadata;
 
             return $base;

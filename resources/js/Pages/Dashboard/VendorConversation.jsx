@@ -15,6 +15,7 @@ import {
 } from 'lucide-react'
 import VendorKlasmeytLayout from '../../Layouts/VendorKlasmeytLayout'
 import CameraCaptureModal from '../../Components/CameraCaptureModal'
+import ProductListPicker, { ProductMessageCard } from '../../Components/ProductListPicker'
 import { useShopConversationMessages } from '../../hooks/useShopConversationMessages'
 
 const ATTACHMENT_OPTIONS = [
@@ -132,6 +133,22 @@ function ChatBubble({ message }) {
                     <div className={isOutgoing ? 'ml-auto' : ''}>
                         <FileAttachment message={message} />
                     </div>
+                ) : message.type === 'product' ? (
+                    <div className={isOutgoing ? 'ml-auto inline-block' : 'inline-block'}>
+                        <ProductMessageCard
+                            product={message.product}
+                            tone={isOutgoing ? 'outgoing' : 'incoming'}
+                        />
+                        {message.body ? (
+                            <p
+                                className={`mt-1.5 rounded-2xl px-3.5 py-2.5 text-left text-sm leading-relaxed ${bubbleTone} ${
+                                    isOutgoing ? 'rounded-br-md' : 'rounded-bl-md'
+                                }`}
+                            >
+                                {message.body}
+                            </p>
+                        ) : null}
+                    </div>
                 ) : (
                     <div
                         className={`rounded-2xl px-3.5 py-2.5 text-left text-sm leading-relaxed ${bubbleTone} ${
@@ -156,12 +173,14 @@ export default function VendorConversation({
     conversation,
     messages = [],
     sendUrl,
+    productsUrl,
 }) {
     const [draft, setDraft] = useState('')
     const [pendingAttachments, setPendingAttachments] = useState([])
     const [sending, setSending] = useState(false)
     const [attachMenuOpen, setAttachMenuOpen] = useState(false)
     const [cameraOpen, setCameraOpen] = useState(false)
+    const [productPickerOpen, setProductPickerOpen] = useState(false)
     const attachMenuRef = useRef(null)
     const fileInputRef = useRef(null)
     const threadRef = useRef(null)
@@ -268,7 +287,9 @@ export default function VendorConversation({
             setCameraOpen(true)
             return
         }
-        // Products picker to be wired in a follow-up
+        if (optionId === 'products') {
+            setProductPickerOpen(true)
+        }
     }
 
     const appendPendingFiles = (files) => {
@@ -291,6 +312,18 @@ export default function VendorConversation({
 
     const handleCameraCapture = (file) => {
         appendPendingFiles([file])
+    }
+
+    const handleProductSelect = (product) => {
+        if (!product?.id || !sendUrl || sending) return Promise.resolve()
+
+        return new Promise((resolve) => {
+            postMessage({
+                body: draft.trim(),
+                item_id: product.id,
+            })
+            resolve()
+        })
     }
 
     const canSend = Boolean(sendUrl) && !sending && (draft.trim() || pendingAttachments.length > 0)
@@ -474,6 +507,12 @@ export default function VendorConversation({
                 open={cameraOpen}
                 onClose={() => setCameraOpen(false)}
                 onCapture={handleCameraCapture}
+            />
+            <ProductListPicker
+                open={productPickerOpen}
+                productsUrl={productsUrl}
+                onClose={() => setProductPickerOpen(false)}
+                onSelect={handleProductSelect}
             />
         </VendorKlasmeytLayout>
     )
