@@ -8,6 +8,7 @@ use App\Models\UserDetail;
 use App\Models\UserCredential;
 use App\Models\Notification;
 use App\Services\AuthTokenService;
+use App\Services\PasswordResetEmailService;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rules\Password;
@@ -253,5 +254,102 @@ class MobileAuthController extends Controller
         }
 
         return response()->json($response);
+    }
+
+    public function forgotPassword(Request $request, PasswordResetEmailService $passwordResetEmailService)
+    {
+        $data = $request->validate([
+            'email' => 'required|email',
+        ]);
+
+        $user = $this->findUserByEmail($data['email']);
+
+        if (! $user) {
+            return response()->json([
+                'message' => 'Email does not exist.',
+            ], 404);
+        }
+
+        $user->loadMissing('userCredential');
+
+        if (! $user->userCredential) {
+            return response()->json([
+                'message' => 'Email does not exist.',
+            ], 404);
+        }
+
+        $otp = (string) random_int(100000, 999999);
+        $expiresInMinutes = 60;
+
+        $user->userCredential->update([
+            'reset_token' => Hash::make($otp),
+            'reset_token_expires' => now()->addMinutes($expiresInMinutes),
+        ]);
+
+        $emailSent = $passwordResetEmailService->send($user, $otp, $expiresInMinutes);
+
+        if (! $emailSent) {
+            return response()->json([
+                'message' => 'Unable to send password reset email. Please try again later.',
+            ], 500);
+        }
+
+        return response()->json([
+            'message' => 'Password reset code has been sent to your email.',
+        ]);
+    }
+
+    public function resetPassword(Request $request)
+    {
+        $data = $request->validate([
+            'email' => 'required|email',
+            'otp' => 'required|string|size:6',
+            'password' => ['required', 'confirmed', Password::min(8)],
+        ]);
+
+        $user = $this->findUserByEmail($data['email']);
+
+        if (! $user) {
+            return response()->json([
+                'message' => 'Email does not exist.',
+            ], 404);
+        }
+
+        $user->loadMissing('userCredential');
+
+        $credential = $user->userCredential;
+
+        if (
+            ! $credential
+            || ! $credential->reset_token
+            || ! $credential->reset_token_expires
+            || $credential->reset_token_expires->isPast()
+            || ! Hash::check($data['otp'], $credential->reset_token)
+        ) {
+            throw ValidationException::withMessages([
+                'otp' => ['The reset code is invalid or has expired.'],
+            ]);
+        }
+
+        $credential->update([
+            'password_hash' => Hash::make($data['password']),
+            'reset_token' => null,
+            'reset_token_expires' => null,
+        ]);
+
+        return response()->json([
+            'message' => 'Password has been reset successfully.',
+        ]);
+    }
+
+    private function findUserByEmail(string $email): ?User
+    {
+        $userDetail = UserDetail::where('email', $email)->first();
+
+        if (! $userDetail) {
+            return null;
+        }
+
+        return User::where('user_detail_id', $userDetail->id)->first();
     }
 }
