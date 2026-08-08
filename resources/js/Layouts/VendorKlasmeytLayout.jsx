@@ -8,7 +8,9 @@ export default function VendorKlasmeytLayout({
     title,
     children,
     notificationCount = 0,
+    messageCount = 0,
     mainClassName = 'w-full px-6 py-8',
+    showContactSupport = true,
 }) {
     useDashboardSession()
 
@@ -18,12 +20,17 @@ export default function VendorKlasmeytLayout({
             <div className="klasmeyt-landing min-h-screen bg-[#F8F9FB]">
                 <DashboardHeader
                     showNav={false}
+                    showMessaging
+                    messagingHref="/dashboard/vendor/messages"
                     userName={auth.user.name}
                     userEmail={auth.user.email}
                     notificationCount={notificationCount}
+                    messageCount={messageCount}
                 />
                 <main className={`relative w-full min-w-0 ${mainClassName}`.trim()}>{children}</main>
-                <ContactSupportFab href="/dashboard/vendor/support" />
+                {showContactSupport ? (
+                    <ContactSupportFab href="/dashboard/vendor/support" />
+                ) : null}
             </div>
         </>
     )

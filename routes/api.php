@@ -18,6 +18,7 @@ use App\Http\Controllers\ActivityLogController;
 use App\Http\Controllers\PaymentController;
 use App\Http\Controllers\SearchController;
 use App\Http\Controllers\VoucherApiController;
+use App\Http\Controllers\CustomerShopMessageController;
 use Illuminate\Http\Request;
 
 /*
@@ -162,6 +163,12 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/notifications/read-all', [NotificationController::class, 'markAllAsRead']);
     Route::delete('/notifications/{id}', [NotificationController::class, 'destroy']);
     Route::delete('/notifications/clear-read', [NotificationController::class, 'clearRead']);
+
+    // Customer ↔ shop messaging
+    Route::get('messages', [CustomerShopMessageController::class, 'index']);
+    Route::post('shops/{shopId}/messages', [CustomerShopMessageController::class, 'start']);
+    Route::get('messages/{conversationId}', [CustomerShopMessageController::class, 'show']);
+    Route::post('messages/{conversationId}', [CustomerShopMessageController::class, 'send']);
 
     // Activity logs (admin audit trail)
     Route::get('activity-logs', [ActivityLogController::class, 'index']);

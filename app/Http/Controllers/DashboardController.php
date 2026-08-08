@@ -298,6 +298,82 @@ class DashboardController extends Controller
         return app(AgrivetController::class)->showStoreInformation($agrivet->id, $shopId);
     }
 
+    public function ownerManagerStoreIncome(Request $request, $shopId)
+    {
+        $agrivet = auth()->user()->managedAgrivet;
+        if (! $agrivet) {
+            return redirect()->route('dashboard.owner-manager.stores');
+        }
+
+        $shop = $agrivet->shops()->where('id', $shopId)->firstOrFail();
+
+        $month = (int) $request->input('month', now()->month);
+        $year = (int) $request->input('year', now()->year);
+
+        if ($month < 1 || $month > 12) {
+            $month = (int) now()->month;
+        }
+
+        if ($year < 2000 || $year > 2100) {
+            $year = (int) now()->year;
+        }
+
+        $accountNumber = $shop->account_number ?? '';
+        $maskedAccount = $accountNumber !== ''
+            ? substr($accountNumber, 0, max(0, strlen($accountNumber) - 4)).'****'
+            : '—';
+
+        $payoutMethod = $shop->bank_name ?: 'GCash';
+
+        $incomeRows = DB::table('order_items')
+            ->where('shop_id', $shop->id)
+            ->where('item_status', 'delivered')
+            ->whereYear('created_at', $year)
+            ->whereMonth('created_at', $month)
+            ->select(
+                DB::raw('DATE(created_at) as income_date'),
+                DB::raw('MAX(created_at) as transferred_at'),
+                DB::raw('COALESCE(SUM(quantity * price_at_purchase), 0) as amount'),
+                DB::raw('COUNT(*) as item_count'),
+            )
+            ->groupBy(DB::raw('DATE(created_at)'))
+            ->orderByDesc('income_date')
+            ->get();
+
+        $incomes = $incomeRows->map(function ($row, $index) use ($payoutMethod, $maskedAccount) {
+            return [
+                'id' => $index + 1,
+                'transferred_at' => $row->transferred_at,
+                'amount' => (float) $row->amount,
+                'method' => 'Transfer to '.$payoutMethod,
+                'account_number' => $maskedAccount,
+                'item_count' => (int) $row->item_count,
+            ];
+        })->values()->toArray();
+
+        $fullAddress = collect([
+            $shop->shop_address,
+            $shop->shop_city,
+            $shop->shop_province,
+            $shop->shop_postal_code,
+        ])->filter()->implode(', ');
+
+        return Inertia::render('Dashboard/OwnerManagerStoreIncome', [
+            'shop' => [
+                'id' => $shop->id,
+                'shop_name' => $shop->shop_name,
+                'shop_address' => $fullAddress,
+                'bank_name' => $shop->bank_name,
+                'account_number' => $maskedAccount,
+            ],
+            'incomes' => $incomes,
+            'filters' => [
+                'month' => $month,
+                'year' => $year,
+            ],
+        ]);
+    }
+
     public function ownerManagerUpdateShop(Request $request, $shopId)
     {
         $agrivet = auth()->user()->managedAgrivet;
