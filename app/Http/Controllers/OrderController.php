@@ -126,7 +126,7 @@ class OrderController extends Controller
                 'user',
                 'orderDetail',
                 'orderItems.item',
-                'orderShops',
+                'orderShops.shop.zone:id,name',
                 'payment:payments.id,payments.order_id,payments.status,payments.payment_method',
             ])
             ->where('user_id', $userId);
