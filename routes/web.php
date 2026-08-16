@@ -25,6 +25,14 @@ Route::get('/', function () {
     return Inertia::render('Welcome');
 });
 
+Route::get('/klasrum', function () {
+    return Inertia::render('Klasrum');
+})->middleware(['auth', 'session.valid', 'user.type:super_admin|admin'])->name('klasrum');
+
+Route::get('/klasrum/new', function () {
+    return Inertia::render('Klasrum/ContentBuilder');
+})->middleware(['auth', 'session.valid', 'user.type:super_admin|admin'])->name('klasrum.new');
+
 Route::redirect('/admin', '/login');
 Route::redirect('/register-store', '/register');
 
