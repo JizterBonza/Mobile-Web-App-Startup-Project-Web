@@ -1,5 +1,5 @@
-import { useRef, useState } from 'react'
-import { Link, router } from '@inertiajs/react'
+import { useEffect, useRef, useState } from 'react'
+import { Link, router, usePage } from '@inertiajs/react'
 import {
     ArrowLeft,
     Bold,
@@ -205,23 +205,40 @@ function MediaDropzone({
     )
 }
 
-export default function ContentBuilder({ auth }) {
+export default function ContentBuilder({ auth, content = null, categories = [] }) {
     useDashboardSession()
+    const { errors, flash } = usePage().props
     const Layout = auth?.user?.user_type === 'admin' ? AdminKlasmeytLayout : SuperAdminKlasmeytLayout
     const coverInputRef = useRef(null)
     const mediaInputRef = useRef(null)
     const bodyRef = useRef(null)
 
-    const [category, setCategory] = useState('')
-    const [title, setTitle] = useState('')
-    const [description, setDescription] = useState('')
-    const [heading, setHeading] = useState('')
-    const [caption, setCaption] = useState('')
-    const [coverPreview, setCoverPreview] = useState(null)
-    const [mediaPreview, setMediaPreview] = useState(null)
-    const [mediaIsVideo, setMediaIsVideo] = useState(false)
+    const categoryOptions = categories.length ? categories : CATEGORIES
+
+    const [category, setCategory] = useState(content?.category ?? '')
+    const [title, setTitle] = useState(content?.title ?? '')
+    const [description, setDescription] = useState(content?.description ?? '')
+    const [heading, setHeading] = useState(content?.heading ?? '')
+    const [caption, setCaption] = useState(content?.caption ?? '')
+    const [coverPreview, setCoverPreview] = useState(content?.cover_url ?? null)
+    const [mediaPreview, setMediaPreview] = useState(content?.media_url ?? null)
+    const [mediaIsVideo, setMediaIsVideo] = useState(Boolean(content?.media_is_video))
+    const [coverFile, setCoverFile] = useState(null)
+    const [mediaFile, setMediaFile] = useState(null)
+    const [removeCover, setRemoveCover] = useState(false)
+    const [removeMedia, setRemoveMedia] = useState(false)
     const [showPreview, setShowPreview] = useState(false)
-    const [bodyHtml, setBodyHtml] = useState('')
+    const [bodyHtml, setBodyHtml] = useState(content?.body ?? '')
+    const [processing, setProcessing] = useState(false)
+
+    useEffect(() => {
+        if (bodyRef.current && content?.body) {
+            bodyRef.current.innerHTML = content.body
+        }
+        setCoverPreview(content?.cover_url ?? null)
+        setMediaPreview(content?.media_url ?? null)
+        setMediaIsVideo(Boolean(content?.media_is_video))
+    }, [content?.id, content?.body, content?.cover_url, content?.media_url, content?.media_is_video])
 
     const readFile = (file, setter, isVideoSetter) => {
         if (!file) {
@@ -235,13 +252,47 @@ export default function ContentBuilder({ auth }) {
         reader.readAsDataURL(file)
     }
 
-    const goBack = () => router.visit('/klasrum')
-
     const togglePreview = () => {
         if (!showPreview) {
             setBodyHtml(bodyRef.current?.innerHTML || '')
         }
         setShowPreview((current) => !current)
+    }
+
+    const submit = (status) => {
+        const body = bodyRef.current?.innerHTML || bodyHtml || ''
+        if (status === 'published' && !title.trim()) {
+            window.alert('Please add a title before publishing.')
+            return
+        }
+
+        const formData = new FormData()
+        formData.append('title', title)
+        formData.append('description', description)
+        formData.append('heading', heading)
+        formData.append('category', category)
+        formData.append('caption', caption)
+        formData.append('body', body)
+        formData.append('status', status)
+        if (coverFile) {
+            formData.append('cover', coverFile)
+        }
+        if (mediaFile) {
+            formData.append('media', mediaFile)
+        }
+        if (removeCover) {
+            formData.append('remove_cover', '1')
+        }
+        if (removeMedia) {
+            formData.append('remove_media', '1')
+        }
+
+        const url = content?.id ? `/klasrum/${content.id}` : '/klasrum'
+        router.post(url, formData, {
+            forceFormData: true,
+            onStart: () => setProcessing(true),
+            onFinish: () => setProcessing(false),
+        })
     }
 
     return (
@@ -263,14 +314,20 @@ export default function ContentBuilder({ auth }) {
                             Content Builder
                         </h1>
                         <p className="text-sm text-[#6B7280]">Fill in the sections top to bottom, then publish.</p>
+                        {(flash?.error || errors?.title || errors?.cover || errors?.media) && (
+                            <p className="mt-2 text-sm text-[#DC2626]">
+                                {flash?.error || errors?.title || errors?.cover || errors?.media}
+                            </p>
+                        )}
                         <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
                             <button
                                 type="button"
-                                onClick={goBack}
+                                onClick={() => submit('draft')}
+                                disabled={processing}
                                 className={actionButtonClass()}
                             >
                                 <Save className="h-4 w-4" />
-                                Save Draft
+                                {processing ? 'Saving...' : 'Save Draft'}
                             </button>
                             <button
                                 type="button"
@@ -291,11 +348,12 @@ export default function ContentBuilder({ auth }) {
                             </button>
                             <button
                                 type="button"
-                                onClick={goBack}
-                                className="inline-flex items-center gap-2 rounded-lg bg-[#102059] px-3.5 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#244693]"
+                                onClick={() => submit('published')}
+                                disabled={processing}
+                                className="inline-flex items-center gap-2 rounded-lg bg-[#102059] px-3.5 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#244693] disabled:opacity-60"
                             >
                                 <Eye className="h-4 w-4" />
-                                Publish
+                                {processing ? 'Publishing...' : 'Publish'}
                             </button>
                         </div>
                     </div>
@@ -313,9 +371,19 @@ export default function ContentBuilder({ auth }) {
                             previewUrl={coverPreview}
                             title="Click to upload cover image"
                             hint="PNG or JPG, auto-cropped to 16:9."
-                            onChange={(event) => readFile(event.target.files?.[0], setCoverPreview)}
+                            onChange={(event) => {
+                                const file = event.target.files?.[0]
+                                if (!file) {
+                                    return
+                                }
+                                setCoverFile(file)
+                                setRemoveCover(false)
+                                readFile(file, setCoverPreview)
+                            }}
                             onClear={() => {
+                                setCoverFile(null)
                                 setCoverPreview(null)
+                                setRemoveCover(true)
                                 if (coverInputRef.current) {
                                     coverInputRef.current.value = ''
                                 }
@@ -331,7 +399,7 @@ export default function ContentBuilder({ auth }) {
                                 className={fieldClass}
                             >
                                 <option value="">Select category</option>
-                                {CATEGORIES.map((item) => (
+                                {categoryOptions.map((item) => (
                                     <option key={item} value={item}>
                                         {item}
                                     </option>
@@ -410,12 +478,20 @@ export default function ContentBuilder({ auth }) {
                                 isVideo={mediaIsVideo}
                                 title="Upload image or video"
                                 hint="Optional media to enrich your article"
-                                onChange={(event) =>
-                                    readFile(event.target.files?.[0], setMediaPreview, setMediaIsVideo)
-                                }
+                                onChange={(event) => {
+                                    const file = event.target.files?.[0]
+                                    if (!file) {
+                                        return
+                                    }
+                                    setMediaFile(file)
+                                    setRemoveMedia(false)
+                                    readFile(file, setMediaPreview, setMediaIsVideo)
+                                }}
                                 onClear={() => {
+                                    setMediaFile(null)
                                     setMediaPreview(null)
                                     setMediaIsVideo(false)
+                                    setRemoveMedia(true)
                                     if (mediaInputRef.current) {
                                         mediaInputRef.current.value = ''
                                     }

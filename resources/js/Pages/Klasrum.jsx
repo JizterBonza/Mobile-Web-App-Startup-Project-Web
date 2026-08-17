@@ -1,58 +1,24 @@
-import { useMemo, useState } from 'react'
-import { Link, router } from '@inertiajs/react'
+import { Link, router, usePage } from '@inertiajs/react'
 import { FileMinus, FileText, Pencil, Plus, Trash2 } from 'lucide-react'
 import AdminKlasmeytLayout from '../Layouts/AdminKlasmeytLayout'
 import SuperAdminKlasmeytLayout from '../Layouts/SuperAdminKlasmeytLayout'
 import { useDashboardSession } from '../hooks/useDashboardSession'
 
-const INITIAL_CONTENTS = [
-    {
-        id: 1,
-        title: 'Recognizing Newcastle Disease Before it Spreads',
-        description: 'Newcastle disease can wipe out a flock in days. Learn the early warning signs now.',
-        category: 'Health',
-        status: 'published',
-        publishedAt: 'August 10, 2026',
-    },
-]
-
-function formatPublishedDate(date = new Date()) {
-    return date.toLocaleDateString('en-US', {
-        month: 'long',
-        day: 'numeric',
-        year: 'numeric',
-    })
-}
-
-export default function Klasrum({ auth }) {
+export default function Klasrum({ auth, contents = [] }) {
     useDashboardSession()
-    const [contents, setContents] = useState(INITIAL_CONTENTS)
+    const { flash } = usePage().props
     const Layout = auth?.user?.user_type === 'admin' ? AdminKlasmeytLayout : SuperAdminKlasmeytLayout
 
     const togglePublish = (id) => {
-        setContents((items) =>
-            items.map((item) => {
-                if (item.id !== id) {
-                    return item
-                }
-                const nextStatus = item.status === 'published' ? 'draft' : 'published'
-                return {
-                    ...item,
-                    status: nextStatus,
-                    publishedAt: nextStatus === 'published' ? formatPublishedDate() : item.publishedAt,
-                }
-            }),
-        )
+        router.post(`/klasrum/${id}/toggle-publish`)
     }
 
     const deleteContent = (id) => {
         if (!window.confirm('Delete this content?')) {
             return
         }
-        setContents((items) => items.filter((item) => item.id !== id))
+        router.delete(`/klasrum/${id}`)
     }
-
-    const sortedContents = useMemo(() => contents, [contents])
 
     return (
         <Layout auth={auth} title="Klasrum">
@@ -80,11 +46,22 @@ export default function Klasrum({ auth }) {
                     </div>
                 </div>
 
+                {flash?.success ? (
+                    <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+                        {flash.success}
+                    </div>
+                ) : null}
+                {flash?.error ? (
+                    <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900">
+                        {flash.error}
+                    </div>
+                ) : null}
+
                 <h2 className="mb-5 text-2xl font-bold tracking-tight text-[#111827] sm:text-[1.75rem]">
                     Manage Contents
                 </h2>
 
-                {sortedContents.length === 0 ? (
+                {contents.length === 0 ? (
                     <div className="max-w-md rounded-xl border border-dashed border-[#D1D5DB] bg-white px-6 py-16 text-center">
                         <p className="text-sm font-medium text-[#6B7280]">No contents yet.</p>
                         <Link
@@ -96,7 +73,7 @@ export default function Klasrum({ auth }) {
                     </div>
                 ) : (
                     <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-                        {sortedContents.map((item) => {
+                        {contents.map((item) => {
                             const isPublished = item.status === 'published'
                             return (
                                 <article
@@ -122,17 +99,21 @@ export default function Klasrum({ auth }) {
                                         </p>
                                     ) : null}
                                     <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2">
-                                        <span className="rounded-full bg-[#F3F4F6] px-2.5 py-0.5 text-xs font-medium text-[#4B5563]">
-                                            {item.category}
-                                        </span>
+                                        {item.category ? (
+                                            <span className="rounded-full bg-[#F3F4F6] px-2.5 py-0.5 text-xs font-medium text-[#4B5563]">
+                                                {item.category}
+                                            </span>
+                                        ) : null}
                                         <span className="text-xs text-[#9CA3AF]">
-                                            {isPublished ? `Published: ${item.publishedAt}` : 'Not published'}
+                                            {isPublished && item.publishedAt
+                                                ? `Published: ${item.publishedAt}`
+                                                : 'Not published'}
                                         </span>
                                     </div>
                                     <div className="mt-4 flex items-center justify-between border-t border-[#F3F4F6] pt-3">
                                         <div className="flex items-center gap-8">
                                             <Link
-                                                href="/klasrum/new"
+                                                href={`/klasrum/${item.id}/edit`}
                                                 className="inline-flex items-center gap-1.5 text-sm font-medium text-[#4B5563] transition-colors hover:text-[#111827]"
                                             >
                                                 <Pencil className="h-4 w-4" />
