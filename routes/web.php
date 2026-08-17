@@ -18,11 +18,22 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\ShopMessageController;
 use App\Http\Controllers\SupportTicketController;
 use App\Http\Controllers\VoucherController;
+use App\Http\Controllers\KlasrumContentController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
 Route::get('/', function () {
     return Inertia::render('Welcome');
+});
+
+Route::middleware(['auth', 'session.valid', 'user.type:super_admin|admin'])->prefix('klasrum')->name('klasrum.')->group(function () {
+    Route::get('/', [KlasrumContentController::class, 'index'])->name('index');
+    Route::get('/new', [KlasrumContentController::class, 'create'])->name('create');
+    Route::post('/', [KlasrumContentController::class, 'store'])->name('store');
+    Route::get('/{content}/edit', [KlasrumContentController::class, 'edit'])->name('edit');
+    Route::post('/{content}', [KlasrumContentController::class, 'update'])->name('update');
+    Route::delete('/{content}', [KlasrumContentController::class, 'destroy'])->name('destroy');
+    Route::post('/{content}/toggle-publish', [KlasrumContentController::class, 'togglePublish'])->name('toggle-publish');
 });
 
 Route::redirect('/admin', '/login');

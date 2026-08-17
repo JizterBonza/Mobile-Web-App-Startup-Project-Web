@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link } from '@inertiajs/react'
+import { Link, usePage } from '@inertiajs/react'
 import primaryLogo from '../../../../Logo/Primary Logo.png'
 
 const navy = '#0B132B'
@@ -14,8 +14,10 @@ const HERO_SLIDES = [
 const SLIDE_INTERVAL_MS = 5000
 
 export function HomeSection() {
+  const { auth } = usePage().props
   const [activeSlide, setActiveSlide] = useState(0)
   const [menuOpen, setMenuOpen] = useState(false)
+  const canAccessKlasrum = ['super_admin', 'admin'].includes(auth?.user?.user_type)
 
   const navLinkClass =
     'text-[15px] font-medium text-black transition-opacity hover:opacity-70'
@@ -82,6 +84,11 @@ export function HomeSection() {
               <a href="#contact" style={{ color: navy }} className={navLinkClass}>
                 Contact
               </a>
+              {canAccessKlasrum && (
+                <Link href="/klasrum" style={{ color: navy }} className={navLinkClass}>
+                  Klasrum
+                </Link>
+              )}
               <Link
                 href="/admin"
                 className="rounded-[10px] border border-neutral-300/80 bg-white px-5 py-2.5 text-sm font-medium text-neutral-900 shadow-sm transition-[box-shadow,background-color] hover:bg-neutral-50 hover:shadow"
@@ -125,6 +132,16 @@ export function HomeSection() {
               <a href="#contact" style={{ color: navy }} className={navLinkClass} onClick={() => setMenuOpen(false)}>
                 Contact
               </a>
+              {canAccessKlasrum && (
+                <Link
+                  href="/klasrum"
+                  style={{ color: navy }}
+                  className={navLinkClass}
+                  onClick={() => setMenuOpen(false)}
+                >
+                  Klasrum
+                </Link>
+              )}
               <Link
                 href="/admin"
                 className="self-start rounded-[10px] border border-neutral-300/80 bg-white px-5 py-2.5 text-sm font-medium text-neutral-900 shadow-sm"
