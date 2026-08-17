@@ -21,24 +21,19 @@ class CustomerShopMessageController extends Controller
     {
         $user = $this->customerOrAbort($request);
 
-        $conversations = ShopConversation::query()
-            ->where('customer_user_id', $user->id)
-            ->with(['shop'])
-            ->orderByDesc('last_message_at')
-            ->orderByDesc('id')
-            ->get()
-            ->map(function (ShopConversation $conversation) {
-                return [
-                    'id' => $conversation->id,
-                    'shop_id' => $conversation->shop_id,
-                    'shop_name' => $conversation->shop?->shop_name,
-                    'last_message' => $conversation->last_message_preview,
-                    'last_message_at' => $conversation->last_message_at?->toIso8601String(),
-                ];
-            })
-            ->values();
+        return response()->json($this->messaging->formatCustomerConversationList($user));
+    }
 
-        return response()->json(['conversations' => $conversations]);
+    /**
+     * Unread conversation count for the authenticated customer (badge polling).
+     */
+    public function unreadCount(Request $request)
+    {
+        $user = $this->customerOrAbort($request);
+
+        return response()->json([
+            'unread_count' => $this->messaging->unreadCountForCustomer($user),
+        ]);
     }
 
     /**

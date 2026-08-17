@@ -19,6 +19,7 @@ use App\Http\Controllers\PaymentController;
 use App\Http\Controllers\SearchController;
 use App\Http\Controllers\VoucherApiController;
 use App\Http\Controllers\CustomerShopMessageController;
+use Illuminate\Broadcasting\BroadcastController;
 use Illuminate\Http\Request;
 
 /*
@@ -83,6 +84,9 @@ Route::post('/payment/webhook', [PaymentController::class, 'handleWebhook']);
 */
 
 Route::middleware('auth:sanctum')->group(function () {
+    // Private channel auth for mobile (Sanctum Bearer token)
+    Route::post('broadcasting/auth', [BroadcastController::class, 'authenticate']);
+
     // Session / profile
     Route::post('logout', [MobileAuthController::class, 'logout']);
     Route::get('profile', function (Request $request) {
@@ -169,6 +173,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Customer ↔ shop messaging
     Route::get('messages', [CustomerShopMessageController::class, 'index']);
+    Route::get('messages/unread-count', [CustomerShopMessageController::class, 'unreadCount']);
     Route::post('shops/{shopId}/messages', [CustomerShopMessageController::class, 'start']);
     Route::get('messages/{conversationId}', [CustomerShopMessageController::class, 'show']);
     Route::post('messages/{conversationId}', [CustomerShopMessageController::class, 'send']);
