@@ -27,6 +27,63 @@ function actionButtonClass(active = false) {
     return 'inline-flex items-center gap-2 rounded-lg border border-[#E5E7EB] bg-white px-3.5 py-2 text-sm font-medium text-[#4B5563] transition-colors hover:bg-[#F9FAFB]'
 }
 
+const editorListClass =
+    '[&_ul]:my-2 [&_ul]:list-disc [&_ul]:pl-6 [&_ol]:my-2 [&_ol]:list-decimal [&_ol]:pl-6 [&_li]:my-1'
+
+function placeCaretIn(node) {
+    const selection = window.getSelection()
+    const range = document.createRange()
+    range.selectNodeContents(node)
+    range.collapse(false)
+    selection.removeAllRanges()
+    selection.addRange(range)
+}
+
+function ensureEditorSelection(editor) {
+    editor.focus()
+    const selection = window.getSelection()
+    const anchorInEditor = selection.anchorNode && editor.contains(selection.anchorNode)
+    if (selection.rangeCount && anchorInEditor) {
+        return
+    }
+    if (!editor.innerHTML.trim() || editor.innerHTML === '<br>') {
+        editor.innerHTML = '<p><br></p>'
+    }
+    const target = editor.querySelector('li, p, div') || editor
+    placeCaretIn(target)
+}
+
+function wrapSelectionAsList(editor, ordered) {
+    const tag = ordered ? 'ol' : 'ul'
+    const selection = window.getSelection()
+    const selectedText = selection.toString()
+    const itemHtml = selectedText ? selectedText.split('\n').map((line) => `<li>${line || '<br>'}</li>`).join('') : '<li><br></li>'
+    document.execCommand('insertHTML', false, `<${tag}>${itemHtml}</${tag}>`)
+    const list = editor.querySelector(`${tag}:last-of-type`)
+    const lastItem = list?.querySelector('li:last-child')
+    if (lastItem) {
+        placeCaretIn(lastItem)
+    }
+}
+
+function applyFormat(command, editor) {
+    if (!editor) {
+        return
+    }
+    ensureEditorSelection(editor)
+    const isList = command === 'insertUnorderedList' || command === 'insertOrderedList'
+    const ordered = command === 'insertOrderedList'
+    if (isList) {
+        const applied = document.execCommand(command, false, null)
+        const tag = ordered ? 'ol' : 'ul'
+        if (!applied || !editor.querySelector(tag)) {
+            wrapSelectionAsList(editor, ordered)
+        }
+        return
+    }
+    document.execCommand(command, false, null)
+}
+
 function PreviewArticle({
     category,
     title,
@@ -65,7 +122,7 @@ function PreviewArticle({
                 ) : null}
                 {hasBody ? (
                     <div
-                        className="mt-4 space-y-4 text-base leading-relaxed text-[#111827] [&_p]:mb-4 [&_p:last-child]:mb-0"
+                        className={`mt-4 space-y-4 text-base leading-relaxed text-[#111827] [&_p]:mb-4 [&_p:last-child]:mb-0 ${editorListClass}`}
                         dangerouslySetInnerHTML={{ __html: bodyHtml }}
                     />
                 ) : null}
@@ -323,7 +380,7 @@ export default function ContentBuilder({ auth }) {
                                         title={label}
                                         aria-label={label}
                                         onMouseDown={(event) => event.preventDefault()}
-                                        onClick={() => applyFormat(command)}
+                                        onClick={() => applyFormat(command, bodyRef.current)}
                                         className="rounded p-1.5 text-[#4B5563] hover:bg-[#F3F4F6]"
                                     >
                                         <Icon className="h-4 w-4" />
@@ -335,7 +392,7 @@ export default function ContentBuilder({ auth }) {
                                 contentEditable
                                 suppressContentEditableWarning
                                 data-placeholder="Write your content here..."
-                                className="min-h-[180px] px-3 py-2.5 text-sm text-[#111827] outline-none empty:before:text-[#9CA3AF] empty:before:content-[attr(data-placeholder)]"
+                                className={`min-h-[180px] px-3 py-2.5 text-sm text-[#111827] outline-none empty:before:text-[#9CA3AF] empty:before:content-[attr(data-placeholder)] ${editorListClass}`}
                             />
                         </div>
                     </section>
