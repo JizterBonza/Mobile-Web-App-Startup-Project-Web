@@ -4,7 +4,6 @@ namespace App\Services;
 
 use App\Events\ShopMessageSent;
 use App\Models\Item;
-use App\Models\Notification;
 use App\Models\Shop;
 use App\Models\ShopConversation;
 use App\Models\ShopConversationAttachment;
@@ -70,13 +69,15 @@ class ShopMessagingService
         }
 
         $unreadMap = $this->unreadFlagsForConversations($conversations, $viewer->id);
+        $lastMessages = $this->latestMessagesForConversations($conversations);
 
-        return $conversations->map(function (ShopConversation $conversation) use ($unreadMap) {
+        return $conversations->map(function (ShopConversation $conversation) use ($unreadMap, $lastMessages) {
             return [
                 'id' => $conversation->id,
                 'name' => $this->displayName($conversation->customer),
                 'avatar_url' => $this->avatarUrl($conversation->customer),
                 'last_message' => $conversation->last_message_preview ?: 'No messages yet',
+                'last_sender' => $this->formatLastSender($lastMessages->get($conversation->id)),
                 'timestamp' => $this->listTimestamp($conversation->last_message_at),
                 'unread' => (bool) ($unreadMap[$conversation->id] ?? false),
             ];
@@ -100,14 +101,16 @@ class ShopMessagingService
         }
 
         $unreadMap = $this->unreadFlagsForCustomerConversations($conversations, $customer->id);
+        $lastMessages = $this->latestMessagesForConversations($conversations);
 
-        $items = $conversations->map(function (ShopConversation $conversation) use ($unreadMap) {
+        $items = $conversations->map(function (ShopConversation $conversation) use ($unreadMap, $lastMessages) {
             return [
                 'id' => $conversation->id,
                 'shop_id' => $conversation->shop_id,
                 'shop_name' => $conversation->shop?->shop_name,
                 'last_message' => $conversation->last_message_preview,
                 'last_message_at' => $conversation->last_message_at?->toIso8601String(),
+                'last_sender' => $this->formatLastSender($lastMessages->get($conversation->id)),
                 'unread' => (bool) ($unreadMap[$conversation->id] ?? false),
             ];
         })->values()->all();
@@ -211,7 +214,6 @@ class ShopMessagingService
             return $message->fresh(['attachments', 'sender.userDetail']);
         });
 
-        $this->notifyCounterpart($conversation, $sender, $message);
         $this->broadcastMessage($conversation->fresh(), $message);
 
         return $message;
@@ -256,7 +258,6 @@ class ShopMessagingService
             return $message->fresh(['attachments', 'sender.userDetail']);
         });
 
-        $this->notifyCounterpart($conversation, $sender, $message);
         $this->broadcastMessage($conversation->fresh(), $message);
 
         return $message;
@@ -423,6 +424,7 @@ class ShopMessagingService
                 'name' => $this->displayName($conversation->customer),
                 'avatar_url' => $this->avatarUrl($conversation->customer),
                 'last_message' => $conversation->last_message_preview ?: 'New message',
+                'last_sender' => $this->formatLastSender($message),
                 'timestamp' => $this->listTimestamp($conversation->last_message_at),
             ],
         ];
@@ -682,6 +684,54 @@ class ShopMessagingService
     }
 
     /**
+     * Latest message per conversation, keyed by conversation id.
+     *
+     * @param  Collection<int, ShopConversation>  $conversations
+     * @return Collection<int, ShopConversationMessage>
+     */
+    private function latestMessagesForConversations(Collection $conversations): Collection
+    {
+        $ids = $conversations->pluck('id')->all();
+        if ($ids === []) {
+            return collect();
+        }
+
+        $latestIds = ShopConversationMessage::query()
+            ->select(DB::raw('MAX(id) as id'))
+            ->whereIn('shop_conversation_id', $ids)
+            ->groupBy('shop_conversation_id')
+            ->pluck('id');
+
+        if ($latestIds->isEmpty()) {
+            return collect();
+        }
+
+        return ShopConversationMessage::query()
+            ->with('sender.userDetail')
+            ->whereIn('id', $latestIds)
+            ->get()
+            ->keyBy('shop_conversation_id');
+    }
+
+    /**
+     * @return array{user_id: int, role: string, name: string}|null
+     */
+    private function formatLastSender(?ShopConversationMessage $message): ?array
+    {
+        if (! $message) {
+            return null;
+        }
+
+        $message->loadMissing('sender.userDetail');
+
+        return [
+            'user_id' => (int) $message->sender_user_id,
+            'role' => $message->sender_role,
+            'name' => $this->displayName($message->sender),
+        ];
+    }
+
+    /**
      * @return Collection<int, ShopConversation>
      */
     private function customerConversations(User $customer, bool $withShop = true): Collection
@@ -770,72 +820,6 @@ class ShopMessagingService
             ShopConversationMessage::TYPE_PRODUCT => 'Shared a product',
             default => 'New message',
         };
-    }
-
-    private function notifyCounterpart(
-        ShopConversation $conversation,
-        User $sender,
-        ShopConversationMessage $message
-    ): void {
-        $conversation->loadMissing('shop', 'customer.userDetail');
-        $preview = $conversation->fresh()->last_message_preview ?? 'New message';
-
-        if ($message->isStaffMessage()) {
-            $customerId = (int) $conversation->customer_user_id;
-            if ($customerId === (int) $sender->id) {
-                return;
-            }
-
-            Notification::createForUser(
-                $customerId,
-                'shop_message',
-                $conversation->shop->shop_name ?? 'New message',
-                $preview,
-                'messages',
-                $conversation,
-                [
-                    'shop_id' => $conversation->shop_id,
-                    'conversation_id' => $conversation->id,
-                ],
-            );
-
-            return;
-        }
-
-        // Customer → notify assigned vendors + owner/manager of the agrivet
-        $shop = $conversation->shop;
-        $recipientIds = $shop->vendors()->pluck('users.id')->all();
-
-        $ownerManagerId = User::query()
-            ->where('user_type', User::TYPE_OWNER_MANAGER)
-            ->where('agrivet_id', $shop->agrivet_id)
-            ->value('id');
-
-        if ($ownerManagerId) {
-            $recipientIds[] = (int) $ownerManagerId;
-        }
-
-        $customerName = $this->displayName($conversation->customer);
-        $title = "Message from {$customerName}";
-
-        foreach (array_unique($recipientIds) as $recipientId) {
-            if ((int) $recipientId === (int) $sender->id) {
-                continue;
-            }
-
-            Notification::createForUser(
-                (int) $recipientId,
-                'shop_message',
-                $title,
-                $preview,
-                'messages',
-                $conversation,
-                [
-                    'shop_id' => $conversation->shop_id,
-                    'conversation_id' => $conversation->id,
-                ],
-            );
-        }
     }
 
     private function displayName(?User $user): string

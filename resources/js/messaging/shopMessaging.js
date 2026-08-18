@@ -74,6 +74,16 @@ export function applyConversationListUpdate(conversations, payload, user) {
         (conversation) => Number(conversation.id) === Number(payload.conversation_id),
     )
 
+    const lastSender =
+        payload.preview.last_sender ||
+        (payload.message
+            ? {
+                  user_id: payload.message.sender_user_id,
+                  role: payload.message.sender_role,
+                  name: payload.message.sent_by || null,
+              }
+            : null)
+
     if (index === -1) {
         return {
             conversations: [
@@ -82,6 +92,7 @@ export function applyConversationListUpdate(conversations, payload, user) {
                     name: payload.preview.name || 'Customer',
                     avatar_url: payload.preview.avatar_url || null,
                     last_message: payload.preview.last_message || 'New message',
+                    last_sender: lastSender,
                     timestamp: payload.preview.timestamp || '',
                     unread,
                 },
@@ -96,6 +107,7 @@ export function applyConversationListUpdate(conversations, payload, user) {
     updated.unshift({
         ...existing,
         last_message: payload.preview.last_message || existing.last_message,
+        last_sender: lastSender || existing.last_sender || null,
         timestamp: payload.preview.timestamp || existing.timestamp,
         unread: unread || Boolean(existing.unread && !isOwnMessage),
     })
