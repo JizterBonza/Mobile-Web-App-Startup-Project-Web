@@ -19,6 +19,7 @@ use App\Http\Controllers\PaymentController;
 use App\Http\Controllers\SearchController;
 use App\Http\Controllers\VoucherApiController;
 use App\Http\Controllers\CustomerShopMessageController;
+use App\Http\Controllers\KlasrumApiController;
 use Illuminate\Broadcasting\BroadcastController;
 use Illuminate\Http\Request;
 
@@ -45,6 +46,10 @@ Route::get('search', [SearchController::class, 'index']);
 
 Route::get('categories', [CategoryController::class, 'index']);
 Route::get('categories/{id}', [CategoryController::class, 'show']);
+
+Route::get('klasrum/categories', [KlasrumApiController::class, 'categories']);
+Route::get('klasrum', [KlasrumApiController::class, 'index']);
+Route::get('klasrum/{id}', [KlasrumApiController::class, 'show']);
 
 Route::get('/items/search', [ItemController::class, 'search']);
 Route::get('items', [ItemController::class, 'index']);
@@ -174,6 +179,7 @@ Route::middleware('auth:sanctum')->group(function () {
     // Customer ↔ shop messaging
     Route::get('messages', [CustomerShopMessageController::class, 'index']);
     Route::get('messages/unread-count', [CustomerShopMessageController::class, 'unreadCount']);
+    Route::get('shops/{shopId}/messages/products', [CustomerShopMessageController::class, 'products']);
     Route::post('shops/{shopId}/messages', [CustomerShopMessageController::class, 'start']);
     Route::get('messages/{conversationId}', [CustomerShopMessageController::class, 'show']);
     Route::post('messages/{conversationId}', [CustomerShopMessageController::class, 'send']);

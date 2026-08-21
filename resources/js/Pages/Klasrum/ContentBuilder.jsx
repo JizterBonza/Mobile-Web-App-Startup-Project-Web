@@ -15,8 +15,6 @@ import AdminKlasmeytLayout from '../../Layouts/AdminKlasmeytLayout'
 import SuperAdminKlasmeytLayout from '../../Layouts/SuperAdminKlasmeytLayout'
 import { useDashboardSession } from '../../hooks/useDashboardSession'
 
-const CATEGORIES = ['Health', 'Nutrition', 'Training', 'News', 'General']
-
 const fieldClass =
     'w-full rounded-lg border border-[#E5E7EB] bg-white px-3 py-2.5 text-sm text-[#111827] placeholder:text-[#9CA3AF] shadow-none ring-0 focus:border-[#102059] focus:outline-none focus:ring-1 focus:ring-[#102059]'
 
@@ -213,9 +211,8 @@ export default function ContentBuilder({ auth, content = null, categories = [] }
     const mediaInputRef = useRef(null)
     const bodyRef = useRef(null)
 
-    const categoryOptions = categories.length ? categories : CATEGORIES
-
-    const [category, setCategory] = useState(content?.category ?? '')
+    const [category, setCategory] = useState(content?.category_id ? String(content.category_id) : '')
+    const selectedCategoryName = categories.find((item) => String(item.id) === String(category))?.name ?? ''
     const [title, setTitle] = useState(content?.title ?? '')
     const [description, setDescription] = useState(content?.description ?? '')
     const [heading, setHeading] = useState(content?.heading ?? '')
@@ -267,10 +264,10 @@ export default function ContentBuilder({ auth, content = null, categories = [] }
         }
 
         const formData = new FormData()
+        formData.append('category_id', category)
         formData.append('title', title)
         formData.append('description', description)
         formData.append('heading', heading)
-        formData.append('category', category)
         formData.append('caption', caption)
         formData.append('body', body)
         formData.append('status', status)
@@ -399,9 +396,9 @@ export default function ContentBuilder({ auth, content = null, categories = [] }
                                 className={fieldClass}
                             >
                                 <option value="">Select category</option>
-                                {categoryOptions.map((item) => (
-                                    <option key={item} value={item}>
-                                        {item}
+                                {categories.map((item) => (
+                                    <option key={item.id} value={item.id}>
+                                        {item.name}
                                     </option>
                                 ))}
                             </select>
@@ -510,7 +507,7 @@ export default function ContentBuilder({ auth, content = null, categories = [] }
 
                 {showPreview ? (
                     <PreviewArticle
-                        category={category}
+                        category={selectedCategoryName}
                         title={title}
                         description={description}
                         heading={heading}

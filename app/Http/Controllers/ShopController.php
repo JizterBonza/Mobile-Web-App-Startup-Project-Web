@@ -44,7 +44,10 @@ class ShopController extends Controller
         // Order by created_at descending (newest first)
         $query->orderBy('created_at', 'desc');
 
-        $shops = $query->get();
+        $shops = $query->with(['agrivet' => function ($query) {
+            $query->select('id', 'banner_url');
+        }])->get();
+        $shops->each->includeAgrivetBanner();
 
         return response()->json([
             'success' => true,
@@ -61,7 +64,11 @@ class ShopController extends Controller
      */
     public function show($id)
     {
-        $shop = Shop::find($id);
+        $shop = Shop::query()
+            ->with(['agrivet' => function ($query) {
+                $query->select('id', 'banner_url');
+            }])
+            ->find($id);
 
         if (!$shop) {
             return response()->json([
@@ -72,7 +79,7 @@ class ShopController extends Controller
 
         return response()->json([
             'success' => true,
-            'data' => $shop
+            'data' => $shop->includeAgrivetBanner()
         ]);
     }
 
@@ -84,10 +91,15 @@ class ShopController extends Controller
      */
     public function getShopWithItems($id)
     {
-        $shop = Shop::with(['items' => function ($query) {
-            $query->where('item_status', 'active')
-                  ->orderBy('created_at', 'desc');
-        }])->find($id);
+        $shop = Shop::with([
+            'agrivet' => function ($query) {
+                $query->select('id', 'banner_url');
+            },
+            'items' => function ($query) {
+                $query->where('item_status', 'active')
+                      ->orderBy('created_at', 'desc');
+            },
+        ])->find($id);
 
         if (!$shop) {
             return response()->json([
@@ -98,7 +110,7 @@ class ShopController extends Controller
 
         return response()->json([
             'success' => true,
-            'data' => $shop
+            'data' => $shop->includeAgrivetBanner()
         ]);
     }
 
@@ -110,7 +122,13 @@ class ShopController extends Controller
      */
     public function getByAgrivetId($agrivetId)
     {
-        $shops = Shop::where('agrivet_id', $agrivetId)->get();
+        $shops = Shop::query()
+            ->with(['agrivet' => function ($query) {
+                $query->select('id', 'banner_url');
+            }])
+            ->where('agrivet_id', $agrivetId)
+            ->get();
+        $shops->each->includeAgrivetBanner();
 
         if ($shops->isEmpty()) {
             return response()->json([
@@ -313,12 +331,17 @@ class ShopController extends Controller
      */
     public function getShopWithReviews($id)
     {
-        $shop = Shop::with(['ratingReviews' => function ($query) {
-            $query->orderBy('created_at', 'desc')
-                  ->with(['user.userCredential' => function ($query) {
-                      $query->select('id', 'username');
-                  }]);
-        }])->find($id);
+        $shop = Shop::with([
+            'agrivet' => function ($query) {
+                $query->select('id', 'banner_url');
+            },
+            'ratingReviews' => function ($query) {
+                $query->orderBy('created_at', 'desc')
+                    ->with(['user.userCredential' => function ($query) {
+                        $query->select('id', 'username');
+                    }]);
+            },
+        ])->find($id);
 
         if (!$shop) {
             return response()->json([
@@ -333,6 +356,7 @@ class ShopController extends Controller
             'shop_lat', 'shop_long', 'contact_number',
             'average_rating', 'total_reviews', 'shop_status', 'created_at', 'updated_at'
         ]);
+        $shopData['banner_url'] = $shop->agrivet?->banner_url;
 
         // Add reviews
         $shopData['reviews'] = $shop->ratingReviews->map(function ($review) {
@@ -454,6 +478,9 @@ class ShopController extends Controller
         $radiusKm = $request->filled('radius_km') ? (float) $request->radius_km : null;
 
         $shops = Shop::query()
+            ->with(['agrivet' => function ($query) {
+                $query->select('id', 'banner_url');
+            }])
             ->where('shop_status', 'active')
             ->whereNotNull('shop_lat')
             ->whereNotNull('shop_long')
@@ -466,7 +493,7 @@ class ShopController extends Controller
                     (float) $shop->shop_long
                 );
 
-                $shopData = $shop->toArray();
+                $shopData = $shop->includeAgrivetBanner()->toArray();
                 $shopData['distance_km'] = $distanceKm !== null ? round($distanceKm, 3) : null;
 
                 return $shopData;
@@ -518,7 +545,9 @@ class ShopController extends Controller
             ], 422);
         }
 
-        $query = Shop::query();
+        $query = Shop::query()->with(['agrivet' => function ($query) {
+            $query->select('id', 'banner_url');
+        }]);
 
         // Only search active shops by default
         $query->where('shop_status', 'active');
@@ -543,6 +572,7 @@ class ShopController extends Controller
         // Limit results (default 20, max 50)
         $limit = $request->input('limit', 20);
         $shops = $query->limit($limit)->get();
+        $shops->each->includeAgrivetBanner();
 
         return response()->json([
             'success' => true,

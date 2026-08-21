@@ -71,6 +71,34 @@ class Shop extends Model
     }
 
     /**
+     * Agrivet banner path. Not a shops column; exposed when appended for API payloads.
+     */
+    public function getBannerUrlAttribute(): ?string
+    {
+        if (! $this->relationLoaded('agrivet')) {
+            $this->load(['agrivet' => function ($query) {
+                $query->select('id', 'banner_url');
+            }]);
+        }
+
+        return $this->agrivet?->banner_url;
+    }
+
+    /**
+     * Include agrivet banner_url in JSON without nesting the agrivet.
+     */
+    public function includeAgrivetBanner(): static
+    {
+        $this->loadMissing(['agrivet' => function ($query) {
+            $query->select('id', 'banner_url');
+        }]);
+        $this->append('banner_url');
+        $this->makeHidden('agrivet');
+
+        return $this;
+    }
+
+    /**
      * Get the zone where this shop is located.
      */
     public function zone()

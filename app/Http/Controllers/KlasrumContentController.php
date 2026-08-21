@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\ActivityLog;
+use App\Models\KlasrumCategory;
 use App\Models\KlasrumContent;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -18,6 +19,7 @@ class KlasrumContentController extends Controller
     public function index(): Response
     {
         $contents = KlasrumContent::query()
+            ->with('category')
             ->orderByRaw("CASE WHEN status = ? THEN 0 ELSE 1 END", [KlasrumContent::STATUS_PUBLISHED])
             ->orderByDesc('published_at')
             ->orderByDesc('updated_at')
@@ -26,7 +28,7 @@ class KlasrumContentController extends Controller
 
         return Inertia::render('Klasrum', [
             'contents' => $contents,
-            'categories' => KlasrumContent::CATEGORIES,
+            'categories' => KlasrumCategory::options(),
         ]);
     }
 
@@ -34,7 +36,7 @@ class KlasrumContentController extends Controller
     {
         return Inertia::render('Klasrum/ContentBuilder', [
             'content' => null,
-            'categories' => KlasrumContent::CATEGORIES,
+            'categories' => KlasrumCategory::options(),
         ]);
     }
 
@@ -71,9 +73,11 @@ class KlasrumContentController extends Controller
 
     public function edit(KlasrumContent $content): Response
     {
+        $content->load('category');
+
         return Inertia::render('Klasrum/ContentBuilder', [
             'content' => $content->toBuilderArray(),
-            'categories' => KlasrumContent::CATEGORIES,
+            'categories' => KlasrumCategory::options(),
         ]);
     }
 
@@ -164,6 +168,10 @@ class KlasrumContentController extends Controller
      */
     private function validatedPayload(Request $request): array
     {
+        $request->merge([
+            'category_id' => $request->input('category_id') ?: null,
+        ]);
+
         $status = $request->input('status', KlasrumContent::STATUS_DRAFT);
         $titleRules = $status === KlasrumContent::STATUS_PUBLISHED
             ? ['required', 'string', 'max:255']
@@ -174,7 +182,7 @@ class KlasrumContentController extends Controller
             'description' => ['nullable', 'string'],
             'heading' => ['nullable', 'string', 'max:255'],
             'body' => ['nullable', 'string'],
-            'category' => ['nullable', 'string', Rule::in(['', ...KlasrumContent::CATEGORIES])],
+            'category_id' => ['nullable', 'integer', 'exists:klasrum_categories,id'],
             'caption' => ['nullable', 'string', 'max:1000'],
             'status' => ['required', Rule::in([KlasrumContent::STATUS_DRAFT, KlasrumContent::STATUS_PUBLISHED])],
             'cover' => ['nullable', 'image', 'mimes:jpeg,jpg,png', 'max:5120'],
@@ -197,7 +205,7 @@ class KlasrumContentController extends Controller
             'description' => $validated['description'] ?? null,
             'heading' => $validated['heading'] ?? null,
             'body' => isset($validated['body']) ? strip_tags($validated['body'], $allowedTags) : null,
-            'category' => $validated['category'] ?: null,
+            'category_id' => $validated['category_id'] ?? null,
             'caption' => $validated['caption'] ?? null,
         ];
     }

@@ -68,10 +68,21 @@ class FavoriteController extends Controller
             ->orderBy('created_at', 'desc')
             ->get();
 
+        $data = $favorites->toArray();
+        foreach ($data as &$favorite) {
+            if (! isset($favorite['item'])) {
+                continue;
+            }
+            $favorite['item']['item_images'] = $this->firstItemImageUrl(
+                $favorite['item']['item_images'] ?? null
+            );
+        }
+        unset($favorite);
+
         return response()->json([
             'success' => true,
-            'data' => $favorites,
-            'count' => $favorites->count()
+            'data' => $data,
+            'count' => count($data),
         ]);
     }
 
@@ -273,5 +284,30 @@ class FavoriteController extends Controller
             'success' => true,
             'is_favorited' => $isFavorited
         ]);
+    }
+
+    /**
+     * First image URL from an item_images value (array or JSON string).
+     */
+    private function firstItemImageUrl(mixed $itemImages): ?string
+    {
+        if ($itemImages === null || $itemImages === '') {
+            return null;
+        }
+
+        $decoded = is_string($itemImages) ? json_decode($itemImages, true) : $itemImages;
+        if (! is_array($decoded) || $decoded === []) {
+            return is_string($itemImages) ? $itemImages : null;
+        }
+
+        $first = $decoded[0];
+        if (is_string($first)) {
+            return $first;
+        }
+        if (is_array($first)) {
+            return $first['url'] ?? $first['path'] ?? null;
+        }
+
+        return null;
     }
 }

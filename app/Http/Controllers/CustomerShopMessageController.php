@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Item;
 use App\Models\Shop;
 use App\Models\ShopConversation;
 use App\Models\User;
@@ -37,6 +38,22 @@ class CustomerShopMessageController extends Controller
     }
 
     /**
+     * Active shop listings for the mobile product picker.
+     */
+    public function products(Request $request, int $shopId)
+    {
+        $this->customerOrAbort($request);
+        $shop = Shop::findOrFail($shopId);
+
+        return response()->json([
+            'products' => $this->messaging->listShopProductsForPicker(
+                $shop,
+                $request->string('search')->toString()
+            ),
+        ]);
+    }
+
+    /**
      * Start or resume a conversation with a shop, optionally sending the first message.
      */
     public function start(Request $request, int $shopId)
@@ -44,21 +61,17 @@ class CustomerShopMessageController extends Controller
         $user = $this->customerOrAbort($request);
         $shop = Shop::findOrFail($shopId);
 
-        $validated = $request->validate([
-            'body' => ['nullable', 'string', 'max:5000'],
-            'attachments' => ['nullable', 'array', 'max:10'],
-            'attachments.*' => [
-                'file',
-                'max:20480',
-                'mimes:jpg,jpeg,png,gif,webp,mp4,pdf,docx',
-            ],
-        ]);
+        $validated = $request->validate($this->messageRules());
 
         $conversation = $this->messaging->findOrCreate($shop, $user);
         $body = trim((string) ($validated['body'] ?? ''));
         $files = array_values(array_filter($request->file('attachments', []) ?? []));
+        $itemId = $validated['item_id'] ?? null;
 
-        if ($body !== '' || $files !== []) {
+        if ($itemId) {
+            $item = $this->resolveActiveShopItem((int) $shop->id, (int) $itemId);
+            $this->messaging->sendProductMessage($conversation, $user, $item, $body);
+        } elseif ($body !== '' || $files !== []) {
             $this->messaging->sendMessage($conversation, $user, $body, $files);
         }
 
@@ -101,30 +114,61 @@ class CustomerShopMessageController extends Controller
         $user = $this->customerOrAbort($request);
         $conversation = $this->ownedConversation($user, $conversationId);
 
-        $validated = $request->validate([
-            'body' => ['nullable', 'string', 'max:5000'],
-            'attachments' => ['nullable', 'array', 'max:10'],
-            'attachments.*' => [
-                'file',
-                'max:20480',
-                'mimes:jpg,jpeg,png,gif,webp,mp4,pdf,docx',
-            ],
-        ]);
+        $validated = $request->validate($this->messageRules());
 
         $body = trim((string) ($validated['body'] ?? ''));
         $files = array_values(array_filter($request->file('attachments', []) ?? []));
+        $itemId = $validated['item_id'] ?? null;
 
-        if ($body === '' && $files === []) {
-            return response()->json(['message' => 'Message cannot be empty.'], 422);
+        if ($itemId) {
+            $item = $this->resolveActiveShopItem((int) $conversation->shop_id, (int) $itemId);
+            $this->messaging->sendProductMessage($conversation, $user, $item, $body);
+        } else {
+            if ($body === '' && $files === []) {
+                return response()->json(['message' => 'Message cannot be empty.'], 422);
+            }
+
+            $this->messaging->sendMessage($conversation, $user, $body, $files);
         }
 
-        $this->messaging->sendMessage($conversation, $user, $body, $files);
         $thread = $this->messaging->formatConversationThread($conversation->fresh(), $user);
 
         return response()->json([
             'conversation' => $thread['conversation'],
             'messages' => $thread['messages'],
         ]);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function messageRules(): array
+    {
+        return [
+            'body' => ['nullable', 'string', 'max:5000'],
+            'item_id' => ['nullable', 'integer', 'exists:items,id'],
+            'attachments' => ['nullable', 'array', 'max:10'],
+            'attachments.*' => [
+                'file',
+                'max:20480',
+                'mimes:jpg,jpeg,png,gif,webp,mp4,pdf,docx',
+            ],
+        ];
+    }
+
+    private function resolveActiveShopItem(int $shopId, int $itemId): Item
+    {
+        $item = Item::query()
+            ->where('id', $itemId)
+            ->where('shop_id', $shopId)
+            ->where('item_status', 'active')
+            ->first();
+
+        if (! $item) {
+            abort(422, 'Product not found in this shop.');
+        }
+
+        return $item;
     }
 
     private function customerOrAbort(Request $request): User
