@@ -109,6 +109,22 @@ class NotificationController extends Controller
         ]);
     }
 
+    public function unreadCountByUser(Request $request, $userId)
+    {
+        if ($response = $this->ensureSelfOrStaff($request, $userId)) {
+            return $response;
+        }
+
+        $count = Notification::where('user_id', $userId)
+            ->where('read', false)
+            ->count();
+
+        return response()->json([
+            'success' => true,
+            'count' => $count,
+        ]);
+    }
+
     public function destroy(Request $request, $id)
     {
         if ($response = $this->rejectUserIdMismatch($request, $request->input('user_id'))) {

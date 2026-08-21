@@ -20,6 +20,7 @@ use App\Http\Controllers\PayoutController;
 use App\Http\Controllers\SearchController;
 use App\Http\Controllers\VoucherApiController;
 use App\Http\Controllers\CustomerShopMessageController;
+use Illuminate\Broadcasting\BroadcastController;
 use Illuminate\Http\Request;
 
 /*
@@ -84,11 +85,15 @@ Route::post('/payment/webhook', [PaymentController::class, 'handleWebhook']);
 */
 
 Route::middleware('auth:sanctum')->group(function () {
+    // Private channel auth for mobile (Sanctum Bearer token)
+    Route::post('broadcasting/auth', [BroadcastController::class, 'authenticate']);
+
     // Session / profile
     Route::post('logout', [MobileAuthController::class, 'logout']);
     Route::get('profile', function (Request $request) {
         return response()->json($request->user());
     });
+    Route::get('badges', [MobileController::class, 'badges']);
     Route::put('profile/update', [UserController::class, 'updateMobile']);
     Route::put('profile/change-password', [UserController::class, 'updatePasswordMobile']);
 
@@ -129,6 +134,7 @@ Route::middleware('auth:sanctum')->group(function () {
     // Cart
     Route::get('carts', [CartController::class, 'index']);
     Route::get('carts/user/{userId}', [CartController::class, 'getByUser']);
+    Route::get('carts/user/{userId}/count', [CartController::class, 'countByUser']);
     Route::get('carts/{id}', [CartController::class, 'show']);
     Route::post('carts/add', [CartController::class, 'store']);
     Route::put('carts/{id}', [CartController::class, 'update']);
@@ -160,6 +166,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/notifications', [NotificationController::class, 'index']);
     Route::get('/notifications/by-category', [NotificationController::class, 'byCategory']);
     Route::get('/notifications/unread-count', [NotificationController::class, 'unreadCount']);
+    Route::get('/notifications/user/{userId}/unread-count', [NotificationController::class, 'unreadCountByUser']);
     Route::post('/notifications/{id}/read', [NotificationController::class, 'markAsRead']);
     Route::post('/notifications/read-all', [NotificationController::class, 'markAllAsRead']);
     Route::delete('/notifications/{id}', [NotificationController::class, 'destroy']);
@@ -167,6 +174,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Customer ↔ shop messaging
     Route::get('messages', [CustomerShopMessageController::class, 'index']);
+    Route::get('messages/unread-count', [CustomerShopMessageController::class, 'unreadCount']);
     Route::post('shops/{shopId}/messages', [CustomerShopMessageController::class, 'start']);
     Route::get('messages/{conversationId}', [CustomerShopMessageController::class, 'show']);
     Route::post('messages/{conversationId}', [CustomerShopMessageController::class, 'send']);

@@ -176,6 +176,22 @@ class CartController extends Controller
         ]);
     }
 
+    public function countByUser(Request $request, $userId)
+    {
+        if ($response = $this->ensureSelfOrStaff($request, $userId)) {
+            return $response;
+        }
+
+        $count = Cart::where('user_id', $userId)
+            ->where('status', 'active')
+            ->count();
+
+        return response()->json([
+            'success' => true,
+            'count' => $count,
+        ]);
+    }
+
     public function store(Request $request)
     {
         $validator = Validator::make($request->all(), [

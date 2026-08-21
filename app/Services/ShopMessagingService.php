@@ -85,6 +85,53 @@ class ShopMessagingService
     }
 
     /**
+     * Conversation list for a customer, with unread flags for staff replies.
+     *
+     * @return array{conversations: list<array<string, mixed>>, unread_count: int}
+     */
+    public function formatCustomerConversationList(User $customer): array
+    {
+        $conversations = $this->customerConversations($customer);
+
+        if ($conversations->isEmpty()) {
+            return [
+                'conversations' => [],
+                'unread_count' => 0,
+            ];
+        }
+
+        $unreadMap = $this->unreadFlagsForCustomerConversations($conversations, $customer->id);
+
+        $items = $conversations->map(function (ShopConversation $conversation) use ($unreadMap) {
+            return [
+                'id' => $conversation->id,
+                'shop_id' => $conversation->shop_id,
+                'shop_name' => $conversation->shop?->shop_name,
+                'last_message' => $conversation->last_message_preview,
+                'last_message_at' => $conversation->last_message_at?->toIso8601String(),
+                'unread' => (bool) ($unreadMap[$conversation->id] ?? false),
+            ];
+        })->values()->all();
+
+        return [
+            'conversations' => $items,
+            'unread_count' => $this->countUnreadFlags($unreadMap),
+        ];
+    }
+
+    public function unreadCountForCustomer(User $customer): int
+    {
+        $conversations = $this->customerConversations($customer, withShop: false);
+        if ($conversations->isEmpty()) {
+            return 0;
+        }
+
+        return $this->countUnreadFlags(
+            $this->unreadFlagsForCustomerConversations($conversations, $customer->id)
+        );
+    }
+
+    /**
      * Header + thread payload for a conversation page.
      *
      * @return array{conversation: array<string, mixed>, messages: list<array<string, mixed>>}
@@ -716,6 +763,77 @@ class ShopMessagingService
         }
 
         return $flags;
+    }
+
+    /**
+     * @param  Collection<int, ShopConversation>  $conversations
+     * @return array<int, bool>
+     */
+    private function unreadFlagsForCustomerConversations(Collection $conversations, int $customerUserId): array
+    {
+        $ids = $conversations->pluck('id')->all();
+        if ($ids === []) {
+            return [];
+        }
+
+        $reads = ShopConversationRead::query()
+            ->where('user_id', $customerUserId)
+            ->whereIn('shop_conversation_id', $ids)
+            ->pluck('last_read_at', 'shop_conversation_id');
+
+        $latestStaffMessage = ShopConversationMessage::query()
+            ->select('shop_conversation_id', DB::raw('MAX(created_at) as latest_at'))
+            ->whereIn('shop_conversation_id', $ids)
+            ->whereIn('sender_role', [
+                ShopConversationMessage::ROLE_VENDOR,
+                ShopConversationMessage::ROLE_OWNER_MANAGER,
+            ])
+            ->groupBy('shop_conversation_id')
+            ->pluck('latest_at', 'shop_conversation_id');
+
+        $flags = [];
+        foreach ($ids as $id) {
+            $latest = $latestStaffMessage[$id] ?? null;
+            if (! $latest) {
+                $flags[$id] = false;
+                continue;
+            }
+
+            $lastRead = $reads[$id] ?? null;
+            if (! $lastRead) {
+                $flags[$id] = true;
+                continue;
+            }
+
+            $flags[$id] = Carbon::parse($latest)->gt(Carbon::parse($lastRead));
+        }
+
+        return $flags;
+    }
+
+    /**
+     * @return Collection<int, ShopConversation>
+     */
+    private function customerConversations(User $customer, bool $withShop = true): Collection
+    {
+        $query = ShopConversation::query()
+            ->where('customer_user_id', $customer->id)
+            ->orderByDesc('last_message_at')
+            ->orderByDesc('id');
+
+        if ($withShop) {
+            $query->with(['shop']);
+        }
+
+        return $query->get();
+    }
+
+    /**
+     * @param  array<int, bool>  $flags
+     */
+    private function countUnreadFlags(array $flags): int
+    {
+        return collect($flags)->filter()->count();
     }
 
     private function senderRole(User $user): string
