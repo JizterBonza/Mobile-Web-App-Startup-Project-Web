@@ -30,6 +30,10 @@ export function toUiMessage(payloadMessage, user) {
         message.file_label = payloadMessage.file_label
         message.file_size = payloadMessage.file_size
         message.file_url = payloadMessage.file_url
+    } else if (payloadMessage.type === 'order_update') {
+        message.body = payloadMessage.body || ''
+        message.products = payloadMessage.products || []
+        message.total = payloadMessage.total
     } else if (payloadMessage.type === 'product') {
         message.body = payloadMessage.body || ''
         message.product = payloadMessage.product

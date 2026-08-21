@@ -15,7 +15,7 @@ import {
 } from 'lucide-react'
 import VendorKlasmeytLayout from '../../Layouts/VendorKlasmeytLayout'
 import CameraCaptureModal from '../../Components/CameraCaptureModal'
-import ProductListPicker, { ProductMessageCard } from '../../Components/ProductListPicker'
+import ProductListPicker, { OrderUpdateMessage, ProductMessageCard } from '../../Components/ProductListPicker'
 import { useShopConversationMessages } from '../../hooks/useShopConversationMessages'
 
 const ATTACHMENT_OPTIONS = [
@@ -132,6 +132,15 @@ function ChatBubble({ message }) {
                 {message.type === 'file' ? (
                     <div className={isOutgoing ? 'ml-auto' : ''}>
                         <FileAttachment message={message} />
+                    </div>
+                ) : message.type === 'order_update' ? (
+                    <div className={isOutgoing ? 'ml-auto' : ''}>
+                        <OrderUpdateMessage
+                            body={message.body}
+                            products={message.products}
+                            total={message.total}
+                            tone={isOutgoing ? 'outgoing' : 'incoming'}
+                        />
                     </div>
                 ) : message.type === 'product' ? (
                     <div className={isOutgoing ? 'ml-auto inline-block' : 'inline-block'}>

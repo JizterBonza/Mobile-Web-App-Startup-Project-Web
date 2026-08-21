@@ -27,6 +27,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'session.valid' => \App\Http\Middleware\CheckSessionValidity::class,
             'user.type' => \App\Http\Middleware\CheckUserType::class,
+            'payout.automation' => \App\Http\Middleware\AuthenticatePayoutAutomation::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {

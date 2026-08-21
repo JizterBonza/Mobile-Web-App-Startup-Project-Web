@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Concerns;
 
+use App\Services\OrderStatusCustomerMessageService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
@@ -282,6 +283,15 @@ trait ManagesShopOrders
         return (int) (DB::table('order_item_status')->where('stat_description', 'Preparing')->value('id') ?? 0);
     }
 
+    protected function deliveredItemStatusId(): int
+    {
+        if (! Schema::hasTable('order_item_status')) {
+            return 0;
+        }
+
+        return (int) (DB::table('order_item_status')->where('stat_description', 'Delivered')->value('id') ?? 0);
+    }
+
     /**
      * @param  array<int>  $shopIds
      */
@@ -377,6 +387,21 @@ trait ManagesShopOrders
             3       => 'Mark Ready for Pickup',
             default => 'Mark Order Ready',
         };
+    }
+
+    /**
+     * Send a shop-chat update to the customer for the given order status.
+     *
+     * @param  array<int, int>  $shopIds
+     */
+    protected function notifyCustomerOfShopOrderStatus(int $orderId, array $shopIds, string $statusDescription): void
+    {
+        app(OrderStatusCustomerMessageService::class)->notifyForShops(
+            $orderId,
+            $shopIds,
+            $statusDescription,
+            auth()->user(),
+        );
     }
 
     protected function logShopOrderEvent(
