@@ -918,6 +918,7 @@ class AgrivetController extends Controller
                 'bank_name' => $shop->bank_name,
                 'account_name' => $shop->account_name,
                 'account_number' => $shop->account_number,
+                'wallet_balance' => (float) ($shop->wallet_balance ?? 0),
                 'created_at' => $shop->created_at->format('Y-m-d H:i:s'),
             ],
             'vendors' => $vendors,

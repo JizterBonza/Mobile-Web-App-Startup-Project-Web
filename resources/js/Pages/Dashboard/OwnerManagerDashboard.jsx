@@ -99,6 +99,7 @@ export default function OwnerManagerDashboard({ auth, agrivet, shops = [], stats
                                             storeStats.find((s) => s.id === shop.id) ?? {}
                                         const storeRevenue = storeStat.revenue ?? 0
                                         const storeOrders = storeStat.orders ?? 0
+                                        const storeWallet = storeStat.wallet ?? shop.wallet_balance ?? 0
                                         const growthRates = ['+12%', '+8%', '+15%']
                                         const growthRate = growthRates[index] ?? '+10%'
 
@@ -142,7 +143,7 @@ export default function OwnerManagerDashboard({ auth, agrivet, shops = [], stats
                                                     </div>
                                                 </div>
 
-                                                <div className="grid grid-cols-2 gap-3">
+                                                <div className="grid grid-cols-3 gap-3">
                                                     <div>
                                                         <p className="text-xs text-[#6B7280] mb-1">
                                                             Revenue
@@ -157,6 +158,14 @@ export default function OwnerManagerDashboard({ auth, agrivet, shops = [], stats
                                                         </p>
                                                         <p className="text-base font-bold text-[#102059]">
                                                             {storeOrders}
+                                                        </p>
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-xs text-[#6B7280] mb-1">
+                                                            Wallet
+                                                        </p>
+                                                        <p className="text-base font-bold text-[#102059]">
+                                                            ₱{Number(storeWallet).toLocaleString()}
                                                         </p>
                                                     </div>
                                                 </div>

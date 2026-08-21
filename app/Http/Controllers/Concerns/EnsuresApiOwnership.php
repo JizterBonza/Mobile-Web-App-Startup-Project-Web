@@ -103,9 +103,25 @@ trait EnsuresApiOwnership
         ], 403);
     }
 
+    protected function isPayoutAutomation(Request $request): bool
+    {
+        return (bool) $request->attributes->get('payout_automation', false);
+    }
+
     protected function ensureStaffOrVendor(Request $request): ?JsonResponse
     {
+        if ($this->isPayoutAutomation($request)) {
+            return null;
+        }
+
         $user = $request->user();
+
+        if (! $user) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Unauthenticated.',
+            ], 401);
+        }
 
         if ($this->isStaff($user) || $user->user_type === 'vendor' || $user->user_type === 'owner_manager') {
             return null;
@@ -141,5 +157,14 @@ trait EnsuresApiOwnership
             'success' => false,
             'message' => 'You are not authorized to perform this action.',
         ], 403);
+    }
+
+    protected function isStaff(?User $user): bool
+    {
+        if (! $user) {
+            return false;
+        }
+
+        return in_array($user->user_type, [User::TYPE_SUPER_ADMIN, User::TYPE_ADMIN], true);
     }
 }

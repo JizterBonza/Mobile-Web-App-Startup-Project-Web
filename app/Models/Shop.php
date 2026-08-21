@@ -43,6 +43,7 @@ class Shop extends Model
         'bank_name',
         'account_name',
         'account_number',
+        'wallet_balance',
     ];
 
     /**
@@ -57,6 +58,7 @@ class Shop extends Model
             'shop_long' => 'decimal:7',
             'average_rating' => 'decimal:2',
             'total_reviews' => 'integer',
+            'wallet_balance' => 'decimal:2',
             'created_at' => 'datetime',
             'updated_at' => 'datetime',
         ];
@@ -138,6 +140,16 @@ class Shop extends Model
     public function conversations()
     {
         return $this->hasMany(ShopConversation::class);
+    }
+
+    public function payouts()
+    {
+        return $this->hasMany(Payout::class);
+    }
+
+    public function walletTransactions()
+    {
+        return $this->hasMany(ShopWalletTransaction::class);
     }
 }
 

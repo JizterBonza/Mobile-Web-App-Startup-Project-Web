@@ -20,6 +20,7 @@ import {
   UserCog,
   UserPlus,
   Users,
+  Wallet,
   X,
 } from 'lucide-react'
 import {
@@ -2207,27 +2208,54 @@ export default function AgrivetStoreInformation({
                       <h3 className="text-lg font-bold text-[#102059]">Financial Performance</h3>
                     </div>
 
-                    <div className="bg-white rounded-lg border border-[#E5E7EB] p-4 max-w-sm relative group">
-                      <div className="flex items-center justify-between mb-3">
-                        <div className="w-10 h-10 bg-[#FFEBEE] rounded-full flex items-center justify-center">
-                          <TrendingUp className="w-5 h-5 text-[#E20E28]" />
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="bg-white rounded-lg border border-[#E5E7EB] p-4 relative group">
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="w-10 h-10 bg-[#FFEBEE] rounded-full flex items-center justify-center">
+                            <TrendingUp className="w-5 h-5 text-[#E20E28]" />
+                          </div>
+                          <InsightTrendBadge trend={periodInsights.trends?.revenue} />
                         </div>
-                        <InsightTrendBadge trend={periodInsights.trends?.revenue} />
+                        <h3 className="text-2xl font-bold text-[#102059] mb-1">
+                          {formatInsightCurrency(periodInsights.revenue)}
+                        </h3>
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm text-[#65676B]">Revenue Growth</p>
+                          <div className="relative">
+                            <Info className="w-3.5 h-3.5 text-[#E20E28] cursor-help" />
+                            <div className="absolute left-0 bottom-full mb-2 w-64 bg-[#102059] text-white text-xs rounded-lg p-3 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-10 shadow-lg">
+                              <p className="font-semibold mb-1">Financial Health</p>
+                              <p>
+                                Total income growth vs previous period. Key profitability indicator. Use to assess
+                                business viability, plan expansion, and make investment decisions.
+                              </p>
+                              <div className="absolute left-4 top-full w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-[#102059]" />
+                            </div>
+                          </div>
+                        </div>
                       </div>
-                      <h3 className="text-2xl font-bold text-[#102059] mb-1">
-                        {formatInsightCurrency(periodInsights.revenue)}
-                      </h3>
-                      <div className="flex items-center gap-2">
-                        <p className="text-sm text-[#65676B]">Revenue Growth</p>
-                        <div className="relative">
-                          <Info className="w-3.5 h-3.5 text-[#E20E28] cursor-help" />
-                          <div className="absolute left-0 bottom-full mb-2 w-64 bg-[#102059] text-white text-xs rounded-lg p-3 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-10 shadow-lg">
-                            <p className="font-semibold mb-1">Financial Health</p>
-                            <p>
-                              Total income growth vs previous period. Key profitability indicator. Use to assess
-                              business viability, plan expansion, and make investment decisions.
-                            </p>
-                            <div className="absolute left-4 top-full w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-[#102059]" />
+
+                      <div className="bg-white rounded-lg border border-[#E5E7EB] p-4 relative group">
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="w-10 h-10 bg-[#E8F5E9] rounded-full flex items-center justify-center">
+                            <Wallet className="w-5 h-5 text-[#00C950]" />
+                          </div>
+                        </div>
+                        <h3 className="text-2xl font-bold text-[#102059] mb-1">
+                          {formatInsightCurrency(shop?.wallet_balance)}
+                        </h3>
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm text-[#65676B]">Wallet</p>
+                          <div className="relative">
+                            <Info className="w-3.5 h-3.5 text-[#00C950] cursor-help" />
+                            <div className="absolute left-0 bottom-full mb-2 w-64 bg-[#102059] text-white text-xs rounded-lg p-3 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-10 shadow-lg">
+                              <p className="font-semibold mb-1">Available for Payout</p>
+                              <p>
+                                Current shop wallet balance from completed sales, minus previous payouts.
+                                This is the amount waiting to be transferred to the shop bank account.
+                              </p>
+                              <div className="absolute left-4 top-full w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-[#102059]" />
+                            </div>
                           </div>
                         </div>
                       </div>

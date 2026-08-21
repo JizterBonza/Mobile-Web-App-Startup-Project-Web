@@ -932,6 +932,11 @@ class VendorController extends Controller
                 'updated_at' => now(),
             ]);
 
+        $creditedItem = \App\Models\OrderItem::find($id);
+        if ($creditedItem) {
+            app(\App\Services\ShopWalletService::class)->creditFromOrderItem($creditedItem);
+        }
+
         // If we just moved this item from Preparing to a "Ready" status, check if it was the last Preparing item for this order
         $readyStatusIds = [
             (int) DB::table('order_item_status')->where('stat_description', 'Ready for Pickup')->value('id'),
@@ -971,6 +976,15 @@ class VendorController extends Controller
                             'order_status' => $newOrderStatus,
                             'updated_at' => now(),
                         ]);
+
+                    $readyLabel = DB::table('order_status')->where('id', $newOrderStatus)->value('stat_description');
+                    if (is_string($readyLabel) && $readyLabel !== '') {
+                        $this->notifyCustomerOfShopOrderStatus(
+                            (int) $orderItem->order_id,
+                            [(int) $shop->id],
+                            $readyLabel
+                        );
+                    }
                 }
             }
         }
@@ -996,6 +1010,12 @@ class VendorController extends Controller
                             'order_status' => (int) $preparingOrderStatusId,
                             'updated_at' => now(),
                         ]);
+
+                    $this->notifyCustomerOfShopOrderStatus(
+                        (int) $orderItem->order_id,
+                        [(int) $shop->id],
+                        'Preparing'
+                    );
                 }
             }
         }
@@ -1022,11 +1042,13 @@ class VendorController extends Controller
                 ->with('error', 'You are not associated with any Shop.');
         }
 
+        $deliveredItemStatusId = $this->deliveredItemStatusId();
+
         // Get completed orders through items that belong to this shop
         $completedOrders = DB::table('order_items')
             ->join('items', 'order_items.item_id', '=', 'items.id')
             ->where('items.shop_id', $shop->id)
-            ->where('order_items.item_status', 'delivered')
+            ->where('order_items.item_status', $deliveredItemStatusId)
             ->join('orders', 'order_items.order_id', '=', 'orders.id')
             ->select(
                 'order_items.id',
@@ -1397,6 +1419,12 @@ class VendorController extends Controller
             'Order accepted by vendor.'
         );
 
+        $this->notifyCustomerOfShopOrderStatus(
+            $orderId,
+            $orderShops->pluck('shop_id')->map(fn ($id) => (int) $id)->all(),
+            'Preparing'
+        );
+
         return $this->redirectToVendorStoreOrdersTab()
             ->with('success', 'Order accepted successfully.');
     }
@@ -1510,6 +1538,12 @@ class VendorController extends Controller
             'Preparing',
             $readyStatus['label'],
             'Order marked as ready by vendor.'
+        );
+
+        $this->notifyCustomerOfShopOrderStatus(
+            $orderId,
+            $orderShops->pluck('shop_id')->map(fn ($id) => (int) $id)->all(),
+            $readyStatus['label']
         );
 
         return $this->redirectToVendorStoreOrdersTab()

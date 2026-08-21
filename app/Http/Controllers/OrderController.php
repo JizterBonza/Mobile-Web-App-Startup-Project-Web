@@ -15,6 +15,7 @@ use App\Models\OrderStatus;
 use App\Models\Payment;
 use App\Models\User;
 use App\Services\DeliveryFeeService;
+use App\Services\OrderStatusCustomerMessageService;
 use App\Services\PaymongoService;
 use App\Services\VoucherService;
 use Illuminate\Http\Request;
@@ -396,7 +397,7 @@ class OrderController extends Controller
             $serverSubtotal = 0.0;
             foreach ($data['items'] as $item) {
                 // Lock the item row for update to prevent concurrent modifications
-                $itemModel = Item::with('categoryRelation')->lockForUpdate()->find($item['item_id']);
+                $itemModel = Item::lockForUpdate()->find($item['item_id']);
                 
                 if (!$itemModel) {
                     return response()->json([
@@ -447,7 +448,6 @@ class OrderController extends Controller
                     'original_price' => $originalPrice,
                     'discount_percent_at_purchase' => $discountPercent,
                     'item_name_at_purchase' => $itemModel->item_name,
-                    'category_rate' => $itemModel->categoryRelation?->category_rate,
                 ];
             }
 
@@ -583,7 +583,6 @@ class OrderController extends Controller
                         ?? '';
 
                     $quantity = (int) $item['quantity'];
-                    $categoryRate = $locked['category_rate'] ?? null;
 
                     OrderItem::create([
                         'order_id' => $order->id,
@@ -593,7 +592,7 @@ class OrderController extends Controller
                         'quantity' => $quantity,
                         'price_at_purchase' => (float) $unitPrice,
                         'original_price' => (float) $originalPrice,
-                        'platform_fee' => OrderItem::calculatePlatformFee((float) $unitPrice, $quantity, $categoryRate),
+                        'platform_fee' => 0,
                         'discount_percent_at_purchase' => (float) $discountPercent,
                         'item_status' => 1,
                     ]);
@@ -949,6 +948,9 @@ class OrderController extends Controller
         if ($request->has('order_status')) {
             $newStatus = $request->order_status;
             OrderShop::where('order_id', $order->id)->update(['order_status' => $newStatus]);
+            app(\App\Services\ShopWalletService::class)->syncUncreditedSales(
+                $order->orderShops->pluck('shop_id')->map(fn ($id) => (int) $id)->all()
+            );
         }
         if ($request->has('rider_id')) {
             OrderShop::where('order_id', $order->id)->update(['rider_id' => $request->rider_id]);
@@ -957,6 +959,16 @@ class OrderController extends Controller
         // Create POD entry if status changed to in-transit (status ID: 5)
         if ($newStatus && (int)$newStatus === 5 && $oldStatus != $newStatus) {
             $this->createProofOfDeliveryEntry($order);
+        }
+
+        if ($newStatus && $oldStatus != $newStatus) {
+            $shopIds = $order->orderShops->pluck('shop_id')->map(fn ($id) => (int) $id)->unique()->values()->all();
+            app(OrderStatusCustomerMessageService::class)->notifyForStatusId(
+                (int) $order->id,
+                $shopIds,
+                (int) $newStatus,
+                $request->user()
+            );
         }
 
         // Load relationships
@@ -1016,9 +1028,20 @@ class OrderController extends Controller
             ->where('shop_id', $request->shop_id)
             ->update(['order_status' => $newStatus]);
 
+        app(\App\Services\ShopWalletService::class)->syncUncreditedSales([(int) $request->shop_id]);
+
         // Create POD entry if status changed to in-transit (status ID: 5)
         if ((int)$newStatus === 5 && $oldStatus != $newStatus) {
             $this->createProofOfDeliveryEntry($order);
+        }
+
+        if ($oldStatus != $newStatus) {
+            app(OrderStatusCustomerMessageService::class)->notifyForStatusId(
+                (int) $order->id,
+                [(int) $request->shop_id],
+                (int) $newStatus,
+                $request->user()
+            );
         }
 
         // Load relationships

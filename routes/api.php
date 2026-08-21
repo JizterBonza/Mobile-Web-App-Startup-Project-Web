@@ -16,6 +16,7 @@ use App\Http\Controllers\MobileController;
 use App\Http\Controllers\PaymentMethodController;
 use App\Http\Controllers\ActivityLogController;
 use App\Http\Controllers\PaymentController;
+use App\Http\Controllers\PayoutController;
 use App\Http\Controllers\SearchController;
 use App\Http\Controllers\VoucherApiController;
 use App\Http\Controllers\CustomerShopMessageController;
@@ -195,4 +196,14 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/payment/checkout', [PaymentController::class, 'checkout']);
     Route::get('/payment/checkout-url/{orderId}', [PaymentController::class, 'getCheckoutUrlByOrderId']);
     Route::get('/payment/status/{orderId}', [PaymentController::class, 'getPaymentStatusByOrderId']);
+});
+
+/*
+|--------------------------------------------------------------------------
+| Payout automation (API key or Sanctum)
+|--------------------------------------------------------------------------
+*/
+
+Route::middleware('payout.automation')->group(function () {
+    Route::get('payouts', [PayoutController::class, 'index']);
 });

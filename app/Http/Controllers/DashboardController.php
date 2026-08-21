@@ -54,8 +54,10 @@ class DashboardController extends Controller
             ->whereYear('ordered_at', now()->year)
             ->count();
 
+        $deliveredItemStatusId = $this->deliveredItemStatusId();
+
         $itemsSold = (int) DB::table('order_items')
-            ->where('item_status', 'delivered')
+            ->where('item_status', $deliveredItemStatusId)
             ->sum('quantity');
 
         $avgItemsPerOrder = $ordersTotal > 0 ? round($itemsSold / $ordersTotal, 1) : 0;
@@ -63,9 +65,9 @@ class DashboardController extends Controller
         // Top 5 stores by delivered order revenue
         $topStores = DB::table('shops')
             ->join('agrivets', 'shops.agrivet_id', '=', 'agrivets.id')
-            ->leftJoin('order_items', function ($join) {
+            ->leftJoin('order_items', function ($join) use ($deliveredItemStatusId) {
                 $join->on('order_items.shop_id', '=', 'shops.id')
-                     ->where('order_items.item_status', '=', 'delivered');
+                     ->where('order_items.item_status', '=', $deliveredItemStatusId);
             })
             ->leftJoin('items', 'items.shop_id', '=', 'shops.id')
             ->select(
@@ -167,6 +169,8 @@ class DashboardController extends Controller
             ]);
         }
 
+        $deliveredItemStatusId = $this->deliveredItemStatusId();
+
         $totalOrders = (int) DB::table('order_items')
             ->whereIn('shop_id', $shopIds)
             ->distinct('order_id')
@@ -174,25 +178,25 @@ class DashboardController extends Controller
 
         $itemsSold = (int) DB::table('order_items')
             ->whereIn('shop_id', $shopIds)
-            ->where('item_status', 'delivered')
+            ->where('item_status', $deliveredItemStatusId)
             ->sum('quantity');
 
         $totalRevenue = (float) DB::table('order_items')
             ->whereIn('shop_id', $shopIds)
-            ->where('item_status', 'delivered')
+            ->where('item_status', $deliveredItemStatusId)
             ->selectRaw('COALESCE(SUM(quantity * price_at_purchase), 0) as total')
             ->value('total');
 
         $avgRating = $shops->avg('average_rating') ?? 0;
 
-        $storeStats = $shops->map(function ($shop) {
+        $storeStats = $shops->map(function ($shop) use ($deliveredItemStatusId) {
             $orders = (int) DB::table('order_items')
                 ->where('shop_id', $shop->id)
                 ->distinct('order_id')
                 ->count('order_id');
             $revenue = (float) DB::table('order_items')
                 ->where('shop_id', $shop->id)
-                ->where('item_status', 'delivered')
+                ->where('item_status', $deliveredItemStatusId)
                 ->selectRaw('COALESCE(SUM(quantity * price_at_purchase), 0) as total')
                 ->value('total');
             return [
@@ -202,13 +206,14 @@ class DashboardController extends Controller
                 'average_rating' => $shop->average_rating,
                 'orders'         => $orders,
                 'revenue'        => $revenue,
+                'wallet'         => (float) ($shop->wallet_balance ?? 0),
             ];
         })->values()->toArray();
 
         $topProducts = DB::table('order_items')
             ->join('items', 'order_items.item_id', '=', 'items.id')
             ->whereIn('order_items.shop_id', $shopIds)
-            ->where('order_items.item_status', 'delivered')
+            ->where('order_items.item_status', $deliveredItemStatusId)
             ->select(
                 'items.item_name as name',
                 DB::raw('COALESCE(SUM(order_items.quantity), 0) as quantity'),
@@ -327,7 +332,7 @@ class DashboardController extends Controller
 
         $incomeRows = DB::table('order_items')
             ->where('shop_id', $shop->id)
-            ->where('item_status', 'delivered')
+            ->where('item_status', $this->deliveredItemStatusId())
             ->whereYear('created_at', $year)
             ->whereMonth('created_at', $month)
             ->select(
@@ -611,6 +616,12 @@ class DashboardController extends Controller
             'Order accepted by owner/manager.'
         );
 
+        $this->notifyCustomerOfShopOrderStatus(
+            $orderId,
+            $orderShops->pluck('shop_id')->map(fn ($id) => (int) $id)->all(),
+            'Preparing'
+        );
+
         return redirect()->route('dashboard.owner-manager.orders')
             ->with('success', 'Order accepted successfully.');
     }
@@ -728,6 +739,12 @@ class DashboardController extends Controller
             'Order marked as ready by owner/manager.'
         );
 
+        $this->notifyCustomerOfShopOrderStatus(
+            $orderId,
+            $orderShops->pluck('shop_id')->map(fn ($id) => (int) $id)->all(),
+            $readyStatus['label']
+        );
+
         return redirect()->route('dashboard.owner-manager.orders')
             ->with('success', 'Order marked as ' . $readyStatus['label'] . '.');
     }
@@ -803,17 +820,19 @@ class DashboardController extends Controller
             ->whereYear('ordered_at', now()->year)
             ->count();
 
+        $deliveredItemStatusId = $this->deliveredItemStatusId();
+
         $itemsSold = (int) DB::table('order_items')
-            ->where('item_status', 'delivered')
+            ->where('item_status', $deliveredItemStatusId)
             ->sum('quantity');
 
         $avgItemsPerOrder = $ordersTotal > 0 ? round($itemsSold / $ordersTotal, 1) : 0;
 
         $topStores = DB::table('shops')
             ->join('agrivets', 'shops.agrivet_id', '=', 'agrivets.id')
-            ->leftJoin('order_items', function ($join) {
+            ->leftJoin('order_items', function ($join) use ($deliveredItemStatusId) {
                 $join->on('order_items.shop_id', '=', 'shops.id')
-                     ->where('order_items.item_status', '=', 'delivered');
+                     ->where('order_items.item_status', '=', $deliveredItemStatusId);
             })
             ->leftJoin('items', 'items.shop_id', '=', 'shops.id')
             ->select(

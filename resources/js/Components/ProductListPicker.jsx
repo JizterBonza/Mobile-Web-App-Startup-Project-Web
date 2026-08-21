@@ -238,13 +238,22 @@ export function ProductMessageCard({ product, tone = 'outgoing' }) {
     const unit = product.unit_label || null
     const effective = product.effective_price ?? product.item_price
     const original = product.item_price
+    const quantity = Number(product.quantity)
+    const hasQuantity = Number.isFinite(quantity) && quantity > 0
+    const lineTotal = Number(product.line_total)
+    const hasLineTotal = Number.isFinite(lineTotal)
     const hasDiscount =
-        Number(effective) < Number(original) && Number(product.active_discount_percent) > 0
-    const bubbleTone = tone === 'outgoing' ? 'bg-[#BFDBFE]' : 'bg-[#E5E7EB]'
+        !hasLineTotal &&
+        Number(effective) < Number(original) &&
+        Number(product.active_discount_percent) > 0
+    const bubbleTone =
+        tone === 'outgoing' ? 'bg-[#BFDBFE]' : tone === 'embedded' ? 'bg-white' : 'bg-[#E5E7EB]'
 
     return (
         <div
-            className={`flex max-w-[280px] items-stretch gap-2.5 overflow-hidden rounded-2xl ${bubbleTone} p-2.5 text-left`}
+            className={`flex items-stretch gap-2.5 overflow-hidden rounded-2xl ${
+                tone === 'embedded' ? 'w-full' : 'max-w-[280px]'
+            } ${bubbleTone} p-2.5 text-left`}
         >
             <div className="h-16 w-16 shrink-0 overflow-hidden rounded-xl bg-white/70">
                 {product.image_url ? (
@@ -261,11 +270,22 @@ export function ProductMessageCard({ product, tone = 'outgoing' }) {
             </div>
             <div className="min-w-0 flex-1 py-0.5">
                 <p className="truncate text-sm font-bold text-[#1F2937]" style={{ marginBottom: '0px' }}>{name}</p>
-                {unit && <p className="mt-0.5 text-xs text-[#4B5563]" style={{ marginBottom: '0px' }}>{unit}</p>}
+                {hasQuantity ? (
+                    <p className="mt-0.5 text-xs text-[#4B5563]" style={{ marginBottom: '0px' }}>
+                        Qty {quantity}
+                    </p>
+                ) : unit ? (
+                    <p className="mt-0.5 text-xs text-[#4B5563]" style={{ marginBottom: '0px' }}>{unit}</p>
+                ) : null}
                 <div className="mt-1 flex items-baseline gap-1.5">
                     <span className="text-sm font-bold text-[#1F2937]">
-                        {formatPeso(effective)}
+                        {formatPeso(hasLineTotal ? lineTotal : effective)}
                     </span>
+                    {hasLineTotal && hasQuantity && quantity > 1 && (
+                        <span className="text-xs text-[#6B7280]">
+                            {formatPeso(effective)} each
+                        </span>
+                    )}
                     {hasDiscount && (
                         <span className="text-xs text-[#6B7280] line-through">
                             {formatPeso(original)}
@@ -277,4 +297,34 @@ export function ProductMessageCard({ product, tone = 'outgoing' }) {
     )
 }
 
-export { formatPeso }
+export function OrderUpdateMessage({ body, products = [], total, tone = 'outgoing' }) {
+    const bubbleTone = tone === 'outgoing' ? 'bg-[#BFDBFE] text-[#1F2937]' : 'bg-[#E5E7EB] text-[#1F2937]'
+    const corner = tone === 'outgoing' ? 'rounded-br-md' : 'rounded-bl-md'
+    const hasTotal = total != null && Number.isFinite(Number(total))
+
+    return (
+        <div className={`w-full max-w-[280px] rounded-2xl ${corner} px-3 py-2.5 text-left ${bubbleTone}`}>
+            {body ? (
+                <p className="whitespace-pre-line text-sm leading-relaxed" style={{ marginBottom: 0 }}>
+                    {body}
+                </p>
+            ) : null}
+            {products.length > 0 ? (
+                <div className={`flex flex-col gap-2 ${body ? 'mt-2.5' : ''}`}>
+                    {products.map((product, index) => (
+                        <ProductMessageCard
+                            key={product.order_item_id || product.item_id || index}
+                            product={product}
+                            tone="embedded"
+                        />
+                    ))}
+                </div>
+            ) : null}
+            {hasTotal ? (
+                <p className="mt-2.5 text-sm font-bold" style={{ marginBottom: 0 }}>
+                    Total: {formatPeso(total)}
+                </p>
+            ) : null}
+        </div>
+    )
+}
