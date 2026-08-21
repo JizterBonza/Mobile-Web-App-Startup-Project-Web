@@ -144,10 +144,23 @@ class OrderController extends Controller
 
         $orders = $query->get();
 
+        $data = $orders->toArray();
+        foreach ($data as &$order) {
+            foreach ($order['order_items'] ?? [] as &$orderItem) {
+                if (! isset($orderItem['item'])) {
+                    continue;
+                }
+                $orderItem['item']['item_images'] = $this->firstItemImageUrl(
+                    $orderItem['item']['item_images'] ?? null
+                );
+            }
+        }
+        unset($order, $orderItem);
+
         return response()->json([
             'success' => true,
-            'data' => $orders,
-            'count' => $orders->count()
+            'data' => $data,
+            'count' => count($data),
         ]);
     }
 
@@ -1127,6 +1140,31 @@ class OrderController extends Controller
             'message' => 'Order cancelled successfully',
             'data' => $order
         ]);
+    }
+
+    /**
+     * First image URL from an item_images value (array or JSON string).
+     */
+    private function firstItemImageUrl(mixed $itemImages): ?string
+    {
+        if ($itemImages === null || $itemImages === '') {
+            return null;
+        }
+
+        $decoded = is_string($itemImages) ? json_decode($itemImages, true) : $itemImages;
+        if (! is_array($decoded) || $decoded === []) {
+            return is_string($itemImages) ? $itemImages : null;
+        }
+
+        $first = $decoded[0];
+        if (is_string($first)) {
+            return $first;
+        }
+        if (is_array($first)) {
+            return $first['url'] ?? $first['path'] ?? null;
+        }
+
+        return null;
     }
 }
 

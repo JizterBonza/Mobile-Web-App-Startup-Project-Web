@@ -89,6 +89,7 @@ class CartController extends Controller
         if ($item) {
             $itemData = $item->toArray();
             unset($itemData['active_discount_log']);
+            $itemData['item_images'] = $this->firstItemImageUrl($itemData['item_images'] ?? null);
             $data['item'] = $itemData;
         }
 
@@ -354,5 +355,30 @@ class CartController extends Controller
             'message' => 'Cart cleared successfully',
             'items_removed' => $deleted
         ]);
+    }
+
+    /**
+     * First image URL from an item_images value (array or JSON string).
+     */
+    private function firstItemImageUrl(mixed $itemImages): ?string
+    {
+        if ($itemImages === null || $itemImages === '') {
+            return null;
+        }
+
+        $decoded = is_string($itemImages) ? json_decode($itemImages, true) : $itemImages;
+        if (! is_array($decoded) || $decoded === []) {
+            return is_string($itemImages) ? $itemImages : null;
+        }
+
+        $first = $decoded[0];
+        if (is_string($first)) {
+            return $first;
+        }
+        if (is_array($first)) {
+            return $first['url'] ?? $first['path'] ?? null;
+        }
+
+        return null;
     }
 }

@@ -10,8 +10,6 @@ class KlasrumContent extends Model
     public const STATUS_DRAFT = 'draft';
     public const STATUS_PUBLISHED = 'published';
 
-    public const CATEGORIES = ['Health', 'Nutrition', 'Training', 'News', 'General'];
-
     protected $table = 'klasrum_contents';
 
     protected $fillable = [
@@ -19,7 +17,7 @@ class KlasrumContent extends Model
         'description',
         'heading',
         'body',
-        'category',
+        'category_id',
         'caption',
         'cover_path',
         'media_path',
@@ -33,10 +31,16 @@ class KlasrumContent extends Model
     protected function casts(): array
     {
         return [
+            'category_id' => 'integer',
             'published_at' => 'datetime',
             'created_at' => 'datetime',
             'updated_at' => 'datetime',
         ];
+    }
+
+    public function category(): BelongsTo
+    {
+        return $this->belongsTo(KlasrumCategory::class, 'category_id');
     }
 
     public function creator(): BelongsTo
@@ -72,13 +76,61 @@ class KlasrumContent extends Model
         return $this->status === self::STATUS_PUBLISHED;
     }
 
+    public function scopePublished($query)
+    {
+        return $query->where('status', self::STATUS_PUBLISHED);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function toMobileListArray(): array
+    {
+        return [
+            'id' => $this->id,
+            'title' => $this->title ?: 'Untitled',
+            'description' => $this->description,
+            'heading' => $this->heading,
+            'category_id' => $this->category_id,
+            'category' => $this->category ? [
+                'id' => $this->category->id,
+                'name' => $this->category->name,
+            ] : null,
+            'cover_url' => $this->absoluteFileUrl($this->cover_path),
+            'published_at' => $this->published_at?->toIso8601String(),
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function toMobileDetailArray(): array
+    {
+        return [
+            ...$this->toMobileListArray(),
+            'body' => $this->body,
+            'caption' => $this->caption,
+            'media_url' => $this->absoluteFileUrl($this->media_path),
+            'media_type' => $this->media_type,
+        ];
+    }
+
+    private function absoluteFileUrl(?string $path): ?string
+    {
+        if (! $path) {
+            return null;
+        }
+
+        return url('/storage/' . ltrim($path, '/'));
+    }
+
     public function toListArray(): array
     {
         return [
             'id' => $this->id,
             'title' => $this->title ?: 'Untitled',
             'description' => $this->description,
-            'category' => $this->category,
+            'category' => $this->category?->name,
             'status' => $this->status,
             'publishedAt' => $this->published_at?->format('F j, Y'),
         ];
@@ -92,7 +144,8 @@ class KlasrumContent extends Model
             'description' => $this->description ?? '',
             'heading' => $this->heading ?? '',
             'body' => $this->body ?? '',
-            'category' => $this->category ?? '',
+            'category_id' => $this->category_id,
+            'category' => $this->category?->name ?? '',
             'caption' => $this->caption ?? '',
             'cover_url' => $this->coverUrl(),
             'media_url' => $this->mediaUrl(),
