@@ -4,6 +4,8 @@ namespace App\Services;
 
 use App\Events\ShopMessageSent;
 use App\Models\Item;
+use App\Models\Notification;
+use App\Models\OrderItem;
 use App\Models\Shop;
 use App\Models\ShopConversation;
 use App\Models\ShopConversationAttachment;
@@ -232,10 +234,29 @@ class ShopMessagingService
             abort(422, 'Product does not belong to this shop.');
         }
 
+        return $this->sendProductSnapshotMessage(
+            $conversation,
+            $sender,
+            $this->productMetadataFromItem($item),
+            $body,
+        );
+    }
+
+    /**
+     * Share a product snapshot (order item or listing) as a product message.
+     *
+     * @param  array<string, mixed>  $metadata
+     */
+    public function sendProductSnapshotMessage(
+        ShopConversation $conversation,
+        User $sender,
+        array $metadata,
+        string $body = '',
+        bool $notify = true,
+    ): ShopConversationMessage {
         $sender->loadMissing('userDetail');
         $role = $this->senderRole($sender);
         $trimmedBody = trim($body);
-        $metadata = $this->productMetadataFromItem($item);
 
         $message = DB::transaction(function () use ($conversation, $sender, $role, $trimmedBody, $metadata) {
             $message = ShopConversationMessage::create([
@@ -258,6 +279,58 @@ class ShopMessagingService
             return $message->fresh(['attachments', 'sender.userDetail']);
         });
 
+        if ($notify) {
+            $this->notifyCounterpart($conversation, $sender, $message);
+        }
+        $this->broadcastMessage($conversation->fresh(), $message);
+
+        return $message;
+    }
+
+    /**
+     * Send a single order-status update that includes product cards and a total.
+     *
+     * @param  list<array<string, mixed>>  $products
+     * @param  array<string, mixed>  $extra
+     */
+    public function sendOrderUpdateMessage(
+        ShopConversation $conversation,
+        User $sender,
+        string $body,
+        array $products = [],
+        ?float $total = null,
+        array $extra = [],
+    ): ShopConversationMessage {
+        $sender->loadMissing('userDetail');
+        $role = $this->senderRole($sender);
+        $trimmedBody = trim($body);
+        $metadata = array_merge($extra, [
+            'products' => array_values($products),
+            'total' => $total,
+        ]);
+
+        $message = DB::transaction(function () use ($conversation, $sender, $role, $trimmedBody, $metadata) {
+            $message = ShopConversationMessage::create([
+                'shop_conversation_id' => $conversation->id,
+                'sender_user_id' => $sender->id,
+                'sender_role' => $role,
+                'type' => ShopConversationMessage::TYPE_ORDER_UPDATE,
+                'body' => $trimmedBody !== '' ? $trimmedBody : null,
+                'metadata' => $metadata,
+            ]);
+
+            $preview = $this->buildPreview($message, $trimmedBody);
+            $conversation->update([
+                'last_message_at' => now(),
+                'last_message_preview' => $preview,
+            ]);
+
+            $this->markRead($conversation, $sender);
+
+            return $message->fresh(['attachments', 'sender.userDetail']);
+        });
+
+        $this->notifyCounterpart($conversation, $sender, $message);
         $this->broadcastMessage($conversation->fresh(), $message);
 
         return $message;
@@ -321,6 +394,53 @@ class ShopMessagingService
             'item_status' => $item->item_status,
             'is_bundle' => (bool) $item->is_bundle,
         ];
+    }
+
+    /**
+     * Product card snapshot from an order line (image, paid price, ordered qty, line total).
+     *
+     * @return array<string, mixed>
+     */
+    public function productMetadataFromOrderItem(OrderItem $orderItem): array
+    {
+        $orderItem->loadMissing('item');
+        $item = $orderItem->item;
+        $base = $item ? $this->productMetadataFromItem($item) : [
+            'item_id' => (int) $orderItem->item_id,
+            'product_name' => 'Item',
+            'item_price' => 0.0,
+            'effective_price' => 0.0,
+            'active_discount_percent' => 0.0,
+            'image_url' => null,
+            'unit_label' => null,
+            'weight' => null,
+            'metric' => null,
+            'item_quantity' => 0,
+            'item_status' => null,
+            'is_bundle' => false,
+        ];
+
+        $name = trim((string) ($orderItem->item_name_at_purchase ?? ''));
+        if ($name === '') {
+            $name = trim((string) ($base['product_name'] ?? 'Item'));
+        }
+
+        $unitPrice = round((float) $orderItem->price_at_purchase, 2);
+        $listPrice = round((float) ($orderItem->original_price ?? $orderItem->price_at_purchase), 2);
+        $quantity = max(0, (int) $orderItem->quantity);
+        $discount = (float) ($orderItem->discount_percent_at_purchase ?? 0);
+
+        return array_merge($base, [
+            'item_id' => (int) ($orderItem->item_id ?: ($base['item_id'] ?? 0)),
+            'product_name' => $name !== '' ? $name : 'Item',
+            'item_price' => $listPrice,
+            'effective_price' => $unitPrice,
+            'active_discount_percent' => $discount,
+            'quantity' => $quantity,
+            'line_total' => round($unitPrice * $quantity, 2),
+            'order_id' => (int) $orderItem->order_id,
+            'order_item_id' => (int) $orderItem->id,
+        ]);
     }
 
     private function itemImageUrl(Item $item): ?string
@@ -412,6 +532,10 @@ class ShopMessagingService
         } elseif ($message->type === ShopConversationMessage::TYPE_PRODUCT) {
             $formatted['body'] = $message->body ?? '';
             $formatted['product'] = $message->metadata;
+        } elseif ($message->type === ShopConversationMessage::TYPE_ORDER_UPDATE) {
+            $formatted['body'] = $message->body ?? '';
+            $formatted['products'] = $message->metadata['products'] ?? [];
+            $formatted['total'] = $message->metadata['total'] ?? null;
         } else {
             $formatted['body'] = $message->body ?? '';
         }
@@ -558,6 +682,14 @@ class ShopMessagingService
         if ($message->type === ShopConversationMessage::TYPE_PRODUCT) {
             $base['body'] = $message->body ?? '';
             $base['product'] = $message->metadata;
+
+            return $base;
+        }
+
+        if ($message->type === ShopConversationMessage::TYPE_ORDER_UPDATE) {
+            $base['body'] = $message->body ?? '';
+            $base['products'] = $message->metadata['products'] ?? [];
+            $base['total'] = $message->metadata['total'] ?? null;
 
             return $base;
         }
@@ -817,9 +949,89 @@ class ShopMessagingService
         return match ($message->type) {
             ShopConversationMessage::TYPE_IMAGES => 'Sent a photo',
             ShopConversationMessage::TYPE_FILE => 'Sent a file',
-            ShopConversationMessage::TYPE_PRODUCT => 'Shared a product',
+            ShopConversationMessage::TYPE_PRODUCT => $this->productPreview($message),
+            ShopConversationMessage::TYPE_ORDER_UPDATE => 'Order update',
             default => 'New message',
         };
+    }
+
+    private function productPreview(ShopConversationMessage $message): string
+    {
+        $name = trim((string) ($message->metadata['product_name'] ?? ''));
+        $quantity = (int) ($message->metadata['quantity'] ?? 0);
+        $lineTotal = $message->metadata['line_total'] ?? null;
+
+        if ($name !== '' && $quantity > 0 && is_numeric($lineTotal)) {
+            return Str::limit($name.' (qty '.$quantity.')', 180);
+        }
+
+        return $name !== '' ? Str::limit($name, 180) : 'Shared a product';
+    }
+
+    private function notifyCounterpart(
+        ShopConversation $conversation,
+        User $sender,
+        ShopConversationMessage $message
+    ): void {
+        $conversation->loadMissing('shop', 'customer.userDetail');
+        $preview = $conversation->fresh()->last_message_preview ?? 'New message';
+
+        if ($message->isStaffMessage()) {
+            $customerId = (int) $conversation->customer_user_id;
+            if ($customerId === (int) $sender->id) {
+                return;
+            }
+
+            Notification::createForUser(
+                $customerId,
+                'shop_message',
+                $conversation->shop->shop_name ?? 'New message',
+                $preview,
+                'messages',
+                $conversation,
+                [
+                    'shop_id' => $conversation->shop_id,
+                    'conversation_id' => $conversation->id,
+                ],
+            );
+
+            return;
+        }
+
+        // Customer → notify assigned vendors + owner/manager of the agrivet
+        $shop = $conversation->shop;
+        $recipientIds = $shop->vendors()->pluck('users.id')->all();
+
+        $ownerManagerId = User::query()
+            ->where('user_type', User::TYPE_OWNER_MANAGER)
+            ->where('agrivet_id', $shop->agrivet_id)
+            ->value('id');
+
+        if ($ownerManagerId) {
+            $recipientIds[] = (int) $ownerManagerId;
+        }
+
+        $customerName = $this->displayName($conversation->customer);
+        $title = "Message from {$customerName}";
+
+        foreach (array_unique($recipientIds) as $recipientId) {
+            if ((int) $recipientId === (int) $sender->id) {
+                continue;
+            }
+
+            Notification::createForUser(
+                (int) $recipientId,
+                'shop_message',
+                $title,
+                $preview,
+                'messages',
+                $conversation,
+                [
+                    'shop_id' => $conversation->shop_id,
+                    'conversation_id' => $conversation->id,
+                ],
+            );
+        }
     }
 
     private function displayName(?User $user): string

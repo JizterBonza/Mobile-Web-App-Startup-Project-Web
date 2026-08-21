@@ -16,6 +16,8 @@ class ShopConversationMessage extends Model
 
     public const TYPE_PRODUCT = 'product';
 
+    public const TYPE_ORDER_UPDATE = 'order_update';
+
     public const ROLE_CUSTOMER = 'customer';
 
     public const ROLE_VENDOR = 'vendor';
