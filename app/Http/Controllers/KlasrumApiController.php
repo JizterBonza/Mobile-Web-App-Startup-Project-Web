@@ -30,7 +30,7 @@ class KlasrumApiController extends Controller
     {
         $query = KlasrumContent::query()
             ->with('category')
-            ->where('status', KlasrumContent::STATUS_PUBLISHED);
+            ->published();
 
         if ($request->filled('category_id')) {
             $query->where('category_id', $request->integer('category_id'));
@@ -58,11 +58,28 @@ class KlasrumApiController extends Controller
         ]);
     }
 
+    public function contents(): JsonResponse
+    {
+        $contents = KlasrumContent::query()
+            ->with('category')
+            ->published()
+            ->orderByDesc('published_at')
+            ->orderByDesc('id')
+            ->get()
+            ->map(fn (KlasrumContent $content) => $content->toMobileDetailArray());
+
+        return response()->json([
+            'success' => true,
+            'data' => $contents,
+            'count' => $contents->count(),
+        ]);
+    }
+
     public function show(int $id): JsonResponse
     {
         $content = KlasrumContent::query()
             ->with('category')
-            ->where('status', KlasrumContent::STATUS_PUBLISHED)
+            ->published()
             ->find($id);
 
         if (! $content) {

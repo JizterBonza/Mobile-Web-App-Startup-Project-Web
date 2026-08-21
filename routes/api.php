@@ -48,6 +48,7 @@ Route::get('categories', [CategoryController::class, 'index']);
 Route::get('categories/{id}', [CategoryController::class, 'show']);
 
 Route::get('klasrum/categories', [KlasrumApiController::class, 'categories']);
+Route::get('klasrum/contents', [KlasrumApiController::class, 'contents']);
 Route::get('klasrum', [KlasrumApiController::class, 'index']);
 Route::get('klasrum/{id}', [KlasrumApiController::class, 'show']);
 

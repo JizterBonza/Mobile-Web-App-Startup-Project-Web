@@ -76,6 +76,11 @@ class KlasrumContent extends Model
         return $this->status === self::STATUS_PUBLISHED;
     }
 
+    public function scopePublished($query)
+    {
+        return $query->where('status', self::STATUS_PUBLISHED);
+    }
+
     /**
      * @return array<string, mixed>
      */
