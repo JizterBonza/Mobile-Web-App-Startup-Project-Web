@@ -23,6 +23,7 @@ class ProofOfDelivery extends Model
      */
     protected $fillable = [
         'order_id',
+        'order_shop_id',
         'rider_id',
         'latitude',
         'longitude',
@@ -54,6 +55,11 @@ class ProofOfDelivery extends Model
         return $this->belongsTo(Order::class, 'order_id');
     }
 
+    public function orderShop()
+    {
+        return $this->belongsTo(OrderShop::class);
+    }
+
     /**
      * Get the order detail for the proof of delivery (accessed through order relationship).
      * This is an accessor that accesses OrderDetail through the Order relationship.
@@ -63,6 +69,5 @@ class ProofOfDelivery extends Model
         return $this->order?->orderDetail;
     }
 }
-
 
 

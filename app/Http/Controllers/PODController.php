@@ -6,15 +6,24 @@ use App\Http\Controllers\Concerns\EnsuresApiOwnership;
 use App\Models\ProofOfDelivery;
 use App\Models\OrderDetail;
 use App\Models\Order;
+use App\Models\OrderShop;
+use App\Models\User;
+use App\Services\OrderStatusTransitionService;
+use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 
 class PODController extends Controller
 {
     use EnsuresApiOwnership;
+
+    public function __construct(
+        private readonly OrderStatusTransitionService $statusTransitions,
+    ) {}
 
     /**
      * Store a new proof of delivery.
@@ -27,12 +36,13 @@ class PODController extends Controller
         // Validate the request
         $validator = Validator::make($request->all(), [
             'orderId' => 'required|exists:orders,id',
+            'orderShopId' => 'nullable|integer|exists:order_shops,id',
             'riderId' => 'nullable|exists:users,id',
             'image' => 'required|image|mimes:jpeg,png,jpg,gif,webp|max:5120',
             'latitude' => 'required|numeric|between:-90,90',
             'longitude' => 'required|numeric|between:-180,180',
             'remarks' => 'nullable|string|max:1000',
-            'status' => 'nullable|string|in:pending,delivered,failed',
+            'status' => 'nullable|string|in:delivered,failed',
         ]);
 
         if ($validator->fails()) {
@@ -41,10 +51,6 @@ class PODController extends Controller
                 'message' => 'Validation failed',
                 'errors' => $validator->errors()
             ], 422);
-        }
-
-        if ($response = $this->ensureRiderOrStaff($request)) {
-            return $response;
         }
 
         // Find the order using orders.id sent by the app
@@ -56,10 +62,6 @@ class PODController extends Controller
             ], 404);
         }
 
-        if ($response = $this->forbidUnlessOrderAccess($request, $order)) {
-            return $response;
-        }
-
         // Find the order detail using order_detail_id from the order
         $orderDetail = OrderDetail::find($order->order_detail_id);
         if (!$orderDetail) {
@@ -69,47 +71,71 @@ class PODController extends Controller
             ], 404);
         }
 
-        // Rider id: auth user for riders; optional override only for staff
-        $riderId = $this->authUserId($request);
-        if ($request->filled('riderId')) {
-            if ($response = $this->ensureSelfOrStaffOrSameRider($request, $request->riderId)) {
-                return $response;
-            }
-            $riderId = (int) $request->riderId;
-        } elseif (! $this->isStaff($request->user())) {
-            $assigned = DB::table('order_shops')
-                ->where('order_id', $order->id)
-                ->where('rider_id', $riderId)
-                ->exists();
-
-            if (! $assigned) {
+        if ($request->filled('orderShopId')) {
+            $orderShop = $order->orderShops->firstWhere('id', (int) $request->orderShopId);
+            if (! $orderShop) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'You are not assigned to this order.',
-                ], 403);
+                    'message' => 'The selected order shop does not belong to this order.',
+                ], 422);
             }
+        } elseif ($order->orderShops->count() === 1) {
+            $orderShop = $order->orderShops->first();
         } else {
-            $riderId = DB::table('order_shops')
-                ->where('order_id', $order->id)
-                ->whereNotNull('rider_id')
-                ->value('rider_id') ?? $riderId;
+            return response()->json([
+                'success' => false,
+                'message' => 'orderShopId is required for a multi-shop order.',
+                'errors' => ['orderShopId' => ['Select the shop leg this proof belongs to.']],
+            ], 422);
+        }
+
+        $actor = $request->user();
+        if ($actor->user_type !== User::TYPE_RIDER
+            || $orderShop->rider_id === null
+            || (int) $orderShop->rider_id !== (int) $actor->id
+        ) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Only the rider assigned to this shop order may upload proof of delivery.',
+            ], 403);
+        }
+
+        if ($request->filled('riderId') && (int) $request->riderId !== (int) $actor->id) {
+            return response()->json([
+                'success' => false,
+                'message' => 'riderId does not match the authenticated rider.',
+            ], 403);
+        }
+
+        $inTransitStatusId = DB::table('order_status')
+            ->where('stat_description', 'In-Transit')
+            ->value('id');
+        if ((int) $orderShop->order_status !== (int) $inTransitStatusId) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Proof may only be submitted while this shop order is in transit.',
+            ], 422);
         }
 
         try {
-            // Check if POD entry already exists for this order
-            $proofOfDelivery = ProofOfDelivery::where('order_id', $order->id)->first();
+            DB::beginTransaction();
+
+            $orderShop = OrderShop::query()->lockForUpdate()->findOrFail($orderShop->id);
+            if ((int) $orderShop->order_status !== (int) $inTransitStatusId) {
+                throw ValidationException::withMessages([
+                    'orderShopId' => ['This shop order is no longer in transit.'],
+                ]);
+            }
+
+            // One proof lifecycle per shop leg.
+            $proofOfDelivery = ProofOfDelivery::where('order_shop_id', $orderShop->id)
+                ->lockForUpdate()
+                ->first();
+            $oldImagePath = $proofOfDelivery?->image_path;
 
             // Handle image upload
             $imagePath = null;
             if ($request->hasFile('image')) {
-                // If updating existing POD, delete old image if exists
-                if ($proofOfDelivery && $proofOfDelivery->image_path) {
-                    $oldPath = str_replace('/storage/', '', $proofOfDelivery->image_path);
-                    if (Storage::disk('public')->exists($oldPath)) {
-                        Storage::disk('public')->delete($oldPath);
-                    }
-                }
-
                 // Generate a unique filename to prevent conflicts
                 $filename = Str::uuid() . '_' . time() . '.' . $request->file('image')->getClientOriginalExtension();
 
@@ -127,7 +153,7 @@ class PODController extends Controller
                     'longitude' => $request->longitude,
                     'image_path' => $imagePath,
                     'remarks' => $request->remarks,
-                    'status' => $request->status ?? 'pending',
+                    'status' => $request->input('status', 'delivered'),
                 ]);
 
                 $message = 'Proof of delivery updated successfully';
@@ -136,16 +162,57 @@ class PODController extends Controller
                 // Create new proof of delivery record using order id
                 $proofOfDelivery = ProofOfDelivery::create([
                     'order_id' => $order->id,
-                    'rider_id' => $riderId,
+                    'order_shop_id' => $orderShop->id,
+                    'rider_id' => $actor->id,
                     'latitude' => $request->latitude,
                     'longitude' => $request->longitude,
                     'image_path' => $imagePath,
                     'remarks' => $request->remarks,
-                    'status' => $request->status ?? 'pending',
+                    'status' => $request->input('status', 'delivered'),
                 ]);
 
                 $message = 'Proof of delivery created successfully';
                 $statusCode = 201;
+            }
+
+            if ($proofOfDelivery->status === 'delivered') {
+                $deliveredStatusId = (int) DB::table('order_status')
+                    ->where('stat_description', 'Delivered')
+                    ->value('id');
+
+                $this->statusTransitions->transition(
+                    $orderShop,
+                    $deliveredStatusId,
+                    $actor,
+                    [
+                        'notes' => $request->input('remarks'),
+                        'source' => 'pod_upload',
+                        'proof_verified' => true,
+                        'metadata' => ['proof_of_delivery_id' => $proofOfDelivery->id],
+                    ],
+                );
+                $message = 'Proof of delivery uploaded and order marked as delivered';
+            } else {
+                $this->statusTransitions->recordEvent(
+                    $orderShop->fresh(['status']),
+                    'delivery_failed',
+                    $actor,
+                    $request->input('remarks'),
+                    [
+                        'source' => 'pod_upload',
+                        'proof_of_delivery_id' => $proofOfDelivery->id,
+                    ],
+                );
+                $message = 'Failed delivery attempt recorded';
+            }
+
+            DB::commit();
+
+            if ($oldImagePath && $oldImagePath !== $imagePath) {
+                $oldPath = str_replace('/storage/', '', $oldImagePath);
+                if (Storage::disk('public')->exists($oldPath)) {
+                    Storage::disk('public')->delete($oldPath);
+                }
             }
 
             // Load the relationship for response
@@ -157,6 +224,7 @@ class PODController extends Controller
                 'data' => [
                     'id' => $proofOfDelivery->id,
                     'orderId' => $proofOfDelivery->order_id,
+                    'orderShopId' => $proofOfDelivery->order_shop_id,
                     'riderId' => $proofOfDelivery->rider_id,
                     'imagePath' => $proofOfDelivery->image_path,
                     'timestamp' => $proofOfDelivery->created_at->toISOString(),
@@ -168,13 +236,20 @@ class PODController extends Controller
                 ]
             ], $statusCode);
 
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
+            if (DB::transactionLevel() > 0) {
+                DB::rollBack();
+            }
             // If image was uploaded but database save failed, delete the image
             if (isset($imagePath) && $imagePath) {
                 $pathToDelete = str_replace('/storage/', '', $imagePath);
                 if (Storage::disk('public')->exists($pathToDelete)) {
                     Storage::disk('public')->delete($pathToDelete);
                 }
+            }
+
+            if ($e instanceof ValidationException || $e instanceof AuthorizationException) {
+                throw $e;
             }
 
             return response()->json([
@@ -217,6 +292,7 @@ class PODController extends Controller
                 return [
                     'id' => $pod->id,
                     'orderId' => $pod->order_id,
+                    'orderShopId' => $pod->order_shop_id,
                     'riderId' => $pod->rider_id,
                     'imagePath' => $pod->image_path,
                     'timestamp' => $pod->created_at->toISOString(),
@@ -254,6 +330,7 @@ class PODController extends Controller
                 return [
                     'id' => $pod->id,
                     'orderId' => $pod->order_id,
+                    'orderShopId' => $pod->order_shop_id,
                     'riderId' => $pod->rider_id,
                     'imagePath' => $pod->image_path,
                     'timestamp' => $pod->created_at->toISOString(),
@@ -294,6 +371,7 @@ class PODController extends Controller
             'data' => [
                 'id' => $proofOfDelivery->id,
                 'orderId' => $proofOfDelivery->order_id,
+                'orderShopId' => $proofOfDelivery->order_shop_id,
                 'riderId' => $proofOfDelivery->rider_id,
                 'imagePath' => $proofOfDelivery->image_path,
                 'timestamp' => $proofOfDelivery->created_at->toISOString(),
@@ -315,7 +393,7 @@ class PODController extends Controller
      */
     public function update(Request $request, $id)
     {
-        $proofOfDelivery = ProofOfDelivery::with(['order.orderShops'])->find($id);
+        $proofOfDelivery = ProofOfDelivery::with(['order.orderShops', 'orderShop.status'])->find($id);
 
         if (!$proofOfDelivery) {
             return response()->json([
@@ -332,12 +410,38 @@ class PODController extends Controller
             return $response;
         }
 
+        if (! $this->isStaff($request->user())
+            && (! $proofOfDelivery->orderShop
+                || (int) $proofOfDelivery->orderShop->rider_id !== $this->authUserId($request))
+        ) {
+            return response()->json([
+                'success' => false,
+                'message' => 'You are not assigned to this proof of delivery.',
+            ], 403);
+        }
+
+        if ($proofOfDelivery->orderShop
+            && strcasecmp((string) $proofOfDelivery->orderShop->status?->stat_description, 'Delivered') === 0
+        ) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Proof for a delivered order is immutable and cannot be edited.',
+            ], 422);
+        }
+
+        if ($request->has('status')) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Use POST /api/pod/upload to record a delivered or failed attempt.',
+                'errors' => ['status' => ['POD status cannot be changed through this endpoint.']],
+            ], 422);
+        }
+
         $validator = Validator::make($request->all(), [
             'image' => 'nullable|image|mimes:jpeg,png,jpg,gif,webp|max:5120',
             'latitude' => 'nullable|numeric|between:-90,90',
             'longitude' => 'nullable|numeric|between:-180,180',
             'remarks' => 'nullable|string|max:1000',
-            'status' => 'nullable|string|in:pending,delivered,failed',
         ]);
 
         if ($validator->fails()) {
@@ -376,10 +480,6 @@ class PODController extends Controller
                 $updateData['remarks'] = $request->remarks;
             }
 
-            if ($request->has('status')) {
-                $updateData['status'] = $request->status;
-            }
-
             if (!empty($updateData)) {
                 $proofOfDelivery->update($updateData);
             }
@@ -392,6 +492,7 @@ class PODController extends Controller
                 'data' => [
                     'id' => $proofOfDelivery->id,
                     'orderId' => $proofOfDelivery->order_id,
+                    'orderShopId' => $proofOfDelivery->order_shop_id,
                     'riderId' => $proofOfDelivery->rider_id,
                     'imagePath' => $proofOfDelivery->image_path,
                     'timestamp' => $proofOfDelivery->updated_at->toISOString(),
@@ -420,7 +521,7 @@ class PODController extends Controller
      */
     public function destroy(Request $request, $id)
     {
-        $proofOfDelivery = ProofOfDelivery::with(['order.orderShops'])->find($id);
+        $proofOfDelivery = ProofOfDelivery::with(['order.orderShops', 'orderShop.status'])->find($id);
 
         if (!$proofOfDelivery) {
             return response()->json([
@@ -435,6 +536,25 @@ class PODController extends Controller
 
         if ($response = $this->ensureRiderOrStaff($request)) {
             return $response;
+        }
+
+        if ($proofOfDelivery->orderShop
+            && strcasecmp((string) $proofOfDelivery->orderShop->status?->stat_description, 'Delivered') === 0
+        ) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Proof for a delivered order is part of the audit trail and cannot be deleted.',
+            ], 422);
+        }
+
+        if (! $this->isStaff($request->user())
+            && (! $proofOfDelivery->orderShop
+                || (int) $proofOfDelivery->orderShop->rider_id !== $this->authUserId($request))
+        ) {
+            return response()->json([
+                'success' => false,
+                'message' => 'You are not assigned to this proof of delivery.',
+            ], 403);
         }
 
         try {

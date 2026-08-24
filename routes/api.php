@@ -110,9 +110,11 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Orders
     Route::get('orders', [OrderController::class, 'index']);
+    Route::get('orders/ready-for-delivery', [OrderController::class, 'getReadyForDelivery']);
     Route::get('orders/user/{userId}', [OrderController::class, 'getByUser']);
     Route::get('orders/rider/{riderId}', [OrderController::class, 'getByRider']);
     Route::get('orders/details/user/{userId}', [OrderController::class, 'getOrderDetailsByUser']);
+    Route::get('orders/{id}/history', [OrderController::class, 'history']);
     Route::get('orders/{id}', [OrderController::class, 'show']);
     Route::put('orders/{id}', [OrderController::class, 'update']);
     Route::put('orders/{id}/status', [OrderController::class, 'updateStatus']);

@@ -3,28 +3,28 @@
 namespace App\Http\Controllers;
 
 use App\Http\Controllers\Concerns\EnsuresApiOwnership;
+use App\Models\Address;
+use App\Models\Cart;
+use App\Models\Item;
+use App\Models\Notification;
 use App\Models\Order;
 use App\Models\OrderDetail;
 use App\Models\OrderItem;
+use App\Models\OrderLog;
 use App\Models\OrderShop;
-use App\Models\Item;
-use App\Models\Cart;
-use App\Models\Notification;
-use App\Models\ProofOfDelivery;
 use App\Models\OrderStatus;
 use App\Models\Payment;
+use App\Models\Shop;
 use App\Models\User;
 use App\Services\DeliveryFeeService;
-use App\Services\OrderStatusCustomerMessageService;
+use App\Services\OrderStatusTransitionService;
 use App\Services\PaymongoService;
 use App\Services\VoucherService;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
-use App\Models\Address;
-use App\Models\Shop;
 
 class OrderController extends Controller
 {
@@ -36,19 +36,23 @@ class OrderController extends Controller
 
     protected VoucherService $voucherService;
 
+    protected OrderStatusTransitionService $statusTransitions;
+
     public function __construct(
         PaymongoService $paymongo,
         DeliveryFeeService $deliveryFeeService,
-        VoucherService $voucherService
+        VoucherService $voucherService,
+        OrderStatusTransitionService $statusTransitions,
     ) {
         $this->paymongo = $paymongo;
         $this->deliveryFeeService = $deliveryFeeService;
         $this->voucherService = $voucherService;
+        $this->statusTransitions = $statusTransitions;
     }
+
     /**
      * Fetch all orders
      *
-     * @param Request $request
      * @return \Illuminate\Http\JsonResponse
      */
     public function index(Request $request)
@@ -79,24 +83,24 @@ class OrderController extends Controller
         return response()->json([
             'success' => true,
             'data' => $orders,
-            'count' => $orders->count()
+            'count' => $orders->count(),
         ]);
     }
 
     /**
      * Fetch a single order by ID
      *
-     * @param int $id
+     * @param  int  $id
      * @return \Illuminate\Http\JsonResponse
      */
     public function show(Request $request, $id)
     {
         $order = Order::with(['user', 'orderDetail', 'orderItems', 'orderShops'])->find($id);
 
-        if (!$order) {
+        if (! $order) {
             return response()->json([
                 'success' => false,
-                'message' => 'Order not found'
+                'message' => 'Order not found',
             ], 404);
         }
 
@@ -106,15 +110,14 @@ class OrderController extends Controller
 
         return response()->json([
             'success' => true,
-            'data' => $order
+            'data' => $order,
         ]);
     }
 
     /**
      * Fetch all orders by user ID
      *
-     * @param int $userId
-     * @param Request $request
+     * @param  int  $userId
      * @return \Illuminate\Http\JsonResponse
      */
     public function getByUser($userId, Request $request)
@@ -124,12 +127,12 @@ class OrderController extends Controller
         }
 
         $query = Order::with([
-                'user',
-                'orderDetail',
-                'orderItems.item',
-                'orderShops.shop.zone:id,name',
-                'payment:payments.id,payments.order_id,payments.status,payments.payment_method',
-            ])
+            'user',
+            'orderDetail',
+            'orderItems.item',
+            'orderShops.shop.zone:id,name',
+            'payment:payments.id,payments.order_id,payments.status,payments.payment_method',
+        ])
             ->where('user_id', $userId);
 
         // Filter by order_status if provided (via order_shops)
@@ -189,8 +192,7 @@ class OrderController extends Controller
      *   "count": 2
      * }
      *
-     * @param int $riderId
-     * @param Request $request
+     * @param  int  $riderId
      * @return \Illuminate\Http\JsonResponse
      */
     public function getByRider($riderId, Request $request)
@@ -205,7 +207,44 @@ class OrderController extends Controller
             $orderShopsQuery->where('order_status', $request->order_status);
         }
 
-        $orderShops = $orderShopsQuery->orderBy('created_at', 'desc')->get();
+        return $this->orderShopCollectionResponse($orderShopsQuery);
+    }
+
+    /**
+     * Fetch every unassigned shop-order leg currently marked Ready for Delivery.
+     */
+    public function getReadyForDelivery(Request $request)
+    {
+        if ($response = $this->ensureRiderOrStaff($request)) {
+            return $response;
+        }
+
+        $readyStatusId = OrderStatus::query()
+            ->where('stat_description', 'Ready for Delivery')
+            ->where('is_active', true)
+            ->value('id');
+
+        if (! $readyStatusId) {
+            return response()->json([
+                'success' => true,
+                'data' => [],
+                'count' => 0,
+            ]);
+        }
+
+        return $this->orderShopCollectionResponse(
+            OrderShop::query()
+                ->where('order_status', $readyStatusId)
+                ->whereNull('rider_id')
+        );
+    }
+
+    private function orderShopCollectionResponse($orderShopsQuery)
+    {
+        $orderShops = $orderShopsQuery
+            ->with('status')
+            ->orderBy('created_at', 'desc')
+            ->get();
 
         if ($orderShops->isEmpty()) {
             return response()->json([
@@ -230,11 +269,11 @@ class OrderController extends Controller
             ->get();
 
         $itemsByOrderAndShop = $orderItems->groupBy(function ($oi) {
-            return $oi->order_id . '_' . $oi->shop_id;
+            return $oi->order_id.'_'.$oi->shop_id;
         });
 
         $data = $orderShops->map(function ($os) use ($orders, $shops, $itemsByOrderAndShop) {
-            $key = $os->order_id . '_' . $os->shop_id;
+            $key = $os->order_id.'_'.$os->shop_id;
             $items = $itemsByOrderAndShop->get($key, collect())->values()->all();
 
             return [
@@ -243,6 +282,7 @@ class OrderController extends Controller
                 'shop_id' => $os->shop_id,
                 'rider_id' => $os->rider_id,
                 'order_status' => $os->order_status,
+                'order_status_description' => $os->status?->stat_description,
                 'order' => $orders->get($os->order_id),
                 'shop' => $shops->get($os->shop_id),
                 'items' => $items,
@@ -259,8 +299,7 @@ class OrderController extends Controller
     /**
      * Get order details joined with orders by user ID
      *
-     * @param int $userId
-     * @param Request $request
+     * @param  int  $userId
      * @return \Illuminate\Http\JsonResponse
      */
     public function getOrderDetailsByUser($userId, Request $request)
@@ -302,14 +341,13 @@ class OrderController extends Controller
         return response()->json([
             'success' => true,
             'data' => $orderDetails,
-            'count' => $orderDetails->count()
+            'count' => $orderDetails->count(),
         ]);
     }
 
     /**
      * Create a new order with order details
      *
-     * @param Request $request
      * @return \Illuminate\Http\JsonResponse
      */
     public function store(Request $request)
@@ -322,7 +360,7 @@ class OrderController extends Controller
             'user_id' => 'sometimes|integer',
             'order_status' => 'nullable|integer|exists:order_status,id',
             'ordered_at' => 'nullable|date',
-            
+
             // Order detail fields
             'order_code' => 'nullable|string|max:100|unique:order_details,order_code',
             'subtotal' => 'required|numeric|min:0',
@@ -334,7 +372,7 @@ class OrderController extends Controller
             'payment_method' => 'nullable|string|max:50',
             'payment_status' => 'nullable|string|max:50',
             'voucher_code' => 'nullable|string|max:50',
-            
+
             // Order items
             'items' => 'required|array|min:1',
             'items.*.cart_id' => 'required|exists:carts,id',
@@ -348,7 +386,7 @@ class OrderController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Validation error',
-                'errors' => $validator->errors()
+                'errors' => $validator->errors(),
             ], 422);
         }
 
@@ -398,12 +436,12 @@ class OrderController extends Controller
             foreach ($data['items'] as $item) {
                 // Lock the item row for update to prevent concurrent modifications
                 $itemModel = Item::lockForUpdate()->find($item['item_id']);
-                
-                if (!$itemModel) {
+
+                if (! $itemModel) {
                     return response()->json([
                         'success' => false,
                         'message' => 'Item not found',
-                        'item_id' => $item['item_id']
+                        'item_id' => $item['item_id'],
                     ], 404);
                 }
 
@@ -419,7 +457,7 @@ class OrderController extends Controller
                         'item_name' => $itemModel->item_name,
                         'available_quantity' => $availableQuantity,
                         'ordered_quantity' => $orderedQuantity,
-                        'shortage' => abs($result)
+                        'shortage' => abs($result),
                     ], 400);
                 }
 
@@ -520,7 +558,7 @@ class OrderController extends Controller
 
             // Create order detail first
             $orderDetailData = [
-                'order_code' => $data['order_code'] ?? '#ORD-' . strtoupper(Str::random(10)),
+                'order_code' => $data['order_code'] ?? '#ORD-'.strtoupper(Str::random(10)),
                 'subtotal' => $serverSubtotal,
                 'shipping_fee' => $voucherResult['shipping_fee'],
                 'delivery_base_fee' => $feeResult['delivery_base_fee'],
@@ -620,8 +658,14 @@ class OrderController extends Controller
                         'updated_at' => $now,
                     ];
                 }, $uniqueShopIds);
-                if (!empty($orderShopRows)) {
+                if (! empty($orderShopRows)) {
                     DB::table('order_shops')->insert($orderShopRows);
+
+                    OrderShop::query()
+                        ->where('order_id', $order->id)
+                        ->with('status')
+                        ->get()
+                        ->each(fn (OrderShop $orderShop) => $this->statusTransitions->createInitialLog($orderShop, $user));
                 }
             }
 
@@ -630,7 +674,7 @@ class OrderController extends Controller
             // Extract cart_ids and item_ids from items array
             $cartIds = array_column($data['items'], 'cart_id');
             $orderedItemIds = array_column($data['items'], 'item_id');
-            
+
             // Update carts that match user_id, cart_id, and item_id
             Cart::where('user_id', $user->id)
                 ->whereIn('id', $cartIds)
@@ -646,7 +690,7 @@ class OrderController extends Controller
                 $user->id,
                 'order_placed',
                 'Order Placed Successfully',
-                "Your order {$orderDetail->order_code} has been placed successfully. Total amount: ₱" . number_format($orderDetail->total_amount, 2),
+                "Your order {$orderDetail->order_code} has been placed successfully. Total amount: ₱".number_format($orderDetail->total_amount, 2),
                 Notification::CATEGORY_ORDER,
                 $order,
                 [
@@ -688,7 +732,7 @@ class OrderController extends Controller
 
                 // PayMongo returns an `errors` array (not `data`) on failure,
                 // and network/SSL issues can bubble up as an empty/null payload.
-                if (!is_array($session) || !empty($session['errors'])) {
+                if (! is_array($session) || ! empty($session['errors'])) {
                     Log::error('PayMongo checkout session creation failed', [
                         'order_id' => $order->id,
                         'response' => $session,
@@ -699,7 +743,7 @@ class OrderController extends Controller
                 $sessionId = $session['data']['id'] ?? null;
                 $checkoutUrl = $session['data']['attributes']['checkout_url'] ?? null;
 
-                if (!$sessionId || !$checkoutUrl) {
+                if (! $sessionId || ! $checkoutUrl) {
                     Log::error('PayMongo checkout session response malformed', [
                         'order_id' => $order->id,
                         'response' => $session,
@@ -850,23 +894,32 @@ class OrderController extends Controller
     /**
      * Update an existing order and/or order details
      *
-     * @param Request $request
-     * @param int $id
+     * @param  int  $id
      * @return \Illuminate\Http\JsonResponse
      */
     public function update(Request $request, $id)
     {
         $order = Order::with(['orderDetail', 'orderShops'])->find($id);
 
-        if (!$order) {
+        if (! $order) {
             return response()->json([
                 'success' => false,
-                'message' => 'Order not found'
+                'message' => 'Order not found',
             ], 404);
         }
 
         if ($response = $this->forbidUnlessOrderAccess($request, $order)) {
             return $response;
+        }
+
+        if ($request->has('order_status')) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation error',
+                'errors' => [
+                    'order_status' => ['Use PUT /api/orders/{id}/status for order status transitions.'],
+                ],
+            ], 422);
         }
 
         // Only staff may reassign the order to another user.
@@ -878,14 +931,13 @@ class OrderController extends Controller
         }
 
         $validator = Validator::make($request->all(), [
-            // Order fields (order_status and rider_id apply to order_shops)
+            // Order fields (rider_id applies to order_shops)
             'user_id' => 'sometimes|exists:users,id',
-            'order_status' => 'nullable|integer|exists:order_status,id',
             'rider_id' => 'nullable|exists:users,id',
             'ordered_at' => 'nullable|date',
-            
+
             // Order detail fields
-            'order_code' => 'sometimes|string|max:100|unique:order_details,order_code,' . $order->order_detail_id,
+            'order_code' => 'sometimes|string|max:100|unique:order_details,order_code,'.$order->order_detail_id,
             'subtotal' => 'sometimes|numeric|min:0',
             'shipping_fee' => 'nullable|numeric|min:0',
             'total_amount' => 'sometimes|numeric|min:0',
@@ -900,14 +952,14 @@ class OrderController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Validation error',
-                'errors' => $validator->errors()
+                'errors' => $validator->errors(),
             ], 422);
         }
 
         // Update order detail if any order detail fields are provided
         $orderDetailFields = [
             'order_code', 'subtotal', 'shipping_fee', 'total_amount',
-            'shipping_address', 'order_instruction', 'delivery_method_id', 'payment_method', 'payment_status'
+            'shipping_address', 'order_instruction', 'delivery_method_id', 'payment_method', 'payment_status',
         ];
 
         $orderDetailData = [];
@@ -917,7 +969,7 @@ class OrderController extends Controller
             }
         }
 
-        if (!empty($orderDetailData) && $order->orderDetail) {
+        if (! empty($orderDetailData) && $order->orderDetail) {
             $order->orderDetail->update($orderDetailData);
         }
 
@@ -930,45 +982,14 @@ class OrderController extends Controller
             }
         }
 
-        if (!empty($orderUpdateData)) {
+        if (! empty($orderUpdateData)) {
             $order->update($orderUpdateData);
-            // Update order_status in order_shops only for the specific order_id and shop_id when shop_id is provided
-            if (isset($orderUpdateData['order_status']) && $request->has('shop_id')) {
-                DB::table('order_shops')
-                    ->where('order_id', $order->id)
-                    ->where('shop_id', $request->shop_id)
-                    ->update(['order_status' => $orderUpdateData['order_status']]);
-            }
         }
 
-        // Update order_status and/or rider_id on all order_shops for this order
+        // Update rider_id on all order_shops for this order.
         $order->load('orderShops');
-        $oldStatus = $order->orderShops->first()?->order_status;
-        $newStatus = null;
-        if ($request->has('order_status')) {
-            $newStatus = $request->order_status;
-            OrderShop::where('order_id', $order->id)->update(['order_status' => $newStatus]);
-            app(\App\Services\ShopWalletService::class)->syncUncreditedSales(
-                $order->orderShops->pluck('shop_id')->map(fn ($id) => (int) $id)->all()
-            );
-        }
         if ($request->has('rider_id')) {
             OrderShop::where('order_id', $order->id)->update(['rider_id' => $request->rider_id]);
-        }
-
-        // Create POD entry if status changed to in-transit (status ID: 5)
-        if ($newStatus && (int)$newStatus === 5 && $oldStatus != $newStatus) {
-            $this->createProofOfDeliveryEntry($order);
-        }
-
-        if ($newStatus && $oldStatus != $newStatus) {
-            $shopIds = $order->orderShops->pluck('shop_id')->map(fn ($id) => (int) $id)->unique()->values()->all();
-            app(OrderStatusCustomerMessageService::class)->notifyForStatusId(
-                (int) $order->id,
-                $shopIds,
-                (int) $newStatus,
-                $request->user()
-            );
         }
 
         // Load relationships
@@ -977,15 +998,14 @@ class OrderController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'Order updated successfully',
-            'data' => $order
+            'data' => $order,
         ]);
     }
 
     /**
      * Update order status by order ID
      *
-     * @param Request $request
-     * @param int $id
+     * @param  int  $id
      * @return \Illuminate\Http\JsonResponse
      */
     public function updateStatus(Request $request, $id)
@@ -993,113 +1013,169 @@ class OrderController extends Controller
         $validator = Validator::make($request->all(), [
             'status' => 'required|integer|exists:order_status,id',
             'shop_id' => 'required|integer|exists:shops,id',
+            'notes' => 'nullable|string|max:1000',
+            'force' => 'sometimes|boolean',
+            'reason' => 'nullable|string|max:1000|required_if:force,true',
         ]);
 
         if ($validator->fails()) {
             return response()->json([
                 'success' => false,
                 'message' => 'Validation error',
-                'errors' => $validator->errors()
+                'errors' => $validator->errors(),
             ], 422);
         }
 
         $order = Order::with('orderShops')->find($id);
 
-        if (!$order) {
+        if (! $order) {
             return response()->json([
                 'success' => false,
-                'message' => 'Order not found'
+                'message' => 'Order not found',
             ], 404);
         }
 
-        if ($response = $this->forbidUnlessOrderAccess($request, $order)) {
-            return $response;
-        }
-
-        $newStatus = $request->status;
-
-        // Get the old status for the specific shop being updated (for POD trigger check)
         $orderShop = $order->orderShops->where('shop_id', $request->shop_id)->first();
-        $oldStatus = $orderShop?->order_status;
-
-        // Update order_status only for the specific order_id and shop_id in order_shops
-        DB::table('order_shops')
-            ->where('order_id', $order->id)
-            ->where('shop_id', $request->shop_id)
-            ->update(['order_status' => $newStatus]);
-
-        app(\App\Services\ShopWalletService::class)->syncUncreditedSales([(int) $request->shop_id]);
-
-        // Create POD entry if status changed to in-transit (status ID: 5)
-        if ((int)$newStatus === 5 && $oldStatus != $newStatus) {
-            $this->createProofOfDeliveryEntry($order);
+        if (! $orderShop) {
+            return response()->json([
+                'success' => false,
+                'message' => 'The selected shop does not belong to this order.',
+            ], 422);
         }
 
-        if ($oldStatus != $newStatus) {
-            app(OrderStatusCustomerMessageService::class)->notifyForStatusId(
-                (int) $order->id,
-                [(int) $request->shop_id],
-                (int) $newStatus,
-                $request->user()
-            );
-        }
+        $result = $this->statusTransitions->transition(
+            $orderShop,
+            (int) $request->status,
+            $request->user(),
+            [
+                'notes' => $request->input('notes'),
+                'force' => $request->boolean('force'),
+                'reason' => $request->input('reason'),
+                'source' => 'api',
+            ],
+        );
 
         // Load relationships
         $order->load(['user', 'orderDetail', 'orderItems', 'orderShops']);
 
         return response()->json([
             'success' => true,
-            'message' => 'Order status updated successfully',
-            'data' => $order
+            'message' => $result['changed']
+                ? 'Order status updated successfully'
+                : 'Order status is already up to date',
+            'changed' => $result['changed'],
+            'data' => $order,
         ]);
     }
 
-    /**
-     * Create proof of delivery entry when order status changes to in-transit (status ID: 5)
-     *
-     * @param Order $order
-     * @return void
-     */
-    private function createProofOfDeliveryEntry(Order $order)
+    public function history(Request $request, $id)
     {
-        if (!$order->id) {
-            return;
+        $request->validate([
+            'shop_id' => 'nullable|integer|exists:shops,id',
+        ]);
+
+        $order = Order::with(['orderShops.shop'])->find($id);
+        if (! $order) {
+            return response()->json(['success' => false, 'message' => 'Order not found'], 404);
         }
 
-        $order->loadMissing('orderShops');
-        $riderId = $order->orderShops->firstWhere('rider_id', '!=', null)?->rider_id ?? null;
+        $user = $request->user();
+        $visibleLegs = $order->orderShops->filter(function (OrderShop $leg) use ($order, $user) {
+            if ($this->isStaff($user) || (int) $order->user_id === (int) $user->id) {
+                return true;
+            }
 
-        $existingPOD = ProofOfDelivery::where('order_id', $order->id)
-            ->where('status', 'pending')
-            ->first();
+            if ($user->user_type === User::TYPE_RIDER) {
+                return $leg->rider_id !== null && (int) $leg->rider_id === (int) $user->id;
+            }
 
-        if (!$existingPOD) {
-            ProofOfDelivery::create([
-                'order_id' => $order->id,
-                'rider_id' => $riderId,
-                'latitude' => null,
-                'longitude' => null,
-                'image_path' => null,
-                'remarks' => null,
-                'status' => 'pending',
-            ]);
+            return $this->statusTransitions->userManagesShop($user, $leg);
+        });
+
+        if ($request->filled('shop_id')) {
+            $visibleLegs = $visibleLegs->where('shop_id', (int) $request->shop_id);
         }
+
+        if ($visibleLegs->isEmpty()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'You are not authorized to access this order history.',
+            ], 403);
+        }
+
+        $visibleLegIds = $visibleLegs->pluck('id')->map(fn ($value) => (int) $value)->all();
+        $includeLegacyOrderLogs = $this->isStaff($user) || (int) $order->user_id === (int) $user->id;
+
+        $logs = OrderLog::query()
+            ->with([
+                'orderShop.shop:id,shop_name',
+                'user:id,user_detail_id,user_type',
+                'user.userDetail:id,first_name,last_name',
+            ])
+            ->where('order_id', $order->id)
+            ->where(function ($query) use ($visibleLegIds, $includeLegacyOrderLogs) {
+                $query->whereIn('order_shop_id', $visibleLegIds);
+                if ($includeLegacyOrderLogs) {
+                    $query->orWhereNull('order_shop_id');
+                }
+            })
+            ->orderBy('created_at')
+            ->orderBy('id')
+            ->get();
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'order_id' => (int) $order->id,
+                'events' => $logs->map(function (OrderLog $log) {
+                    $detail = $log->user?->userDetail;
+                    $actorName = $detail
+                        ? trim(($detail->first_name ?? '').' '.($detail->last_name ?? ''))
+                        : null;
+                    $safeMetadata = collect($log->metadata ?? [])->except([
+                        'ip_address', 'user_agent', 'request_headers',
+                    ])->all();
+
+                    return [
+                        'id' => (int) $log->id,
+                        'order_shop_id' => $log->order_shop_id ? (int) $log->order_shop_id : null,
+                        'shop' => $log->orderShop?->shop ? [
+                            'id' => (int) $log->orderShop->shop->id,
+                            'name' => $log->orderShop->shop->shop_name,
+                        ] : null,
+                        'event' => $log->event,
+                        'from_status' => $log->from_status,
+                        'to_status' => $log->to_status,
+                        'actor' => $log->user ? [
+                            'id' => (int) $log->user->id,
+                            'name' => is_string($actorName) && $actorName !== ''
+                                ? $actorName
+                                : 'User #'.$log->user->id,
+                            'role' => $log->user->user_type,
+                        ] : null,
+                        'notes' => $log->notes,
+                        'metadata' => $safeMetadata,
+                        'occurred_at' => $log->created_at?->toISOString(),
+                    ];
+                })->values(),
+            ],
+        ]);
     }
 
     /**
      * Delete an order
      *
-     * @param int $id
+     * @param  int  $id
      * @return \Illuminate\Http\JsonResponse
      */
     public function destroy(Request $request, $id)
     {
         $order = Order::with(['orderDetail', 'orderShops'])->find($id);
 
-        if (!$order) {
+        if (! $order) {
             return response()->json([
                 'success' => false,
-                'message' => 'Order not found'
+                'message' => 'Order not found',
             ], 404);
         }
 
@@ -1109,13 +1185,25 @@ class OrderController extends Controller
 
         // Update all order_shops for this order to Cancelled status
         $cancelledStatusId = OrderStatus::whereIn('stat_description', ['Cancelled', 'cancelled'])->value('id');
-        if (!$cancelledStatusId) {
+        if (! $cancelledStatusId) {
             return response()->json([
                 'success' => false,
-                'message' => 'Cancelled status not found'
+                'message' => 'Cancelled status not found',
             ], 404);
         }
-        OrderShop::where('order_id', $order->id)->update(['order_status' => $cancelledStatusId]);
+        DB::transaction(function () use ($order, $cancelledStatusId, $request) {
+            foreach ($order->orderShops as $orderShop) {
+                $this->statusTransitions->transition(
+                    $orderShop,
+                    (int) $cancelledStatusId,
+                    $request->user(),
+                    [
+                        'notes' => $request->input('reason', 'Cancelled by customer.'),
+                        'source' => 'api_cancellation',
+                    ],
+                );
+            }
+        });
 
         $order->load(['user', 'orderDetail', 'orderItems', 'orderShops']);
 
@@ -1138,7 +1226,7 @@ class OrderController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'Order cancelled successfully',
-            'data' => $order
+            'data' => $order,
         ]);
     }
 
@@ -1167,4 +1255,3 @@ class OrderController extends Controller
         return null;
     }
 }
-
