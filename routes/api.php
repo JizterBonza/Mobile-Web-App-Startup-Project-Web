@@ -1,26 +1,26 @@
 <?php
 
-use App\Http\Controllers\Api\SocialAuthController;
-use App\Http\Controllers\MobileAuthController;
-use App\Http\Controllers\UserController;
-use App\Http\Controllers\CategoryController;
-use App\Http\Controllers\ItemController;
-use App\Http\Controllers\OrderController;
-use App\Http\Controllers\PODController;
-use App\Http\Controllers\CartController;
-use App\Http\Controllers\FavoriteController;
-use App\Http\Controllers\AddressController;
-use App\Http\Controllers\NotificationController;
-use App\Http\Controllers\ShopController;
-use App\Http\Controllers\MobileController;
-use App\Http\Controllers\PaymentMethodController;
 use App\Http\Controllers\ActivityLogController;
-use App\Http\Controllers\PaymentController;
-use App\Http\Controllers\PayoutController;
-use App\Http\Controllers\SearchController;
-use App\Http\Controllers\VoucherApiController;
+use App\Http\Controllers\AddressController;
+use App\Http\Controllers\Api\SocialAuthController;
+use App\Http\Controllers\CartController;
+use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\CustomerShopMessageController;
+use App\Http\Controllers\FavoriteController;
+use App\Http\Controllers\ItemController;
 use App\Http\Controllers\KlasrumApiController;
+use App\Http\Controllers\MobileAuthController;
+use App\Http\Controllers\MobileController;
+use App\Http\Controllers\NotificationController;
+use App\Http\Controllers\OrderController;
+use App\Http\Controllers\PaymentController;
+use App\Http\Controllers\PaymentMethodController;
+use App\Http\Controllers\PayoutController;
+use App\Http\Controllers\PODController;
+use App\Http\Controllers\SearchController;
+use App\Http\Controllers\ShopController;
+use App\Http\Controllers\UserController;
+use App\Http\Controllers\VoucherApiController;
 use Illuminate\Broadcasting\BroadcastController;
 use Illuminate\Http\Request;
 
@@ -111,6 +111,10 @@ Route::middleware('auth:sanctum')->group(function () {
     // Orders
     Route::get('orders', [OrderController::class, 'index']);
     Route::get('orders/ready-for-delivery', [OrderController::class, 'getReadyForDelivery']);
+    Route::get('rider/active-deliveries', [OrderController::class, 'getActiveDeliveries']);
+    Route::get('rider/active-deliveries/{order_id}', [OrderController::class, 'getActiveDelivery'])
+        ->whereNumber('order_id');
+    Route::post('orders/{id}/accept', [OrderController::class, 'accept']);
     Route::get('orders/user/{userId}', [OrderController::class, 'getByUser']);
     Route::get('orders/rider/{riderId}', [OrderController::class, 'getByRider']);
     Route::get('orders/details/user/{userId}', [OrderController::class, 'getOrderDetailsByUser']);

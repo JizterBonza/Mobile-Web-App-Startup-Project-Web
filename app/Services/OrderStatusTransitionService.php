@@ -191,6 +191,106 @@ class OrderStatusTransitionService
         );
     }
 
+    /**
+     * Assign a set of ready shop legs to a rider as one all-or-nothing operation.
+     *
+     * @param  array<int, int|string>  $orderShopIds
+     * @return array{
+     *     order_id: int,
+     *     rider_id: int,
+     *     order_shop_ids: array<int, int>,
+     *     newly_assigned_order_shop_ids: array<int, int>,
+     *     already_assigned_order_shop_ids: array<int, int>
+     * }
+     */
+    public function acceptForDelivery(int $orderId, array $orderShopIds, User $actor): array
+    {
+        if ($actor->user_type !== User::TYPE_RIDER) {
+            throw new AuthorizationException('Only riders may accept orders for delivery.');
+        }
+
+        $ids = collect($orderShopIds)
+            ->map(fn ($id) => (int) $id)
+            ->unique()
+            ->sort()
+            ->values()
+            ->all();
+
+        $readyStatus = OrderStatus::query()
+            ->where('stat_description', 'Ready for Delivery')
+            ->where('is_active', true)
+            ->first();
+
+        if (! $readyStatus) {
+            throw ValidationException::withMessages([
+                'order_shop_ids' => ['The Ready for Delivery status is unavailable.'],
+            ]);
+        }
+
+        return DB::transaction(function () use ($actor, $ids, $orderId, $readyStatus) {
+            $legs = OrderShop::query()
+                ->whereIn('id', $ids)
+                ->orderBy('id')
+                ->lockForUpdate()
+                ->get();
+
+            if ($legs->count() !== count($ids)
+                || $legs->contains(fn (OrderShop $leg) => (int) $leg->order_id !== $orderId)
+            ) {
+                throw ValidationException::withMessages([
+                    'order_shop_ids' => ['Every selected shop leg must belong to this order.'],
+                ]);
+            }
+
+            $unavailable = $legs->filter(function (OrderShop $leg) use ($actor, $readyStatus) {
+                $assignedToAnotherRider = $leg->rider_id !== null
+                    && (int) $leg->rider_id !== (int) $actor->id;
+
+                return (int) $leg->order_status !== (int) $readyStatus->id
+                    || $assignedToAnotherRider;
+            });
+
+            if ($unavailable->isNotEmpty()) {
+                throw ValidationException::withMessages([
+                    'order_shop_ids' => ['One or more selected shop pickups are no longer available.'],
+                ])->status(409);
+            }
+
+            $legs->load('status');
+            $newlyAssigned = [];
+            $alreadyAssigned = [];
+
+            foreach ($legs as $leg) {
+                if ($leg->rider_id !== null) {
+                    $alreadyAssigned[] = (int) $leg->id;
+
+                    continue;
+                }
+
+                $leg->forceFill(['rider_id' => $actor->id])->save();
+                $this->recordEvent(
+                    $leg,
+                    'rider_assigned',
+                    $actor,
+                    'Rider accepted this shop pickup.',
+                    [
+                        'source' => 'api',
+                        'rider_id' => (int) $actor->id,
+                    ],
+                );
+                $newlyAssigned[] = (int) $leg->id;
+            }
+
+            return [
+                'order_id' => $orderId,
+                'rider_id' => (int) $actor->id,
+                'order_shop_ids' => $ids,
+                'newly_assigned_order_shop_ids' => $newlyAssigned,
+                'already_assigned_order_shop_ids' => $alreadyAssigned,
+            ];
+        });
+    }
+
     public function createInitialLog(OrderShop $orderShop, ?User $actor = null): OrderLog
     {
         $orderShop->loadMissing('status');

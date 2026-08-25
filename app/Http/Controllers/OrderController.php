@@ -232,11 +232,348 @@ class OrderController extends Controller
             ]);
         }
 
-        return $this->orderShopCollectionResponse(
+        return $this->readyOrderCardResponse(
             OrderShop::query()
                 ->where('order_status', $readyStatusId)
                 ->whereNull('rider_id')
         );
+    }
+
+    /**
+     * Fetch mobile delivery cards assigned to the authenticated rider.
+     */
+    public function getActiveDeliveries(Request $request)
+    {
+        $rider = $request->user();
+        if ($rider->user_type !== User::TYPE_RIDER) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Only riders may access active deliveries.',
+            ], 403);
+        }
+
+        $activeStatusIds = $this->activeDeliveryStatusIds();
+
+        if ($activeStatusIds->isEmpty()) {
+            return response()->json([
+                'success' => true,
+                'data' => [],
+                'count' => 0,
+            ]);
+        }
+
+        $orderShops = OrderShop::query()
+            ->with('status')
+            ->where('rider_id', $rider->id)
+            ->whereIn('order_status', $activeStatusIds)
+            ->orderByDesc('created_at')
+            ->get();
+
+        if ($orderShops->isEmpty()) {
+            return response()->json([
+                'success' => true,
+                'data' => [],
+                'count' => 0,
+            ]);
+        }
+
+        $data = $this->activeDeliveryCards($orderShops, false, true);
+
+        return response()->json([
+            'success' => true,
+            'data' => $data,
+            'count' => count($data),
+        ]);
+    }
+
+    /**
+     * Fetch one active delivery assigned to the authenticated rider.
+     */
+    public function getActiveDelivery(Request $request, $order_id)
+    {
+        $rider = $request->user();
+        if ($rider->user_type !== User::TYPE_RIDER) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Only riders may access active deliveries.',
+            ], 403);
+        }
+
+        $activeStatusIds = $this->activeDeliveryStatusIds();
+
+        $orderShops = OrderShop::query()
+            ->with('status')
+            ->where('order_id', $order_id)
+            ->where('rider_id', $rider->id)
+            ->whereIn('order_status', $activeStatusIds)
+            ->orderByDesc('created_at')
+            ->get();
+
+        if ($orderShops->isEmpty()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Active delivery not found.',
+            ], 404);
+        }
+
+        return response()->json([
+            'success' => true,
+            'data' => $this->activeDeliveryCards($orderShops, true, true)[0],
+        ]);
+    }
+
+    /**
+     * Atomically assign the requested ready shop legs to the authenticated rider.
+     */
+    public function accept(Request $request, $id)
+    {
+        $actor = $request->user();
+        if ($actor->user_type !== User::TYPE_RIDER) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Only riders may accept orders for delivery.',
+            ], 403);
+        }
+
+        $order = Order::query()->find($id);
+        if (! $order) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Order not found',
+            ], 404);
+        }
+
+        $validator = Validator::make($request->all(), [
+            'order_shop_ids' => 'required|array|min:1',
+            'order_shop_ids.*' => 'required|integer|distinct|exists:order_shops,id',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation error',
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        $result = $this->statusTransitions->acceptForDelivery(
+            (int) $order->id,
+            $validator->validated()['order_shop_ids'],
+            $actor,
+        );
+
+        return response()->json([
+            'success' => true,
+            'message' => empty($result['newly_assigned_order_shop_ids'])
+                ? 'Order was already accepted by this rider.'
+                : 'Order accepted successfully.',
+            'data' => $result,
+        ]);
+    }
+
+    private function activeDeliveryStatusIds()
+    {
+        return OrderStatus::query()
+            ->whereIn('stat_description', [
+                'Ready for Delivery',
+                'Ready for Drop off',
+                'In-Transit',
+            ])
+            ->where('is_active', true)
+            ->pluck('id');
+    }
+
+    private function activeDeliveryCards(
+        $orderShops,
+        bool $includeRecipientContact = false,
+        bool $includeDropOffCoordinates = false,
+    ): array
+    {
+        $orderIds = $orderShops->pluck('order_id')->unique()->values()->all();
+        $shopIds = $orderShops->pluck('shop_id')->unique()->values()->all();
+        $addressColumns = ['id', 'recipient_name'];
+        if ($includeRecipientContact) {
+            $addressColumns[] = 'contact_number';
+        }
+        if ($includeDropOffCoordinates) {
+            array_push($addressColumns, 'latitude', 'longitude');
+        }
+
+        $orderRelations = [
+            'orderDetail.address' => fn ($query) => $query
+                ->withTrashed()
+                ->select($addressColumns),
+        ];
+        if ($includeRecipientContact) {
+            $orderRelations[] = 'orderDetail.deliveryMethod:id,description';
+        }
+
+        $orders = Order::with($orderRelations)
+            ->whereIn('id', $orderIds)
+            ->orderByDesc('ordered_at')
+            ->get();
+        $shops = Shop::query()
+            ->whereIn('id', $shopIds)
+            ->get(['id', 'shop_name', 'shop_address', 'shop_lat', 'shop_long'])
+            ->keyBy('id');
+        $itemsByOrderAndShop = OrderItem::with('item')
+            ->whereIn('order_id', $orderIds)
+            ->whereIn('shop_id', $shopIds)
+            ->get()
+            ->groupBy(fn ($orderItem) => $orderItem->order_id.'_'.$orderItem->shop_id);
+        $legsByOrder = $orderShops->groupBy('order_id');
+
+        return $orders->map(function (Order $order) use (
+            $itemsByOrderAndShop,
+            $legsByOrder,
+            $shops,
+            $includeRecipientContact,
+            $includeDropOffCoordinates,
+        ) {
+            $activeOrderShops = $legsByOrder->get($order->id, collect())
+                ->map(function (OrderShop $orderShop) use ($itemsByOrderAndShop, $shops) {
+                    $items = $itemsByOrderAndShop
+                        ->get($orderShop->order_id.'_'.$orderShop->shop_id, collect())
+                        ->map(function (OrderItem $orderItem) {
+                            $data = $orderItem->toArray();
+                            if (isset($data['item'])) {
+                                $data['item']['item_images'] = $this->firstItemImageUrl(
+                                    $data['item']['item_images'] ?? null
+                                );
+                            }
+
+                            return $data;
+                        })
+                        ->values();
+
+                    return [
+                        'order_shop_id' => $orderShop->id,
+                        'shop_id' => $orderShop->shop_id,
+                        'order_status' => $orderShop->order_status,
+                        'order_status_description' => $orderShop->status?->stat_description,
+                        'shop' => $shops->get($orderShop->shop_id),
+                        'items' => $items->all(),
+                    ];
+                })
+                ->values();
+
+            $card = [
+                'order_id' => $order->id,
+                'order_code' => $order->orderDetail?->order_code,
+                'ordered_at' => $order->ordered_at?->toIso8601String(),
+                'recipient_name' => $order->orderDetail?->address?->recipient_name,
+                'delivery_address' => $order->orderDetail?->shipping_address,
+                'pickup_store_count' => $activeOrderShops->pluck('shop_id')->unique()->count(),
+                'item_count' => $activeOrderShops->sum(
+                    fn (array $activeShop) => collect($activeShop['items'])->sum('quantity')
+                ),
+                'active_order_shops' => $activeOrderShops->all(),
+            ];
+
+            $address = $order->orderDetail?->address;
+            if ($includeDropOffCoordinates) {
+                $card['drop_off_coordinates'] = [
+                    'latitude' => $address?->latitude !== null ? (float) $address->latitude : null,
+                    'longitude' => $address?->longitude !== null ? (float) $address->longitude : null,
+                ];
+            }
+
+            if ($includeRecipientContact) {
+                $deliveryMethod = trim((string) $order->orderDetail?->deliveryMethod?->description);
+                $recipientContact = trim((string) $address?->contact_number);
+                if (strcasecmp($deliveryMethod, 'Standard') === 0 && $recipientContact !== '') {
+                    $card['recipient_contact_number'] = $recipientContact;
+                }
+            }
+
+            return $card;
+        })->values()->all();
+    }
+
+    private function readyOrderCardResponse($orderShopsQuery)
+    {
+        $orderShops = $orderShopsQuery
+            ->orderByDesc('created_at')
+            ->get();
+
+        if ($orderShops->isEmpty()) {
+            return response()->json([
+                'success' => true,
+                'data' => [],
+                'count' => 0,
+            ]);
+        }
+
+        $orderIds = $orderShops->pluck('order_id')->unique()->values()->all();
+        $shopIds = $orderShops->pluck('shop_id')->unique()->values()->all();
+
+        $orders = Order::with([
+            'orderDetail.address' => fn ($query) => $query
+                ->withTrashed()
+                ->select('id', 'recipient_name'),
+        ])
+            ->whereIn('id', $orderIds)
+            ->orderByDesc('ordered_at')
+            ->get();
+
+        $shops = Shop::query()
+            ->whereIn('id', $shopIds)
+            ->get(['id', 'shop_name', 'shop_address', 'shop_lat', 'shop_long'])
+            ->keyBy('id');
+
+        $itemsByOrderAndShop = OrderItem::with('item')
+            ->whereIn('order_id', $orderIds)
+            ->whereIn('shop_id', $shopIds)
+            ->get()
+            ->groupBy(fn ($orderItem) => $orderItem->order_id.'_'.$orderItem->shop_id);
+
+        $legsByOrder = $orderShops->groupBy('order_id');
+
+        $data = $orders->map(function (Order $order) use ($itemsByOrderAndShop, $legsByOrder, $shops) {
+            $availableOrderShops = $legsByOrder->get($order->id, collect())
+                ->map(function (OrderShop $orderShop) use ($itemsByOrderAndShop, $shops) {
+                    $items = $itemsByOrderAndShop
+                        ->get($orderShop->order_id.'_'.$orderShop->shop_id, collect())
+                        ->map(function (OrderItem $orderItem) {
+                            $data = $orderItem->toArray();
+                            if (isset($data['item'])) {
+                                $data['item']['item_images'] = $this->firstItemImageUrl(
+                                    $data['item']['item_images'] ?? null
+                                );
+                            }
+
+                            return $data;
+                        })
+                        ->values();
+
+                    return [
+                        'order_shop_id' => $orderShop->id,
+                        'shop_id' => $orderShop->shop_id,
+                        'shop' => $shops->get($orderShop->shop_id),
+                        'items' => $items->all(),
+                    ];
+                })
+                ->values();
+
+            return [
+                'order_id' => $order->id,
+                'order_code' => $order->orderDetail?->order_code,
+                'ordered_at' => $order->ordered_at?->toIso8601String(),
+                'recipient_name' => $order->orderDetail?->address?->recipient_name,
+                'delivery_address' => $order->orderDetail?->shipping_address,
+                'pickup_store_count' => $availableOrderShops->count(),
+                'item_count' => $availableOrderShops->sum(
+                    fn (array $availableShop) => collect($availableShop['items'])->sum('quantity')
+                ),
+                'available_order_shops' => $availableOrderShops->all(),
+            ];
+        })->values()->all();
+
+        return response()->json([
+            'success' => true,
+            'data' => $data,
+            'count' => count($data),
+        ]);
     }
 
     private function orderShopCollectionResponse($orderShopsQuery)
@@ -920,6 +1257,13 @@ class OrderController extends Controller
                     'order_status' => ['Use PUT /api/orders/{id}/status for order status transitions.'],
                 ],
             ], 422);
+        }
+
+        if ($request->has('rider_id') && ! $this->isStaff($request->user())) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Only staff may reassign an order rider. Riders must use POST /api/orders/{id}/accept.',
+            ], 403);
         }
 
         // Only staff may reassign the order to another user.
