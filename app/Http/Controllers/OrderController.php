@@ -323,6 +323,273 @@ class OrderController extends Controller
     }
 
     /**
+     * Fetch completed delivery cards for the authenticated rider's history screen.
+     */
+    public function getRiderDeliveryHistory(Request $request)
+    {
+        $rider = $request->user();
+        if ($rider->user_type !== User::TYPE_RIDER) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Only riders may access delivery history.',
+            ], 403);
+        }
+
+        $validated = $request->validate([
+            'month' => 'nullable|integer|between:1,12',
+            'year' => 'nullable|integer|between:2000,2100',
+            'status' => 'nullable|string|in:all,delivered,failed,cancelled',
+        ]);
+        $month = (int) ($validated['month'] ?? now()->month);
+        $year = (int) ($validated['year'] ?? now()->year);
+        $statusFilter = $validated['status'] ?? 'all';
+
+        $orders = Order::query()
+            ->whereHas('orderShops', fn ($query) => $query->where('rider_id', $rider->id))
+            ->whereMonth('ordered_at', $month)
+            ->whereYear('ordered_at', $year)
+            ->with([
+                'orderDetail.address' => fn ($query) => $query
+                    ->withTrashed()
+                    ->select('id', 'recipient_name'),
+                'orderShops' => fn ($query) => $query
+                    ->where('rider_id', $rider->id)
+                    ->with([
+                        'status:id,stat_description',
+                        'proofsOfDelivery' => fn ($proofs) => $proofs
+                            ->orderByDesc('updated_at')
+                            ->orderByDesc('id'),
+                    ]),
+                'orderItems:id,order_id,shop_id,quantity',
+            ])
+            ->orderByDesc('ordered_at')
+            ->orderByDesc('id')
+            ->get();
+
+        $data = $orders->map(function (Order $order) use ($statusFilter) {
+            $legs = $order->orderShops->values();
+            $outcome = $this->riderDeliveryHistoryOutcome($legs);
+
+            if (! $outcome || ($statusFilter !== 'all' && $outcome['key'] !== $statusFilter)) {
+                return null;
+            }
+
+            $shopIds = $legs->pluck('shop_id')
+                ->map(fn ($shopId) => (int) $shopId)
+                ->unique()
+                ->values();
+            $itemCount = $order->orderItems
+                ->filter(fn (OrderItem $item) => $shopIds->contains((int) $item->shop_id))
+                ->sum(fn (OrderItem $item) => (int) $item->quantity);
+
+            return [
+                'order_id' => (int) $order->id,
+                'order_code' => $order->orderDetail?->order_code,
+                'ordered_at' => $order->ordered_at?->toISOString(),
+                'status' => $outcome,
+                'recipient_name' => $order->orderDetail?->address?->recipient_name,
+                'delivery_address' => $order->orderDetail?->shipping_address,
+                'pickup_store_count' => $shopIds->count(),
+                'item_count' => (int) $itemCount,
+            ];
+        })->filter()->values();
+
+        return response()->json([
+            'success' => true,
+            'data' => $data,
+            'count' => $data->count(),
+            'filters' => [
+                'month' => $month,
+                'year' => $year,
+                'status' => $statusFilter,
+            ],
+        ]);
+    }
+
+    /**
+     * Fetch a presentation-ready delivery detail for the authenticated rider.
+     */
+    public function getRiderDelivery(Request $request, $orderId)
+    {
+        $rider = $request->user();
+        if ($rider->user_type !== User::TYPE_RIDER) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Only riders may access delivery details.',
+            ], 403);
+        }
+
+        $order = Order::query()
+            ->whereHas('orderShops', function ($query) use ($rider) {
+                $query->where('rider_id', $rider->id);
+            })
+            ->with([
+                'orderDetail.address' => fn ($query) => $query
+                    ->withTrashed()
+                    ->select('id', 'recipient_name', 'contact_number'),
+                'orderDetail.deliveryMethod:id,description',
+                'orderShops' => fn ($query) => $query
+                    ->where('rider_id', $rider->id)
+                    ->with([
+                        'shop:id,shop_name,shop_address',
+                        'status:id,stat_description',
+                        'logs' => fn ($logs) => $logs
+                            ->whereIn('event', ['rider_assigned', 'status_changed'])
+                            ->orderBy('created_at')
+                            ->orderBy('id'),
+                        'proofsOfDelivery.images',
+                    ]),
+            ])
+            ->find($orderId);
+
+        if (! $order || $order->orderShops->isEmpty()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Delivery not found.',
+            ], 404);
+        }
+
+        $legs = $order->orderShops->values();
+        $pickupLogsByLeg = $legs->mapWithKeys(fn (OrderShop $leg) => [
+            $leg->id => $this->firstRiderDeliveryStatusLog($leg, 'In-Transit'),
+        ]);
+        $deliveredLogsByLeg = $legs->mapWithKeys(fn (OrderShop $leg) => [
+            $leg->id => $this->firstRiderDeliveryStatusLog($leg, 'Delivered'),
+        ]);
+
+        $orderedLegs = $legs->sort(function (OrderShop $left, OrderShop $right) use ($pickupLogsByLeg) {
+            $leftTimestamp = $pickupLogsByLeg->get($left->id)?->created_at?->getTimestamp();
+            $rightTimestamp = $pickupLogsByLeg->get($right->id)?->created_at?->getTimestamp();
+
+            if ($leftTimestamp === null && $rightTimestamp !== null) {
+                return 1;
+            }
+            if ($leftTimestamp !== null && $rightTimestamp === null) {
+                return -1;
+            }
+            if ($leftTimestamp !== $rightTimestamp) {
+                return ($leftTimestamp ?? 0) <=> ($rightTimestamp ?? 0);
+            }
+
+            return (int) $left->id <=> (int) $right->id;
+        })->values();
+
+        $pickupStores = $orderedLegs->map(function (OrderShop $leg) use ($pickupLogsByLeg) {
+            $statusLabel = $leg->status?->stat_description ?? 'Unknown';
+
+            return [
+                'order_shop_id' => (int) $leg->id,
+                'shop_id' => (int) $leg->shop_id,
+                'name' => $leg->shop?->shop_name,
+                'address' => $leg->shop?->shop_address,
+                'status' => [
+                    'id' => $leg->order_status !== null ? (int) $leg->order_status : null,
+                    'key' => $this->riderDeliveryStatusKey($statusLabel),
+                    'label' => $statusLabel,
+                ],
+                'picked_up_at' => $pickupLogsByLeg->get($leg->id)?->created_at?->toISOString(),
+            ];
+        })->values();
+
+        $allLogs = $legs->flatMap(fn (OrderShop $leg) => $leg->logs)->values();
+        $acceptedLog = $allLogs
+            ->where('event', 'rider_assigned')
+            ->sortBy('created_at')
+            ->first();
+        $allPickedUp = $pickupLogsByLeg->every(fn ($log) => $log !== null);
+        $outForDeliveryLog = $allPickedUp
+            ? $pickupLogsByLeg->sortByDesc('created_at')->first()
+            : null;
+        $allDelivered = $legs->every(
+            fn (OrderShop $leg) => $this->riderDeliveryStatusKey($leg->status?->stat_description) === 'delivered'
+        );
+        $allHaveDeliveredLog = $deliveredLogsByLeg->every(fn ($log) => $log !== null);
+        $deliveredLog = $allDelivered && $allHaveDeliveredLog
+            ? $deliveredLogsByLeg->sortByDesc('created_at')->first()
+            : null;
+
+        $timeline = collect([
+            ['key' => 'received', 'label' => 'Received', 'occurred_at' => $order->ordered_at?->toISOString()],
+            ['key' => 'accepted', 'label' => 'Accepted', 'occurred_at' => $acceptedLog?->created_at?->toISOString()],
+            ['key' => 'out_for_delivery', 'label' => 'Out for Delivery', 'occurred_at' => $outForDeliveryLog?->created_at?->toISOString()],
+            ['key' => 'delivered', 'label' => 'Delivered', 'occurred_at' => $deliveredLog?->created_at?->toISOString()],
+        ])->map(fn (array $event) => array_merge($event, [
+            'completed' => $event['occurred_at'] !== null,
+        ]))->values();
+
+        $proofGroups = $orderedLegs->flatMap(function (OrderShop $leg) {
+            return $leg->proofsOfDelivery
+                ->map(function ($proof) use ($leg) {
+                    $images = $proof->images->values();
+                    if ($images->isEmpty() && is_string($proof->image_path) && $proof->image_path !== '') {
+                        $images = collect([(object) [
+                            'id' => null,
+                            'image_path' => $proof->image_path,
+                            'sort_order' => 0,
+                        ]]);
+                    }
+
+                    $isEmptyPendingProof = $this->riderDeliveryStatusKey($proof->status) === 'pending'
+                        && $images->isEmpty()
+                        && trim((string) $proof->remarks) === '';
+                    if ($isEmptyPendingProof) {
+                        return null;
+                    }
+
+                    return [
+                        'id' => (int) $proof->id,
+                        'order_shop_id' => (int) $leg->id,
+                        'shop_id' => (int) $leg->shop_id,
+                        'shop_name' => $leg->shop?->shop_name,
+                        'status' => $proof->status,
+                        'submitted_at' => $proof->updated_at?->toISOString(),
+                        'remarks' => $proof->remarks,
+                        'images' => $images->map(function ($image, int $index) {
+                            $url = $image->image_path;
+                            $path = parse_url($url, PHP_URL_PATH) ?: $url;
+                            $extension = strtolower((string) pathinfo($path, PATHINFO_EXTENSION));
+
+                            return [
+                                'id' => $image->id !== null ? (int) $image->id : null,
+                                'sort_order' => (int) $image->sort_order,
+                                'display_name' => 'Image'.($index + 1).($extension !== '' ? '.'.$extension : ''),
+                                'url' => $url,
+                            ];
+                        })->values(),
+                    ];
+                })
+                ->filter()
+                ->values();
+        })->values();
+
+        $address = $order->orderDetail?->address;
+        $deliveryMethod = trim((string) $order->orderDetail?->deliveryMethod?->description);
+        $contactNumber = trim((string) $address?->contact_number);
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'order_id' => (int) $order->id,
+                'order_code' => $order->orderDetail?->order_code,
+                'ordered_at' => $order->ordered_at?->toISOString(),
+                'status' => $this->aggregateRiderDeliveryStatus($legs),
+                'customer_delivery' => [
+                    'customer_name' => $address?->recipient_name,
+                    'contact_number' => strcasecmp($deliveryMethod, 'Standard') === 0 && $contactNumber !== ''
+                        ? $contactNumber
+                        : null,
+                    'drop_off_address' => $order->orderDetail?->shipping_address,
+                ],
+                'pickup_stores' => $pickupStores,
+                'timeline' => $timeline,
+                'proof_of_delivery' => [
+                    'groups' => $proofGroups,
+                ],
+            ],
+        ]);
+    }
+
+    /**
      * Atomically assign the requested ready shop legs to the authenticated rider.
      */
     public function accept(Request $request, $id)
@@ -383,12 +650,101 @@ class OrderController extends Controller
             ->pluck('id');
     }
 
+    private function firstRiderDeliveryStatusLog(OrderShop $leg, string $toStatus): ?OrderLog
+    {
+        return $leg->logs->first(function (OrderLog $log) use ($toStatus) {
+            return $log->event === 'status_changed'
+                && strcasecmp(trim((string) $log->to_status), $toStatus) === 0;
+        });
+    }
+
+    private function aggregateRiderDeliveryStatus($legs): array
+    {
+        $statuses = $legs->map(function (OrderShop $leg) {
+            $label = $leg->status?->stat_description ?? 'Unknown';
+
+            return [
+                'key' => $this->riderDeliveryStatusKey($label),
+                'label' => $label,
+            ];
+        })->values();
+
+        if ($statuses->pluck('key')->unique()->count() === 1) {
+            return $statuses->first();
+        }
+
+        $activeStatuses = $statuses
+            ->reject(fn (array $status) => in_array($status['key'], ['delivered', 'cancelled'], true))
+            ->values();
+
+        if ($activeStatuses->isEmpty()) {
+            return ['key' => 'mixed', 'label' => 'Mixed'];
+        }
+
+        $ranks = [
+            'pending' => 0,
+            'preparing' => 1,
+            'ready_for_pickup' => 2,
+            'ready_for_delivery' => 2,
+            'ready_for_drop_off' => 2,
+            'in_transit' => 3,
+        ];
+        $lowestRank = $activeStatuses->min(fn (array $status) => $ranks[$status['key']] ?? 99);
+        $leastProgressed = $activeStatuses->filter(
+            fn (array $status) => ($ranks[$status['key']] ?? 99) === $lowestRank
+        )->values();
+        $readyKeys = ['ready_for_pickup', 'ready_for_delivery', 'ready_for_drop_off'];
+
+        if ($leastProgressed->count() > 1
+            && $leastProgressed->every(fn (array $status) => in_array($status['key'], $readyKeys, true))
+        ) {
+            return ['key' => 'ready_for_delivery', 'label' => 'Ready for Delivery'];
+        }
+
+        return $leastProgressed->first();
+    }
+
+    private function riderDeliveryHistoryOutcome($legs): ?array
+    {
+        $statusKeys = $legs->map(
+            fn (OrderShop $leg) => $this->riderDeliveryStatusKey($leg->status?->stat_description)
+        );
+
+        if ($statusKeys->every(fn (string $status) => $status === 'delivered')) {
+            return ['key' => 'delivered', 'label' => 'Delivered'];
+        }
+
+        $allTerminal = $statusKeys->every(
+            fn (string $status) => in_array($status, ['delivered', 'cancelled'], true)
+        );
+        if ($allTerminal && $statusKeys->contains('cancelled')) {
+            return ['key' => 'cancelled', 'label' => 'Cancelled'];
+        }
+
+        $hasFailedProof = $legs->contains(function (OrderShop $leg) {
+            $latestProof = $leg->proofsOfDelivery->first();
+
+            return $latestProof
+                && $this->riderDeliveryStatusKey($latestProof->status) === 'failed';
+        });
+
+        return $hasFailedProof
+            ? ['key' => 'failed', 'label' => 'Failed']
+            : null;
+    }
+
+    private function riderDeliveryStatusKey(?string $status): string
+    {
+        $status = preg_replace('/[^a-z0-9]+/i', ' ', trim((string) $status)) ?? '';
+
+        return Str::snake($status !== '' ? $status : 'unknown');
+    }
+
     private function activeDeliveryCards(
         $orderShops,
         bool $includeRecipientContact = false,
         bool $includeDropOffCoordinates = false,
-    ): array
-    {
+    ): array {
         $orderIds = $orderShops->pluck('order_id')->unique()->values()->all();
         $shopIds = $orderShops->pluck('shop_id')->unique()->values()->all();
         $addressColumns = ['id', 'recipient_name'];

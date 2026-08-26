@@ -114,6 +114,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('rider/active-deliveries', [OrderController::class, 'getActiveDeliveries']);
     Route::get('rider/active-deliveries/{order_id}', [OrderController::class, 'getActiveDelivery'])
         ->whereNumber('order_id');
+    Route::get('rider/deliveries', [OrderController::class, 'getRiderDeliveryHistory']);
+    Route::get('rider/deliveries/{orderId}', [OrderController::class, 'getRiderDelivery'])
+        ->whereNumber('orderId');
     Route::post('orders/{id}/accept', [OrderController::class, 'accept']);
     Route::get('orders/user/{userId}', [OrderController::class, 'getByUser']);
     Route::get('orders/rider/{riderId}', [OrderController::class, 'getByRider']);

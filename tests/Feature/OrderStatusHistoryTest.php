@@ -11,6 +11,7 @@ use App\Services\ShopWalletService;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
@@ -551,6 +552,495 @@ class OrderStatusHistoryTest extends TestCase
                 'data' => [],
                 'count' => 0,
             ]);
+    }
+
+    public function test_rider_delivery_history_filters_terminal_cards_by_month_year_and_status(): void
+    {
+        [, $rider, $deliveredOrderId, $firstDeliveredLeg] = $this->makeOrder(6);
+        $deliveredAt = Carbon::parse('2026-09-10 03:51:00', 'UTC');
+        $deliveredDetailId = DB::table('orders')->where('id', $deliveredOrderId)->value('order_detail_id');
+        $deliveredAddressId = DB::table('order_details')->where('id', $deliveredDetailId)->value('address_id');
+        DB::table('orders')->where('id', $deliveredOrderId)->update(['ordered_at' => $deliveredAt]);
+        DB::table('order_details')->where('id', $deliveredDetailId)->update([
+            'order_code' => 'ORD-HISTORY-DELIVERED',
+            'shipping_address' => 'Purok 21, Madaum, Tagum City',
+        ]);
+        DB::table('addresses')->where('id', $deliveredAddressId)->update([
+            'recipient_name' => 'Maria Santos',
+        ]);
+        $secondDeliveredShopId = $this->makeShop('Second History Pickup');
+        DB::table('order_shops')->insert([
+            'order_id' => $deliveredOrderId,
+            'shop_id' => $secondDeliveredShopId,
+            'rider_id' => $rider->id,
+            'order_status' => 6,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $otherRiderShopId = $this->makeShop('Other Rider History Pickup');
+        DB::table('order_shops')->insert([
+            'order_id' => $deliveredOrderId,
+            'shop_id' => $otherRiderShopId,
+            'rider_id' => $this->makeUser(User::TYPE_RIDER)->id,
+            'order_status' => 6,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        foreach ([
+            [$firstDeliveredLeg->shop_id, 2],
+            [$secondDeliveredShopId, 5],
+            [$otherRiderShopId, 9],
+        ] as [$shopId, $quantity]) {
+            DB::table('order_items')->insert([
+                'order_id' => $deliveredOrderId,
+                'shop_id' => $shopId,
+                'item_id' => null,
+                'quantity' => $quantity,
+                'price_at_purchase' => 100,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        }
+
+        [, , $failedOrderId, $failedLeg] = $this->makeOrder(5);
+        $failedAt = Carbon::parse('2026-09-20 04:30:00', 'UTC');
+        $failedLeg->update(['rider_id' => $rider->id]);
+        DB::table('orders')->where('id', $failedOrderId)->update(['ordered_at' => $failedAt]);
+        DB::table('order_details')
+            ->where('id', DB::table('orders')->where('id', $failedOrderId)->value('order_detail_id'))
+            ->update(['order_code' => 'ORD-HISTORY-FAILED']);
+        DB::table('proof_of_delivery')->insert([
+            'order_id' => $failedOrderId,
+            'order_shop_id' => $failedLeg->id,
+            'rider_id' => $rider->id,
+            'image_path' => '/storage/pod_images/failed-history.jpg',
+            'remarks' => 'Recipient unavailable.',
+            'status' => 'failed',
+            'created_at' => $failedAt,
+            'updated_at' => $failedAt,
+        ]);
+
+        [, , $cancelledOrderId, $cancelledLeg] = $this->makeOrder(7);
+        $cancelledAt = Carbon::parse('2026-09-05 02:00:00', 'UTC');
+        $cancelledLeg->update(['rider_id' => $rider->id]);
+        DB::table('orders')->where('id', $cancelledOrderId)->update(['ordered_at' => $cancelledAt]);
+        DB::table('order_details')
+            ->where('id', DB::table('orders')->where('id', $cancelledOrderId)->value('order_detail_id'))
+            ->update(['order_code' => 'ORD-HISTORY-CANCELLED']);
+
+        [, , $activeOrderId, $activeLeg] = $this->makeOrder(5);
+        $activeLeg->update(['rider_id' => $rider->id]);
+        DB::table('orders')->where('id', $activeOrderId)->update([
+            'ordered_at' => Carbon::parse('2026-09-25 01:00:00', 'UTC'),
+        ]);
+
+        [, , $augustOrderId, $augustLeg] = $this->makeOrder(6);
+        $augustLeg->update(['rider_id' => $rider->id]);
+        DB::table('orders')->where('id', $augustOrderId)->update([
+            'ordered_at' => Carbon::parse('2026-08-15 01:00:00', 'UTC'),
+        ]);
+
+        Sanctum::actingAs($rider);
+
+        $this->getJson('/api/rider/deliveries?month=9&year=2026')
+            ->assertOk()
+            ->assertJsonPath('count', 3)
+            ->assertJsonPath('filters.month', 9)
+            ->assertJsonPath('filters.year', 2026)
+            ->assertJsonPath('filters.status', 'all')
+            ->assertJsonPath('data.0.order_id', $failedOrderId)
+            ->assertJsonPath('data.0.status.key', 'failed')
+            ->assertJsonPath('data.1.order_id', $deliveredOrderId)
+            ->assertJsonPath('data.1.order_code', 'ORD-HISTORY-DELIVERED')
+            ->assertJsonPath('data.1.ordered_at', $deliveredAt->toISOString())
+            ->assertJsonPath('data.1.status.key', 'delivered')
+            ->assertJsonPath('data.1.recipient_name', 'Maria Santos')
+            ->assertJsonPath('data.1.delivery_address', 'Purok 21, Madaum, Tagum City')
+            ->assertJsonPath('data.1.pickup_store_count', 2)
+            ->assertJsonPath('data.1.item_count', 7)
+            ->assertJsonPath('data.2.order_id', $cancelledOrderId)
+            ->assertJsonPath('data.2.status.key', 'cancelled')
+            ->assertJsonMissing(['order_id' => $activeOrderId])
+            ->assertJsonMissing(['order_id' => $augustOrderId]);
+
+        foreach ([
+            'delivered' => $deliveredOrderId,
+            'failed' => $failedOrderId,
+            'cancelled' => $cancelledOrderId,
+        ] as $status => $expectedOrderId) {
+            $this->getJson("/api/rider/deliveries?month=9&year=2026&status={$status}")
+                ->assertOk()
+                ->assertJsonPath('count', 1)
+                ->assertJsonPath('filters.status', $status)
+                ->assertJsonPath('data.0.order_id', $expectedOrderId)
+                ->assertJsonPath('data.0.status.key', $status);
+        }
+
+        $this->getJson('/api/rider/deliveries?month=8&year=2026&status=delivered')
+            ->assertOk()
+            ->assertJsonPath('count', 1)
+            ->assertJsonPath('data.0.order_id', $augustOrderId);
+    }
+
+    public function test_rider_delivery_history_enforces_role_and_validates_filters(): void
+    {
+        [$customer, $rider, $orderId] = $this->makeOrder(6);
+
+        $this->getJson('/api/rider/deliveries?month=9&year=2026')->assertUnauthorized();
+
+        Sanctum::actingAs($customer);
+        $this->getJson('/api/rider/deliveries?month=9&year=2026')->assertForbidden();
+
+        Sanctum::actingAs($rider);
+        $this->getJson('/api/rider/deliveries?month=13&year=2026')
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('month');
+        $this->getJson('/api/rider/deliveries?month=9&year=1999')
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('year');
+        $this->getJson('/api/rider/deliveries?month=9&year=2026&status=in_transit')
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('status');
+
+        $this->getJson("/api/rider/deliveries/{$orderId}")->assertOk();
+    }
+
+    public function test_rider_delivery_detail_returns_a_normalized_completed_delivery(): void
+    {
+        [, $rider, $orderId, $orderShop] = $this->makeOrder(6);
+        $receivedAt = Carbon::parse('2026-07-07 07:00:00', 'UTC');
+        $acceptedAt = Carbon::parse('2026-07-07 08:00:00', 'UTC');
+        $pickedUpAt = Carbon::parse('2026-07-08 09:00:00', 'UTC');
+        $deliveredAt = Carbon::parse('2026-07-10 07:00:00', 'UTC');
+        $orderDetailId = DB::table('orders')->where('id', $orderId)->value('order_detail_id');
+        $addressId = DB::table('order_details')->where('id', $orderDetailId)->value('address_id');
+
+        DB::table('orders')->where('id', $orderId)->update(['ordered_at' => $receivedAt]);
+        DB::table('order_details')->where('id', $orderDetailId)->update([
+            'order_code' => 'ORD-20451',
+            'shipping_address' => 'Purok 21, Madaum, Tagum City',
+        ]);
+        DB::table('addresses')->where('id', $addressId)->update([
+            'recipient_name' => 'Maria Santos',
+            'contact_number' => ' 09157782211 ',
+        ]);
+        DB::table('shops')->where('id', $orderShop->shop_id)->update([
+            'shop_name' => 'PMC Agrivet Supply',
+            'shop_address' => 'Pioneer Avenue, Tagum City',
+        ]);
+
+        foreach ([
+            ['rider_assigned', 'Ready for Delivery', 'Ready for Delivery', $acceptedAt],
+            ['status_changed', 'Ready for Delivery', 'In-Transit', $pickedUpAt],
+            ['status_changed', 'In-Transit', 'Delivered', $deliveredAt],
+        ] as [$event, $fromStatus, $toStatus, $occurredAt]) {
+            DB::table('order_logs')->insert([
+                'order_id' => $orderId,
+                'order_shop_id' => $orderShop->id,
+                'event' => $event,
+                'from_status' => $fromStatus,
+                'to_status' => $toStatus,
+                'user_id' => $rider->id,
+                'created_at' => $occurredAt,
+                'updated_at' => $occurredAt,
+            ]);
+        }
+
+        $proofId = DB::table('proof_of_delivery')->insertGetId([
+            'order_id' => $orderId,
+            'order_shop_id' => $orderShop->id,
+            'rider_id' => $rider->id,
+            'image_path' => '/storage/pod_images/first.jpg',
+            'remarks' => 'Delivered successfully.',
+            'status' => 'delivered',
+            'created_at' => $pickedUpAt,
+            'updated_at' => $deliveredAt,
+        ]);
+        DB::table('proof_of_delivery_images')->insert([
+            [
+                'proof_of_delivery_id' => $proofId,
+                'image_path' => '/storage/pod_images/second.WEBP',
+                'sort_order' => 1,
+                'created_at' => $deliveredAt,
+                'updated_at' => $deliveredAt,
+            ],
+            [
+                'proof_of_delivery_id' => $proofId,
+                'image_path' => '/storage/pod_images/first.jpg',
+                'sort_order' => 0,
+                'created_at' => $deliveredAt,
+                'updated_at' => $deliveredAt,
+            ],
+        ]);
+        Sanctum::actingAs($rider);
+
+        $this->getJson("/api/rider/deliveries/{$orderId}")
+            ->assertOk()
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('data.order_id', $orderId)
+            ->assertJsonPath('data.order_code', 'ORD-20451')
+            ->assertJsonPath('data.ordered_at', $receivedAt->toISOString())
+            ->assertJsonPath('data.status.key', 'delivered')
+            ->assertJsonPath('data.status.label', 'Delivered')
+            ->assertJsonPath('data.customer_delivery.customer_name', 'Maria Santos')
+            ->assertJsonPath('data.customer_delivery.contact_number', '09157782211')
+            ->assertJsonPath('data.customer_delivery.drop_off_address', 'Purok 21, Madaum, Tagum City')
+            ->assertJsonCount(1, 'data.pickup_stores')
+            ->assertJsonPath('data.pickup_stores.0.name', 'PMC Agrivet Supply')
+            ->assertJsonPath('data.pickup_stores.0.address', 'Pioneer Avenue, Tagum City')
+            ->assertJsonPath('data.pickup_stores.0.picked_up_at', $pickedUpAt->toISOString())
+            ->assertJsonPath('data.timeline.0.occurred_at', $receivedAt->toISOString())
+            ->assertJsonPath('data.timeline.1.occurred_at', $acceptedAt->toISOString())
+            ->assertJsonPath('data.timeline.2.occurred_at', $pickedUpAt->toISOString())
+            ->assertJsonPath('data.timeline.3.occurred_at', $deliveredAt->toISOString())
+            ->assertJsonPath('data.timeline.3.completed', true)
+            ->assertJsonCount(1, 'data.proof_of_delivery.groups')
+            ->assertJsonPath('data.proof_of_delivery.groups.0.status', 'delivered')
+            ->assertJsonPath('data.proof_of_delivery.groups.0.submitted_at', $deliveredAt->toISOString())
+            ->assertJsonPath('data.proof_of_delivery.groups.0.remarks', 'Delivered successfully.')
+            ->assertJsonPath('data.proof_of_delivery.groups.0.images.0.display_name', 'Image1.jpg')
+            ->assertJsonPath('data.proof_of_delivery.groups.0.images.0.url', '/storage/pod_images/first.jpg')
+            ->assertJsonPath('data.proof_of_delivery.groups.0.images.1.display_name', 'Image2.webp');
+    }
+
+    public function test_rider_delivery_detail_scopes_legs_and_aggregates_partial_progress(): void
+    {
+        [, $rider, $orderId, $inTransitLeg] = $this->makeOrder(5);
+        $acceptedAt = Carbon::parse('2026-07-07 08:00:00', 'UTC');
+        $pickedUpAt = Carbon::parse('2026-07-08 09:00:00', 'UTC');
+        $readyDeliveryShopId = $this->makeShop('Ready Delivery Shop');
+        $readyDropOffShopId = $this->makeShop('Ready Drop Off Shop');
+        $otherRider = $this->makeUser(User::TYPE_RIDER);
+        $otherShopId = $this->makeShop('Other Rider Shop');
+
+        $readyDeliveryLegId = DB::table('order_shops')->insertGetId([
+            'order_id' => $orderId,
+            'shop_id' => $readyDeliveryShopId,
+            'rider_id' => $rider->id,
+            'order_status' => 4,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $readyDropOffLegId = DB::table('order_shops')->insertGetId([
+            'order_id' => $orderId,
+            'shop_id' => $readyDropOffShopId,
+            'rider_id' => $rider->id,
+            'order_status' => 8,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $otherLegId = DB::table('order_shops')->insertGetId([
+            'order_id' => $orderId,
+            'shop_id' => $otherShopId,
+            'rider_id' => $otherRider->id,
+            'order_status' => 6,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        DB::table('order_logs')->insert([
+            [
+                'order_id' => $orderId,
+                'order_shop_id' => $inTransitLeg->id,
+                'event' => 'rider_assigned',
+                'from_status' => 'Ready for Delivery',
+                'to_status' => 'Ready for Delivery',
+                'user_id' => $rider->id,
+                'created_at' => $acceptedAt,
+                'updated_at' => $acceptedAt,
+            ],
+            [
+                'order_id' => $orderId,
+                'order_shop_id' => $inTransitLeg->id,
+                'event' => 'status_changed',
+                'from_status' => 'Ready for Delivery',
+                'to_status' => 'In-Transit',
+                'user_id' => $rider->id,
+                'created_at' => $pickedUpAt,
+                'updated_at' => $pickedUpAt,
+            ],
+            [
+                'order_id' => $orderId,
+                'order_shop_id' => $readyDeliveryLegId,
+                'event' => 'history_baseline',
+                'from_status' => null,
+                'to_status' => 'In-Transit',
+                'user_id' => null,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+        ]);
+
+        $failedProofId = DB::table('proof_of_delivery')->insertGetId([
+            'order_id' => $orderId,
+            'order_shop_id' => $inTransitLeg->id,
+            'rider_id' => $rider->id,
+            'image_path' => '/storage/pod_images/failed.png',
+            'remarks' => 'Recipient unavailable.',
+            'status' => 'failed',
+            'created_at' => $pickedUpAt,
+            'updated_at' => $pickedUpAt,
+        ]);
+        DB::table('proof_of_delivery_images')->insert([
+            'proof_of_delivery_id' => $failedProofId,
+            'image_path' => '/storage/pod_images/failed.png',
+            'sort_order' => 0,
+            'created_at' => $pickedUpAt,
+            'updated_at' => $pickedUpAt,
+        ]);
+        $otherProofId = DB::table('proof_of_delivery')->insertGetId([
+            'order_id' => $orderId,
+            'order_shop_id' => $otherLegId,
+            'rider_id' => $otherRider->id,
+            'image_path' => '/storage/pod_images/private.jpg',
+            'remarks' => 'Other rider proof.',
+            'status' => 'delivered',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        DB::table('proof_of_delivery_images')->insert([
+            'proof_of_delivery_id' => $otherProofId,
+            'image_path' => '/storage/pod_images/private.jpg',
+            'sort_order' => 0,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        Sanctum::actingAs($rider);
+
+        $response = $this->getJson("/api/rider/deliveries/{$orderId}");
+        $response->assertOk()
+            ->assertJsonPath('data.status.key', 'ready_for_delivery')
+            ->assertJsonPath('data.status.label', 'Ready for Delivery')
+            ->assertJsonCount(3, 'data.pickup_stores')
+            ->assertJsonPath('data.pickup_stores.0.order_shop_id', $inTransitLeg->id)
+            ->assertJsonPath('data.pickup_stores.0.picked_up_at', $pickedUpAt->toISOString())
+            ->assertJsonPath('data.pickup_stores.1.order_shop_id', $readyDeliveryLegId)
+            ->assertJsonPath('data.pickup_stores.1.picked_up_at', null)
+            ->assertJsonPath('data.pickup_stores.2.order_shop_id', $readyDropOffLegId)
+            ->assertJsonPath('data.timeline.1.occurred_at', $acceptedAt->toISOString())
+            ->assertJsonPath('data.timeline.2.occurred_at', null)
+            ->assertJsonPath('data.timeline.2.completed', false)
+            ->assertJsonPath('data.timeline.3.occurred_at', null)
+            ->assertJsonCount(1, 'data.proof_of_delivery.groups')
+            ->assertJsonPath('data.proof_of_delivery.groups.0.status', 'failed')
+            ->assertJsonMissing(['order_shop_id' => $otherLegId])
+            ->assertJsonMissing(['url' => '/storage/pod_images/private.jpg']);
+
+        DB::table('order_shops')->where('id', $inTransitLeg->id)->update(['order_status' => 6]);
+        DB::table('order_shops')->where('id', $readyDeliveryLegId)->update(['order_status' => 6]);
+        DB::table('order_shops')->where('id', $readyDropOffLegId)->update(['order_status' => 7]);
+
+        $this->getJson("/api/rider/deliveries/{$orderId}")
+            ->assertOk()
+            ->assertJsonPath('data.status.key', 'mixed')
+            ->assertJsonPath('data.status.label', 'Mixed');
+    }
+
+    public function test_rider_delivery_detail_uses_earliest_acceptance_and_latest_leg_completions(): void
+    {
+        [, $rider, $orderId, $firstLeg] = $this->makeOrder(6);
+        $secondLegId = DB::table('order_shops')->insertGetId([
+            'order_id' => $orderId,
+            'shop_id' => $this->makeShop('Second Completed Pickup'),
+            'rider_id' => $rider->id,
+            'order_status' => 6,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $firstAcceptedAt = Carbon::parse('2026-07-07 08:00:00', 'UTC');
+        $earliestAcceptedAt = Carbon::parse('2026-07-07 07:30:00', 'UTC');
+        $firstPickedUpAt = Carbon::parse('2026-07-08 09:00:00', 'UTC');
+        $lastPickedUpAt = Carbon::parse('2026-07-08 10:00:00', 'UTC');
+        $firstDeliveredAt = Carbon::parse('2026-07-10 11:00:00', 'UTC');
+        $lastDeliveredAt = Carbon::parse('2026-07-10 12:00:00', 'UTC');
+
+        foreach ([
+            [$firstLeg->id, 'rider_assigned', 'Ready for Delivery', 'Ready for Delivery', $firstAcceptedAt],
+            [$secondLegId, 'rider_assigned', 'Ready for Delivery', 'Ready for Delivery', $earliestAcceptedAt],
+            [$firstLeg->id, 'status_changed', 'Ready for Delivery', 'In-Transit', $firstPickedUpAt],
+            [$secondLegId, 'status_changed', 'Ready for Delivery', 'In-Transit', $lastPickedUpAt],
+            [$firstLeg->id, 'status_changed', 'In-Transit', 'Delivered', $firstDeliveredAt],
+            [$secondLegId, 'status_changed', 'In-Transit', 'Delivered', $lastDeliveredAt],
+        ] as [$orderShopId, $event, $fromStatus, $toStatus, $occurredAt]) {
+            DB::table('order_logs')->insert([
+                'order_id' => $orderId,
+                'order_shop_id' => $orderShopId,
+                'event' => $event,
+                'from_status' => $fromStatus,
+                'to_status' => $toStatus,
+                'user_id' => $rider->id,
+                'created_at' => $occurredAt,
+                'updated_at' => $occurredAt,
+            ]);
+        }
+
+        Sanctum::actingAs($rider);
+
+        $this->getJson("/api/rider/deliveries/{$orderId}")
+            ->assertOk()
+            ->assertJsonPath('data.status.key', 'delivered')
+            ->assertJsonPath('data.pickup_stores.0.order_shop_id', $firstLeg->id)
+            ->assertJsonPath('data.pickup_stores.0.picked_up_at', $firstPickedUpAt->toISOString())
+            ->assertJsonPath('data.pickup_stores.1.order_shop_id', $secondLegId)
+            ->assertJsonPath('data.pickup_stores.1.picked_up_at', $lastPickedUpAt->toISOString())
+            ->assertJsonPath('data.timeline.1.occurred_at', $earliestAcceptedAt->toISOString())
+            ->assertJsonPath('data.timeline.2.occurred_at', $lastPickedUpAt->toISOString())
+            ->assertJsonPath('data.timeline.3.occurred_at', $lastDeliveredAt->toISOString());
+    }
+
+    public function test_rider_delivery_detail_enforces_authentication_role_and_assignment(): void
+    {
+        [$customer, $assignedRider, $orderId] = $this->makeOrder(6);
+
+        $this->getJson("/api/rider/deliveries/{$orderId}")->assertUnauthorized();
+
+        Sanctum::actingAs($customer);
+        $this->getJson("/api/rider/deliveries/{$orderId}")->assertForbidden();
+
+        $unassignedRider = $this->makeUser(User::TYPE_RIDER);
+        Sanctum::actingAs($unassignedRider);
+        $this->getJson("/api/rider/deliveries/{$orderId}")->assertNotFound();
+
+        Sanctum::actingAs($assignedRider);
+        $this->getJson('/api/rider/deliveries/999999')->assertNotFound();
+    }
+
+    public function test_rider_delivery_detail_hides_contact_and_does_not_fabricate_legacy_timestamps(): void
+    {
+        [, $rider, $orderId, $orderShop] = $this->makeOrder(6);
+        $orderDetailId = DB::table('orders')->where('id', $orderId)->value('order_detail_id');
+        $addressId = DB::table('order_details')->where('id', $orderDetailId)->value('address_id');
+        DB::table('order_details')->where('id', $orderDetailId)->update(['delivery_method_id' => 2]);
+        DB::table('addresses')->where('id', $addressId)->update(['contact_number' => '09170000001']);
+        DB::table('order_logs')->insert([
+            'order_id' => $orderId,
+            'order_shop_id' => $orderShop->id,
+            'event' => 'history_baseline',
+            'from_status' => null,
+            'to_status' => 'Delivered',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        DB::table('proof_of_delivery')->insert([
+            'order_id' => $orderId,
+            'order_shop_id' => $orderShop->id,
+            'rider_id' => $rider->id,
+            'status' => 'pending',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        Sanctum::actingAs($rider);
+
+        $this->getJson("/api/rider/deliveries/{$orderId}")
+            ->assertOk()
+            ->assertJsonPath('data.status.key', 'delivered')
+            ->assertJsonPath('data.customer_delivery.contact_number', null)
+            ->assertJsonPath('data.pickup_stores.0.picked_up_at', null)
+            ->assertJsonPath('data.timeline.2.occurred_at', null)
+            ->assertJsonPath('data.timeline.3.occurred_at', null)
+            ->assertJsonCount(0, 'data.proof_of_delivery.groups');
     }
 
     public function test_rider_accepts_all_selected_ready_legs_atomically_and_idempotently(): void
