@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
@@ -45,5 +46,28 @@ class Payout extends Model
     public function shop()
     {
         return $this->belongsTo(Shop::class);
+    }
+
+    /**
+     * Super Admin/Admin: all shops.
+     * Owner Manager: shops under their agrivet.
+     * Vendor: the shop they are assigned to.
+     */
+    public function scopeVisibleTo(Builder $query, User $user): Builder
+    {
+        return match ($user->user_type) {
+            User::TYPE_SUPER_ADMIN, User::TYPE_ADMIN => $query,
+            User::TYPE_OWNER_MANAGER => $user->agrivet_id
+                ? $query->whereHas(
+                    'shop',
+                    fn (Builder $shopQuery) => $shopQuery->where('agrivet_id', $user->agrivet_id)
+                )
+                : $query->whereRaw('1 = 0'),
+            User::TYPE_VENDOR => $query->whereIn(
+                'shop_id',
+                $user->shops()->select('shops.id')
+            ),
+            default => $query->whereRaw('1 = 0'),
+        };
     }
 }

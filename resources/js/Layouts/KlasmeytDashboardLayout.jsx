@@ -298,6 +298,12 @@ export default function KlasmeytDashboardLayout({
                                             Activity Logs
                                         </Link>
                                         <Link
+                                            href={`${home}/payout-records`}
+                                            className="block rounded-md px-3 py-2 text-sm text-white/90 hover:bg-white/10"
+                                        >
+                                            Payout Records
+                                        </Link>
+                                        <Link
                                             href={`${home}/vouchers`}
                                             className="block rounded-md px-3 py-2 text-sm text-white/90 hover:bg-white/10"
                                         >

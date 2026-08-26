@@ -1,6 +1,6 @@
 import { Head } from '@inertiajs/react'
 import { ContactSupportFab } from '../Components/Dashboard/ContactSupportFab'
-import { DashboardHeader } from '../Components/Dashboard/DashboardHeader'
+import { DashboardHeader, OWNER_MANAGER_DROPDOWN_NAV } from '../Components/Dashboard/DashboardHeader'
 import { useDashboardSession } from '../hooks/useDashboardSession'
 
 export const OWNER_MANAGER_NAV = [
@@ -43,6 +43,7 @@ export default function OwnerManagerKlasmeytLayout({
                     showMessaging
                     messagingHref="/dashboard/owner-manager/messages"
                     navigationItems={OWNER_MANAGER_NAV}
+                    dropdownNavItems={OWNER_MANAGER_DROPDOWN_NAV}
                     userName={auth.user.name}
                     userEmail={auth.user.email}
                     notificationCount={notificationCount}

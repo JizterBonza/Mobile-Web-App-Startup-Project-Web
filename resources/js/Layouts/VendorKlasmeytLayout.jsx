@@ -1,6 +1,6 @@
 import { Head } from '@inertiajs/react'
 import { ContactSupportFab } from '../Components/Dashboard/ContactSupportFab'
-import { DashboardHeader } from '../Components/Dashboard/DashboardHeader'
+import { DashboardHeader, VENDOR_DROPDOWN_NAV } from '../Components/Dashboard/DashboardHeader'
 import { useDashboardSession } from '../hooks/useDashboardSession'
 
 export default function VendorKlasmeytLayout({
@@ -20,6 +20,7 @@ export default function VendorKlasmeytLayout({
             <div className="klasmeyt-landing min-h-screen bg-[#F8F9FB]">
                 <DashboardHeader
                     showNav={false}
+                    dropdownNavItems={VENDOR_DROPDOWN_NAV}
                     showMessaging
                     messagingHref="/dashboard/vendor/messages"
                     userName={auth.user.name}

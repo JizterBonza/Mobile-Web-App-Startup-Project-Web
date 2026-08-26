@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useForm, usePage } from '@inertiajs/react'
-import { Bell, ChevronDown, CreditCard, History, LogOut, Map, MessageSquareMore, Settings, SlidersHorizontal, Ticket, Truck } from 'lucide-react'
+import { Bell, ChevronDown, CreditCard, History, LogOut, Map, MessageSquareMore, Settings, SlidersHorizontal, Ticket, Truck, Wallet } from 'lucide-react'
 import primaryLogo from '../../../../Logo/Primary Logo.png'
 
 /**
@@ -375,6 +375,7 @@ export const SUPER_ADMIN_HEADER_NAV = [
 
 export const SUPER_ADMIN_DROPDOWN_NAV = [
     { label: 'Activity Logs', href: '/dashboard/super-admin/activity-logs', Icon: History },
+    { label: 'Payout Records', href: '/dashboard/super-admin/payout-records', Icon: Wallet },
     { label: 'Vouchers', href: '/dashboard/super-admin/vouchers', Icon: Ticket },
     { label: 'Payment Methods', href: '/dashboard/super-admin/payment-methods', Icon: CreditCard },
     { label: 'Delivery Methods', href: '/dashboard/super-admin/delivery-methods', Icon: Truck },
@@ -402,9 +403,18 @@ export const ADMIN_HEADER_NAV = [
 
 export const ADMIN_DROPDOWN_NAV = [
     { label: 'Activity Logs', href: '/dashboard/admin/activity-logs', Icon: History },
+    { label: 'Payout Records', href: '/dashboard/admin/payout-records', Icon: Wallet },
     { label: 'Vouchers', href: '/dashboard/admin/vouchers', Icon: Ticket },
     { label: 'Payment Methods', href: '/dashboard/admin/payment-methods', Icon: CreditCard },
     { label: 'Delivery Methods', href: '/dashboard/admin/delivery-methods', Icon: Truck },
     { label: 'Delivery Revenue Settings', href: '/dashboard/admin/delivery-revenue-settings', Icon: SlidersHorizontal },
     { label: 'Zones', href: '/dashboard/admin/zones', Icon: Map },
+]
+
+export const OWNER_MANAGER_DROPDOWN_NAV = [
+    { label: 'Payout Records', href: '/dashboard/owner-manager/payout-records', Icon: Wallet },
+]
+
+export const VENDOR_DROPDOWN_NAV = [
+    { label: 'Payout Records', href: '/dashboard/vendor/payout-records', Icon: Wallet },
 ]

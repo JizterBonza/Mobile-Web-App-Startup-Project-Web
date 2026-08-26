@@ -47,12 +47,13 @@ class PayoutController extends Controller
             $shopIds = [(int) $shop->id];
         }
 
-        $data = $this->payouts->disbursements($shopIds);
+        $result = $this->payouts->disbursements($shopIds);
 
         return response()->json([
             'success' => true,
-            'data' => $data,
-            'count' => count($data),
+            'data' => $result['ready'],
+            'skipped' => $result['skipped'],
+            'count' => count($result['ready']),
         ]);
     }
 }

@@ -67,7 +67,7 @@ class PayoutInstructionService
      * for each shop with a payable wallet balance.
      *
      * @param  array<int, int>|null  $shopIds
-     * @return array<int, array<string, mixed>>
+     * @return array{ready: array<int, array<string, mixed>>, skipped: array<int, array<string, mixed>>}
      */
     public function disbursements(?array $shopIds = null): array
     {
@@ -86,6 +86,7 @@ class PayoutInstructionService
             }
 
             $payloads = [];
+            $skipped = [];
 
             foreach ($query->orderBy('id')->lockForUpdate()->get() as $shop) {
                 $amount = round((float) $shop->wallet_balance, 2);
@@ -98,7 +99,14 @@ class PayoutInstructionService
                         'shop' => $shop,
                         'amount' => $amount,
                     ]);
-                } catch (InvalidArgumentException) {
+                } catch (InvalidArgumentException $e) {
+                    $skipped[] = [
+                        'shop_id' => $shop->id,
+                        'shop_name' => $shop->shop_name,
+                        'amount' => $amount,
+                        'bank_name' => $shop->bank_name,
+                        'reason' => $e->getMessage(),
+                    ];
                     continue;
                 }
 
@@ -122,7 +130,10 @@ class PayoutInstructionService
                 $payloads[] = $payload;
             }
 
-            return $payloads;
+            return [
+                'ready' => $payloads,
+                'skipped' => $skipped,
+            ];
         });
     }
 

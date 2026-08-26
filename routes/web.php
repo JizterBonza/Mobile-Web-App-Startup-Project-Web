@@ -18,6 +18,7 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\ShopMessageController;
 use App\Http\Controllers\SupportTicketController;
 use App\Http\Controllers\VoucherController;
+use App\Http\Controllers\PayoutRecordController;
 use App\Http\Controllers\KlasrumContentController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -152,6 +153,10 @@ Route::middleware(['auth', 'session.valid', 'user.type:super_admin'])->prefix('d
     Route::get('/{id}', [ActivityLogController::class, 'show'])->name('show');
 });
 
+Route::get('/dashboard/super-admin/payout-records', [PayoutRecordController::class, 'index'])
+    ->middleware(['auth', 'session.valid', 'user.type:super_admin'])
+    ->name('dashboard.super-admin.payout-records');
+
 // Super Admin Payment Methods
 Route::middleware(['auth', 'session.valid', 'user.type:super_admin'])->prefix('dashboard/super-admin/payment-methods')->name('dashboard.super-admin.payment-methods.')->group(function () {
     Route::get('/', [PaymentMethodController::class, 'index'])->name('index');
@@ -220,6 +225,7 @@ Route::middleware(['auth', 'session.valid', 'user.type:owner_manager'])->prefix(
     Route::get('/messages/{shopId}/products', [ShopMessageController::class, 'ownerManagerProducts'])->name('messages.products');
     Route::get('/messages/{shopId}/{conversationId}', [ShopMessageController::class, 'ownerManagerConversation'])->name('messages.conversation');
     Route::post('/messages/{shopId}/{conversationId}', [ShopMessageController::class, 'ownerManagerSend'])->name('messages.send');
+    Route::get('/payout-records', [PayoutRecordController::class, 'index'])->name('payout-records');
     Route::get('/support', [DashboardController::class, 'ownerManagerSupport'])->name('support');
     Route::post('/support/tickets', [SupportTicketController::class, 'store'])->name('support.tickets.store');
     Route::post('/support/tickets/{id}/reply', [SupportTicketController::class, 'vendorReply'])->name('support.tickets.reply');
@@ -323,6 +329,10 @@ Route::middleware(['auth', 'session.valid', 'user.type:admin'])->prefix('dashboa
     Route::get('/', [ActivityLogController::class, 'index'])->name('index');
     Route::get('/{id}', [ActivityLogController::class, 'show'])->name('show');
 });
+
+Route::get('/dashboard/admin/payout-records', [PayoutRecordController::class, 'index'])
+    ->middleware(['auth', 'session.valid', 'user.type:admin'])
+    ->name('dashboard.admin.payout-records');
 
 // Admin Payment Methods
 Route::middleware(['auth', 'session.valid', 'user.type:admin'])->prefix('dashboard/admin/payment-methods')->name('dashboard.admin.payment-methods.')->group(function () {
@@ -428,6 +438,7 @@ Route::middleware(['auth', 'session.valid', 'user.type:vendor'])->prefix('dashbo
     
     // Payouts
     Route::get('/payouts', [VendorController::class, 'payoutsIndex'])->name('payouts.index');
+    Route::get('/payout-records', [PayoutRecordController::class, 'index'])->name('payout-records');
     
     // Promotions
     Route::get('/promotions', [VendorController::class, 'promotionsIndex'])->name('promotions.index');
