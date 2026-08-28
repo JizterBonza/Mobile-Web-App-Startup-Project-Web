@@ -40,7 +40,7 @@ class KlasrumContent extends Model
 
     public function category(): BelongsTo
     {
-        return $this->belongsTo(KlasrumCategory::class, 'category_id');
+        return $this->belongsTo(KlasrumCategory::class, 'category_id')->withTrashed();
     }
 
     public function creator(): BelongsTo

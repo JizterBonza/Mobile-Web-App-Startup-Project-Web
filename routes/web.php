@@ -19,6 +19,7 @@ use App\Http\Controllers\ShopMessageController;
 use App\Http\Controllers\SupportTicketController;
 use App\Http\Controllers\VoucherController;
 use App\Http\Controllers\PayoutRecordController;
+use App\Http\Controllers\KlasrumCategoryController;
 use App\Http\Controllers\KlasrumContentController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -31,6 +32,9 @@ Route::middleware(['auth', 'session.valid', 'user.type:super_admin|admin'])->pre
     Route::get('/', [KlasrumContentController::class, 'index'])->name('index');
     Route::get('/new', [KlasrumContentController::class, 'create'])->name('create');
     Route::post('/', [KlasrumContentController::class, 'store'])->name('store');
+    Route::post('/categories', [KlasrumCategoryController::class, 'store'])->name('categories.store');
+    Route::put('/categories/{category}', [KlasrumCategoryController::class, 'update'])->whereNumber('category')->name('categories.update');
+    Route::delete('/categories/{category}', [KlasrumCategoryController::class, 'destroy'])->name('categories.destroy')->whereNumber('category');
     Route::get('/{content}/edit', [KlasrumContentController::class, 'edit'])->name('edit');
     Route::post('/{content}', [KlasrumContentController::class, 'update'])->name('update');
     Route::delete('/{content}', [KlasrumContentController::class, 'destroy'])->name('destroy');

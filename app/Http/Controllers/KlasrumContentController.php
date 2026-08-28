@@ -77,13 +77,13 @@ class KlasrumContentController extends Controller
 
         return Inertia::render('Klasrum/ContentBuilder', [
             'content' => $content->toBuilderArray(),
-            'categories' => KlasrumCategory::options(),
+            'categories' => KlasrumCategory::options($content->category_id),
         ]);
     }
 
     public function update(Request $request, KlasrumContent $content): RedirectResponse
     {
-        $validated = $this->validatedPayload($request);
+        $validated = $this->validatedPayload($request, $content);
         $oldValues = $content->toArray();
         $paths = $this->storeUploads($request, $content);
 
@@ -166,7 +166,7 @@ class KlasrumContentController extends Controller
     /**
      * @return array<string, mixed>
      */
-    private function validatedPayload(Request $request): array
+    private function validatedPayload(Request $request, ?KlasrumContent $existing = null): array
     {
         $request->merge([
             'category_id' => $request->input('category_id') ?: null,
@@ -182,7 +182,18 @@ class KlasrumContentController extends Controller
             'description' => ['nullable', 'string'],
             'heading' => ['nullable', 'string', 'max:255'],
             'body' => ['nullable', 'string'],
-            'category_id' => ['nullable', 'integer', 'exists:klasrum_categories,id'],
+            'category_id' => [
+                'nullable',
+                'integer',
+                Rule::exists('klasrum_categories', 'id')->where(function ($query) use ($existing) {
+                    $query->where(function ($inner) use ($existing) {
+                        $inner->where('active', 1)->whereNull('deleted_at');
+                        if ($existing?->category_id) {
+                            $inner->orWhere('id', $existing->category_id);
+                        }
+                    });
+                }),
+            ],
             'caption' => ['nullable', 'string', 'max:1000'],
             'status' => ['required', Rule::in([KlasrumContent::STATUS_DRAFT, KlasrumContent::STATUS_PUBLISHED])],
             'cover' => ['nullable', 'image', 'mimes:jpeg,jpg,png', 'max:5120'],
