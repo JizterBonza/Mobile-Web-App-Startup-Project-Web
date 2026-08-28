@@ -44,4 +44,14 @@ class OrderShop extends Model
     {
         return $this->belongsTo(OrderStatus::class, 'order_status', 'id');
     }
+
+    public function logs()
+    {
+        return $this->hasMany(OrderLog::class);
+    }
+
+    public function proofsOfDelivery()
+    {
+        return $this->hasMany(ProofOfDelivery::class);
+    }
 }

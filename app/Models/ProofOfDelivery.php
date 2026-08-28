@@ -23,6 +23,7 @@ class ProofOfDelivery extends Model
      */
     protected $fillable = [
         'order_id',
+        'order_shop_id',
         'rider_id',
         'latitude',
         'longitude',
@@ -54,6 +55,32 @@ class ProofOfDelivery extends Model
         return $this->belongsTo(Order::class, 'order_id');
     }
 
+    public function orderShop()
+    {
+        return $this->belongsTo(OrderShop::class);
+    }
+
+    public function images()
+    {
+        return $this->hasMany(ProofOfDeliveryImage::class)
+            ->orderBy('sort_order')
+            ->orderBy('id');
+    }
+
+    /** @return array<int, string> */
+    public function resolvedImagePaths(): array
+    {
+        $paths = $this->relationLoaded('images')
+            ? $this->images->pluck('image_path')->filter()->values()->all()
+            : $this->images()->pluck('image_path')->filter()->values()->all();
+
+        if ($paths === [] && is_string($this->image_path) && $this->image_path !== '') {
+            $paths[] = $this->image_path;
+        }
+
+        return $paths;
+    }
+
     /**
      * Get the order detail for the proof of delivery (accessed through order relationship).
      * This is an accessor that accesses OrderDetail through the Order relationship.
@@ -63,6 +90,3 @@ class ProofOfDelivery extends Model
         return $this->order?->orderDetail;
     }
 }
-
-
-

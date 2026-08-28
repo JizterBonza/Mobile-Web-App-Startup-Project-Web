@@ -117,6 +117,11 @@ class Order extends Model
         return $this->hasMany(VoucherUsage::class);
     }
 
+    public function logs()
+    {
+        return $this->hasMany(OrderLog::class);
+    }
+
     /**
      * Resolve order_status from order_shops (first shop's status) for API compatibility.
      */
@@ -140,4 +145,3 @@ class Order extends Model
         return $value;
     }
 }
-

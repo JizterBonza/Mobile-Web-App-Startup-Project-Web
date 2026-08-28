@@ -595,10 +595,12 @@ class DashboardController extends Controller
 
         $now = now();
 
-        DB::table('order_shops')
-            ->where('order_id', $orderId)
-            ->whereIn('shop_id', $shopIds)
-            ->update(['order_status' => $preparingStatusId, 'updated_at' => $now]);
+        $this->transitionShopOrderRows(
+            $orderShops,
+            $preparingStatusId,
+            'Order accepted by owner/manager.',
+            'owner_manager_dashboard',
+        );
 
         $preparingItemStatusId = DB::table('order_item_status')->where('stat_description', 'Preparing')->value('id');
         if ($preparingItemStatusId) {
@@ -607,20 +609,6 @@ class DashboardController extends Controller
                 ->whereIn('shop_id', $shopIds)
                 ->update(['item_status' => (int) $preparingItemStatusId, 'updated_at' => $now]);
         }
-
-        $this->logShopOrderEvent(
-            $orderId,
-            'status_changed',
-            'Pending',
-            'Preparing',
-            'Order accepted by owner/manager.'
-        );
-
-        $this->notifyCustomerOfShopOrderStatus(
-            $orderId,
-            $orderShops->pluck('shop_id')->map(fn ($id) => (int) $id)->all(),
-            'Preparing'
-        );
 
         return redirect()->route('dashboard.owner-manager.orders')
             ->with('success', 'Order accepted successfully.');
@@ -660,10 +648,12 @@ class DashboardController extends Controller
         $now = now();
         $declineReason = trim($request->input('decline_reason'));
 
-        DB::table('order_shops')
-            ->where('order_id', $orderId)
-            ->whereIn('shop_id', $shopIds)
-            ->update(['order_status' => $cancelledStatusId, 'updated_at' => $now]);
+        $this->transitionShopOrderRows(
+            $orderShops,
+            $cancelledStatusId,
+            $declineReason,
+            'owner_manager_dashboard',
+        );
 
         $cancelledItemStatusId = DB::table('order_item_status')->where('stat_description', 'Cancelled')->value('id');
         if ($cancelledItemStatusId) {
@@ -672,14 +662,6 @@ class DashboardController extends Controller
                 ->whereIn('shop_id', $shopIds)
                 ->update(['item_status' => (int) $cancelledItemStatusId, 'updated_at' => $now]);
         }
-
-        $this->logShopOrderEvent(
-            $orderId,
-            'cancelled',
-            'Pending',
-            'Cancelled',
-            $declineReason
-        );
 
         return redirect()->route('dashboard.owner-manager.orders')
             ->with('success', 'Order declined successfully.');
@@ -724,25 +706,11 @@ class DashboardController extends Controller
                 ->with('error', 'Mark every item as done preparing before marking the order ready.');
         }
 
-        $now = now();
-
-        DB::table('order_shops')
-            ->where('order_id', $orderId)
-            ->whereIn('shop_id', $shopIds)
-            ->update(['order_status' => $readyStatus['order_status_id'], 'updated_at' => $now]);
-
-        $this->logShopOrderEvent(
-            $orderId,
-            'status_changed',
-            'Preparing',
-            $readyStatus['label'],
-            'Order marked as ready by owner/manager.'
-        );
-
-        $this->notifyCustomerOfShopOrderStatus(
-            $orderId,
-            $orderShops->pluck('shop_id')->map(fn ($id) => (int) $id)->all(),
-            $readyStatus['label']
+        $this->transitionShopOrderRows(
+            $orderShops,
+            $readyStatus['order_status_id'],
+            'Order marked as ready by owner/manager.',
+            'owner_manager_dashboard',
         );
 
         return redirect()->route('dashboard.owner-manager.orders')

@@ -969,20 +969,16 @@ class VendorController extends Controller
                     ? (int) $orderStatusByDeliveryMethod[$deliveryMethodId]
                     : null;
                 if ($newOrderStatus !== null) {
-                    DB::table('order_shops')
+                    $orderShop = DB::table('order_shops')
                         ->where('order_id', $orderItem->order_id)
                         ->where('shop_id', $shop->id)
-                        ->update([
-                            'order_status' => $newOrderStatus,
-                            'updated_at' => now(),
-                        ]);
-
-                    $readyLabel = DB::table('order_status')->where('id', $newOrderStatus)->value('stat_description');
-                    if (is_string($readyLabel) && $readyLabel !== '') {
-                        $this->notifyCustomerOfShopOrderStatus(
-                            (int) $orderItem->order_id,
-                            [(int) $shop->id],
-                            $readyLabel
+                        ->first();
+                    if ($orderShop) {
+                        $this->transitionShopOrderRows(
+                            [$orderShop],
+                            $newOrderStatus,
+                            'Order became ready after all items were prepared.',
+                            'vendor_item_status',
                         );
                     }
                 }
@@ -1003,19 +999,18 @@ class VendorController extends Controller
                     ->where('stat_description', 'Preparing')
                     ->value('id');
                 if ($preparingOrderStatusId !== null) {
-                    DB::table('order_shops')
+                    $orderShop = DB::table('order_shops')
                         ->where('order_id', $orderItem->order_id)
                         ->where('shop_id', $shop->id)
-                        ->update([
-                            'order_status' => (int) $preparingOrderStatusId,
-                            'updated_at' => now(),
-                        ]);
-
-                    $this->notifyCustomerOfShopOrderStatus(
-                        (int) $orderItem->order_id,
-                        [(int) $shop->id],
-                        'Preparing'
-                    );
+                        ->first();
+                    if ($orderShop) {
+                        $this->transitionShopOrderRows(
+                            [$orderShop],
+                            (int) $preparingOrderStatusId,
+                            'Order preparation started after all items were accepted.',
+                            'vendor_item_status',
+                        );
+                    }
                 }
             }
         }
@@ -1398,10 +1393,12 @@ class VendorController extends Controller
 
         $now = now();
 
-        DB::table('order_shops')
-            ->where('order_id', $orderId)
-            ->whereIn('shop_id', $shopIds)
-            ->update(['order_status' => $preparingStatusId, 'updated_at' => $now]);
+        $this->transitionShopOrderRows(
+            $orderShops,
+            $preparingStatusId,
+            'Order accepted by vendor.',
+            'vendor_dashboard',
+        );
 
         $preparingItemStatusId = DB::table('order_item_status')->where('stat_description', 'Preparing')->value('id');
         if ($preparingItemStatusId) {
@@ -1410,20 +1407,6 @@ class VendorController extends Controller
                 ->whereIn('shop_id', $shopIds)
                 ->update(['item_status' => (int) $preparingItemStatusId, 'updated_at' => $now]);
         }
-
-        $this->logShopOrderEvent(
-            $orderId,
-            'status_changed',
-            'Pending',
-            'Preparing',
-            'Order accepted by vendor.'
-        );
-
-        $this->notifyCustomerOfShopOrderStatus(
-            $orderId,
-            $orderShops->pluck('shop_id')->map(fn ($id) => (int) $id)->all(),
-            'Preparing'
-        );
 
         return $this->redirectToVendorStoreOrdersTab()
             ->with('success', 'Order accepted successfully.');
@@ -1463,10 +1446,12 @@ class VendorController extends Controller
         $now = now();
         $declineReason = trim($request->input('decline_reason'));
 
-        DB::table('order_shops')
-            ->where('order_id', $orderId)
-            ->whereIn('shop_id', $shopIds)
-            ->update(['order_status' => $cancelledStatusId, 'updated_at' => $now]);
+        $this->transitionShopOrderRows(
+            $orderShops,
+            $cancelledStatusId,
+            $declineReason,
+            'vendor_dashboard',
+        );
 
         $cancelledItemStatusId = DB::table('order_item_status')->where('stat_description', 'Cancelled')->value('id');
         if ($cancelledItemStatusId) {
@@ -1475,14 +1460,6 @@ class VendorController extends Controller
                 ->whereIn('shop_id', $shopIds)
                 ->update(['item_status' => (int) $cancelledItemStatusId, 'updated_at' => $now]);
         }
-
-        $this->logShopOrderEvent(
-            $orderId,
-            'cancelled',
-            'Pending',
-            'Cancelled',
-            $declineReason
-        );
 
         return $this->redirectToVendorStoreOrdersTab()
             ->with('success', 'Order declined successfully.');
@@ -1527,23 +1504,11 @@ class VendorController extends Controller
                 ->with('error', 'Mark every item as done preparing before marking the order ready.');
         }
 
-        DB::table('order_shops')
-            ->where('order_id', $orderId)
-            ->whereIn('shop_id', $shopIds)
-            ->update(['order_status' => $readyStatus['order_status_id'], 'updated_at' => now()]);
-
-        $this->logShopOrderEvent(
-            $orderId,
-            'status_changed',
-            'Preparing',
-            $readyStatus['label'],
-            'Order marked as ready by vendor.'
-        );
-
-        $this->notifyCustomerOfShopOrderStatus(
-            $orderId,
-            $orderShops->pluck('shop_id')->map(fn ($id) => (int) $id)->all(),
-            $readyStatus['label']
+        $this->transitionShopOrderRows(
+            $orderShops,
+            $readyStatus['order_status_id'],
+            'Order marked as ready by vendor.',
+            'vendor_dashboard',
         );
 
         return $this->redirectToVendorStoreOrdersTab()

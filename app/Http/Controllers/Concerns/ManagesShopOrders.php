@@ -2,9 +2,9 @@
 
 namespace App\Http\Controllers\Concerns;
 
-use App\Services\OrderStatusCustomerMessageService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use App\Services\OrderStatusTransitionService;
 
 trait ManagesShopOrders
 {
@@ -394,39 +394,28 @@ trait ManagesShopOrders
      *
      * @param  array<int, int>  $shopIds
      */
-    protected function notifyCustomerOfShopOrderStatus(int $orderId, array $shopIds, string $statusDescription): void
-    {
-        app(OrderStatusCustomerMessageService::class)->notifyForShops(
-            $orderId,
-            $shopIds,
-            $statusDescription,
-            auth()->user(),
-        );
-    }
-
-    protected function logShopOrderEvent(
-        int $orderId,
-        string $event,
-        ?string $fromStatus,
-        ?string $toStatus,
+    protected function transitionShopOrderRows(
+        iterable $orderShops,
+        int $toStatusId,
         ?string $notes = null,
+        string $source = 'dashboard',
     ): void {
-        if (! Schema::hasTable('order_logs')) {
-            return;
-        }
+        $service = app(OrderStatusTransitionService::class);
+        $actor = auth()->user();
 
-        DB::table('order_logs')->insert([
-            'order_id'    => $orderId,
-            'event'       => $event,
-            'from_status' => $fromStatus,
-            'to_status'   => $toStatus,
-            'user_id'     => auth()->id(),
-            'notes'       => $notes,
-            'ip_address'  => request()->ip(),
-            'user_agent'  => request()->userAgent(),
-            'created_at'  => now(),
-            'updated_at'  => now(),
-        ]);
+        DB::transaction(function () use ($orderShops, $toStatusId, $notes, $source, $service, $actor) {
+            foreach ($orderShops as $orderShop) {
+                $service->transition(
+                    (int) $orderShop->id,
+                    $toStatusId,
+                    $actor,
+                    [
+                        'notes' => $notes,
+                        'source' => $source,
+                    ],
+                );
+            }
+        });
     }
 
     protected function firstItemImageUrl(mixed $itemImages): ?string
