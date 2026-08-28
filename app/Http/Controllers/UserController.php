@@ -11,6 +11,7 @@ use App\Services\UserWelcomeEmailService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 
@@ -418,9 +419,13 @@ class UserController extends Controller
             'email' => 'nullable|string|email|max:255|unique:user_details,email,' . $user->user_detail_id,
             'mobile_number' => 'nullable|string|max:20',
             'shipping_address' => 'nullable|string',
+            'profile_image' => 'nullable|image|mimes:jpeg,png,jpg,webp|max:5120',
             'profile_image_url' => 'nullable|url|max:255',
             'username' => 'nullable|string|max:100|unique:user_credentials,username,' . $user->user_credential_id,
         ]);
+
+        $newStoredPath = null;
+        $previousImageUrl = $user->userDetail->profile_image_url ?? null;
 
         try {
             DB::beginTransaction();
@@ -445,7 +450,11 @@ class UserController extends Controller
             if ($request->has('shipping_address')) {
                 $userDetailData['shipping_address'] = $request->shipping_address;
             }
-            if ($request->filled('profile_image_url')) {
+
+            if ($request->hasFile('profile_image')) {
+                $newStoredPath = $request->file('profile_image')->store('profile-images', 'public');
+                $userDetailData['profile_image_url'] = Storage::disk('public')->url($newStoredPath);
+            } elseif ($request->filled('profile_image_url')) {
                 $userDetailData['profile_image_url'] = $request->profile_image_url;
             }
 
@@ -462,6 +471,13 @@ class UserController extends Controller
 
             DB::commit();
 
+            if (
+                array_key_exists('profile_image_url', $userDetailData)
+                && $userDetailData['profile_image_url'] !== $previousImageUrl
+            ) {
+                $this->deleteLocalProfileImage($previousImageUrl);
+            }
+
             // Reload user with updated relationships
             $user->refresh();
             $user->load(['userDetail', 'userCredential']);
@@ -472,10 +488,42 @@ class UserController extends Controller
             ], 200);
         } catch (\Exception $e) {
             DB::rollBack();
+
+            if ($newStoredPath) {
+                Storage::disk('public')->delete($newStoredPath);
+            }
+
             return response()->json([
                 'message' => 'Failed to update profile.',
                 'error' => $e->getMessage()
             ], 500);
+        }
+    }
+
+    /**
+     * Delete a previously stored local profile image. Remote URLs are left intact.
+     */
+    private function deleteLocalProfileImage(?string $url): void
+    {
+        if (! $url) {
+            return;
+        }
+
+        $publicPrefix = rtrim(Storage::disk('public')->url(''), '/');
+        $storagePath = null;
+
+        if (str_starts_with($url, $publicPrefix.'/')) {
+            $storagePath = ltrim(substr($url, strlen($publicPrefix)), '/');
+        } elseif (str_starts_with($url, '/storage/')) {
+            $storagePath = ltrim(substr($url, strlen('/storage/')), '/');
+        }
+
+        if (! $storagePath || str_contains($storagePath, '..')) {
+            return;
+        }
+
+        if (Storage::disk('public')->exists($storagePath)) {
+            Storage::disk('public')->delete($storagePath);
         }
     }
 

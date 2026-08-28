@@ -100,7 +100,7 @@ Route::middleware('auth:sanctum')->group(function () {
         return response()->json($request->user());
     });
     Route::get('badges', [MobileController::class, 'badges']);
-    Route::put('profile/update', [UserController::class, 'updateMobile']);
+    Route::match(['put', 'post'], 'profile/update', [UserController::class, 'updateMobile']);
     Route::put('profile/change-password', [UserController::class, 'updatePasswordMobile']);
 
     // Vouchers / checkout
