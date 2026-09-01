@@ -65,6 +65,7 @@ class ActivityLogController extends Controller
         return Inertia::render('Dashboard/ActivityLogs', [
             'activityLogs' => $activityLogs,
             'filters' => $filters,
+            'subjectTypes' => ActivityLog::availableSubjectTypes(),
         ]);
     }
 

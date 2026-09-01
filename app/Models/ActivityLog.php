@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Str;
 
 class ActivityLog extends Model
 {
@@ -119,6 +120,28 @@ class ActivityLog extends Model
     public function scopeAction($query, $action)
     {
         return $query->where('action', $action);
+    }
+
+    /**
+     * Distinct subject types present in the logs, with human-readable labels.
+     *
+     * @return list<array{value: string, label: string}>
+     */
+    public static function availableSubjectTypes(): array
+    {
+        return static::query()
+            ->whereNotNull('subject_type')
+            ->where('subject_type', '!=', '')
+            ->distinct()
+            ->pluck('subject_type')
+            ->filter()
+            ->map(fn (string $type) => [
+                'value' => $type,
+                'label' => Str::headline(class_basename($type)),
+            ])
+            ->sortBy('label', SORT_NATURAL | SORT_FLAG_CASE)
+            ->values()
+            ->all();
     }
 
     /**
