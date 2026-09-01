@@ -210,7 +210,7 @@ export default function Login() {
                                 Continue with Google
                             </button>
 
-                            <div className="pt-2 text-center text-sm text-[#6B7280] space-y-2">
+                            <div className="pt-2 text-center text-sm text-[#6B7280]">
                                 <p>
                                     <button
                                         type="button"
@@ -219,11 +219,6 @@ export default function Login() {
                                     >
                                         Need help signing in?
                                     </button>
-                                </p>
-                                <p>
-                                    <Link href="/register" className="text-[#102059] font-semibold hover:underline">
-                                        Create an account
-                                    </Link>
                                 </p>
                             </div>
                         </form>
