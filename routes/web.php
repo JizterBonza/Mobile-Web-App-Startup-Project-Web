@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Auth\AuthController;
+use App\Http\Controllers\Auth\GoogleAuthController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\AgrivetController;
 use App\Http\Controllers\VendorController;
@@ -47,6 +48,9 @@ Route::redirect('/register-store', '/register');
 // Authentication Routes
 Route::get('/login', [AuthController::class, 'showLogin'])->name('login');
 Route::post('/login', [AuthController::class, 'login']);
+Route::get('/auth/google', [GoogleAuthController::class, 'redirect'])->name('auth.google');
+Route::get('/auth/google/callback', [GoogleAuthController::class, 'callback'])->name('auth.google.callback');
+Route::post('/auth/google/token', [GoogleAuthController::class, 'token'])->name('auth.google.token');
 Route::get('/register', [AuthController::class, 'showRegister'])->name('register');
 Route::post('/register', [AuthController::class, 'register']);
 Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
