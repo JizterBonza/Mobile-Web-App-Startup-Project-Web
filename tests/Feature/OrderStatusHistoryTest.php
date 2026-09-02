@@ -2,9 +2,11 @@
 
 namespace Tests\Feature;
 
+use App\Models\Notification;
 use App\Models\OrderLog;
 use App\Models\OrderShop;
 use App\Models\User;
+use App\Services\OrderLifecycleNotificationService;
 use App\Services\OrderStatusCustomerMessageService;
 use App\Services\OrderStatusTransitionService;
 use App\Services\ShopWalletService;
@@ -13,6 +15,7 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
@@ -64,6 +67,19 @@ class OrderStatusHistoryTest extends TestCase
             'order_shop_id' => $orderShop->id,
             'status' => 'pending',
         ]);
+
+        $notification = Notification::query()->sole();
+        $this->assertSame($rider->id, (int) $notification->user_id);
+        $this->assertSame('order_picked_up', $notification->type);
+        $this->assertSame('order', $notification->category);
+        $this->assertSame('Pickup Successful', $notification->title);
+        $this->assertSame($orderId, $notification->data['order_id']);
+        $this->assertSame($orderShop->id, $notification->data['order_shop_id']);
+        $this->assertSame($orderShop->shop_id, $notification->data['shop_id']);
+        $this->assertStringStartsWith('Test Shop ', $notification->data['shop_name']);
+        $this->assertSame('In-Transit', $notification->data['status']);
+        $this->assertNull($notification->action_url);
+        $this->assertFalse($notification->read);
     }
 
     public function test_delivery_requires_verified_proof(): void
@@ -76,6 +92,7 @@ class OrderStatusHistoryTest extends TestCase
             $this->fail('Delivery without proof should be rejected.');
         } catch (ValidationException) {
             $this->assertSame(5, (int) $orderShop->fresh()->order_status);
+            $this->assertDatabaseCount('notifications', 0);
         }
 
         $service->transition($orderShop, 6, $rider, [
@@ -88,6 +105,12 @@ class OrderStatusHistoryTest extends TestCase
             'from_status' => 'In-Transit',
             'to_status' => 'Delivered',
         ]);
+
+        $notification = Notification::query()->sole();
+        $this->assertSame($rider->id, (int) $notification->user_id);
+        $this->assertSame('order_delivered', $notification->type);
+        $this->assertSame('Delivery Completed', $notification->title);
+        $this->assertSame('Delivered', $notification->data['status']);
     }
 
     public function test_customer_can_cancel_only_a_pending_order(): void
@@ -126,6 +149,21 @@ class OrderStatusHistoryTest extends TestCase
         $log = OrderLog::firstOrFail();
         $this->assertSame('admin_override', $log->event);
         $this->assertTrue($log->metadata['admin_override']);
+        $this->assertDatabaseCount('notifications', 0);
+    }
+
+    public function test_admin_override_does_not_create_a_rider_lifecycle_notification(): void
+    {
+        [, , , $orderShop] = $this->makeOrder(5);
+        $admin = $this->makeUser(User::TYPE_ADMIN);
+
+        app(OrderStatusTransitionService::class)->transition($orderShop, 6, $admin, [
+            'force' => true,
+            'reason' => 'Completing a manually verified delivery.',
+        ]);
+
+        $this->assertSame(6, (int) $orderShop->fresh()->order_status);
+        $this->assertDatabaseCount('notifications', 0);
     }
 
     public function test_history_endpoint_limits_a_rider_to_assigned_shop_legs(): void
@@ -1045,7 +1083,7 @@ class OrderStatusHistoryTest extends TestCase
 
     public function test_rider_accepts_all_selected_ready_legs_atomically_and_idempotently(): void
     {
-        [, $rider, $orderId, $firstReadyLeg] = $this->makeOrder(4);
+        [$customer, $rider, $orderId, $firstReadyLeg] = $this->makeOrder(4);
         $firstReadyLeg->update(['rider_id' => null]);
         $secondReadyLegId = DB::table('order_shops')->insertGetId([
             'order_id' => $orderId,
@@ -1087,6 +1125,31 @@ class OrderStatusHistoryTest extends TestCase
             ]);
         }
 
+        $notifications = Notification::query()->orderBy('user_id')->get();
+        $this->assertCount(2, $notifications);
+        $riderNotification = $notifications->firstWhere('user_id', $rider->id);
+        $customerNotification = $notifications->firstWhere('user_id', $customer->id);
+
+        $this->assertNotNull($riderNotification);
+        $this->assertNotNull($customerNotification);
+        $this->assertSame('order_accepted', $riderNotification->type);
+        $this->assertSame('Order Accepted', $riderNotification->title);
+        $this->assertSame('Rider Assigned', $customerNotification->title);
+        $this->assertSame('order', $riderNotification->category);
+        $this->assertSame($sortedIds, $riderNotification->data['order_shop_ids']);
+        $this->assertCount(2, $riderNotification->data['shop_ids']);
+        $this->assertSame($orderId, $riderNotification->data['order_id']);
+        $this->assertSame($rider->id, $riderNotification->data['rider_id']);
+        $this->assertNull($riderNotification->action_url);
+
+        $this->getJson('/api/notifications?type=order_accepted')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.type', 'order_accepted')
+            ->assertJsonPath('data.0.category', 'order')
+            ->assertJsonPath('data.0.data.order_id', $orderId)
+            ->assertJsonPath('data.0.data.order_shop_ids', $sortedIds);
+
         $this->getJson('/api/orders/ready-for-delivery')
             ->assertOk()
             ->assertJsonPath('count', 0);
@@ -1102,6 +1165,37 @@ class OrderStatusHistoryTest extends TestCase
             ->assertJsonPath('data.newly_assigned_order_shop_ids', [])
             ->assertJsonPath('data.already_assigned_order_shop_ids', $sortedIds);
         $this->assertDatabaseCount('order_logs', 2);
+        $this->assertDatabaseCount('notifications', 2);
+    }
+
+    public function test_acceptance_succeeds_and_is_committed_when_notification_creation_fails(): void
+    {
+        [, $rider, $orderId, $readyLeg] = $this->makeOrder(4);
+        $readyLeg->update(['rider_id' => null]);
+
+        $this->mock(OrderLifecycleNotificationService::class)
+            ->shouldReceive('notifyOrderAccepted')
+            ->once()
+            ->andThrow(new \RuntimeException('Notification storage unavailable.'));
+        Log::spy();
+        Sanctum::actingAs($rider);
+
+        $this->postJson("/api/orders/{$orderId}/accept", [
+            'order_shop_ids' => [$readyLeg->id],
+        ])->assertOk();
+
+        $this->assertSame($rider->id, (int) $readyLeg->fresh()->rider_id);
+        $this->assertDatabaseHas('order_logs', [
+            'order_shop_id' => $readyLeg->id,
+            'event' => 'rider_assigned',
+        ]);
+        $this->assertDatabaseCount('notifications', 0);
+        Log::shouldHaveReceived('warning')
+            ->once()
+            ->withArgs(fn ($message, $context) => $message === 'Rider accepted order but lifecycle notification failed.'
+                && $context['order_id'] === $orderId
+                && $context['rider_id'] === $rider->id
+            );
     }
 
     public function test_rider_acceptance_rolls_back_when_any_selected_leg_is_unavailable(): void
@@ -1129,6 +1223,7 @@ class OrderStatusHistoryTest extends TestCase
             'rider_id' => null,
         ]);
         $this->assertDatabaseCount('order_logs', 0);
+        $this->assertDatabaseCount('notifications', 0);
     }
 
     public function test_rider_acceptance_rejects_non_ready_and_foreign_order_legs(): void
@@ -1259,6 +1354,15 @@ class OrderStatusHistoryTest extends TestCase
             'order_shop_id' => $orderShop->id,
             'to_status' => 'Delivered',
         ]);
+        $this->assertDatabaseHas('notifications', [
+            'user_id' => $rider->id,
+            'type' => 'order_delivered',
+            'category' => 'order',
+            'title' => 'Delivery Completed',
+            'reference_type' => \App\Models\Order::class,
+            'reference_id' => $orderId,
+            'action_url' => null,
+        ]);
     }
 
     public function test_failed_delivery_is_logged_without_completing_the_order(): void
@@ -1291,6 +1395,7 @@ class OrderStatusHistoryTest extends TestCase
             'from_status' => 'In-Transit',
             'to_status' => 'In-Transit',
         ]);
+        $this->assertDatabaseCount('notifications', 0);
     }
 
     public function test_pod_upload_rejects_more_than_five_images(): void
@@ -1779,6 +1884,21 @@ class OrderStatusHistoryTest extends TestCase
             $table->json('metadata')->nullable();
             $table->string('ip_address')->nullable();
             $table->string('user_agent')->nullable();
+            $table->timestamps();
+        });
+        Schema::create('notifications', function (Blueprint $table) {
+            $table->id();
+            $table->unsignedBigInteger('user_id');
+            $table->string('type');
+            $table->string('category')->default('general');
+            $table->string('title');
+            $table->text('message');
+            $table->string('reference_type')->nullable();
+            $table->unsignedBigInteger('reference_id')->nullable();
+            $table->json('data')->nullable();
+            $table->boolean('read')->default(false);
+            $table->timestamp('read_at')->nullable();
+            $table->string('action_url')->nullable();
             $table->timestamps();
         });
         Schema::create('proof_of_delivery', function (Blueprint $table) {
