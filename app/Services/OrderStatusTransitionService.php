@@ -17,6 +17,7 @@ class OrderStatusTransitionService
     public function __construct(
         private readonly OrderStatusCustomerMessageService $customerMessages,
         private readonly ShopWalletService $shopWallets,
+        private readonly OrderLifecycleNotificationService $lifecycleNotifications,
     ) {}
 
     /**
@@ -156,6 +157,32 @@ class OrderStatusTransitionService
                         'error' => $e->getMessage(),
                     ]);
                 }
+
+                if ($actor->user_type !== User::TYPE_RIDER) {
+                    return;
+                }
+
+                try {
+                    match ($this->statusKey($toStatus->stat_description)) {
+                        'in-transit' => $this->lifecycleNotifications->notifyOrderPickedUp(
+                            (int) $leg->id,
+                            (int) $actor->id,
+                        ),
+                        'delivered' => $this->lifecycleNotifications->notifyOrderDelivered(
+                            (int) $leg->id,
+                            (int) $actor->id,
+                        ),
+                        default => null,
+                    };
+                } catch (\Throwable $e) {
+                    Log::warning('Order status changed but rider notification failed.', [
+                        'order_id' => $leg->order_id,
+                        'order_shop_id' => $leg->id,
+                        'rider_id' => $actor->id,
+                        'status' => $toStatus->stat_description,
+                        'error' => $e->getMessage(),
+                    ]);
+                }
             });
 
             return ['changed' => true, 'order_shop' => $leg, 'log' => $log];
@@ -279,6 +306,25 @@ class OrderStatusTransitionService
                     ],
                 );
                 $newlyAssigned[] = (int) $leg->id;
+            }
+
+            if ($newlyAssigned !== []) {
+                DB::afterCommit(function () use ($actor, $newlyAssigned, $orderId) {
+                    try {
+                        $this->lifecycleNotifications->notifyOrderAccepted(
+                            $orderId,
+                            (int) $actor->id,
+                            $newlyAssigned,
+                        );
+                    } catch (\Throwable $e) {
+                        Log::warning('Rider accepted order but lifecycle notification failed.', [
+                            'order_id' => $orderId,
+                            'order_shop_ids' => $newlyAssigned,
+                            'rider_id' => $actor->id,
+                            'error' => $e->getMessage(),
+                        ]);
+                    }
+                });
             }
 
             return [
