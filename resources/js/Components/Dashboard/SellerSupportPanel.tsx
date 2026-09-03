@@ -189,6 +189,32 @@ function fileIcon(type: string) {
   return <FileText className="w-4 h-4 text-gray-500" />;
 }
 
+function isImageAttachment(file: { type: string; name: string }) {
+  return (
+    file.type.startsWith("image/") ||
+    /\.(jpe?g|png|gif|webp|bmp|heic|heif)$/i.test(file.name)
+  );
+}
+
+function isVideoAttachment(file: { type: string; name: string }) {
+  return file.type.startsWith("video/") || /\.mp4$/i.test(file.name);
+}
+
+function revokeFileUrl(file: AttachedFile) {
+  if (file.url) URL.revokeObjectURL(file.url);
+}
+
+function toAttachedFiles(files: File[]): AttachedFile[] {
+  return files.map((f) => ({
+    id: Math.random().toString(36).slice(2),
+    name: f.name,
+    size: f.size,
+    type: f.type,
+    url: URL.createObjectURL(f),
+    file: f,
+  }));
+}
+
 // ─── Status Badge ─────────────────────────────────────────────────────────────
 
 function StatusBadge({ status }: { status: TicketStatus }) {
@@ -244,6 +270,8 @@ export function SellerSupportPanel({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const attachedFilesRef = useRef<AttachedFile[]>([]);
+  const replyFilesRef = useRef<AttachedFile[]>([]);
 
   useEffect(() => {
     setTickets(initialTickets.map(parseTicket));
@@ -268,6 +296,21 @@ export function SellerSupportPanel({
   const [showAcceptSuccess, setShowAcceptSuccess] = useState(false);
   const [showReopenSuccess, setShowReopenSuccess] = useState(false);
 
+  useEffect(() => {
+    attachedFilesRef.current = attachedFiles;
+  }, [attachedFiles]);
+
+  useEffect(() => {
+    replyFilesRef.current = replyFiles;
+  }, [replyFiles]);
+
+  useEffect(() => {
+    return () => {
+      attachedFilesRef.current.forEach(revokeFileUrl);
+      replyFilesRef.current.forEach(revokeFileUrl);
+    };
+  }, []);
+
   // ── Filtered tickets ──
   const filteredTickets = tickets
     .filter((t) => {
@@ -285,53 +328,66 @@ export function SellerSupportPanel({
     });
 
   // ── File handling (new ticket) ──
-  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const files = Array.from(e.target.files || []);
+  function addAttachedFiles(files: File[]) {
     const maxSize = 20 * 1024 * 1024;
+    let sizeError = "";
     const validFiles = files.filter((f) => {
       if (f.size > maxSize) {
-        setFormErrors((prev) => ({
-          ...prev,
-          attachments: `"${f.name}" exceeds the 20MB limit.`,
-        }));
+        sizeError = `"${f.name}" exceeds the 20MB limit.`;
         return false;
       }
       return true;
     });
 
-    const newFiles: AttachedFile[] = validFiles.map((f) => ({
-      id: Math.random().toString(36).slice(2),
-      name: f.name,
-      size: f.size,
-      type: f.type,
-      url: URL.createObjectURL(f),
-      file: f,
-    }));
-    setAttachedFiles((prev) => [...prev, ...newFiles]);
+    if (sizeError) {
+      setFormErrors((prev) => ({ ...prev, attachments: sizeError }));
+    } else if (validFiles.length) {
+      setFormErrors((prev) => {
+        if (!prev.attachments) return prev;
+        const next = { ...prev };
+        delete next.attachments;
+        return next;
+      });
+    }
+
+    if (validFiles.length) {
+      setAttachedFiles((prev) => [...prev, ...toAttachedFiles(validFiles)]);
+    }
+  }
+
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    addAttachedFiles(Array.from(e.target.files || []));
     if (fileInputRef.current) fileInputRef.current.value = "";
   }
 
   function removeFile(id: string) {
-    setAttachedFiles((prev) => prev.filter((f) => f.id !== id));
+    setAttachedFiles((prev) => {
+      const target = prev.find((f) => f.id === id);
+      if (target) revokeFileUrl(target);
+      return prev.filter((f) => f.id !== id);
+    });
+  }
+
+  function clearAttachedFiles() {
+    setAttachedFiles((prev) => {
+      prev.forEach(revokeFileUrl);
+      return [];
+    });
   }
 
   // ── File handling (reply) ──
   function handleReplyFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files || []);
-    const newFiles: AttachedFile[] = files.map((f) => ({
-      id: Math.random().toString(36).slice(2),
-      name: f.name,
-      size: f.size,
-      type: f.type,
-      url: URL.createObjectURL(f),
-      file: f,
-    }));
-    setReplyFiles((prev) => [...prev, ...newFiles]);
+    setReplyFiles((prev) => [...prev, ...toAttachedFiles(files)]);
     if (replyFileRef.current) replyFileRef.current.value = "";
   }
 
   function removeReplyFile(id: string) {
-    setReplyFiles((prev) => prev.filter((f) => f.id !== id));
+    setReplyFiles((prev) => {
+      const target = prev.find((f) => f.id === id);
+      if (target) revokeFileUrl(target);
+      return prev.filter((f) => f.id !== id);
+    });
   }
 
   // ── New ticket validation ──
@@ -383,7 +439,7 @@ export function SellerSupportPanel({
       setSubmittedTicketId(ticket.id);
       setShowSuccessDialog(true);
       setForm({ title: "", description: "", category: "" });
-      setAttachedFiles([]);
+      clearAttachedFiles();
       setFormErrors({});
     } catch (error: unknown) {
       const axiosError = error as {
@@ -481,7 +537,10 @@ export function SellerSupportPanel({
       setTickets(updatedTickets.map(parseTicket));
       setSelectedTicket(parsedTicket);
       setReplyText("");
-      setReplyFiles([]);
+      setReplyFiles((prev) => {
+        prev.forEach(revokeFileUrl);
+        return [];
+      });
       setShowReplySuccess(true);
     } catch (error: unknown) {
       handleTicketActionError(
@@ -674,6 +733,7 @@ export function SellerSupportPanel({
             attachedFiles={attachedFiles}
             fileInputRef={fileInputRef}
             onFileChange={handleFileChange}
+            onAddFiles={addAttachedFiles}
             onRemoveFile={removeFile}
             formErrors={formErrors}
             submitError={submitError}
@@ -682,7 +742,7 @@ export function SellerSupportPanel({
             onCancel={() => {
               setView("list");
               setForm({ title: "", description: "", category: "" });
-              setAttachedFiles([]);
+              clearAttachedFiles();
               setFormErrors({});
               setSubmitError("");
             }}
@@ -971,32 +1031,7 @@ function TicketDetail({
             onChange={onReplyFileChange}
           />
           {replyFiles.length > 0 && (
-            <div className="mt-2 space-y-1.5">
-              {replyFiles.map((f) => (
-                <div
-                  key={f.id}
-                  className="flex items-center gap-2 p-2 bg-white border border-[#E5E7EB] rounded-lg"
-                >
-                  {fileIcon(f.type)}
-                  <span
-                    className="flex-1 text-xs text-[#1F2937] truncate"
-                    style={{ fontFamily: "Inter Condensed, sans-serif" }}
-                  >
-                    {f.name}
-                  </span>
-                  <span className="text-xs text-[#9CA3AF]">
-                    {formatFileSize(f.size)}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => onRemoveReplyFile(f.id)}
-                    className="p-0.5 hover:bg-[#FEE2E2] rounded transition-colors"
-                  >
-                    <X className="w-3.5 h-3.5 text-[#6B7280] hover:text-[#E20E28]" />
-                  </button>
-                </div>
-              ))}
-            </div>
+            <AttachmentPreviewList files={replyFiles} onRemove={onRemoveReplyFile} />
           )}
 
           <div className="flex justify-end mt-4">
@@ -1157,7 +1192,93 @@ function ThreadBubble({ msg }: { msg: ThreadMessage }) {
   );
 }
 
-// ─── New Ticket Form ──────────────────────────────────────────────────────────
+// ─── Attachment Preview List ──────────────────────────────────────────────────
+
+function AttachmentPreviewList({
+  files,
+  onRemove,
+}: {
+  files: AttachedFile[];
+  onRemove: (id: string) => void;
+}) {
+  if (files.length === 0) return null;
+
+  const mediaFiles = files.filter(
+    (f) => isImageAttachment(f) || isVideoAttachment(f)
+  );
+  const otherFiles = files.filter(
+    (f) => !isImageAttachment(f) && !isVideoAttachment(f)
+  );
+
+  return (
+    <div className="mt-3 space-y-3">
+      {mediaFiles.length > 0 && (
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+          {mediaFiles.map((f) => (
+            <div
+              key={f.id}
+              className="relative group aspect-square overflow-hidden rounded-lg border border-[#E5E7EB] bg-[#F3F4F6]"
+            >
+              {isImageAttachment(f) ? (
+                <img
+                  src={f.url}
+                  alt={f.name}
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                <video
+                  src={f.url}
+                  className="h-full w-full object-cover bg-black"
+                  muted
+                  playsInline
+                />
+              )}
+              <button
+                type="button"
+                onClick={() => onRemove(f.id)}
+                aria-label={`Remove ${f.name}`}
+                className="absolute top-1.5 right-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-black/60 text-white hover:bg-black/80 transition-colors"
+              >
+                <X className="w-3.5 h-3.5" strokeWidth={2.5} />
+              </button>
+              <p
+                className="absolute bottom-0 inset-x-0 truncate bg-black/55 px-2 py-1 text-[11px] text-white"
+                style={{ fontFamily: "Inter Condensed, sans-serif" }}
+              >
+                {f.name}
+              </p>
+            </div>
+          ))}
+        </div>
+      )}
+      {otherFiles.map((f) => (
+        <div
+          key={f.id}
+          className="flex items-center gap-3 p-3 bg-[#F9FAFB] border border-[#E5E7EB] rounded-lg"
+        >
+          {fileIcon(f.type)}
+          <div className="flex-1 min-w-0">
+            <p
+              className="text-sm font-medium text-[#1F2937] truncate"
+              style={{ fontFamily: "Inter Condensed, sans-serif" }}
+            >
+              {f.name}
+            </p>
+            <p className="text-xs text-[#9CA3AF]">{formatFileSize(f.size)}</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => onRemove(f.id)}
+            className="p-1 hover:bg-[#FEE2E2] rounded-md transition-colors"
+            aria-label={`Remove ${f.name}`}
+          >
+            <X className="w-4 h-4 text-[#6B7280] hover:text-[#E20E28]" />
+          </button>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 function NewTicketForm({
   form,
@@ -1165,6 +1286,7 @@ function NewTicketForm({
   attachedFiles,
   fileInputRef,
   onFileChange,
+  onAddFiles,
   onRemoveFile,
   formErrors,
   submitError,
@@ -1177,6 +1299,7 @@ function NewTicketForm({
   attachedFiles: AttachedFile[];
   fileInputRef: React.RefObject<HTMLInputElement>;
   onFileChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  onAddFiles: (files: File[]) => void;
   onRemoveFile: (id: string) => void;
   formErrors: Record<string, string>;
   submitError?: string;
@@ -1184,6 +1307,31 @@ function NewTicketForm({
   onSubmit: () => void;
   onCancel: () => void;
 }) {
+  const [isDragging, setIsDragging] = useState(false);
+
+  function handleDragOver(e: React.DragEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = "copy";
+    setIsDragging(true);
+  }
+
+  function handleDragLeave(e: React.DragEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+      setIsDragging(false);
+    }
+  }
+
+  function handleDrop(e: React.DragEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    const files = Array.from(e.dataTransfer.files);
+    if (files.length) onAddFiles(files);
+  }
+
   return (
     <div className="max-w-2xl mx-auto">
       <div className="mb-6">
@@ -1287,19 +1435,34 @@ function NewTicketForm({
           <p className="text-xs text-[#6B7280] mb-3">
             Attach screenshots, videos, or documents. JPG, PNG, MP4, PDF, DOCX — max 20MB each.
           </p>
-          <button
-            type="button"
+          <div
+            role="button"
+            tabIndex={0}
             onClick={() => fileInputRef.current?.click()}
-            className="w-full border-2 border-dashed border-[#D1D5DB] rounded-xl p-6 flex flex-col items-center gap-2 hover:border-[#244693] hover:bg-[#F0F4FF] transition-all group"
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                fileInputRef.current?.click();
+              }
+            }}
+            onDragOver={handleDragOver}
+            onDragEnter={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+            className={`w-full border-2 border-dashed rounded-xl p-6 flex flex-col items-center gap-2 cursor-pointer transition-all ${
+              isDragging
+                ? "border-[#244693] bg-[#F0F4FF]"
+                : "border-[#D1D5DB] hover:border-[#244693] hover:bg-[#F0F4FF]"
+            }`}
           >
-            <Upload className="w-8 h-8 text-[#9CA3AF] group-hover:text-[#244693] transition-colors" />
+            <Upload className={`w-8 h-8 transition-colors ${isDragging ? "text-[#244693]" : "text-[#9CA3AF]"}`} />
             <p
-              className="text-sm text-[#6B7280] group-hover:text-[#244693]"
+              className={`text-sm ${isDragging ? "text-[#244693]" : "text-[#6B7280]"}`}
               style={{ fontFamily: "Inter Condensed, sans-serif" }}
             >
               <span className="font-semibold">Click to upload</span> or drag and drop
             </p>
-          </button>
+          </div>
           <input
             ref={fileInputRef}
             type="file"
@@ -1308,34 +1471,7 @@ function NewTicketForm({
             className="hidden"
             onChange={onFileChange}
           />
-          {attachedFiles.length > 0 && (
-            <div className="mt-3 space-y-2">
-              {attachedFiles.map((f) => (
-                <div
-                  key={f.id}
-                  className="flex items-center gap-3 p-3 bg-[#F9FAFB] border border-[#E5E7EB] rounded-lg"
-                >
-                  {fileIcon(f.type)}
-                  <div className="flex-1 min-w-0">
-                    <p
-                      className="text-sm font-medium text-[#1F2937] truncate"
-                      style={{ fontFamily: "Inter Condensed, sans-serif" }}
-                    >
-                      {f.name}
-                    </p>
-                    <p className="text-xs text-[#9CA3AF]">{formatFileSize(f.size)}</p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => onRemoveFile(f.id)}
-                    className="p-1 hover:bg-[#FEE2E2] rounded-md transition-colors"
-                  >
-                    <X className="w-4 h-4 text-[#6B7280] hover:text-[#E20E28]" />
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
+          <AttachmentPreviewList files={attachedFiles} onRemove={onRemoveFile} />
           {formErrors.attachments && (
             <p className="text-xs text-[#E20E28] mt-1">{formErrors.attachments}</p>
           )}
