@@ -4,7 +4,6 @@ namespace App\Http\Controllers;
 
 use App\Http\Controllers\Concerns\EnsuresApiOwnership;
 use App\Models\Cart;
-use App\Models\DiscountLog;
 use App\Models\Item;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
@@ -29,7 +28,6 @@ class CartController extends Controller
             'item:' . implode(',', self::ITEM_SELECT),
             'item.shop:' . implode(',', self::SHOP_SELECT),
             'item.shop.zone:id,name,is_cod',
-            'item.activeDiscountLog',
         ];
 
         if ($includeUser) {
@@ -39,32 +37,22 @@ class CartController extends Controller
         return $with;
     }
 
-    private function ensureDiscountLogIsValid(Item $item): ?DiscountLog
-    {
-        if (!$item->relationLoaded('activeDiscountLog') || !$item->activeDiscountLog) {
-            return null;
-        }
-
-        return $item->activeDiscountLog->deactivateIfExpired()
-            ? $item->activeDiscountLog
-            : null;
-    }
-
     private function buildDiscountDetails(Item $item): ?array
     {
-        $log = $this->ensureDiscountLogIsValid($item);
+        $discountPercent = $item->getActiveDiscountPercent();
 
-        if ($item->getActiveDiscountPercent() <= 0 || !$log) {
+        if ($discountPercent <= 0) {
             return null;
         }
 
         return [
-            'original_price' => $log->original_price,
-            'actual_discount' => $log->actual_discount,
-            'discounted_price' => $log->discounted_price,
-            'discount_percent' => $log->discount_percent,
-            'discount_type' => $log->discount_type,
-            'discount_expires_at' => $log->discount_expires_at,
+            'original_price' => number_format((float) $item->item_price, 2, '.', ''),
+            'discounted_price' => number_format($item->getEffectivePrice(), 2, '.', ''),
+            'discount_percent' => number_format($discountPercent, 2, '.', ''),
+            'discount_type' => $item->discount_type,
+            'discount_expires_at' => $item->discount_type === 'timed'
+                ? $item->discount_expires_at
+                : null,
         ];
     }
 

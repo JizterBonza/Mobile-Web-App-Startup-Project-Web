@@ -123,8 +123,12 @@ class Item extends Model
         return $query
             ->where('discount_percent', '>', 0)
             ->where(function ($q) {
-                $q->whereNull('discount_expires_at')
-                    ->orWhere('discount_expires_at', '>=', now());
+                $q->where('discount_type', 'manual')
+                    ->orWhere(function ($timedQuery) {
+                        $timedQuery->where('discount_type', 'timed')
+                            ->whereNotNull('discount_expires_at')
+                            ->where('discount_expires_at', '>=', now());
+                    });
             });
     }
 
@@ -137,13 +141,17 @@ class Item extends Model
             return 0.0;
         }
 
-        if ($this->discount_type === 'timed' && $this->discount_expires_at !== null) {
-            if (now()->greaterThan($this->discount_expires_at)) {
-                return 0.0;
-            }
+        if ($this->discount_type === 'manual') {
+            return (float) $this->discount_percent;
         }
 
-        return (float) $this->discount_percent;
+        if ($this->discount_type === 'timed'
+            && $this->discount_expires_at !== null
+            && now()->lessThanOrEqualTo($this->discount_expires_at)) {
+            return (float) $this->discount_percent;
+        }
+
+        return 0.0;
     }
 
     /**
@@ -181,4 +189,3 @@ class Item extends Model
         return $this->shop ? $this->shop->shop_name : null;
     }
 }
-
