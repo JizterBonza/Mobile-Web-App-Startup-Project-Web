@@ -689,6 +689,12 @@ class AgrivetController extends Controller
     public function removeShop($id, $shopId)
     {
         $agrivet = Agrivet::findOrFail($id);
+        $currentUser = auth()->user();
+
+        if ($currentUser->user_type === 'owner_manager' && (int) $currentUser->agrivet_id !== (int) $agrivet->id) {
+            abort(403);
+        }
+
         $shop = Shop::where('agrivet_id', $agrivet->id)->findOrFail($shopId);
 
         try {
@@ -698,9 +704,13 @@ class AgrivetController extends Controller
 
             ActivityLog::log('deactivated', "Shop deactivated: {$shop->shop_name}", $shop, $shop->toArray(), null);
 
-            $currentUser = auth()->user();
-            $redirectRoute = $currentUser->user_type === 'admin' 
-                ? 'dashboard.admin.agrivets.shops.index' 
+            if ($currentUser->user_type === 'owner_manager') {
+                return redirect()->route('dashboard.owner-manager.stores')
+                    ->with('success', 'Shop deactivated successfully.');
+            }
+
+            $redirectRoute = $currentUser->user_type === 'admin'
+                ? 'dashboard.admin.agrivets.shops.index'
                 : 'dashboard.super-admin.agrivets.shops.index';
 
             return redirect()->route($redirectRoute, $id)

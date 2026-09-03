@@ -218,6 +218,7 @@ Route::middleware(['auth', 'session.valid', 'user.type:owner_manager'])->prefix(
     Route::get('/stores/{shopId}/store-information', [DashboardController::class, 'ownerManagerStoreInformation'])->name('stores.store-information');
     Route::get('/stores/{shopId}/income', [DashboardController::class, 'ownerManagerStoreIncome'])->name('stores.income');
     Route::put('/stores/{shopId}', [DashboardController::class, 'ownerManagerUpdateShop'])->name('stores.update');
+    Route::delete('/stores/{shopId}', [DashboardController::class, 'ownerManagerRemoveShop'])->name('stores.destroy');
     Route::post('/stores/{shopId}/cover-photo', [DashboardController::class, 'ownerManagerUpdateShopCoverPhoto'])->name('stores.cover-photo');
     Route::post('/stores/{shopId}/permit-photo', [DashboardController::class, 'ownerManagerUpdateShopPermitPhoto'])->name('stores.permit-photo');
     Route::post('/stores/{shopId}/listings', [DashboardController::class, 'ownerManagerStoreShopListing'])->name('stores.listings.store');

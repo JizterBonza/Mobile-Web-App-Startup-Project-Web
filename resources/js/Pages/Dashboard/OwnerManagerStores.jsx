@@ -32,6 +32,8 @@ function FieldError({ message }) {
 export default function OwnerManagerStores({ auth, agrivet, shops = [], zones = [], flash }) {
     const ownerDisplayName = agrivet?.owner_name || auth.user.name
     const [showAddModal, setShowAddModal] = useState(false)
+    const [shopToRemove, setShopToRemove] = useState(null)
+    const [isDeleting, setIsDeleting] = useState(false)
     const [operatingDays, setOperatingDays] = useState([])
     const [storeImagePreview, setStoreImagePreview] = useState(null)
     const [permitImagePreview, setPermitImagePreview] = useState(null)
@@ -166,6 +168,26 @@ export default function OwnerManagerStores({ auth, agrivet, shops = [], zones = 
         })
     }
 
+    const openRemoveStore = (shop) => {
+        if (!agrivet || shop.shop_status !== 'active') return
+        setShopToRemove(shop)
+    }
+
+    const closeRemoveModal = () => {
+        if (isDeleting) return
+        setShopToRemove(null)
+    }
+
+    const confirmRemoveShop = () => {
+        if (!shopToRemove || isDeleting) return
+        setIsDeleting(true)
+        router.delete(`/dashboard/owner-manager/stores/${shopToRemove.id}`, {
+            preserveScroll: true,
+            onFinish: () => setIsDeleting(false),
+            onSuccess: () => setShopToRemove(null),
+        })
+    }
+
     return (
         <OwnerManagerKlasmeytLayout auth={auth} title="My Stores">
             {!agrivet && <OwnerManagerNoAgrivetAlert />}
@@ -237,117 +259,123 @@ export default function OwnerManagerStores({ auth, agrivet, shops = [], zones = 
                                 ? `/dashboard/owner-manager/stores/${shop.id}/store-information`
                                 : null
 
+                            const isActive = shop.shop_status === 'active'
+
+                            const visitStoreInfo = () => {
+                                if (storeInfoUrl) router.visit(storeInfoUrl)
+                            }
+
                             return (
                                 <div
                                     key={shop.id}
-                                    role={storeInfoUrl ? 'button' : undefined}
-                                    tabIndex={storeInfoUrl ? 0 : undefined}
-                                    onClick={
-                                        storeInfoUrl
-                                            ? () => router.visit(storeInfoUrl)
-                                            : undefined
-                                    }
-                                    onKeyDown={
-                                        storeInfoUrl
-                                            ? (e) => {
-                                                  if (e.key === 'Enter' || e.key === ' ') {
-                                                      e.preventDefault()
-                                                      router.visit(storeInfoUrl)
-                                                  }
-                                              }
-                                            : undefined
-                                    }
-                                    className={`bg-white rounded-lg border border-[#E5E7EB] overflow-hidden hover:border-[#102059] transition-all hover:shadow-md text-left ${
-                                        storeInfoUrl ? 'cursor-pointer' : ''
-                                    }`}
+                                    className="bg-white rounded-lg border border-[#E5E7EB] overflow-hidden hover:border-[#102059] transition-all hover:shadow-md text-left"
                                 >
-                                    <div className="relative h-40 w-full overflow-hidden bg-[#F8F9FB]">
-                                        {coverSrc ? (
-                                            <img
-                                                src={coverSrc}
-                                                alt={`${shop.shop_name} storefront`}
-                                                className="w-full h-full object-cover"
-                                            />
-                                        ) : (
-                                            <div className="flex h-full w-full items-center justify-center">
-                                                <Store className="h-14 w-14 text-[#E5E7EB]" aria-hidden />
-                                            </div>
-                                        )}
-                                        <span
-                                            className={`absolute top-3 right-3 inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold backdrop-blur-sm ${
-                                                statusLabel === 'Active'
-                                                    ? 'bg-[#E8F5E9]/90 text-[#2E7D32]'
-                                                    : 'bg-[#FFEBEE]/90 text-[#C62828]'
-                                            }`}
-                                        >
-                                            {statusLabel}
-                                        </span>
-                                    </div>
-
-                                    <div className="p-5">
-                                        <h3 className="text-sm font-bold text-[#102059] mb-3">
-                                            {shop.shop_name}
-                                        </h3>
-
-                                        <div className="flex items-center gap-1.5 mb-3">
-                                            <div className="flex items-center gap-0.5">
-                                                {[1, 2, 3, 4, 5].map((star) => (
-                                                    <Star
-                                                        key={star}
-                                                        className={`w-3.5 h-3.5 ${
-                                                            star <= Math.floor(rating)
-                                                                ? 'fill-[#D3A218] text-[#D3A218]'
-                                                                : star - 0.5 <= rating
-                                                                  ? 'fill-[#D3A218] text-[#D3A218]'
-                                                                  : 'fill-[#E5E7EB] text-[#E5E7EB]'
-                                                        }`}
-                                                    />
-                                                ))}
-                                            </div>
-                                            <span className="text-xs font-semibold text-[#102059]">
-                                                {rating.toFixed(1)}
+                                    <div
+                                        role={storeInfoUrl ? 'button' : undefined}
+                                        tabIndex={storeInfoUrl ? 0 : undefined}
+                                        onClick={storeInfoUrl ? visitStoreInfo : undefined}
+                                        onKeyDown={
+                                            storeInfoUrl
+                                                ? (e) => {
+                                                      if (e.key === 'Enter' || e.key === ' ') {
+                                                          e.preventDefault()
+                                                          visitStoreInfo()
+                                                      }
+                                                  }
+                                                : undefined
+                                        }
+                                        className={storeInfoUrl ? 'cursor-pointer' : ''}
+                                    >
+                                        <div className="relative h-40 w-full overflow-hidden bg-[#F8F9FB]">
+                                            {coverSrc ? (
+                                                <img
+                                                    src={coverSrc}
+                                                    alt={`${shop.shop_name} storefront`}
+                                                    className="w-full h-full object-cover"
+                                                />
+                                            ) : (
+                                                <div className="flex h-full w-full items-center justify-center">
+                                                    <Store className="h-14 w-14 text-[#E5E7EB]" aria-hidden />
+                                                </div>
+                                            )}
+                                            <span
+                                                className={`absolute top-3 right-3 inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold backdrop-blur-sm ${
+                                                    statusLabel === 'Active'
+                                                        ? 'bg-[#E8F5E9]/90 text-[#2E7D32]'
+                                                        : 'bg-[#FFEBEE]/90 text-[#C62828]'
+                                                }`}
+                                            >
+                                                {statusLabel}
                                             </span>
                                         </div>
 
-                                        <div className="text-xs text-[#6B7280] space-y-0.5 mb-3">
-                                            {shop.shop_address && <p>{shop.shop_address}</p>}
-                                            <p>
-                                                {[shop.shop_city, shop.shop_province]
-                                                    .filter(Boolean)
-                                                    .join(', ')}
-                                            </p>
-                                            {shop.shop_postal_code && <p>{shop.shop_postal_code}</p>}
-                                        </div>
+                                        <div className="p-5 pb-0">
+                                            <h3 className="text-sm font-bold text-[#102059] mb-3">
+                                                {shop.shop_name}
+                                            </h3>
 
-                                        <div className="border-t border-[#E5E7EB] my-3" />
-
-                                        <div className="text-xs text-[#6B7280] space-y-1 mb-4">
-                                            <div>
-                                                <span className="font-semibold text-[#102059]">
-                                                    Days:
-                                                </span>{' '}
-                                                {shop.operating_days || '—'}
+                                            <div className="flex items-center gap-1.5 mb-3">
+                                                <div className="flex items-center gap-0.5">
+                                                    {[1, 2, 3, 4, 5].map((star) => (
+                                                        <Star
+                                                            key={star}
+                                                            className={`w-3.5 h-3.5 ${
+                                                                star <= Math.floor(rating)
+                                                                    ? 'fill-[#D3A218] text-[#D3A218]'
+                                                                    : star - 0.5 <= rating
+                                                                      ? 'fill-[#D3A218] text-[#D3A218]'
+                                                                      : 'fill-[#E5E7EB] text-[#E5E7EB]'
+                                                            }`}
+                                                        />
+                                                    ))}
+                                                </div>
+                                                <span className="text-xs font-semibold text-[#102059]">
+                                                    {rating.toFixed(1)}
+                                                </span>
                                             </div>
-                                            <div>
-                                                <span className="font-semibold text-[#102059]">
-                                                    Hours:
-                                                </span>{' '}
-                                                {shop.operating_hours || '—'}
+
+                                            <div className="text-xs text-[#6B7280] space-y-0.5 mb-3">
+                                                {shop.shop_address && <p>{shop.shop_address}</p>}
+                                                <p>
+                                                    {[shop.shop_city, shop.shop_province]
+                                                        .filter(Boolean)
+                                                        .join(', ')}
+                                                </p>
+                                                {shop.shop_postal_code && <p>{shop.shop_postal_code}</p>}
+                                            </div>
+
+                                            <div className="border-t border-[#E5E7EB] my-3" />
+
+                                            <div className="text-xs text-[#6B7280] space-y-1 pb-4">
+                                                <div>
+                                                    <span className="font-semibold text-[#102059]">
+                                                        Days:
+                                                    </span>{' '}
+                                                    {shop.operating_days || '—'}
+                                                </div>
+                                                <div>
+                                                    <span className="font-semibold text-[#102059]">
+                                                        Hours:
+                                                    </span>{' '}
+                                                    {shop.operating_hours || '—'}
+                                                </div>
                                             </div>
                                         </div>
+                                    </div>
 
+                                    <div className="px-5 pb-5">
                                         <div className="flex items-center gap-2">
                                             <button
                                                 type="button"
-                                                onClick={(e) => e.stopPropagation()}
-                                                className="flex-1 px-3 py-2 text-xs font-semibold text-[#1F2937] bg-white border border-[#E5E7EB] rounded-lg hover:bg-[#F8F9FB] transition-colors"
+                                                disabled={!isActive || !agrivet}
+                                                onClick={() => openRemoveStore(shop)}
+                                                className="flex-1 px-3 py-2 text-xs font-semibold text-[#1F2937] bg-white border border-[#E5E7EB] rounded-lg hover:bg-[#F8F9FB] transition-colors disabled:cursor-not-allowed disabled:opacity-50"
                                             >
                                                 Delete Store
                                             </button>
                                             <button
                                                 type="button"
-                                                onClick={(e) => {
-                                                    e.stopPropagation()
+                                                onClick={() => {
                                                     if (!agrivet) return
                                                     router.visit(
                                                         `/dashboard/owner-manager/stores/${shop.id}/income`,
@@ -392,6 +420,59 @@ export default function OwnerManagerStores({ auth, agrivet, shops = [], zones = 
                     </div>
                 </div>
             </div>
+
+            {shopToRemove && (
+                <div
+                    className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
+                    onClick={closeRemoveModal}
+                >
+                    <div
+                        className="bg-white rounded-xl max-w-md w-full"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div className="px-6 py-4 border-b border-[#E5E7EB] flex items-center justify-between">
+                            <h3 className="text-lg font-bold text-[#102059]">Delete Store</h3>
+                            <button
+                                type="button"
+                                className="w-8 h-8 bg-[#F0F2F5] hover:bg-[#E5E7EB] rounded-full flex items-center justify-center text-[#65676B] transition-colors disabled:opacity-50"
+                                onClick={closeRemoveModal}
+                                disabled={isDeleting}
+                                aria-label="Close"
+                            >
+                                <X className="w-4 h-4" />
+                            </button>
+                        </div>
+                        <div className="px-6 py-5 space-y-2">
+                            <p className="text-sm text-[#102059]">
+                                Are you sure you want to deactivate{' '}
+                                <span className="font-semibold">{shopToRemove.shop_name}</span>?
+                            </p>
+                            <p className="text-sm text-[#6B7280]">
+                                This will set the store status to Inactive. The store will not be
+                                visible to customers.
+                            </p>
+                        </div>
+                        <div className="px-6 py-4 border-t border-[#E5E7EB] flex items-center justify-end gap-3">
+                            <button
+                                type="button"
+                                className="px-4 py-2.5 bg-white text-[#65676B] border border-[#E5E7EB] text-sm font-semibold rounded-lg hover:bg-[#F9FAFB] transition-colors disabled:opacity-50"
+                                onClick={closeRemoveModal}
+                                disabled={isDeleting}
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="button"
+                                className="px-4 py-2.5 bg-[#E20E28] text-white text-sm font-semibold rounded-lg hover:bg-[#C10D23] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                onClick={confirmRemoveShop}
+                                disabled={isDeleting}
+                            >
+                                {isDeleting ? 'Deleting...' : 'Delete Store'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {showAddModal && agrivet && (
                 <div
