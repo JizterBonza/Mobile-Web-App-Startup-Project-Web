@@ -214,6 +214,7 @@ Route::get('/dashboard/super-admin/support', [DashboardController::class, 'super
 Route::middleware(['auth', 'session.valid', 'user.type:owner_manager'])->prefix('dashboard/owner-manager')->name('dashboard.owner-manager.')->group(function () {
     Route::get('/', [DashboardController::class, 'ownerManager'])->name('index');
     Route::get('/stores', [DashboardController::class, 'ownerManagerStores'])->name('stores');
+    Route::post('/stores', [DashboardController::class, 'ownerManagerStoreShop'])->name('stores.store');
     Route::get('/stores/{shopId}/store-information', [DashboardController::class, 'ownerManagerStoreInformation'])->name('stores.store-information');
     Route::get('/stores/{shopId}/income', [DashboardController::class, 'ownerManagerStoreIncome'])->name('stores.income');
     Route::put('/stores/{shopId}', [DashboardController::class, 'ownerManagerUpdateShop'])->name('stores.update');

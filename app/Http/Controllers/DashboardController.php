@@ -14,6 +14,7 @@ use App\Models\Category;
 use App\Models\ProductCatalog;
 use App\Models\SubCategory;
 use App\Http\Controllers\SupportTicketController;
+use App\Models\Zone;
 
 class DashboardController extends Controller
 {
@@ -309,10 +310,21 @@ class DashboardController extends Controller
         $user = auth()->user();
         $agrivet = $user->managedAgrivet;
 
+        $zones = Zone::where('status', true)->orderBy('name')->get(['id', 'name', 'boundary']);
+
         return Inertia::render('Dashboard/OwnerManagerStores', [
             'agrivet' => $agrivet,
             'shops'   => $agrivet ? $agrivet->shops : [],
+            'zones'   => $zones->map(fn ($z) => ['id' => $z->id, 'name' => $z->name, 'boundary' => $z->boundary]),
         ]);
+    }
+
+    public function ownerManagerStoreShop(Request $request)
+    {
+        $agrivet = auth()->user()->managedAgrivet;
+        abort_unless($agrivet, 404);
+
+        return app(AgrivetController::class)->storeShop($request, $agrivet->id);
     }
 
     public function ownerManagerStoreInformation($shopId)
