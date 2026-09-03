@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -13,6 +14,7 @@ use App\Models\Category;
 use App\Models\ProductCatalog;
 use App\Models\SubCategory;
 use App\Http\Controllers\SupportTicketController;
+use App\Models\Zone;
 
 class DashboardController extends Controller
 {
@@ -145,16 +147,18 @@ class DashboardController extends Controller
         ]);
     }
 
-    public function ownerManager()
+    public function ownerManager(Request $request)
     {
         $user = auth()->user();
         $agrivet = $user->managedAgrivet;
+        $period = $this->ownerManagerPeriod($request);
 
         if (!$agrivet) {
             return Inertia::render('Dashboard/OwnerManagerDashboard', [
                 'agrivet' => null,
                 'shops'   => [],
-                'stats'   => [],
+                'stats'   => $this->emptyOwnerManagerStats($period),
+                'period'  => $period,
             ]);
         }
 
@@ -165,40 +169,28 @@ class DashboardController extends Controller
             return Inertia::render('Dashboard/OwnerManagerDashboard', [
                 'agrivet' => $agrivet,
                 'shops'   => [],
-                'stats'   => [],
+                'stats'   => $this->emptyOwnerManagerStats($period),
+                'period'  => $period,
             ]);
         }
 
+        [$start, $end] = $this->ownerManagerPeriodRange($period);
+        [$prevStart, $prevEnd] = $this->ownerManagerPreviousPeriodRange($period);
         $deliveredItemStatusId = $this->deliveredItemStatusId();
 
-        $totalOrders = (int) DB::table('order_items')
-            ->whereIn('shop_id', $shopIds)
-            ->distinct('order_id')
-            ->count('order_id');
-
-        $itemsSold = (int) DB::table('order_items')
-            ->whereIn('shop_id', $shopIds)
-            ->where('item_status', $deliveredItemStatusId)
-            ->sum('quantity');
-
-        $totalRevenue = (float) DB::table('order_items')
-            ->whereIn('shop_id', $shopIds)
-            ->where('item_status', $deliveredItemStatusId)
-            ->selectRaw('COALESCE(SUM(quantity * price_at_purchase), 0) as total')
-            ->value('total');
+        $currentMetrics = $this->ownerManagerKeyMetrics($shopIds, $deliveredItemStatusId, $start, $end);
+        $previousMetrics = $this->ownerManagerKeyMetrics($shopIds, $deliveredItemStatusId, $prevStart, $prevEnd);
 
         $avgRating = $shops->avg('average_rating') ?? 0;
 
-        $storeStats = $shops->map(function ($shop) use ($deliveredItemStatusId) {
-            $orders = (int) DB::table('order_items')
-                ->where('shop_id', $shop->id)
-                ->distinct('order_id')
-                ->count('order_id');
-            $revenue = (float) DB::table('order_items')
-                ->where('shop_id', $shop->id)
-                ->where('item_status', $deliveredItemStatusId)
-                ->selectRaw('COALESCE(SUM(quantity * price_at_purchase), 0) as total')
-                ->value('total');
+        $currentStoreMetrics = $this->ownerManagerShopMetricMap($shopIds, $deliveredItemStatusId, $start, $end);
+        $previousStoreMetrics = $this->ownerManagerShopMetricMap($shopIds, $deliveredItemStatusId, $prevStart, $prevEnd);
+
+        $storeStats = $shops->map(function ($shop) use ($currentStoreMetrics, $previousStoreMetrics) {
+            $orders = (int) ($currentStoreMetrics['orders'][$shop->id] ?? 0);
+            $revenue = (float) ($currentStoreMetrics['revenue'][$shop->id] ?? 0);
+            $previousRevenue = (float) ($previousStoreMetrics['revenue'][$shop->id] ?? 0);
+
             return [
                 'id'             => $shop->id,
                 'shop_name'      => $shop->shop_name,
@@ -207,6 +199,7 @@ class DashboardController extends Controller
                 'orders'         => $orders,
                 'revenue'        => $revenue,
                 'wallet'         => (float) ($shop->wallet_balance ?? 0),
+                'growth'         => $this->percentageChange($revenue, $previousRevenue),
             ];
         })->values()->toArray();
 
@@ -214,6 +207,7 @@ class DashboardController extends Controller
             ->join('items', 'order_items.item_id', '=', 'items.id')
             ->whereIn('order_items.shop_id', $shopIds)
             ->where('order_items.item_status', $deliveredItemStatusId)
+            ->whereBetween('order_items.created_at', [$start, $end])
             ->select(
                 'items.item_name as name',
                 DB::raw('COALESCE(SUM(order_items.quantity), 0) as quantity'),
@@ -233,6 +227,7 @@ class DashboardController extends Controller
         $customerRows = DB::table('order_items')
             ->join('orders', 'order_items.order_id', '=', 'orders.id')
             ->whereIn('order_items.shop_id', $shopIds)
+            ->whereBetween('order_items.created_at', [$start, $end])
             ->select('orders.user_id', DB::raw('COUNT(DISTINCT orders.id) as order_count'))
             ->groupBy('orders.user_id')
             ->get();
@@ -246,6 +241,7 @@ class DashboardController extends Controller
             ->join('users', 'orders.user_id', '=', 'users.id')
             ->join('user_details', 'users.user_detail_id', '=', 'user_details.id')
             ->whereIn('order_items.shop_id', $shopIds)
+            ->whereBetween('order_items.created_at', [$start, $end])
             ->select(
                 'orders.user_id',
                 DB::raw("CONCAT(user_details.first_name, ' ', user_details.last_name) as name"),
@@ -263,13 +259,34 @@ class DashboardController extends Controller
             ])
             ->toArray();
 
+        $revenueByCategory = DB::table('order_items')
+            ->join('items', 'order_items.item_id', '=', 'items.id')
+            ->leftJoin('category', 'items.category', '=', 'category.id')
+            ->whereIn('order_items.shop_id', $shopIds)
+            ->where('order_items.item_status', $deliveredItemStatusId)
+            ->whereBetween('order_items.created_at', [$start, $end])
+            ->select(
+                DB::raw("COALESCE(category.category_name, 'Uncategorized') as category"),
+                DB::raw('COALESCE(SUM(order_items.quantity * order_items.price_at_purchase), 0) as revenue'),
+            )
+            ->groupBy('category.id', 'category.category_name')
+            ->orderByDesc('revenue')
+            ->limit(5)
+            ->get()
+            ->map(fn($row) => [
+                'category' => $row->category,
+                'revenue'  => (float) $row->revenue,
+            ])
+            ->toArray();
+
         return Inertia::render('Dashboard/OwnerManagerDashboard', [
             'agrivet' => $agrivet,
             'shops'   => $shops,
+            'period'  => $period,
             'stats'   => [
-                'total_orders'        => $totalOrders,
-                'items_sold'          => $itemsSold,
-                'total_revenue'       => $totalRevenue,
+                'total_orders'        => $currentMetrics['orders'],
+                'items_sold'          => $currentMetrics['items_sold'],
+                'total_revenue'       => $currentMetrics['revenue'],
                 'average_rating'      => round((float) $avgRating, 1),
                 'store_stats'         => $storeStats,
                 'top_products'        => $topProducts,
@@ -277,7 +294,13 @@ class DashboardController extends Controller
                 'returning_customers' => $returningCustomers,
                 'total_customers'     => $totalCustomers,
                 'top_buyers'          => $topBuyers,
-                'revenue_by_category' => [],
+                'revenue_by_category' => $revenueByCategory,
+                'comparison_label'    => $this->ownerManagerComparisonLabel($period),
+                'trends'              => [
+                    'total_orders'  => $this->percentageChange($currentMetrics['orders'], $previousMetrics['orders']),
+                    'items_sold'    => $this->percentageChange($currentMetrics['items_sold'], $previousMetrics['items_sold']),
+                    'total_revenue' => $this->percentageChange($currentMetrics['revenue'], $previousMetrics['revenue']),
+                ],
             ],
         ]);
     }
@@ -287,10 +310,21 @@ class DashboardController extends Controller
         $user = auth()->user();
         $agrivet = $user->managedAgrivet;
 
+        $zones = Zone::where('status', true)->orderBy('name')->get(['id', 'name', 'boundary']);
+
         return Inertia::render('Dashboard/OwnerManagerStores', [
             'agrivet' => $agrivet,
             'shops'   => $agrivet ? $agrivet->shops : [],
+            'zones'   => $zones->map(fn ($z) => ['id' => $z->id, 'name' => $z->name, 'boundary' => $z->boundary]),
         ]);
+    }
+
+    public function ownerManagerStoreShop(Request $request)
+    {
+        $agrivet = auth()->user()->managedAgrivet;
+        abort_unless($agrivet, 404);
+
+        return app(AgrivetController::class)->storeShop($request, $agrivet->id);
     }
 
     public function ownerManagerStoreInformation($shopId)
@@ -385,6 +419,14 @@ class DashboardController extends Controller
         abort_unless($agrivet, 404);
 
         return app(AgrivetController::class)->updateShop($request, $agrivet->id, $shopId);
+    }
+
+    public function ownerManagerRemoveShop($shopId)
+    {
+        $agrivet = auth()->user()->managedAgrivet;
+        abort_unless($agrivet, 404);
+
+        return app(AgrivetController::class)->removeShop($agrivet->id, $shopId);
     }
 
     public function ownerManagerUpdateShopCoverPhoto(Request $request, $shopId)
@@ -882,5 +924,160 @@ class DashboardController extends Controller
         abort_unless($agrivet, 404);
 
         return $agrivet->shops()->pluck('id')->all();
+    }
+
+    private function ownerManagerPeriod(Request $request): string
+    {
+        $period = $request->string('period')->toString();
+
+        return in_array($period, ['day', 'week', 'month', 'year'], true) ? $period : 'month';
+    }
+
+    /**
+     * @return array{0: Carbon, 1: Carbon}
+     */
+    private function ownerManagerPeriodRange(string $period): array
+    {
+        $now = now();
+
+        return match ($period) {
+            'day' => [$now->copy()->startOfDay(), $now->copy()->endOfDay()],
+            'week' => [$now->copy()->startOfWeek(), $now->copy()->endOfWeek()],
+            'year' => [$now->copy()->startOfYear(), $now->copy()->endOfYear()],
+            default => [$now->copy()->startOfMonth(), $now->copy()->endOfMonth()],
+        };
+    }
+
+    /**
+     * @return array{0: Carbon, 1: Carbon}
+     */
+    private function ownerManagerPreviousPeriodRange(string $period): array
+    {
+        $now = now();
+
+        return match ($period) {
+            'day' => [$now->copy()->subDay()->startOfDay(), $now->copy()->subDay()->endOfDay()],
+            'week' => [$now->copy()->subWeek()->startOfWeek(), $now->copy()->subWeek()->endOfWeek()],
+            'year' => [$now->copy()->subYear()->startOfYear(), $now->copy()->subYear()->endOfYear()],
+            default => [$now->copy()->subMonthNoOverflow()->startOfMonth(), $now->copy()->subMonthNoOverflow()->endOfMonth()],
+        };
+    }
+
+    private function ownerManagerComparisonLabel(string $period): string
+    {
+        return match ($period) {
+            'day' => 'from yesterday',
+            'week' => 'from last week',
+            'year' => 'from last year',
+            default => 'from last month',
+        };
+    }
+
+    /**
+     * @return array{
+     *     total_orders: int,
+     *     items_sold: int,
+     *     total_revenue: float,
+     *     average_rating: int|float,
+     *     store_stats: array<int, mixed>,
+     *     top_products: array<int, mixed>,
+     *     new_customers: int,
+     *     returning_customers: int,
+     *     total_customers: int,
+     *     top_buyers: array<int, mixed>,
+     *     revenue_by_category: array<int, mixed>,
+     *     comparison_label: string,
+     *     trends: array{total_orders: null, items_sold: null, total_revenue: null}
+     * }
+     */
+    private function emptyOwnerManagerStats(string $period): array
+    {
+        return [
+            'total_orders'        => 0,
+            'items_sold'          => 0,
+            'total_revenue'       => 0,
+            'average_rating'      => 0,
+            'store_stats'         => [],
+            'top_products'        => [],
+            'new_customers'       => 0,
+            'returning_customers' => 0,
+            'total_customers'     => 0,
+            'top_buyers'          => [],
+            'revenue_by_category' => [],
+            'comparison_label'    => $this->ownerManagerComparisonLabel($period),
+            'trends'              => [
+                'total_orders'  => null,
+                'items_sold'    => null,
+                'total_revenue' => null,
+            ],
+        ];
+    }
+
+    /**
+     * @param  array<int>  $shopIds
+     * @return array{orders: int, items_sold: int, revenue: float}
+     */
+    private function ownerManagerKeyMetrics(array $shopIds, int $deliveredItemStatusId, Carbon $start, Carbon $end): array
+    {
+        $orders = (int) DB::table('order_items')
+            ->whereIn('shop_id', $shopIds)
+            ->whereBetween('created_at', [$start, $end])
+            ->distinct('order_id')
+            ->count('order_id');
+
+        $itemsSold = (int) DB::table('order_items')
+            ->whereIn('shop_id', $shopIds)
+            ->where('item_status', $deliveredItemStatusId)
+            ->whereBetween('created_at', [$start, $end])
+            ->sum('quantity');
+
+        $revenue = (float) DB::table('order_items')
+            ->whereIn('shop_id', $shopIds)
+            ->where('item_status', $deliveredItemStatusId)
+            ->whereBetween('created_at', [$start, $end])
+            ->selectRaw('COALESCE(SUM(quantity * price_at_purchase), 0) as total')
+            ->value('total');
+
+        return [
+            'orders'     => $orders,
+            'items_sold' => $itemsSold,
+            'revenue'    => $revenue,
+        ];
+    }
+
+    /**
+     * @param  array<int>  $shopIds
+     * @return array{orders: \Illuminate\Support\Collection<int|string, mixed>, revenue: \Illuminate\Support\Collection<int|string, mixed>}
+     */
+    private function ownerManagerShopMetricMap(array $shopIds, int $deliveredItemStatusId, Carbon $start, Carbon $end): array
+    {
+        $orders = DB::table('order_items')
+            ->whereIn('shop_id', $shopIds)
+            ->whereBetween('created_at', [$start, $end])
+            ->select('shop_id', DB::raw('COUNT(DISTINCT order_id) as orders'))
+            ->groupBy('shop_id')
+            ->pluck('orders', 'shop_id');
+
+        $revenue = DB::table('order_items')
+            ->whereIn('shop_id', $shopIds)
+            ->where('item_status', $deliveredItemStatusId)
+            ->whereBetween('created_at', [$start, $end])
+            ->select('shop_id', DB::raw('COALESCE(SUM(quantity * price_at_purchase), 0) as revenue'))
+            ->groupBy('shop_id')
+            ->pluck('revenue', 'shop_id');
+
+        return [
+            'orders'  => $orders,
+            'revenue' => $revenue,
+        ];
+    }
+
+    private function percentageChange(float|int $current, float|int $previous): ?float
+    {
+        if ((float) $previous === 0.0) {
+            return null;
+        }
+
+        return round((($current - $previous) / $previous) * 100, 1);
     }
 }

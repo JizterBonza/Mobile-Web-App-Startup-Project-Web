@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { router } from '@inertiajs/react'
 import {
     Activity,
     ArrowUpRight,
@@ -18,9 +19,65 @@ import OwnerManagerKlasmeytLayout, {
     OwnerManagerNoAgrivetAlert,
 } from '../../Layouts/OwnerManagerKlasmeytLayout'
 
-export default function OwnerManagerDashboard({ auth, agrivet, shops = [], stats = {} }) {
+const TIME_PERIODS = [
+    { value: 'day', label: 'Today' },
+    { value: 'week', label: 'This Week' },
+    { value: 'month', label: 'This Month' },
+    { value: 'year', label: 'This Year' },
+]
 
-    const [timePeriod, setTimePeriod] = useState('month')
+function formatTrendPercent(value) {
+    if (value == null || value === '') return null
+    const n = Number(value)
+    if (Number.isNaN(n)) return null
+    const sign = n > 0 ? '+' : ''
+    return `${sign}${n}%`
+}
+
+function MetricTrend({ value, label }) {
+    const formatted = formatTrendPercent(value)
+    if (!formatted) return null
+
+    const isPositive = Number(value) >= 0
+
+    return (
+        <div className={`flex items-center gap-1 text-xs ${isPositive ? 'text-[#00C950]' : 'text-[#E20E28]'}`}>
+            <TrendingUp className={`w-3 h-3 ${isPositive ? '' : 'rotate-180'}`} />
+            <span>
+                {formatted} {label}
+            </span>
+        </div>
+    )
+}
+
+export default function OwnerManagerDashboard({
+    auth,
+    agrivet,
+    shops = [],
+    stats = {},
+    period = 'month',
+}) {
+    const [pendingPeriod, setPendingPeriod] = useState(null)
+    const timePeriod = pendingPeriod ?? period
+    const isLoadingPeriod = pendingPeriod != null
+
+    const selectPeriod = (value) => {
+        if (value === timePeriod) return
+
+        setPendingPeriod(value)
+        router.get(
+            '/dashboard/owner-manager',
+            { period: value },
+            {
+                preserveState: true,
+                preserveScroll: true,
+                only: ['stats', 'period'],
+                onFinish: () => {
+                    setPendingPeriod((current) => (current === value ? null : current))
+                },
+            },
+        )
+    }
 
     const totalOrders = stats.total_orders ?? 0
     const itemsSold = stats.items_sold ?? 0
@@ -35,6 +92,8 @@ export default function OwnerManagerDashboard({ auth, agrivet, shops = [], stats
         totalCustomers > 0 ? ((returningCustomers / totalCustomers) * 100).toFixed(1) : '0'
     const topBuyers = stats.top_buyers ?? []
     const revenueByCategory = stats.revenue_by_category ?? []
+    const comparisonLabel = stats.comparison_label ?? 'from last period'
+    const trends = stats.trends ?? {}
 
     return (
         <OwnerManagerKlasmeytLayout auth={auth} title="Owner Manager Dashboard">
@@ -54,15 +113,12 @@ export default function OwnerManagerDashboard({ auth, agrivet, shops = [], stats
                             </div>
 
                             <div className="flex items-center gap-2 bg-white rounded-lg border border-[#E5E7EB] p-1">
-                                {[
-                                    { value: 'day', label: 'Today' },
-                                    { value: 'week', label: 'This Week' },
-                                    { value: 'month', label: 'This Month' },
-                                    { value: 'year', label: 'This Year' },
-                                ].map(({ value, label }) => (
+                                {TIME_PERIODS.map(({ value, label }) => (
                                     <button
                                         key={value}
-                                        onClick={() => setTimePeriod(value)}
+                                        type="button"
+                                        aria-pressed={timePeriod === value}
+                                        onClick={() => selectPeriod(value)}
                                         className={`px-3 py-2 rounded-md text-xs font-semibold transition-all ${
                                             timePeriod === value
                                                 ? 'bg-[#102059] text-white'
@@ -76,6 +132,7 @@ export default function OwnerManagerDashboard({ auth, agrivet, shops = [], stats
                             </div>
                         </div>
 
+                        <div className={`space-y-6 ${isLoadingPeriod ? 'opacity-60' : ''} transition-opacity`}>
                         {/* Multi-Store Performance Overview */}
                         {shops.length > 0 && (
                             <div className="bg-white rounded-lg border border-[#E5E7EB] p-6">
@@ -100,8 +157,9 @@ export default function OwnerManagerDashboard({ auth, agrivet, shops = [], stats
                                         const storeRevenue = storeStat.revenue ?? 0
                                         const storeOrders = storeStat.orders ?? 0
                                         const storeWallet = storeStat.wallet ?? shop.wallet_balance ?? 0
-                                        const growthRates = ['+12%', '+8%', '+15%']
-                                        const growthRate = growthRates[index] ?? '+10%'
+                                        const growth = storeStat.growth
+                                        const growthLabel = formatTrendPercent(growth)
+                                        const growthPositive = growth == null || Number(growth) >= 0
 
                                         return (
                                             <div
@@ -175,10 +233,24 @@ export default function OwnerManagerDashboard({ auth, agrivet, shops = [], stats
                                                         <span className="text-xs text-[#6B7280]">
                                                             Growth
                                                         </span>
-                                                        <div className="flex items-center gap-1 text-xs font-semibold text-[#00C950]">
-                                                            <ArrowUpRight className="w-3 h-3" />
-                                                            <span>{growthRate}</span>
-                                                        </div>
+                                                        {growthLabel ? (
+                                                            <div
+                                                                className={`flex items-center gap-1 text-xs font-semibold ${
+                                                                    growthPositive
+                                                                        ? 'text-[#00C950]'
+                                                                        : 'text-[#E20E28]'
+                                                                }`}
+                                                            >
+                                                                <ArrowUpRight
+                                                                    className={`w-3 h-3 ${
+                                                                        growthPositive ? '' : 'rotate-180'
+                                                                    }`}
+                                                                />
+                                                                <span>{growthLabel}</span>
+                                                            </div>
+                                                        ) : (
+                                                            <span className="text-xs text-[#6B7280]">—</span>
+                                                        )}
                                                     </div>
                                                 </div>
                                             </div>
@@ -215,10 +287,7 @@ export default function OwnerManagerDashboard({ auth, agrivet, shops = [], stats
                                     <p className="text-2xl font-bold text-[#102059] mb-2">
                                         {totalOrders}
                                     </p>
-                                    <div className="flex items-center gap-1 text-xs text-[#00C950]">
-                                        <TrendingUp className="w-3 h-3" />
-                                        <span>+12% from last week</span>
-                                    </div>
+                                    <MetricTrend value={trends.total_orders} label={comparisonLabel} />
                                 </div>
 
                                 <div className="bg-[#F9FAFB] rounded-lg p-4 border border-[#E5E7EB]">
@@ -233,10 +302,7 @@ export default function OwnerManagerDashboard({ auth, agrivet, shops = [], stats
                                     <p className="text-2xl font-bold text-[#102059] mb-2">
                                         {itemsSold}
                                     </p>
-                                    <div className="flex items-center gap-1 text-xs text-[#00C950]">
-                                        <TrendingUp className="w-3 h-3" />
-                                        <span>+8% from last week</span>
-                                    </div>
+                                    <MetricTrend value={trends.items_sold} label={comparisonLabel} />
                                 </div>
 
                                 <div className="bg-[#F9FAFB] rounded-lg p-4 border border-[#E5E7EB]">
@@ -251,10 +317,7 @@ export default function OwnerManagerDashboard({ auth, agrivet, shops = [], stats
                                     <p className="text-2xl font-bold text-[#102059] mb-2">
                                         ₱{Number(totalRevenue).toLocaleString()}
                                     </p>
-                                    <div className="flex items-center gap-1 text-xs text-[#00C950]">
-                                        <TrendingUp className="w-3 h-3" />
-                                        <span>+15% from last week</span>
-                                    </div>
+                                    <MetricTrend value={trends.total_revenue} label={comparisonLabel} />
                                 </div>
 
                                 <div className="bg-[#F9FAFB] rounded-lg p-4 border border-[#E5E7EB]">
@@ -530,6 +593,7 @@ export default function OwnerManagerDashboard({ auth, agrivet, shops = [], stats
                                 </div>
                             </div>
                         )}
+                        </div>
             </div>
         </OwnerManagerKlasmeytLayout>
     )

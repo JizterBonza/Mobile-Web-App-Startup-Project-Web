@@ -1,10 +1,39 @@
-import { useMemo, useState } from 'react';
-import { Head, Link, useForm, usePage } from '@inertiajs/react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
 import { Eye, EyeOff, HelpCircle, X, Send, ArrowLeft } from 'lucide-react';
+
+const GIS_SCRIPT_SRC = 'https://accounts.google.com/gsi/client';
+
+function loadGoogleIdentityServices() {
+    if (typeof window === 'undefined') {
+        return Promise.reject(new Error('Google sign-in is only available in the browser.'));
+    }
+
+    if (window.google?.accounts?.oauth2) {
+        return Promise.resolve();
+    }
+
+    return new Promise((resolve, reject) => {
+        const existing = document.querySelector(`script[src="${GIS_SCRIPT_SRC}"]`);
+        if (existing) {
+            existing.addEventListener('load', () => resolve(), { once: true });
+            existing.addEventListener('error', () => reject(new Error('Failed to load Google sign-in.')), { once: true });
+            return;
+        }
+
+        const script = document.createElement('script');
+        script.src = GIS_SCRIPT_SRC;
+        script.async = true;
+        script.defer = true;
+        script.onload = () => resolve();
+        script.onerror = () => reject(new Error('Failed to load Google sign-in.'));
+        document.head.appendChild(script);
+    });
+}
 
 export default function Login() {
     const page = usePage();
-    const { flash, auth } = page.props;
+    const { flash, auth, googleClientId } = page.props;
 
     const sessionExpiredNotice = useMemo(() => {
         if (auth?.user) {
@@ -29,6 +58,9 @@ export default function Login() {
 
     const [showPassword, setShowPassword] = useState(false);
     const [showHelpModal, setShowHelpModal] = useState(false);
+    const [googleLoading, setGoogleLoading] = useState(false);
+    const [googleError, setGoogleError] = useState(null);
+    const googleTokenClientRef = useRef(null);
 
     const submit = (e) => {
         e.preventDefault();
@@ -38,10 +70,77 @@ export default function Login() {
     const formError =
         errors.email ||
         errors.password ||
+        googleError ||
         (typeof flash?.error === 'string' ? flash.error : null);
 
+    useEffect(() => {
+        if (!googleClientId) {
+            return undefined;
+        }
+
+        let cancelled = false;
+
+        loadGoogleIdentityServices()
+            .then(() => {
+                if (cancelled || !window.google?.accounts?.oauth2) {
+                    return;
+                }
+
+                googleTokenClientRef.current = window.google.accounts.oauth2.initTokenClient({
+                    client_id: googleClientId,
+                    scope: 'openid email profile',
+                    callback: (tokenResponse) => {
+                        if (tokenResponse.error) {
+                            setGoogleLoading(false);
+                            if (tokenResponse.error !== 'popup_closed_by_user') {
+                                setGoogleError('Google sign-in was cancelled or blocked. Add this site as an Authorized JavaScript origin in Google Cloud Console.');
+                            }
+                            return;
+                        }
+
+                        router.post(
+                            '/auth/google/token',
+                            { access_token: tokenResponse.access_token },
+                            {
+                                onFinish: () => setGoogleLoading(false),
+                                onError: () => {
+                                    setGoogleError('Failed to authenticate with Google. Please try again.');
+                                },
+                            }
+                        );
+                    },
+                });
+            })
+            .catch(() => {
+                if (!cancelled) {
+                    googleTokenClientRef.current = null;
+                }
+            });
+
+        return () => {
+            cancelled = true;
+        };
+    }, [googleClientId]);
+
     const handleGoogleLogin = () => {
-        window.alert('Google login is not yet available.');
+        setGoogleError(null);
+
+        if (!googleClientId) {
+            setGoogleError('Google sign-in is not configured.');
+            return;
+        }
+
+        if (googleTokenClientRef.current?.requestAccessToken) {
+            setGoogleLoading(true);
+            const resetLoadingOnPopupClose = () => {
+                window.setTimeout(() => setGoogleLoading(false), 600);
+            };
+            window.addEventListener('focus', resetLoadingOnPopupClose, { once: true });
+            googleTokenClientRef.current.requestAccessToken({ prompt: 'select_account' });
+            return;
+        }
+
+        window.location.href = '/auth/google';
     };
 
     return (
@@ -187,7 +286,8 @@ export default function Login() {
                             <button
                                 type="button"
                                 onClick={handleGoogleLogin}
-                                className="w-full py-3 bg-white border border-[#E5E7EB] hover:bg-[#F9FAFB] text-[#1F2937] font-semibold text-sm rounded-lg transition-all flex items-center justify-center gap-3"
+                                disabled={googleLoading || processing}
+                                className="w-full py-3 bg-white border border-[#E5E7EB] hover:bg-[#F9FAFB] text-[#1F2937] font-semibold text-sm rounded-lg transition-all flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                                 <svg className="w-5 h-5" viewBox="0 0 24 24" aria-hidden>
                                     <path
@@ -207,10 +307,10 @@ export default function Login() {
                                         d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
                                     />
                                 </svg>
-                                Continue with Google
+                                {googleLoading ? 'Connecting to Google...' : 'Continue with Google'}
                             </button>
 
-                            <div className="pt-2 text-center text-sm text-[#6B7280] space-y-2">
+                            <div className="pt-2 text-center text-sm text-[#6B7280]">
                                 <p>
                                     <button
                                         type="button"
@@ -219,11 +319,6 @@ export default function Login() {
                                     >
                                         Need help signing in?
                                     </button>
-                                </p>
-                                <p>
-                                    <Link href="/register" className="text-[#102059] font-semibold hover:underline">
-                                        Create an account
-                                    </Link>
                                 </p>
                             </div>
                         </form>

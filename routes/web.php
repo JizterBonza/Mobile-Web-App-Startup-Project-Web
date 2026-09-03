@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Auth\AuthController;
+use App\Http\Controllers\Auth\GoogleAuthController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\AgrivetController;
 use App\Http\Controllers\VendorController;
@@ -19,6 +20,7 @@ use App\Http\Controllers\ShopMessageController;
 use App\Http\Controllers\SupportTicketController;
 use App\Http\Controllers\VoucherController;
 use App\Http\Controllers\PayoutRecordController;
+use App\Http\Controllers\KlasrumCategoryController;
 use App\Http\Controllers\KlasrumContentController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -31,6 +33,9 @@ Route::middleware(['auth', 'session.valid', 'user.type:super_admin|admin'])->pre
     Route::get('/', [KlasrumContentController::class, 'index'])->name('index');
     Route::get('/new', [KlasrumContentController::class, 'create'])->name('create');
     Route::post('/', [KlasrumContentController::class, 'store'])->name('store');
+    Route::post('/categories', [KlasrumCategoryController::class, 'store'])->name('categories.store');
+    Route::put('/categories/{category}', [KlasrumCategoryController::class, 'update'])->whereNumber('category')->name('categories.update');
+    Route::delete('/categories/{category}', [KlasrumCategoryController::class, 'destroy'])->name('categories.destroy')->whereNumber('category');
     Route::get('/{content}/edit', [KlasrumContentController::class, 'edit'])->name('edit');
     Route::post('/{content}', [KlasrumContentController::class, 'update'])->name('update');
     Route::delete('/{content}', [KlasrumContentController::class, 'destroy'])->name('destroy');
@@ -43,6 +48,9 @@ Route::redirect('/register-store', '/register');
 // Authentication Routes
 Route::get('/login', [AuthController::class, 'showLogin'])->name('login');
 Route::post('/login', [AuthController::class, 'login']);
+Route::get('/auth/google', [GoogleAuthController::class, 'redirect'])->name('auth.google');
+Route::get('/auth/google/callback', [GoogleAuthController::class, 'callback'])->name('auth.google.callback');
+Route::post('/auth/google/token', [GoogleAuthController::class, 'token'])->name('auth.google.token');
 Route::get('/register', [AuthController::class, 'showRegister'])->name('register');
 Route::post('/register', [AuthController::class, 'register']);
 Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
@@ -206,9 +214,11 @@ Route::get('/dashboard/super-admin/support', [DashboardController::class, 'super
 Route::middleware(['auth', 'session.valid', 'user.type:owner_manager'])->prefix('dashboard/owner-manager')->name('dashboard.owner-manager.')->group(function () {
     Route::get('/', [DashboardController::class, 'ownerManager'])->name('index');
     Route::get('/stores', [DashboardController::class, 'ownerManagerStores'])->name('stores');
+    Route::post('/stores', [DashboardController::class, 'ownerManagerStoreShop'])->name('stores.store');
     Route::get('/stores/{shopId}/store-information', [DashboardController::class, 'ownerManagerStoreInformation'])->name('stores.store-information');
     Route::get('/stores/{shopId}/income', [DashboardController::class, 'ownerManagerStoreIncome'])->name('stores.income');
     Route::put('/stores/{shopId}', [DashboardController::class, 'ownerManagerUpdateShop'])->name('stores.update');
+    Route::delete('/stores/{shopId}', [DashboardController::class, 'ownerManagerRemoveShop'])->name('stores.destroy');
     Route::post('/stores/{shopId}/cover-photo', [DashboardController::class, 'ownerManagerUpdateShopCoverPhoto'])->name('stores.cover-photo');
     Route::post('/stores/{shopId}/permit-photo', [DashboardController::class, 'ownerManagerUpdateShopPermitPhoto'])->name('stores.permit-photo');
     Route::post('/stores/{shopId}/listings', [DashboardController::class, 'ownerManagerStoreShopListing'])->name('stores.listings.store');

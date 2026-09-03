@@ -15,6 +15,7 @@ import {
   Search,
   ShoppingCart,
   Star,
+  Store,
   Trash2,
   TrendingUp,
   UserCog,
@@ -434,9 +435,7 @@ export default function AgrivetStoreInformation({
       accountName: shop.account_name || '',
       accountNumber: shop.account_number || '',
       contactNumber: shop.contact_number || '',
-      coverPhoto: shop.logo_url
-        ? `/storage/${shop.logo_url}`
-        : 'https://images.unsplash.com/photo-1516382799247-87df95d790b7?auto=format&fit=crop&w=1600&q=60',
+      coverPhoto: shopPermitUrl(shop.logo_url),
       permitPhoto: shopPermitUrl(shop.permit_url),
       permitIsPdf: isPermitPdf(shopPermitUrl(shop.permit_url)),
     }
@@ -1253,8 +1252,14 @@ export default function AgrivetStoreInformation({
         <div className="bg-white">
           <div className="max-w-[1110px] mx-auto">
             <div className="relative">
-              <div className="aspect-[4/1] bg-[#E5E7EB] overflow-hidden">
-                <img src={store.coverPhoto} alt={store.storeName} className="w-full h-full object-cover" />
+              <div className="aspect-[4/1] bg-[#F8F9FB] overflow-hidden">
+                {store.coverPhoto ? (
+                  <img src={store.coverPhoto} alt={store.storeName} className="w-full h-full object-cover" />
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center">
+                    <Store className="h-16 w-16 text-[#E5E7EB]" aria-hidden />
+                  </div>
+                )}
               </div>
               <button
                 className="absolute top-4 right-4 w-10 h-10 bg-white/90 hover:bg-white rounded-full flex items-center justify-center shadow-lg transition-all hover:scale-110"

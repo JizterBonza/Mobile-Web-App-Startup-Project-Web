@@ -16,6 +16,8 @@ use Inertia\Inertia;
 
 class AuthController extends Controller
 {
+    use EstablishesWebAuthSession;
+
     /**
      * Check if the current session is valid and not expired.
      */
@@ -52,7 +54,9 @@ class AuthController extends Controller
      */
     public function showLogin()
     {
-        return Inertia::render('Auth/Login');
+        return Inertia::render('Auth/Login', [
+            'googleClientId' => config('services.google.client_id'),
+        ]);
     }
 
     /**
@@ -92,11 +96,6 @@ class AuthController extends Controller
             ]);
         }
 
-        // Update last login timestamp
-        $user->userCredential->update([
-            'last_login' => now(),
-        ]);
-
         // Check if user has a valid user_type
         if (!$user->user_type) {
             throw ValidationException::withMessages([
@@ -121,22 +120,7 @@ class AuthController extends Controller
             ]);
         }
 
-        // Login the user
-        Auth::login($user, $request->boolean('remember'));
-        
-        // Regenerate session ID for security
-        $request->session()->regenerate();
-        
-        // Store additional session data
-        $request->session()->put('user_id', Auth::id());
-        $request->session()->put('login_time', now());
-        $request->session()->put('last_activity', now());
-        
-        // Set session timeout (2 hours)
-        $request->session()->put('session_timeout', now()->addHours(2));
-
-        // Redirect to user-type specific dashboard
-        return redirect()->intended($user->getDashboardUrl());
+        return $this->establishWebAuthSession($request, $user, $request->boolean('remember'));
     }
 
     /**

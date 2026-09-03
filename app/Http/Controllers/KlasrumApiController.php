@@ -12,6 +12,7 @@ class KlasrumApiController extends Controller
     public function categories(): JsonResponse
     {
         $categories = KlasrumCategory::query()
+            ->active()
             ->orderBy('name')
             ->get()
             ->map(fn (KlasrumCategory $category) => [

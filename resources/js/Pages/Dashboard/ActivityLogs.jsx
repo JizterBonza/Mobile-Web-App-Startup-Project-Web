@@ -22,7 +22,7 @@ function actionBadgeClass(action) {
   }
 }
 
-export default function ActivityLogs({ auth, activityLogs, filters = {} }) {
+export default function ActivityLogs({ auth, activityLogs, filters = {}, subjectTypes = [] }) {
   const [action, setAction] = useState(filters.action ?? '')
   const [subjectType, setSubjectType] = useState(filters.subject_type ?? '')
   const [fromDate, setFromDate] = useState(filters.from_date ?? '')
@@ -144,13 +144,18 @@ export default function ActivityLogs({ auth, activityLogs, filters = {} }) {
               </div>
               <div>
                 <label className={labelClass}>Subject type</label>
-                <input
-                  type="text"
+                <select
                   className={inputClass + ' w-full'}
-                  placeholder="e.g. Category, User"
                   value={subjectType}
                   onChange={(e) => setSubjectType(e.target.value)}
-                />
+                >
+                  <option value="">All</option>
+                  {subjectTypes.map((type) => (
+                    <option key={type.value} value={type.value}>
+                      {type.label}
+                    </option>
+                  ))}
+                </select>
               </div>
               <div>
                 <label className={labelClass}>From date</label>

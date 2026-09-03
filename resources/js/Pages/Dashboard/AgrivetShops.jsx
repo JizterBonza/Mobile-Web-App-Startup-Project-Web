@@ -402,7 +402,7 @@ export default function AgrivetShops({ auth, agrivet, zones = [], shops = [], fl
                         <img
                           src={coverSrc}
                           alt={`${shop.shop_name} storefront`}
-                          className="h-full w-full object-cover"
+                          className="absolute inset-0 block h-full w-full object-cover"
                         />
                       ) : (
                         <div className="flex h-full w-full items-center justify-center">

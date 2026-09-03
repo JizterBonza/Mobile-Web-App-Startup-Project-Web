@@ -7,9 +7,13 @@ import {
     Italic,
     List,
     ListOrdered,
+    Pencil,
+    Plus,
     Save,
+    Trash2,
     Underline,
     Upload,
+    X,
 } from 'lucide-react'
 import AdminKlasmeytLayout from '../../Layouts/AdminKlasmeytLayout'
 import SuperAdminKlasmeytLayout from '../../Layouts/SuperAdminKlasmeytLayout'
@@ -212,7 +216,8 @@ export default function ContentBuilder({ auth, content = null, categories = [] }
     const bodyRef = useRef(null)
 
     const [category, setCategory] = useState(content?.category_id ? String(content.category_id) : '')
-    const selectedCategoryName = categories.find((item) => String(item.id) === String(category))?.name ?? ''
+    const selectedCategory = categories.find((item) => String(item.id) === String(category)) ?? null
+    const selectedCategoryName = selectedCategory?.name ?? ''
     const [title, setTitle] = useState(content?.title ?? '')
     const [description, setDescription] = useState(content?.description ?? '')
     const [heading, setHeading] = useState(content?.heading ?? '')
@@ -227,6 +232,9 @@ export default function ContentBuilder({ auth, content = null, categories = [] }
     const [showPreview, setShowPreview] = useState(false)
     const [bodyHtml, setBodyHtml] = useState(content?.body ?? '')
     const [processing, setProcessing] = useState(false)
+    const [categoryModal, setCategoryModal] = useState(null)
+    const [categoryName, setCategoryName] = useState('')
+    const [categorySaving, setCategorySaving] = useState(false)
 
     useEffect(() => {
         if (bodyRef.current && content?.body) {
@@ -254,6 +262,81 @@ export default function ContentBuilder({ auth, content = null, categories = [] }
             setBodyHtml(bodyRef.current?.innerHTML || '')
         }
         setShowPreview((current) => !current)
+    }
+
+    const openCreateCategory = () => {
+        setCategoryName('')
+        setCategoryModal('create')
+    }
+
+    const openEditCategory = () => {
+        if (!selectedCategory) {
+            return
+        }
+        setCategoryName(selectedCategory.name)
+        setCategoryModal('edit')
+    }
+
+    const closeCategoryModal = () => {
+        setCategoryModal(null)
+        setCategoryName('')
+    }
+
+    const saveCategory = (event) => {
+        event.preventDefault()
+        const name = categoryName.trim()
+        if (!name) {
+            return
+        }
+
+        const options = {
+            preserveState: true,
+            preserveScroll: true,
+            onStart: () => setCategorySaving(true),
+            onFinish: () => setCategorySaving(false),
+            onSuccess: (page) => {
+                if (categoryModal === 'create') {
+                    const list = page.props.categories || []
+                    const match = list.find((item) => item.name.toLowerCase() === name.toLowerCase())
+                    if (match) {
+                        setCategory(String(match.id))
+                    }
+                }
+                closeCategoryModal()
+            },
+        }
+
+        if (categoryModal === 'edit' && category) {
+            router.put(`/klasrum/categories/${category}`, { name }, options)
+            return
+        }
+
+        router.post('/klasrum/categories', { name }, options)
+    }
+
+    const deleteCategory = () => {
+        if (!selectedCategory) {
+            return
+        }
+
+        const count = selectedCategory.contents_count ?? 0
+        const message = count > 0
+            ? `"${selectedCategory.name}" is used by ${count} article${count === 1 ? '' : 's'}. It will be hidden from the list, but existing articles will keep this category. Continue?`
+            : `Delete category "${selectedCategory.name}"?`
+
+        if (!window.confirm(message)) {
+            return
+        }
+
+        router.delete(`/klasrum/categories/${selectedCategory.id}`, {
+            preserveState: true,
+            preserveScroll: true,
+            onSuccess: () => {
+                if (!content?.id || String(content.category_id) !== String(selectedCategory.id)) {
+                    setCategory('')
+                }
+            },
+        })
     }
 
     const submit = (status) => {
@@ -311,6 +394,9 @@ export default function ContentBuilder({ auth, content = null, categories = [] }
                             Content Builder
                         </h1>
                         <p className="text-sm text-[#6B7280]">Fill in the sections top to bottom, then publish.</p>
+                        {flash?.success ? (
+                            <p className="mt-2 text-sm text-emerald-700">{flash.success}</p>
+                        ) : null}
                         {(flash?.error || errors?.title || errors?.cover || errors?.media) && (
                             <p className="mt-2 text-sm text-[#DC2626]">
                                 {flash?.error || errors?.title || errors?.cover || errors?.media}
@@ -390,18 +476,59 @@ export default function ContentBuilder({ auth, content = null, categories = [] }
 
                     <section className="flex flex-col">
                         <div className="mb-8">
-                            <select
-                                value={category}
-                                onChange={(event) => setCategory(event.target.value)}
-                                className={fieldClass}
-                            >
-                                <option value="">Select category</option>
-                                {categories.map((item) => (
-                                    <option key={item.id} value={item.id}>
-                                        {item.name}
-                                    </option>
-                                ))}
-                            </select>
+                            <div className="mb-2 flex items-center justify-between gap-3">
+                                <label htmlFor="klasrum-category" className="text-sm font-medium text-[#374151]">
+                                    Category
+                                </label>
+                                <button
+                                    type="button"
+                                    onClick={openCreateCategory}
+                                    className="inline-flex items-center gap-1.5 text-sm font-medium text-[#102059] hover:text-[#244693]"
+                                >
+                                    <Plus className="h-4 w-4" />
+                                    Add
+                                </button>
+                            </div>
+                            <div className="flex gap-2">
+                                <select
+                                    id="klasrum-category"
+                                    value={category}
+                                    onChange={(event) => setCategory(event.target.value)}
+                                    className={`${fieldClass} flex-1`}
+                                >
+                                    <option value="">Select category</option>
+                                    {categories.map((item) => (
+                                        <option key={item.id} value={item.id}>
+                                            {item.name}
+                                        </option>
+                                    ))}
+                                </select>
+                                {selectedCategory ? (
+                                    <>
+                                        <button
+                                            type="button"
+                                            onClick={openEditCategory}
+                                            className="inline-flex shrink-0 items-center justify-center rounded-lg border border-[#E5E7EB] bg-white px-3 text-[#4B5563] transition-colors hover:bg-[#F9FAFB]"
+                                            aria-label="Edit category"
+                                            title="Edit category"
+                                        >
+                                            <Pencil className="h-4 w-4" />
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={deleteCategory}
+                                            className="inline-flex shrink-0 items-center justify-center rounded-lg border border-[#E5E7EB] bg-white px-3 text-[#DC2626] transition-colors hover:bg-[#FEF2F2]"
+                                            aria-label="Delete category"
+                                            title="Delete category"
+                                        >
+                                            <Trash2 className="h-4 w-4" />
+                                        </button>
+                                    </>
+                                ) : null}
+                            </div>
+                            {errors?.category_id ? (
+                                <p className="mt-1 text-sm text-[#DC2626]">{errors.category_id}</p>
+                            ) : null}
                         </div>
                         <div className="mb-8">
                             <input
@@ -519,6 +646,61 @@ export default function ContentBuilder({ auth, content = null, categories = [] }
                     />
                 ) : null}
             </div>
+
+            {categoryModal ? (
+                <div
+                    className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
+                    onClick={closeCategoryModal}
+                >
+                    <form
+                        onSubmit={saveCategory}
+                        onClick={(event) => event.stopPropagation()}
+                        className="w-full max-w-md rounded-xl bg-white p-6 shadow-lg"
+                    >
+                        <div className="mb-4 flex items-start justify-between gap-3">
+                            <h2 className="text-lg font-semibold text-[#111827]">
+                                {categoryModal === 'edit' ? 'Edit category' : 'Add category'}
+                            </h2>
+                            <button
+                                type="button"
+                                onClick={closeCategoryModal}
+                                className="rounded-lg p-1 text-[#6B7280] hover:bg-[#F3F4F6]"
+                                aria-label="Close"
+                            >
+                                <X className="h-5 w-5" />
+                            </button>
+                        </div>
+                        <input
+                            autoFocus
+                            type="text"
+                            value={categoryName}
+                            onChange={(event) => setCategoryName(event.target.value)}
+                            placeholder="Category name"
+                            maxLength={100}
+                            className={fieldClass}
+                        />
+                        {errors?.name ? (
+                            <p className="mt-2 text-sm text-[#DC2626]">{errors.name}</p>
+                        ) : null}
+                        <div className="mt-5 flex justify-end gap-2">
+                            <button
+                                type="button"
+                                onClick={closeCategoryModal}
+                                className={actionButtonClass()}
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="submit"
+                                disabled={categorySaving || !categoryName.trim()}
+                                className="inline-flex items-center rounded-lg bg-[#102059] px-3.5 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#244693] disabled:opacity-60"
+                            >
+                                {categorySaving ? 'Saving...' : 'Save'}
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            ) : null}
         </Layout>
     )
 }
