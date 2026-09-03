@@ -9,6 +9,7 @@ use App\Models\UserDetail;
 use App\Models\UserCredential;
 use App\Services\UserWelcomeEmailService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
@@ -642,10 +643,13 @@ class UserController extends Controller
     /**
      * Show the settings page.
      */
-    public function showSettings()
+    public function showSettings(Request $request)
     {
         $user = auth()->user();
         $user->load(['userDetail', 'userCredential']);
+
+        $lastLogin = $user->userCredential?->last_login;
+        $sessionLoginTime = $request->session()->get('login_time');
 
         return Inertia::render('Dashboard/Settings', [
             'userData' => [
@@ -653,9 +657,22 @@ class UserController extends Controller
                 'email' => $user->userDetail->email ?? '',
                 'username' => $user->userCredential->username ?? '',
                 'user_type' => $user->user_type,
-                'last_login' => $user->userCredential->last_login ? $user->userCredential->last_login->format('Y-m-d H:i:s') : null,
+                'last_login' => $this->toIso8601($lastLogin),
+                'session_login_time' => $this->toIso8601($sessionLoginTime) ?? $this->toIso8601($lastLogin),
             ],
         ]);
+    }
+
+    /**
+     * Convert a timestamp to an ISO-8601 string the browser can localize.
+     */
+    private function toIso8601(mixed $value): ?string
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+
+        return Carbon::parse($value)->toIso8601String();
     }
 
     /**

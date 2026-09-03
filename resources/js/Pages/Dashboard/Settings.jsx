@@ -2,6 +2,19 @@ import { useState } from 'react'
 import { useForm, Link } from '@inertiajs/react'
 import SuperAdminOrAdminLayout from '../../Layouts/SuperAdminOrAdminLayout'
 
+function formatDateTime(value) {
+  if (!value) {
+    return 'N/A'
+  }
+
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return 'N/A'
+  }
+
+  return date.toLocaleString()
+}
+
 export default function Settings({ auth, userData, flash }) {
   const [showCurrentPassword, setShowCurrentPassword] = useState(false)
   const [showNewPassword, setShowNewPassword] = useState(false)
@@ -92,9 +105,7 @@ export default function Settings({ auth, userData, flash }) {
                 <li className="list-group-item d-flex justify-content-between align-items-center px-0">
                   <span><i className="fas fa-clock mr-2 text-muted"></i> Last Login</span>
                   <span className="text-muted">
-                    {userData.last_login 
-                      ? new Date(userData.last_login).toLocaleString() 
-                      : 'N/A'}
+                    {formatDateTime(userData.last_login)}
                   </span>
                 </li>
               </ul>
@@ -299,9 +310,7 @@ export default function Settings({ auth, userData, flash }) {
                         <i className="fas fa-clock mr-2"></i> Last Login
                       </th>
                       <td>
-                        {userData.last_login 
-                          ? new Date(userData.last_login).toLocaleString() 
-                          : 'N/A'}
+                        {formatDateTime(userData.session_login_time || userData.last_login)}
                       </td>
                     </tr>
                     <tr>
