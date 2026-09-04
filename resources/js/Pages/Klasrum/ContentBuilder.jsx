@@ -18,6 +18,7 @@ import {
 import AdminKlasmeytLayout from '../../Layouts/AdminKlasmeytLayout'
 import SuperAdminKlasmeytLayout from '../../Layouts/SuperAdminKlasmeytLayout'
 import { useDashboardSession } from '../../hooks/useDashboardSession'
+import { storageUrl } from '../../utils/storageUrl'
 
 const fieldClass =
     'w-full rounded-lg border border-[#E5E7EB] bg-white px-3 py-2.5 text-sm text-[#111827] placeholder:text-[#9CA3AF] shadow-none ring-0 focus:border-[#102059] focus:outline-none focus:ring-1 focus:ring-[#102059]'
@@ -222,8 +223,8 @@ export default function ContentBuilder({ auth, content = null, categories = [] }
     const [description, setDescription] = useState(content?.description ?? '')
     const [heading, setHeading] = useState(content?.heading ?? '')
     const [caption, setCaption] = useState(content?.caption ?? '')
-    const [coverPreview, setCoverPreview] = useState(content?.cover_url ?? null)
-    const [mediaPreview, setMediaPreview] = useState(content?.media_url ?? null)
+    const [coverPreview, setCoverPreview] = useState(storageUrl(content?.cover_url) ?? null)
+    const [mediaPreview, setMediaPreview] = useState(storageUrl(content?.media_url) ?? null)
     const [mediaIsVideo, setMediaIsVideo] = useState(Boolean(content?.media_is_video))
     const [coverFile, setCoverFile] = useState(null)
     const [mediaFile, setMediaFile] = useState(null)
@@ -240,8 +241,8 @@ export default function ContentBuilder({ auth, content = null, categories = [] }
         if (bodyRef.current && content?.body) {
             bodyRef.current.innerHTML = content.body
         }
-        setCoverPreview(content?.cover_url ?? null)
-        setMediaPreview(content?.media_url ?? null)
+        setCoverPreview(storageUrl(content?.cover_url) ?? null)
+        setMediaPreview(storageUrl(content?.media_url) ?? null)
         setMediaIsVideo(Boolean(content?.media_is_video))
     }, [content?.id, content?.body, content?.cover_url, content?.media_url, content?.media_is_video])
 

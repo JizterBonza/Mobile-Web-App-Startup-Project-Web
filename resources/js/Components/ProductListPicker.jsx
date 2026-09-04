@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { ChevronDown, ChevronLeft, Package, Search } from 'lucide-react'
+import { storageUrl } from '../utils/storageUrl'
 
 function formatPeso(amount) {
     const value = Number(amount)
@@ -22,7 +23,7 @@ function ProductListCard({ product, onSend, sendingId }) {
             <div className="h-16 w-16 shrink-0 overflow-hidden rounded-xl bg-[#E5E7EB]">
                 {product.image_url ? (
                     <img
-                        src={product.image_url}
+                        src={storageUrl(product.image_url)}
                         alt=""
                         className="h-full w-full object-cover"
                     />
@@ -258,7 +259,7 @@ export function ProductMessageCard({ product, tone = 'outgoing' }) {
             <div className="h-16 w-16 shrink-0 overflow-hidden rounded-xl bg-white/70">
                 {product.image_url ? (
                     <img
-                        src={product.image_url}
+                        src={storageUrl(product.image_url)}
                         alt=""
                         className="h-full w-full object-cover"
                     />

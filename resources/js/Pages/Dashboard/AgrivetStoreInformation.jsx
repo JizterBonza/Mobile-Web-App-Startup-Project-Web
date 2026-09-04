@@ -42,6 +42,7 @@ import SuperAdminOrAdminLayout from '../../Layouts/SuperAdminOrAdminLayout'
 import VendorKlasmeytLayout from '../../Layouts/VendorKlasmeytLayout'
 import PinLocationMap from '../../Components/PinLocationMap'
 import OwnerManagerOrdersPanel from '../../Components/Dashboard/OwnerManagerOrdersPanel'
+import { storageUrl } from '../../utils/storageUrl'
 
 const tabOrder = ['about', 'vendors', 'products', 'insights']
 const vendorTabOrder = ['about', 'products', 'orders']
@@ -174,11 +175,7 @@ function formatShopAddress(street, barangay) {
 }
 
 function shopPermitUrl(permitUrl) {
-  if (!permitUrl) return null
-  if (permitUrl.startsWith('http://') || permitUrl.startsWith('https://') || permitUrl.startsWith('/')) {
-    return permitUrl
-  }
-  return `/storage/${permitUrl}`
+  return storageUrl(permitUrl)
 }
 
 function isPermitPdf(url) {
@@ -212,9 +209,7 @@ const LISTING_IMAGE_FALLBACK =
 
 function resolveCatalogImageUrl(image) {
   if (!image || typeof image !== 'string') return PLACEHOLDER_PRODUCT_IMAGE
-  if (image.startsWith('http://') || image.startsWith('https://')) return image
-  if (image.startsWith('/storage/')) return image
-  return `/storage/${image.replace(/^\//, '')}`
+  return storageUrl(image) || PLACEHOLDER_PRODUCT_IMAGE
 }
 
 function mapCatalogToRegisteredProduct(entry) {

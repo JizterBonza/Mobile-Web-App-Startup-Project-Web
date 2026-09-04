@@ -17,6 +17,7 @@ import VendorKlasmeytLayout from '../../Layouts/VendorKlasmeytLayout'
 import CameraCaptureModal from '../../Components/CameraCaptureModal'
 import ProductListPicker, { OrderUpdateMessage, ProductMessageCard } from '../../Components/ProductListPicker'
 import { useShopConversationMessages } from '../../hooks/useShopConversationMessages'
+import { storageUrl } from '../../utils/storageUrl'
 
 const ATTACHMENT_OPTIONS = [
     { id: 'gallery', label: 'Gallery', icon: ImageIcon },
@@ -42,7 +43,7 @@ function MessageMeta({ message }) {
 }
 
 function ImageGrid({ images = [] }) {
-    const urls = (images || []).filter(Boolean)
+    const urls = (images || []).map((image) => storageUrl(image)).filter(Boolean)
 
     if (urls.length === 0) {
         return (
@@ -103,7 +104,7 @@ function FileAttachment({ message }) {
     if (message.file_url) {
         return (
             <a
-                href={message.file_url}
+                href={storageUrl(message.file_url)}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="block w-full max-w-[260px] overflow-hidden rounded-xl"
@@ -361,7 +362,7 @@ export default function VendorConversation({
                         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#E5E7EB] text-[#6B7280]">
                             {conversation.avatar_url ? (
                                 <img
-                                    src={conversation.avatar_url}
+                                    src={storageUrl(conversation.avatar_url)}
                                     alt=""
                                     className="h-full w-full rounded-full object-cover"
                                 />

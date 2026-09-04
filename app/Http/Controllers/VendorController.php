@@ -19,6 +19,7 @@ use App\Models\SubCategory;
 use App\Models\ProductCatalog;
 use App\Http\Controllers\Concerns\CreatesProductCatalogEntry;
 use App\Http\Controllers\Concerns\ManagesShopOrders;
+use App\Support\PublicStorage;
 
 class VendorController extends Controller
 {
@@ -271,16 +272,10 @@ class VendorController extends Controller
             if (!empty($images)) {
                 $images = array_map(function ($image) {
                     if (is_string($image)) {
-                        if (preg_match('/^https?:\/\//', $image)) {
-                            return $image;
+                        if (preg_match('/^https?:\/\//', $image) || strpos($image, '/storage/') === 0 || strpos($image, 'products/') !== false) {
+                            return PublicStorage::url($image);
                         }
-                        if (strpos($image, '/storage/') === 0) {
-                            return $image;
-                        }
-                        if (strpos($image, 'products/') !== false) {
-                            return '/storage/' . $image;
-                        }
-                        return '/storage/products/' . basename($image);
+                        return PublicStorage::url('products/'.basename($image));
                     }
                     return $image;
                 }, $images);

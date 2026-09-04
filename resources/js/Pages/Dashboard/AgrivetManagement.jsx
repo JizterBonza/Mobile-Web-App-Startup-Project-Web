@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { useForm, router } from '@inertiajs/react'
 import { Search, Trash2, Pencil, Store, Upload, X } from 'lucide-react'
 import SuperAdminOrAdminLayout from '../../Layouts/SuperAdminOrAdminLayout'
+import { storageUrl } from '../../utils/storageUrl'
 
 function getInitials(name) {
   if (!name || typeof name !== 'string') return '?'
@@ -13,11 +14,7 @@ function getInitials(name) {
 }
 
 function agrivetImageUrl(imageUrl) {
-  if (!imageUrl) return null
-  if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://') || imageUrl.startsWith('/')) {
-    return imageUrl
-  }
-  return `/storage/${imageUrl}`
+  return storageUrl(imageUrl)
 }
 
 function parseAgrivetPermits(permits) {

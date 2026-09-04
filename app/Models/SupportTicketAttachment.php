@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\PublicStorage;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -22,7 +23,6 @@ class SupportTicketAttachment extends Model
 
     public function getUrlAttribute(): string
     {
-        // Root-relative so attachments work regardless of APP_URL host/port (e.g. artisan serve).
-        return '/storage/' . ltrim((string) $this->file_path, '/');
+        return PublicStorage::url($this->file_path) ?? '';
     }
 }

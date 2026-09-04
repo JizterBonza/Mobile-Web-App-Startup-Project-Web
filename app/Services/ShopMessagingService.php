@@ -12,6 +12,7 @@ use App\Models\ShopConversationAttachment;
 use App\Models\ShopConversationMessage;
 use App\Models\ShopConversationRead;
 use App\Models\User;
+use App\Support\PublicStorage;
 use Carbon\Carbon;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Collection;
@@ -459,19 +460,11 @@ class ShopMessagingService
             return null;
         }
 
-        if (preg_match('/^https?:\/\//', $image)) {
-            return $image;
+        if (preg_match('/^https?:\/\//', $image) || str_starts_with($image, '/storage/') || str_contains($image, 'products/')) {
+            return PublicStorage::url($image);
         }
 
-        if (str_starts_with($image, '/storage/')) {
-            return $image;
-        }
-
-        if (str_contains($image, 'products/')) {
-            return '/storage/'.ltrim($image, '/');
-        }
-
-        return '/storage/products/'.basename($image);
+        return PublicStorage::url('products/'.basename($image));
     }
 
     private function itemUnitLabel(Item $item): ?string
@@ -1058,9 +1051,10 @@ class ShopMessagingService
 
         $user->loadMissing('userDetail');
 
-        return $user->userDetail->profile_image_url
+        return PublicStorage::url(
+            $user->userDetail->profile_image_url
             ?: $user->userDetail->avatar
-            ?: null;
+        );
     }
 
     private function listTimestamp($at): string

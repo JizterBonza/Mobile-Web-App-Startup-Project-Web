@@ -3,6 +3,7 @@ import { router } from '@inertiajs/react'
 import { ChevronLeft, Search, User } from 'lucide-react'
 import OwnerManagerKlasmeytLayout from '../../Layouts/OwnerManagerKlasmeytLayout'
 import { useShopConversationsList } from '../../hooks/useShopConversationsList'
+import { storageUrl } from '../../utils/storageUrl'
 
 export default function OwnerManagerBranchChat({ auth, shop, conversations = [] }) {
     const [query, setQuery] = useState('')
@@ -79,7 +80,7 @@ export default function OwnerManagerBranchChat({ auth, shop, conversations = [] 
                                             <div className="flex h-11 w-11 items-center justify-center rounded-full bg-[#E5E7EB] text-[#6B7280]">
                                                 {conversation.avatar_url ? (
                                                     <img
-                                                        src={conversation.avatar_url}
+                                                        src={storageUrl(conversation.avatar_url)}
                                                         alt=""
                                                         className="h-full w-full rounded-full object-cover"
                                                     />

@@ -39,7 +39,9 @@ return [
         'public' => [
             'driver' => 'local',
             'root' => storage_path('app/public'),
-            'url' => env('APP_URL').'/storage',
+            // Root-relative so uploaded files are requested from the current host
+            // instead of APP_URL (which is often localhost on deployed .env files).
+            'url' => rtrim((string) env('FILESYSTEM_PUBLIC_URL', '/storage'), '/'),
             'visibility' => 'public',
             'throw' => false,
         ],

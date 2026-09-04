@@ -3,16 +3,13 @@ import { useForm, router } from '@inertiajs/react'
 import { ArrowLeft, Plus, Star, Store, Trash2, Upload } from 'lucide-react'
 import SuperAdminOrAdminLayout from '../../Layouts/SuperAdminOrAdminLayout'
 import PinLocationMap from '../../Components/PinLocationMap'
+import { storageUrl } from '../../utils/storageUrl'
 
 const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 const FULL_DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
 
 function shopCoverUrl(logoUrl) {
-  if (!logoUrl) return null
-  if (logoUrl.startsWith('http://') || logoUrl.startsWith('https://') || logoUrl.startsWith('/')) {
-    return logoUrl
-  }
-  return `/storage/${logoUrl}`
+  return storageUrl(logoUrl)
 }
 
 export default function AgrivetShops({ auth, agrivet, zones = [], shops = [], flash }) {

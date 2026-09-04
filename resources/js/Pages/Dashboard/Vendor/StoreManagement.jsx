@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useForm } from '@inertiajs/react'
 import VendorKlasmeytLayout from '../../../Layouts/VendorKlasmeytLayout'
 import AddressAutocomplete from '../../../Components/AddressAutocomplete'
+import { storageUrl } from '../../../utils/storageUrl'
 
 export default function StoreManagement({ auth, shop, agrivet, flash }) {
   const [showModal, setShowModal] = useState(false)
@@ -214,7 +215,7 @@ export default function StoreManagement({ auth, shop, agrivet, flash }) {
                 {agrivet.logo_url && (
                   <div className="text-center mt-3">
                     <img 
-                      src={agrivet.logo_url} 
+                      src={storageUrl(agrivet.logo_url)} 
                       alt={`${agrivet.name} Logo`} 
                       className="img-thumbnail"
                       style={{ maxHeight: '100px' }}

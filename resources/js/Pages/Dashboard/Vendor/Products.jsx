@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useForm, router } from '@inertiajs/react'
 import VendorKlasmeytLayout from '../../../Layouts/VendorKlasmeytLayout'
+import { storageUrl } from '../../../utils/storageUrl'
 
 export default function Products({ auth, products = [], shop, flash, stockImages = [], categories = [], subCategories = [] }) {
   const [showAddModal, setShowAddModal] = useState(false)
@@ -273,19 +274,7 @@ export default function Products({ auth, products = [], shop, flash, stockImages
     }
     
     // Ensure images are properly formatted URLs
-    existingImages = existingImages.map(img => {
-      if (!img) return null
-      // If it's already a full URL, return as is
-      if (img.startsWith('http://') || img.startsWith('https://')) {
-        return img
-      }
-      // If it starts with /storage/, return as is
-      if (img.startsWith('/storage/')) {
-        return img
-      }
-      // Otherwise, prepend /storage/
-      return `/storage/${img.replace(/^storage\//, '')}`
-    }).filter(img => img !== null)
+    existingImages = existingImages.map(img => storageUrl(img)).filter(img => img !== null)
     
     // Initialize form with product data - ensure all values are strings for inputs
     editForm.setData({
@@ -761,7 +750,7 @@ export default function Products({ auth, products = [], shop, flash, stockImages
                                     >
                                       <div className="position-relative">
                                         <img
-                                          src={img.image_url}
+                                          src={storageUrl(img.image_url)}
                                           alt={img.name}
                                           className="card-img-top"
                                           style={{ height: '80px', objectFit: 'cover' }}
@@ -1028,9 +1017,7 @@ export default function Products({ auth, products = [], shop, flash, stockImages
                           <label className="d-block font-weight-bold mb-2">Current Images:</label>
                           <div className="row">
                             {editExistingImages.map((image, index) => {
-                              const imageUrl = image.startsWith('http') || image.startsWith('/') 
-                                ? image 
-                                : `/storage/${image.replace(/^storage\//, '')}`
+                              const imageUrl = storageUrl(image)
                               return (
                                 <div key={`existing-${index}`} className="col-md-3 mb-2 position-relative">
                                   <img
@@ -1154,7 +1141,7 @@ export default function Products({ auth, products = [], shop, flash, stockImages
                                     >
                                       <div className="position-relative">
                                         <img
-                                          src={img.image_url}
+                                          src={storageUrl(img.image_url)}
                                           alt={img.name}
                                           className="card-img-top"
                                           style={{ height: '70px', objectFit: 'cover' }}

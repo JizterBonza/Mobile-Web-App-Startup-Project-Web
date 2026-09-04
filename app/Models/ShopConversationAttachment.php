@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\PublicStorage;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -31,8 +32,7 @@ class ShopConversationAttachment extends Model
 
     public function getUrlAttribute(): string
     {
-        // Root-relative so images work regardless of APP_URL host/port (e.g. artisan serve).
-        return '/storage/' . ltrim((string) $this->file_path, '/');
+        return PublicStorage::url($this->file_path) ?? '';
     }
 
     public function isImage(): bool

@@ -2,9 +2,10 @@
 
 namespace App\Http\Controllers\Concerns;
 
+use App\Services\OrderStatusTransitionService;
+use App\Support\PublicStorage;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
-use App\Services\OrderStatusTransitionService;
 
 trait ManagesShopOrders
 {
@@ -431,10 +432,10 @@ trait ManagesShopOrders
 
         $first = $decoded[0];
         if (is_string($first)) {
-            return $first;
+            return PublicStorage::url($first);
         }
         if (is_array($first)) {
-            return $first['url'] ?? $first['path'] ?? null;
+            return PublicStorage::url($first['url'] ?? $first['path'] ?? null);
         }
 
         return null;

@@ -15,10 +15,10 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 use App\Http\Controllers\Concerns\ManagesShopOrders;
 use App\Services\UserWelcomeEmailService;
+use App\Support\PublicStorage;
 
 class AgrivetController extends Controller
 {
@@ -123,8 +123,7 @@ class AgrivetController extends Controller
                     ? $this->storeAgrivetImage($request->file('banner'), 'banners')
                     : null;
 
-                $disk = Storage::disk('public');
-                $permitPublicUrl = $disk->url($permitPath);
+                $permitPublicUrl = PublicStorage::url($permitPath);
 
                 $ownerParts = array_filter([
                     $validated['first_name'],
@@ -784,10 +783,7 @@ class AgrivetController extends Controller
                 $name = $review->user->userCredential->username ?? 'Customer';
             }
 
-            $avatar = $detail->profile_image_url ?? $detail->avatar ?? null;
-            if ($avatar && ! str_starts_with($avatar, 'http')) {
-                $avatar = "/storage/{$avatar}";
-            }
+            $avatar = PublicStorage::url($detail?->profile_image_url ?? $detail?->avatar ?? null);
 
             return [
                 'id' => $review->id,
@@ -844,17 +840,11 @@ class AgrivetController extends Controller
                         if (! is_string($image)) {
                             return $image;
                         }
-                        if (preg_match('/^https?:\/\//', $image)) {
-                            return $image;
-                        }
-                        if (str_starts_with($image, '/storage/')) {
-                            return $image;
-                        }
-                        if (str_contains($image, 'products/')) {
-                            return '/storage/'.$image;
+                        if (preg_match('/^https?:\/\//', $image) || str_starts_with($image, '/storage/') || str_contains($image, 'products/')) {
+                            return PublicStorage::url($image);
                         }
 
-                        return '/storage/products/'.basename($image);
+                        return PublicStorage::url('products/'.basename($image));
                     }, $images);
                 }
 
@@ -1735,14 +1725,11 @@ class AgrivetController extends Controller
             if (! is_string($image)) {
                 return '';
             }
-            if (preg_match('/^https?:\/\//', $image)) {
-                return $image;
-            }
-            if (str_starts_with($image, '/storage/')) {
-                return $image;
+            if (preg_match('/^https?:\/\//', $image) || str_starts_with($image, '/storage/')) {
+                return PublicStorage::url($image);
             }
 
-            return '/storage/'.ltrim($image, '/');
+            return PublicStorage::url(ltrim($image, '/'));
         }, array_filter($images, fn ($image) => is_string($image) && $image !== '')));
     }
 

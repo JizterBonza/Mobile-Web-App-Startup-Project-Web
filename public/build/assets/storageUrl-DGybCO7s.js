@@ -1,0 +1,1 @@
+function s(t){if(!t||typeof t!="string")return null;if(t.startsWith("blob:")||t.startsWith("data:"))return t;if(t.startsWith("http://")||t.startsWith("https://")){try{const r=new URL(t);if(r.pathname.startsWith("/storage/"))return`${r.pathname}${r.search}`}catch{return t}return t}return t.startsWith("/")?t:`/storage/${t.replace(/^storage\//,"")}`}export{s};

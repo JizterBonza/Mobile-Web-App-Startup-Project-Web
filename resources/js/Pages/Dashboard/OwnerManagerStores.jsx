@@ -5,6 +5,7 @@ import OwnerManagerKlasmeytLayout, {
     OwnerManagerNoAgrivetAlert,
 } from '../../Layouts/OwnerManagerKlasmeytLayout'
 import PinLocationMap from '../../Components/PinLocationMap'
+import { storageUrl } from '../../utils/storageUrl'
 
 const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 const FULL_DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
@@ -17,11 +18,7 @@ function formatShopStatus(status) {
 }
 
 function shopCoverUrl(logoUrl) {
-    if (!logoUrl) return null
-    if (logoUrl.startsWith('http://') || logoUrl.startsWith('https://') || logoUrl.startsWith('/')) {
-        return logoUrl
-    }
-    return `/storage/${logoUrl}`
+    return storageUrl(logoUrl)
 }
 
 function FieldError({ message }) {

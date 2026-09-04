@@ -22,12 +22,17 @@ use App\Http\Controllers\VoucherController;
 use App\Http\Controllers\PayoutRecordController;
 use App\Http\Controllers\KlasrumCategoryController;
 use App\Http\Controllers\KlasrumContentController;
+use App\Http\Controllers\PublicStorageController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
 Route::get('/', function () {
     return Inertia::render('Welcome');
 });
+
+Route::get('/storage/{path}', [PublicStorageController::class, 'show'])
+    ->where('path', '.*')
+    ->name('storage.public');
 
 Route::middleware(['auth', 'session.valid', 'user.type:super_admin|admin'])->prefix('klasrum')->name('klasrum.')->group(function () {
     Route::get('/', [KlasrumContentController::class, 'index'])->name('index');

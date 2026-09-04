@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useForm, router } from '@inertiajs/react'
 import VendorKlasmeytLayout from '../../../Layouts/VendorKlasmeytLayout'
+import { storageUrl } from '../../../utils/storageUrl'
 
 export default function ProductImages({ auth, productImages = [], shop, agrivet, flash }) {
   const [showAddModal, setShowAddModal] = useState(false)
@@ -163,7 +164,7 @@ export default function ProductImages({ auth, productImages = [], shop, agrivet,
       category: image.category || '',
       status: image.status || 'active',
     })
-    setEditImagePreview(image.image_url)
+    setEditImagePreview(storageUrl(image.image_url))
     setShowEditModal(true)
     setShowEditModalAnimation(false)
   }
@@ -340,7 +341,7 @@ export default function ProductImages({ auth, productImages = [], shop, agrivet,
               <div className="card h-100">
                 <div className="position-relative">
                   <img
-                    src={image.image_url}
+                    src={storageUrl(image.image_url)}
                     alt={image.name}
                     className="card-img-top"
                     style={{ height: '180px', objectFit: 'cover' }}
@@ -603,7 +604,7 @@ export default function ProductImages({ auth, productImages = [], shop, agrivet,
                 <div className="modal-body">
                   <div className="text-center mb-3">
                     <img
-                      src={imageToDelete.image_url}
+                      src={storageUrl(imageToDelete.image_url)}
                       alt={imageToDelete.name}
                       className="img-thumbnail"
                       style={{ maxHeight: '150px', maxWidth: '100%', objectFit: 'contain' }}

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\PublicStorage;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -55,20 +56,12 @@ class KlasrumContent extends Model
 
     public function coverUrl(): ?string
     {
-        if (! $this->cover_path) {
-            return null;
-        }
-
-        return '/storage/' . ltrim($this->cover_path, '/');
+        return PublicStorage::url($this->cover_path);
     }
 
     public function mediaUrl(): ?string
     {
-        if (! $this->media_path) {
-            return null;
-        }
-
-        return '/storage/' . ltrim($this->media_path, '/');
+        return PublicStorage::url($this->media_path);
     }
 
     public function isPublished(): bool
@@ -117,11 +110,21 @@ class KlasrumContent extends Model
 
     private function absoluteFileUrl(?string $path): ?string
     {
-        if (! $path) {
+        $relative = PublicStorage::url($path);
+        if (! $relative) {
             return null;
         }
 
-        return url('/storage/' . ltrim($path, '/'));
+        if (preg_match('#^https?://#i', $relative)) {
+            return $relative;
+        }
+
+        $root = request()?->getSchemeAndHttpHost();
+        if (! $root) {
+            return url($relative);
+        }
+
+        return rtrim($root, '/').$relative;
     }
 
     public function toListArray(): array

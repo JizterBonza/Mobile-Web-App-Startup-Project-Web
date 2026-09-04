@@ -8,6 +8,7 @@ use App\Models\User;
 use App\Models\UserDetail;
 use App\Models\UserCredential;
 use App\Services\UserWelcomeEmailService;
+use App\Support\PublicStorage;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -454,7 +455,7 @@ class UserController extends Controller
 
             if ($request->hasFile('profile_image')) {
                 $newStoredPath = $request->file('profile_image')->store('profile-images', 'public');
-                $userDetailData['profile_image_url'] = Storage::disk('public')->url($newStoredPath);
+                $userDetailData['profile_image_url'] = PublicStorage::url($newStoredPath);
             } elseif ($request->filled('profile_image_url')) {
                 $userDetailData['profile_image_url'] = $request->profile_image_url;
             }
@@ -510,16 +511,8 @@ class UserController extends Controller
             return;
         }
 
-        $publicPrefix = rtrim(Storage::disk('public')->url(''), '/');
-        $storagePath = null;
-
-        if (str_starts_with($url, $publicPrefix.'/')) {
-            $storagePath = ltrim(substr($url, strlen($publicPrefix)), '/');
-        } elseif (str_starts_with($url, '/storage/')) {
-            $storagePath = ltrim(substr($url, strlen('/storage/')), '/');
-        }
-
-        if (! $storagePath || str_contains($storagePath, '..')) {
+        $storagePath = PublicStorage::relativePath($url);
+        if (! is_string($storagePath) || $storagePath === '') {
             return;
         }
 

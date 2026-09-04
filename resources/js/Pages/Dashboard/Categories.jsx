@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { useForm, router, Link } from '@inertiajs/react'
 import { ArrowLeft, Plus, Search, Pencil, Trash2, Tag, History } from 'lucide-react'
 import SuperAdminOrAdminLayout from '../../Layouts/SuperAdminOrAdminLayout'
+import { storageUrl } from '../../utils/storageUrl'
 
 export default function Categories({ auth, categories = [], flash }) {
   const [showAddModal, setShowAddModal]           = useState(false)
@@ -239,7 +240,7 @@ export default function Categories({ auth, categories = [], flash }) {
                 {/* Icon */}
                 <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg border border-[#E5E7EB] bg-[#F0F2F5]">
                   {category.category_image_url ? (
-                    <img src={category.category_image_url} alt={category.category_name} className="h-full w-full rounded-lg object-cover" onError={e => { e.target.style.display='none' }} />
+                    <img src={storageUrl(category.category_image_url)} alt={category.category_name} className="h-full w-full rounded-lg object-cover" onError={e => { e.target.style.display='none' }} />
                   ) : (
                     <Tag className="h-5 w-5 text-[#9CA3AF]" />
                   )}
