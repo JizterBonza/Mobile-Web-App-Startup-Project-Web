@@ -215,4 +215,5 @@ Route::middleware('auth:sanctum')->group(function () {
 
 Route::middleware('payout.automation')->group(function () {
     Route::get('payouts', [PayoutController::class, 'index']);
+    Route::post('payouts/status', [PayoutController::class, 'updateStatus']);
 });

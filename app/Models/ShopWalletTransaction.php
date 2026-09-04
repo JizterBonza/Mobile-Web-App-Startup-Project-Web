@@ -17,6 +17,8 @@ class ShopWalletTransaction extends Model
 
     public const REASON_PAYOUT = 'payout';
 
+    public const REASON_PAYOUT_REVERSAL = 'payout_reversal';
+
     protected $fillable = [
         'shop_id',
         'type',

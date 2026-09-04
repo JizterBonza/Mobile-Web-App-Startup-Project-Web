@@ -160,6 +160,45 @@ class ShopWalletService
         ]);
     }
 
+    public function creditForFailedPayout(Payout $payout): void
+    {
+        if (! $payout->shop_id) {
+            return;
+        }
+
+        $amount = round((float) $payout->amount, 2);
+        if ($amount < 0.01) {
+            return;
+        }
+
+        $alreadyReversed = ShopWalletTransaction::query()
+            ->where('payout_id', $payout->id)
+            ->where('reason', ShopWalletTransaction::REASON_PAYOUT_REVERSAL)
+            ->lockForUpdate()
+            ->exists();
+
+        if ($alreadyReversed) {
+            return;
+        }
+
+        $shop = Shop::query()->whereKey($payout->shop_id)->lockForUpdate()->first();
+        if (! $shop) {
+            return;
+        }
+
+        $balance = round((float) $shop->wallet_balance + $amount, 2);
+        $shop->forceFill(['wallet_balance' => $balance])->save();
+
+        ShopWalletTransaction::create([
+            'shop_id' => $shop->id,
+            'type' => ShopWalletTransaction::TYPE_CREDIT,
+            'amount' => $amount,
+            'balance_after' => $balance,
+            'reason' => ShopWalletTransaction::REASON_PAYOUT_REVERSAL,
+            'payout_id' => $payout->id,
+        ]);
+    }
+
     public function deliveredItemStatusId(): int
     {
         return (int) (DB::table('order_item_status')->where('stat_description', 'Delivered')->value('id') ?: 6);

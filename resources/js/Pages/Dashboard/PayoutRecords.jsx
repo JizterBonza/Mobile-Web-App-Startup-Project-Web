@@ -196,7 +196,7 @@ export default function PayoutRecords({
                 >
                   <option value="">All statuses</option>
                   <option value="pending">Pending</option>
-                  <option value="completed">Completed</option>
+                  <option value="success">Success</option>
                   <option value="failed">Failed</option>
                 </select>
               </div>
