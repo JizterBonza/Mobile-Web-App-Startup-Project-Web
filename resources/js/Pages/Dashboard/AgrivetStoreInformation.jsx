@@ -919,6 +919,15 @@ export default function AgrivetStoreInformation({
 
   const handleSaveListingEdit = () => {
     if (!selectedListingDetail) return
+
+    const nextStock = Number(editListingFormData.stock)
+    if (
+      selectedListingDetail.canRestock === false &&
+      nextStock > Number(selectedListingDetail.stock)
+    ) {
+      return
+    }
+
     updateListingItem(
       selectedListingDetail.id,
       {
@@ -1113,6 +1122,7 @@ export default function AgrivetStoreInformation({
             ? new Date(product.discount_expires_at).getTime()
             : undefined,
           stock: product.item_quantity ?? 0,
+          canRestock: product.can_restock !== false,
           reorderLevel: 5,
           popularity: product.sold_count ?? 0,
           photos,
@@ -1723,6 +1733,11 @@ export default function AgrivetStoreInformation({
 
               {activeTab === 'products' && (
                 <div className="bg-white rounded-lg border border-[#E5E7EB] p-8 min-h-[600px]">
+                  {flash?.error && (
+                    <div className="mb-4 rounded-lg border border-[#FECACA] bg-[#FEF2F2] px-4 py-3 text-sm text-[#991B1B]">
+                      {flash.error}
+                    </div>
+                  )}
                   <div className="mb-6 flex items-start justify-between">
                     <div>
                       <h2 className="text-lg font-bold text-[#102059] mb-1">Product Listings</h2>
@@ -1907,6 +1922,11 @@ export default function AgrivetStoreInformation({
                               <span className="text-[#6B7280]">Stock:</span>
                               <span className="font-semibold text-[#102059]">{listing.stock}</span>
                             </div>
+                            {listing.canRestock === false && (
+                              <p className="mb-2 text-[10px] font-semibold text-[#E20E28]">
+                                Catalog disabled — restock unavailable
+                              </p>
+                            )}
                             <div className="flex items-center justify-between text-xs mb-3">
                               <span className="text-[#6B7280]">Popularity:</span>
                               <div className="flex items-center gap-1">
@@ -3466,9 +3486,16 @@ export default function AgrivetStoreInformation({
                     <input
                       type="number"
                       value={isEditingListing ? editListingFormData.stock : selectedListingDetail.stock}
-                      onChange={(e) =>
-                        setEditListingFormData({ ...editListingFormData, stock: e.target.value })
-                      }
+                      onChange={(e) => {
+                        const value = e.target.value
+                        if (
+                          selectedListingDetail.canRestock === false &&
+                          Number(value) > Number(selectedListingDetail.stock)
+                        ) {
+                          return
+                        }
+                        setEditListingFormData({ ...editListingFormData, stock: value })
+                      }}
                       disabled={!isEditingListing}
                       className={`w-full px-4 py-2.5 border border-[#E5E7EB] rounded-lg text-sm ${
                         isEditingListing
@@ -3476,6 +3503,11 @@ export default function AgrivetStoreInformation({
                           : 'bg-[#F9FAFB] text-[#6B7280] cursor-not-allowed'
                       }`}
                     />
+                    {selectedListingDetail.canRestock === false && (
+                      <p className="mt-1 text-xs text-[#E20E28]">
+                        This product is disabled in the catalog and cannot be restocked.
+                      </p>
+                    )}
                   </div>
                   <div>
                     <label className="text-xs font-semibold text-[#102059] uppercase tracking-wider block mb-2">

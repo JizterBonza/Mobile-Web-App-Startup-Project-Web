@@ -93,6 +93,10 @@ Route::put('/dashboard/super-admin/products/{id}', [SuperAdminProductController:
     ->middleware(['auth', 'session.valid', 'user.type:super_admin'])
     ->name('dashboard.super-admin.products.update');
 
+Route::patch('/dashboard/super-admin/products/{id}/status', [SuperAdminProductController::class, 'updateStatus'])
+    ->middleware(['auth', 'session.valid', 'user.type:super_admin'])
+    ->name('dashboard.super-admin.products.status');
+
 Route::get('/dashboard/super-admin/products/{id}', [SuperAdminProductController::class, 'show'])
     ->middleware(['auth', 'session.valid', 'user.type:super_admin'])
     ->name('dashboard.super-admin.products.show');
@@ -294,6 +298,10 @@ Route::get('/dashboard/admin/products/{id}/edit', [SuperAdminProductController::
 Route::put('/dashboard/admin/products/{id}', [SuperAdminProductController::class, 'update'])
     ->middleware(['auth', 'session.valid', 'user.type:admin'])
     ->name('dashboard.admin.products.update');
+
+Route::patch('/dashboard/admin/products/{id}/status', [SuperAdminProductController::class, 'updateStatus'])
+    ->middleware(['auth', 'session.valid', 'user.type:admin'])
+    ->name('dashboard.admin.products.status');
 
 Route::get('/dashboard/admin/products/{id}', [SuperAdminProductController::class, 'show'])
     ->middleware(['auth', 'session.valid', 'user.type:admin'])

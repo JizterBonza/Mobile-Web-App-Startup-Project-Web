@@ -231,6 +231,37 @@ class SuperAdminProductController extends Controller
     }
 
     /**
+     * Disable or enable a catalog product.
+     */
+    public function updateStatus(Request $request, $id)
+    {
+        $catalog = ProductCatalog::listedInCatalog()->findOrFail($id);
+        $oldValues = $catalog->toArray();
+
+        $request->validate([
+            'status' => 'required|string|in:active,inactive',
+        ]);
+
+        $catalog->update(['status' => $request->status]);
+
+        $action = $request->status === ProductCatalog::STATUS_INACTIVE ? 'disabled' : 'enabled';
+
+        ActivityLog::log(
+            'updated',
+            "Product catalog entry {$action}: {$catalog->product_name}",
+            $catalog,
+            $oldValues,
+            $catalog->fresh()->toArray()
+        );
+
+        $message = $request->status === ProductCatalog::STATUS_INACTIVE
+            ? 'Product disabled. Agrivets can no longer restock this product when they run out.'
+            : 'Product enabled. Agrivets can add and restock this product again.';
+
+        return redirect()->back()->with('success', $message);
+    }
+
+    /**
      * @return array<string, mixed>
      */
     private function catalogFormOptions($includeCategoryId = null, $includeSubCategoryId = null): array

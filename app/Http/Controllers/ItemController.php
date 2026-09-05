@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Http\Controllers\Concerns\EnsuresApiOwnership;
+use App\Http\Controllers\Concerns\PreventsDisabledCatalogRestock;
 use App\Models\Category;
 use App\Models\Item;
 use App\Models\OrderItem;
@@ -14,6 +15,7 @@ use Illuminate\Support\Facades\Validator;
 class ItemController extends Controller
 {
     use EnsuresApiOwnership;
+    use PreventsDisabledCatalogRestock;
     /**
      * Fetch all items
      *
@@ -423,6 +425,14 @@ class ItemController extends Controller
                 'success' => false,
                 'message' => 'Validation error',
                 'errors' => $validator->errors()
+            ], 422);
+        }
+
+        if ($request->has('item_quantity') && $this->isCatalogRestockBlocked($item, $request->item_quantity)) {
+            return response()->json([
+                'success' => false,
+                'message' => $this->catalogRestockBlockedMessage(),
+                'errors' => ['item_quantity' => [$this->catalogRestockBlockedMessage()]],
             ], 422);
         }
 

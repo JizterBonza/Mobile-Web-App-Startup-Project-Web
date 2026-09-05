@@ -17,12 +17,14 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Inertia\Inertia;
 use App\Http\Controllers\Concerns\ManagesShopOrders;
+use App\Http\Controllers\Concerns\PreventsDisabledCatalogRestock;
 use App\Services\UserWelcomeEmailService;
 use App\Support\PublicStorage;
 
 class AgrivetController extends Controller
 {
     use ManagesShopOrders;
+    use PreventsDisabledCatalogRestock;
     /**
      * Display a listing of agrivets.
      */
@@ -795,7 +797,7 @@ class AgrivetController extends Controller
             ];
         });
 
-        $catalogBrandsByProductName = ProductCatalog::approved()
+        $catalogBrandsByProductName = ProductCatalog::listedInCatalog()
             ->whereNotNull('brand')
             ->where('brand', '!=', '')
             ->pluck('brand', 'product_name');
@@ -826,14 +828,16 @@ class AgrivetController extends Controller
 
         $bundleCatalogById = collect();
         if (! empty($bundleCatalogIds)) {
-            $bundleCatalogById = ProductCatalog::approved()
+            $bundleCatalogById = ProductCatalog::listedInCatalog()
                 ->with('category', 'subCategory')
                 ->whereIn('id', $bundleCatalogIds)
                 ->get()
                 ->keyBy('id');
         }
 
-        $products = $shopItems->map(function ($item) use ($catalogBrandsByProductName, $bundleCatalogById) {
+        $restockBlockedByItemId = ProductCatalog::restockBlockedFlagsForItems($shopItems);
+
+        $products = $shopItems->map(function ($item) use ($catalogBrandsByProductName, $bundleCatalogById, $restockBlockedByItemId) {
                 $images = $item->item_images ? json_decode($item->item_images, true) : [];
                 if (! empty($images)) {
                     $images = array_map(function ($image) {
@@ -871,6 +875,7 @@ class AgrivetController extends Controller
                     'sub_category_name' => $item->sub_category_name,
                     'item_images' => $images,
                     'item_status' => $item->item_status,
+                    'can_restock' => ! ($restockBlockedByItemId[$item->id] ?? false),
                     'average_rating' => $item->average_rating,
                     'total_reviews' => $item->total_reviews,
                     'sold_count' => $item->sold_count,
@@ -1030,6 +1035,11 @@ class AgrivetController extends Controller
             $update['item_price'] = $validated['item_price'];
         }
         if (array_key_exists('item_quantity', $validated)) {
+            if ($this->isCatalogRestockBlocked($item, $validated['item_quantity'])) {
+                return redirect()->back()
+                    ->withErrors(['item_quantity' => $this->catalogRestockBlockedMessage()])
+                    ->with('error', $this->catalogRestockBlockedMessage());
+            }
             $update['item_quantity'] = $validated['item_quantity'];
         }
         if (array_key_exists('item_status', $validated)) {
@@ -1611,7 +1621,7 @@ class AgrivetController extends Controller
             return [];
         }
 
-        $byName = ProductCatalog::approved()
+        $byName = ProductCatalog::listedInCatalog()
             ->with('category', 'subCategory')
             ->whereIn('product_name', $names)
             ->get()

@@ -325,6 +325,9 @@ export default function SuperAdminEditProduct({
                                     <option value="active">Active</option>
                                     <option value="inactive">Inactive</option>
                                 </select>
+                                <p className="mt-1 text-xs text-[#6B7280]">
+                                    Inactive products stay in the catalog but cannot be added or restocked by Agrivets.
+                                </p>
                             </div>
 
                             <div>

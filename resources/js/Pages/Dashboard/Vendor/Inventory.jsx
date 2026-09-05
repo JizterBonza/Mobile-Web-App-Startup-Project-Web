@@ -175,14 +175,29 @@ export default function Inventory({ auth, inventory = [], shop, flash }) {
                 <form onSubmit={handleUpdateInventory}>
                   <div className="modal-body">
                     <p><strong>Product:</strong> {selectedItem.item_name}</p>
+                    {selectedItem.can_restock === false && (
+                      <div className="alert alert-warning py-2">
+                        This product is disabled in the catalog. You can reduce stock, but you cannot restock it.
+                      </div>
+                    )}
                     <div className="form-group">
                       <label>Quantity <span className="text-danger">*</span></label>
                       <input
                         type="number"
                         min="0"
+                        max={selectedItem.can_restock === false ? selectedItem.item_quantity : undefined}
                         className={`form-control ${editForm.errors.item_quantity ? 'is-invalid' : ''}`}
                         value={editForm.data.item_quantity}
-                        onChange={(e) => editForm.setData('item_quantity', e.target.value)}
+                        onChange={(e) => {
+                          const value = e.target.value
+                          if (
+                            selectedItem.can_restock === false &&
+                            Number(value) > Number(selectedItem.item_quantity)
+                          ) {
+                            return
+                          }
+                          editForm.setData('item_quantity', value)
+                        }}
                         required
                       />
                       {editForm.errors.item_quantity && (

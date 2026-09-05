@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link } from '@inertiajs/react'
-import { Clock, Package, Pencil, Plus, Search, Star } from 'lucide-react'
+import { Link, router } from '@inertiajs/react'
+import { Ban, CheckCircle, Clock, Package, Pencil, Plus, Search, Star } from 'lucide-react'
 import SuperAdminOrAdminLayout from '../../../Layouts/SuperAdminOrAdminLayout'
 
 function getProductsBaseRoute(userType) {
@@ -35,6 +35,9 @@ export default function SuperAdminProducts({ auth, products = [], flash, pending
     const [itemsPerPage, setItemsPerPage]         = useState(10)
     const [currentPage, setCurrentPage]           = useState(1)
     const [showSuccessAlert, setShowSuccessAlert] = useState(true)
+    const [showErrorAlert, setShowErrorAlert]     = useState(true)
+    const [statusModal, setStatusModal]           = useState(null)
+    const [updatingStatusId, setUpdatingStatusId] = useState(null)
 
     const normalizedProducts = useMemo(() => {
         return products.map(p => ({
@@ -89,6 +92,37 @@ export default function SuperAdminProducts({ auth, products = [], flash, pending
 
     const filterClass = 'text-sm border border-[#E5E7EB] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#102059] focus:border-transparent px-4 py-2 bg-white'
 
+    const openStatusModal = (product, nextStatus) => {
+        setStatusModal({
+            id: product.id,
+            productName: product.productName,
+            status: nextStatus,
+        })
+    }
+
+    const closeStatusModal = () => {
+        if (updatingStatusId) return
+        setStatusModal(null)
+    }
+
+    const confirmStatusChange = () => {
+        if (!statusModal || updatingStatusId) return
+        setUpdatingStatusId(statusModal.id)
+        router.patch(
+            `${productsBase}/${statusModal.id}/status`,
+            { status: statusModal.status },
+            {
+                preserveScroll: true,
+                onFinish: () => {
+                    setUpdatingStatusId(null)
+                    setStatusModal(null)
+                    setShowSuccessAlert(true)
+                    setShowErrorAlert(true)
+                },
+            }
+        )
+    }
+
     return (
         <SuperAdminOrAdminLayout auth={auth} title="Products">
             <div>
@@ -105,12 +139,25 @@ export default function SuperAdminProducts({ auth, products = [], flash, pending
                         </button>
                     </div>
                 )}
+                {flash?.error && showErrorAlert && (
+                    <div className="mb-4 flex items-center justify-between rounded-lg border border-[#E20E28]/30 bg-[#E20E28]/10 px-4 py-3">
+                        <p className="text-sm font-medium text-[#E20E28]">{flash.error}</p>
+                        <button
+                            type="button"
+                            onClick={() => setShowErrorAlert(false)}
+                            className="ml-4 text-[#E20E28] hover:opacity-70"
+                        >
+                            ×
+                        </button>
+                    </div>
+                )}
 
                 {/* Page header */}
                 <div className="mb-6">
                     <h1 className="mb-1 text-2xl font-semibold text-[#102059]">Product Catalog</h1>
                     <p className="text-sm text-[#6B7280]">
                         Manage the platform product catalog. Vendors can only add products listed here to their shop inventory.
+                        Disabled products stay in the catalog but cannot be restocked by Agrivets when they run out of stock.
                     </p>
                     <div className="mt-4 flex flex-wrap gap-3">
                         <Link
@@ -265,13 +312,36 @@ export default function SuperAdminProducts({ auth, products = [], flash, pending
                                         </div>
                                     </div>
                                     </Link>
-                                    <Link
-                                        href={`${productsBase}/${product.id}/edit`}
-                                        className="inline-flex flex-shrink-0 items-center gap-1.5 rounded-lg border border-[#E5E7EB] bg-white px-3 py-2 text-xs font-semibold text-[#102059] transition-colors hover:bg-[#F0F7FF]"
-                                    >
-                                        <Pencil className="h-3.5 w-3.5" />
-                                        Edit
-                                    </Link>
+                                    <div className="flex flex-shrink-0 items-center gap-2">
+                                        {product.status === 'active' ? (
+                                            <button
+                                                type="button"
+                                                onClick={() => openStatusModal(product, 'inactive')}
+                                                disabled={updatingStatusId === product.id}
+                                                className="inline-flex items-center gap-1.5 rounded-lg border border-[#E20E28]/30 bg-white px-3 py-2 text-xs font-semibold text-[#E20E28] transition-colors hover:bg-[#FEF2F2] disabled:opacity-50"
+                                            >
+                                                <Ban className="h-3.5 w-3.5" />
+                                                Disable
+                                            </button>
+                                        ) : (
+                                            <button
+                                                type="button"
+                                                onClick={() => openStatusModal(product, 'active')}
+                                                disabled={updatingStatusId === product.id}
+                                                className="inline-flex items-center gap-1.5 rounded-lg border border-[#00C950]/30 bg-white px-3 py-2 text-xs font-semibold text-[#00C950] transition-colors hover:bg-[#F0FDF4] disabled:opacity-50"
+                                            >
+                                                <CheckCircle className="h-3.5 w-3.5" />
+                                                Enable
+                                            </button>
+                                        )}
+                                        <Link
+                                            href={`${productsBase}/${product.id}/edit`}
+                                            className="inline-flex items-center gap-1.5 rounded-lg border border-[#E5E7EB] bg-white px-3 py-2 text-xs font-semibold text-[#102059] transition-colors hover:bg-[#F0F7FF]"
+                                        >
+                                            <Pencil className="h-3.5 w-3.5" />
+                                            Edit
+                                        </Link>
+                                    </div>
                                 </div>
                             )
                         }) : (
@@ -323,6 +393,56 @@ export default function SuperAdminProducts({ auth, products = [], flash, pending
                     </div>
                 </div>
             </div>
+
+            {statusModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+                    <div className="w-full max-w-md rounded-lg border border-[#E5E7EB] bg-white p-6">
+                        <h3 className="mb-2 text-lg font-bold text-[#102059]">
+                            {statusModal.status === 'inactive' ? 'Disable Product' : 'Enable Product'}
+                        </h3>
+                        <p className="mb-6 text-sm text-[#6B7280]">
+                            {statusModal.status === 'inactive' ? (
+                                <>
+                                    Disable <span className="font-semibold text-[#102059]">{statusModal.productName}</span>?
+                                    It will be marked inactive and Agrivets will not be able to restock it when they run out of stock.
+                                    Remaining shop inventory can still be sold.
+                                </>
+                            ) : (
+                                <>
+                                    Enable <span className="font-semibold text-[#102059]">{statusModal.productName}</span>?
+                                    Agrivets will be able to add and restock this product again.
+                                </>
+                            )}
+                        </p>
+                        <div className="flex justify-end gap-3">
+                            <button
+                                type="button"
+                                onClick={closeStatusModal}
+                                disabled={Boolean(updatingStatusId)}
+                                className="rounded-lg border border-[#E5E7EB] bg-white px-4 py-2 text-sm font-medium text-[#6B7280] transition-colors hover:bg-[#F9FAFB] disabled:opacity-50"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="button"
+                                onClick={confirmStatusChange}
+                                disabled={Boolean(updatingStatusId)}
+                                className={`rounded-lg px-4 py-2 text-sm font-medium text-white transition-colors disabled:opacity-50 ${
+                                    statusModal.status === 'inactive'
+                                        ? 'bg-[#E20E28] hover:bg-[#B8000F]'
+                                        : 'bg-[#102059] hover:bg-[#244693]'
+                                }`}
+                            >
+                                {updatingStatusId
+                                    ? 'Saving...'
+                                    : statusModal.status === 'inactive'
+                                        ? 'Disable Product'
+                                        : 'Enable Product'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </SuperAdminOrAdminLayout>
     )
 }

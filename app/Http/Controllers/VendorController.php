@@ -19,12 +19,14 @@ use App\Models\SubCategory;
 use App\Models\ProductCatalog;
 use App\Http\Controllers\Concerns\CreatesProductCatalogEntry;
 use App\Http\Controllers\Concerns\ManagesShopOrders;
+use App\Http\Controllers\Concerns\PreventsDisabledCatalogRestock;
 use App\Support\PublicStorage;
 
 class VendorController extends Controller
 {
     use CreatesProductCatalogEntry;
     use ManagesShopOrders;
+    use PreventsDisabledCatalogRestock;
     /**
      * Get the vendor's Shop.
      */
@@ -559,6 +561,12 @@ class VendorController extends Controller
             'item_status' => 'nullable|string|in:active,inactive',
         ]);
 
+        if ($this->isCatalogRestockBlocked($product, $request->item_quantity)) {
+            return redirect()->back()
+                ->withErrors(['item_quantity' => $this->catalogRestockBlockedMessage()])
+                ->withInput();
+        }
+
         $updateData = [
             'item_name' => $request->item_name,
             'item_description' => $request->item_description,
@@ -677,9 +685,24 @@ class VendorController extends Controller
 
         $inventory = DB::table('items')
             ->where('shop_id', $shop->id)
-            ->select('id', 'item_name', 'item_quantity', 'item_price', 'category', 'item_status', 'sold_count')
+            ->select('id', 'item_name', 'item_quantity', 'item_price', 'category', 'item_status', 'sold_count', 'is_bundle', 'bundle_catalog_ids')
             ->orderBy('item_name', 'asc')
             ->get();
+
+        $restockBlockedByItemId = ProductCatalog::restockBlockedFlagsForItems($inventory);
+
+        $inventory = $inventory->map(function ($item) use ($restockBlockedByItemId) {
+            return [
+                'id' => $item->id,
+                'item_name' => $item->item_name,
+                'item_quantity' => $item->item_quantity,
+                'item_price' => $item->item_price,
+                'category' => $item->category,
+                'item_status' => $item->item_status,
+                'sold_count' => $item->sold_count,
+                'can_restock' => ! ($restockBlockedByItemId[$item->id] ?? false),
+            ];
+        });
 
         return Inertia::render('Dashboard/Vendor/Inventory', [
             'inventory' => $inventory,
@@ -715,6 +738,12 @@ class VendorController extends Controller
         $request->validate([
             'item_quantity' => 'required|integer|min:0',
         ]);
+
+        if ($this->isCatalogRestockBlocked($product, $request->item_quantity)) {
+            return redirect()->back()
+                ->withErrors(['item_quantity' => $this->catalogRestockBlockedMessage()])
+                ->withInput();
+        }
 
         DB::table('items')
             ->where('id', $id)

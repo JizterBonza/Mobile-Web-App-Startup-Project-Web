@@ -1,8 +1,10 @@
 import { useState } from 'react'
-import { Link } from '@inertiajs/react'
+import { Link, router } from '@inertiajs/react'
 import {
     ArrowLeft,
+    Ban,
     Calendar,
+    CheckCircle,
     ChevronLeft,
     ChevronRight,
     Package,
@@ -17,12 +19,17 @@ function getProductsBaseRoute(userType) {
     return '/dashboard/super-admin/products'
 }
 
-export default function ProductShow({ auth, product }) {
+export default function ProductShow({ auth, product, flash }) {
     const productsBase = getProductsBaseRoute(auth?.user?.user_type)
 
     const photos        = product.images ?? []
     const primaryIndex  = product.primary_image_index ?? 0
     const [current, setCurrent] = useState(primaryIndex < photos.length ? primaryIndex : 0)
+    const [showStatusModal, setShowStatusModal] = useState(false)
+    const [updatingStatus, setUpdatingStatus] = useState(false)
+
+    const isActive = product.status === 'active'
+    const nextStatus = isActive ? 'inactive' : 'active'
 
     const prev = () => setCurrent(i => (i - 1 + photos.length) % photos.length)
     const next = () => setCurrent(i => (i + 1) % photos.length)
@@ -37,8 +44,30 @@ export default function ProductShow({ auth, product }) {
           })
         : '—'
 
+    const confirmStatusChange = () => {
+        if (updatingStatus) return
+        setUpdatingStatus(true)
+        router.patch(
+            `${productsBase}/${product.id}/status`,
+            { status: nextStatus },
+            {
+                preserveScroll: true,
+                onFinish: () => {
+                    setUpdatingStatus(false)
+                    setShowStatusModal(false)
+                },
+            }
+        )
+    }
+
     return (
         <SuperAdminOrAdminLayout auth={auth} title="Product Detail">
+            {flash?.success && (
+                <div className="mb-4 rounded-lg border border-[#00C950]/30 bg-[#00C950]/10 px-4 py-3">
+                    <p className="text-sm font-medium text-[#00C950]">{flash.success}</p>
+                </div>
+            )}
+
             {/* Back button */}
             <div className="mb-5">
                 <Link
@@ -172,7 +201,7 @@ export default function ProductShow({ auth, product }) {
                         </div>
 
                         {/* Actions */}
-                        <div className="mt-6 flex gap-3">
+                        <div className="mt-6 flex flex-wrap gap-3">
                             <Link
                                 href={`${productsBase}/${product.id}/edit`}
                                 className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#102059] px-5 py-2 text-sm font-medium text-white transition-colors hover:bg-[#244693]"
@@ -180,16 +209,67 @@ export default function ProductShow({ auth, product }) {
                                 <Pencil className="h-4 w-4" />
                                 Edit Product
                             </Link>
-                            {/* <Link
-                                href={productsBase}
-                                className="inline-flex items-center justify-center rounded-lg border border-[#E5E7EB] px-5 py-2 text-sm font-medium text-[#374151] transition-colors hover:bg-[#F9FAFB]"
+                            <button
+                                type="button"
+                                onClick={() => setShowStatusModal(true)}
+                                disabled={updatingStatus}
+                                className={`inline-flex items-center justify-center gap-2 rounded-lg border px-5 py-2 text-sm font-medium transition-colors disabled:opacity-50 ${
+                                    isActive
+                                        ? 'border-[#E20E28]/30 bg-white text-[#E20E28] hover:bg-[#FEF2F2]'
+                                        : 'border-[#00C950]/30 bg-white text-[#00C950] hover:bg-[#F0FDF4]'
+                                }`}
                             >
-                                All Products
-                            </Link> */}
+                                {isActive ? <Ban className="h-4 w-4" /> : <CheckCircle className="h-4 w-4" />}
+                                {isActive ? 'Disable Product' : 'Enable Product'}
+                            </button>
                         </div>
                     </div>
                 </div>
             </div>
+
+            {showStatusModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+                    <div className="w-full max-w-md rounded-lg border border-[#E5E7EB] bg-white p-6">
+                        <h3 className="mb-2 text-lg font-bold text-[#102059]">
+                            {isActive ? 'Disable Product' : 'Enable Product'}
+                        </h3>
+                        <p className="mb-6 text-sm text-[#6B7280]">
+                            {isActive ? (
+                                <>
+                                    Disable <span className="font-semibold text-[#102059]">{product.product_name}</span>?
+                                    It will be marked inactive and Agrivets will not be able to restock it when they run out of stock.
+                                    Remaining shop inventory can still be sold.
+                                </>
+                            ) : (
+                                <>
+                                    Enable <span className="font-semibold text-[#102059]">{product.product_name}</span>?
+                                    Agrivets will be able to add and restock this product again.
+                                </>
+                            )}
+                        </p>
+                        <div className="flex justify-end gap-3">
+                            <button
+                                type="button"
+                                onClick={() => setShowStatusModal(false)}
+                                disabled={updatingStatus}
+                                className="rounded-lg border border-[#E5E7EB] bg-white px-4 py-2 text-sm font-medium text-[#6B7280] transition-colors hover:bg-[#F9FAFB] disabled:opacity-50"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="button"
+                                onClick={confirmStatusChange}
+                                disabled={updatingStatus}
+                                className={`rounded-lg px-4 py-2 text-sm font-medium text-white transition-colors disabled:opacity-50 ${
+                                    isActive ? 'bg-[#E20E28] hover:bg-[#B8000F]' : 'bg-[#102059] hover:bg-[#244693]'
+                                }`}
+                            >
+                                {updatingStatus ? 'Saving...' : isActive ? 'Disable Product' : 'Enable Product'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </SuperAdminOrAdminLayout>
     )
 }
