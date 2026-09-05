@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from '@inertiajs/react'
-import { Clock, Package, Plus, Search, Star } from 'lucide-react'
+import { Clock, Package, Pencil, Plus, Search, Star } from 'lucide-react'
 import SuperAdminOrAdminLayout from '../../../Layouts/SuperAdminOrAdminLayout'
 
 function getProductsBaseRoute(userType) {
@@ -196,7 +196,8 @@ export default function SuperAdminProducts({ auth, products = [], flash, pending
                         {displayed.length > 0 ? displayed.map(product => {
                             const primarySrc = product.photos[product.primaryIndex] ?? product.photos[0]
                             return (
-                                <Link key={product.id} href={`${productsBase}/${product.id}`} className="block px-6 py-4 transition-colors hover:bg-[#F8F9FB] cursor-pointer">
+                                <div key={product.id} className="flex items-center gap-3 px-6 py-4 transition-colors hover:bg-[#F8F9FB]">
+                                    <Link href={`${productsBase}/${product.id}`} className="min-w-0 flex-1 cursor-pointer">
                                     <div className="flex items-center gap-4">
                                         {/* Thumbnail */}
                                         <div className="relative flex h-14 w-14 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg border border-[#E5E7EB] bg-[#F0F2F5]">
@@ -263,7 +264,15 @@ export default function SuperAdminProducts({ auth, products = [], flash, pending
                                             </div>
                                         </div>
                                     </div>
-                                </Link>
+                                    </Link>
+                                    <Link
+                                        href={`${productsBase}/${product.id}/edit`}
+                                        className="inline-flex flex-shrink-0 items-center gap-1.5 rounded-lg border border-[#E5E7EB] bg-white px-3 py-2 text-xs font-semibold text-[#102059] transition-colors hover:bg-[#F0F7FF]"
+                                    >
+                                        <Pencil className="h-3.5 w-3.5" />
+                                        Edit
+                                    </Link>
+                                </div>
                             )
                         }) : (
                             <div className="py-16 text-center">

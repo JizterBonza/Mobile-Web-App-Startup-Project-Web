@@ -85,6 +85,14 @@ Route::get('/dashboard/super-admin/products', [SuperAdminProductController::clas
     ->middleware(['auth', 'session.valid', 'user.type:super_admin'])
     ->name('dashboard.super-admin.products');
 
+Route::get('/dashboard/super-admin/products/{id}/edit', [SuperAdminProductController::class, 'edit'])
+    ->middleware(['auth', 'session.valid', 'user.type:super_admin'])
+    ->name('dashboard.super-admin.products.edit');
+
+Route::put('/dashboard/super-admin/products/{id}', [SuperAdminProductController::class, 'update'])
+    ->middleware(['auth', 'session.valid', 'user.type:super_admin'])
+    ->name('dashboard.super-admin.products.update');
+
 Route::get('/dashboard/super-admin/products/{id}', [SuperAdminProductController::class, 'show'])
     ->middleware(['auth', 'session.valid', 'user.type:super_admin'])
     ->name('dashboard.super-admin.products.show');
@@ -278,6 +286,14 @@ Route::post('/dashboard/admin/product-requests/{id}/approve', [ProductCatalogReq
 Route::post('/dashboard/admin/product-requests/{id}/reject', [ProductCatalogRequestController::class, 'reject'])
     ->middleware(['auth', 'session.valid', 'user.type:admin'])
     ->name('dashboard.admin.product-requests.reject');
+
+Route::get('/dashboard/admin/products/{id}/edit', [SuperAdminProductController::class, 'edit'])
+    ->middleware(['auth', 'session.valid', 'user.type:admin'])
+    ->name('dashboard.admin.products.edit');
+
+Route::put('/dashboard/admin/products/{id}', [SuperAdminProductController::class, 'update'])
+    ->middleware(['auth', 'session.valid', 'user.type:admin'])
+    ->name('dashboard.admin.products.update');
 
 Route::get('/dashboard/admin/products/{id}', [SuperAdminProductController::class, 'show'])
     ->middleware(['auth', 'session.valid', 'user.type:admin'])

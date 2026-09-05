@@ -6,6 +6,7 @@ import {
     ChevronLeft,
     ChevronRight,
     Package,
+    Pencil,
     User,
     Star,
 } from 'lucide-react'
@@ -173,9 +174,10 @@ export default function ProductShow({ auth, product }) {
                         {/* Actions */}
                         <div className="mt-6 flex gap-3">
                             <Link
-                                href={`/dashboard/super-admin/products/${product.id}/edit`}
+                                href={`${productsBase}/${product.id}/edit`}
                                 className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#102059] px-5 py-2 text-sm font-medium text-white transition-colors hover:bg-[#244693]"
                             >
+                                <Pencil className="h-4 w-4" />
                                 Edit Product
                             </Link>
                             {/* <Link
