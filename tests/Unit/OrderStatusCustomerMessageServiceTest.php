@@ -2,6 +2,7 @@
 
 namespace Tests\Unit;
 
+use App\Models\User;
 use App\Services\OrderStatusCustomerMessageService;
 use App\Services\ShopMessagingService;
 use Tests\TestCase;
@@ -47,9 +48,38 @@ class OrderStatusCustomerMessageServiceTest extends TestCase
         );
     }
 
-    public function test_does_not_message_pending_or_cancelled_statuses(): void
+    public function test_builds_cancelled_message_with_trimmed_decline_reason(): void
+    {
+        $this->assertSame(
+            'Your order AGF-1001 was declined. Reason: Items are out of stock.',
+            $this->service->messageBody('Cancelled', 'AGF-1001', '  Items are out of stock.  ')
+        );
+    }
+
+    public function test_builds_cancelled_message_without_a_decline_reason(): void
+    {
+        $this->assertSame(
+            'Your order AGF-1001 was declined.',
+            $this->service->messageBody('Cancelled', 'AGF-1001')
+        );
+        $this->assertSame(
+            'Your order AGF-1001 was declined.',
+            $this->service->messageBody('Cancelled', 'AGF-1001', '   ')
+        );
+    }
+
+    public function test_does_not_message_pending_status(): void
     {
         $this->assertNull($this->service->messageBody('Pending', 'AGF-1001'));
-        $this->assertNull($this->service->messageBody('Cancelled', 'AGF-1001'));
+    }
+
+    public function test_does_not_send_cancelled_update_for_a_customer_actor(): void
+    {
+        $messaging = $this->createMock(ShopMessagingService::class);
+        $messaging->expects($this->never())->method('sendOrderUpdateMessage');
+        $service = new OrderStatusCustomerMessageService($messaging);
+        $customer = new User(['user_type' => User::TYPE_CUSTOMER]);
+
+        $service->notifyForShops(123, [456], 'Cancelled', $customer, 'Changed my mind.');
     }
 }

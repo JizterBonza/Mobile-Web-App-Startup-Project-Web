@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Events\ShopMessageSent;
 use App\Models\Notification;
 use App\Models\OrderLog;
 use App\Models\OrderShop;
@@ -15,6 +16,7 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
@@ -126,6 +128,35 @@ class OrderStatusHistoryTest extends TestCase
         $preparingLeg->unsetRelation('order');
         $this->expectException(AuthorizationException::class);
         $service->transition($preparingLeg, 7, $customer);
+    }
+
+    public function test_owner_manager_decline_creates_customer_chat_message_and_notification(): void
+    {
+        $this->assertStaffDeclineCreatesCustomerMessage(User::TYPE_OWNER_MANAGER);
+    }
+
+    public function test_vendor_decline_creates_customer_chat_message_and_notification(): void
+    {
+        $this->assertStaffDeclineCreatesCustomerMessage(User::TYPE_VENDOR);
+    }
+
+    public function test_customer_cancellation_does_not_create_a_shop_chat_message(): void
+    {
+        $this->useRealCustomerMessageService();
+        [$customer, , $orderId] = $this->makeOrder(1);
+        Sanctum::actingAs($customer);
+
+        $this->deleteJson("/api/orders/{$orderId}", ['reason' => 'Changed my mind.'])
+            ->assertOk();
+
+        $this->assertDatabaseCount('shop_conversations', 0);
+        $this->assertDatabaseCount('shop_conversation_messages', 0);
+        $this->assertDatabaseCount('notifications', 1);
+        $this->assertDatabaseHas('notifications', [
+            'user_id' => $customer->id,
+            'type' => 'order_cancelled',
+            'category' => 'order',
+        ]);
     }
 
     public function test_admin_override_requires_reason_and_is_marked(): void
@@ -1682,6 +1713,113 @@ class OrderStatusHistoryTest extends TestCase
         ]);
 
         return [$customer, $rider, $orderId, OrderShop::findOrFail($orderShopId)];
+    }
+
+    private function assertStaffDeclineCreatesCustomerMessage(string $staffType): void
+    {
+        $this->useRealCustomerMessageService();
+        Event::fake([ShopMessageSent::class]);
+
+        [$customer, , $orderId, $orderShop] = $this->makeOrder(1);
+        $staff = $this->makeUser($staffType);
+        $reason = 'Items are out of stock.';
+
+        if ($staffType === User::TYPE_OWNER_MANAGER) {
+            $agrivetId = 1000 + (int) $staff->id;
+            $staff->forceFill(['agrivet_id' => $agrivetId])->save();
+            DB::table('shops')->where('id', $orderShop->shop_id)->update(['agrivet_id' => $agrivetId]);
+        } else {
+            DB::table('agrivet_vendor')->insert([
+                'shop_id' => $orderShop->shop_id,
+                'vendor_id' => $staff->id,
+                'status' => 'active',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        }
+
+        app(OrderStatusTransitionService::class)->transition(
+            $orderShop,
+            7,
+            $staff,
+            ['notes' => '  '.$reason.'  ', 'source' => 'test'],
+        );
+
+        $orderCode = DB::table('order_details')
+            ->where('id', DB::table('orders')->where('id', $orderId)->value('order_detail_id'))
+            ->value('order_code');
+        $expectedBody = "Your order {$orderCode} was declined. Reason: {$reason}";
+
+        $conversation = DB::table('shop_conversations')->sole();
+        $this->assertSame((int) $orderShop->shop_id, (int) $conversation->shop_id);
+        $this->assertSame((int) $customer->id, (int) $conversation->customer_user_id);
+        $this->assertSame($expectedBody, $conversation->last_message_preview);
+
+        $message = DB::table('shop_conversation_messages')->sole();
+        $this->assertSame((int) $conversation->id, (int) $message->shop_conversation_id);
+        $this->assertSame((int) $staff->id, (int) $message->sender_user_id);
+        $this->assertSame($staffType, $message->sender_role);
+        $this->assertSame('order_update', $message->type);
+        $this->assertSame($expectedBody, $message->body);
+        $metadata = json_decode($message->metadata, true, flags: JSON_THROW_ON_ERROR);
+        $this->assertSame($orderId, $metadata['order_id']);
+        $this->assertSame('Cancelled', $metadata['status']);
+
+        $notification = Notification::query()->sole();
+        $this->assertSame((int) $customer->id, (int) $notification->user_id);
+        $this->assertSame('shop_message', $notification->type);
+        $this->assertSame('messages', $notification->category);
+        $this->assertSame($expectedBody, $notification->message);
+        $this->assertSame((int) $conversation->id, (int) $notification->data['conversation_id']);
+        $this->assertSame((int) $orderShop->shop_id, (int) $notification->data['shop_id']);
+
+        Event::assertDispatched(ShopMessageSent::class);
+    }
+
+    private function useRealCustomerMessageService(): void
+    {
+        $this->createShopMessagingSchema();
+        $this->app->forgetInstance(OrderStatusCustomerMessageService::class);
+    }
+
+    private function createShopMessagingSchema(): void
+    {
+        Schema::create('shop_conversations', function (Blueprint $table) {
+            $table->id();
+            $table->unsignedBigInteger('shop_id');
+            $table->unsignedBigInteger('customer_user_id');
+            $table->timestamp('last_message_at')->nullable();
+            $table->string('last_message_preview', 500)->nullable();
+            $table->timestamps();
+            $table->unique(['shop_id', 'customer_user_id']);
+        });
+        Schema::create('shop_conversation_messages', function (Blueprint $table) {
+            $table->id();
+            $table->unsignedBigInteger('shop_conversation_id');
+            $table->unsignedBigInteger('sender_user_id');
+            $table->string('sender_role', 32);
+            $table->string('type', 16)->default('text');
+            $table->text('body')->nullable();
+            $table->json('metadata')->nullable();
+            $table->timestamps();
+        });
+        Schema::create('shop_conversation_attachments', function (Blueprint $table) {
+            $table->id();
+            $table->unsignedBigInteger('shop_conversation_message_id');
+            $table->string('file_name');
+            $table->string('file_path');
+            $table->unsignedBigInteger('file_size')->default(0);
+            $table->string('mime_type', 128)->nullable();
+            $table->timestamps();
+        });
+        Schema::create('shop_conversation_reads', function (Blueprint $table) {
+            $table->id();
+            $table->unsignedBigInteger('shop_conversation_id');
+            $table->unsignedBigInteger('user_id');
+            $table->timestamp('last_read_at');
+            $table->timestamps();
+            $table->unique(['shop_conversation_id', 'user_id']);
+        });
     }
 
     private function fakePodImage(string $name): UploadedFile

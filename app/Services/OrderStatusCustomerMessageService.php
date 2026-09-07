@@ -24,7 +24,12 @@ class OrderStatusCustomerMessageService
         array $shopIds,
         string $statusDescription,
         ?User $actor = null,
+        ?string $declineReason = null,
     ): void {
+        if ($this->isCancelledStatus($statusDescription) && ! $this->isShopStaff($actor)) {
+            return;
+        }
+
         $shopIds = collect($shopIds)->map(fn ($id) => (int) $id)->filter()->unique()->values()->all();
         if ($shopIds === []) {
             return;
@@ -53,7 +58,7 @@ class OrderStatusCustomerMessageService
                     fn ($item) => (float) $item->price_at_purchase * (int) $item->quantity
                 ), 2);
 
-            $body = $this->messageBody($statusDescription, $orderLabel);
+            $body = $this->messageBody($statusDescription, $orderLabel, $declineReason);
             if ($body === null) {
                 return;
             }
@@ -65,6 +70,7 @@ class OrderStatusCustomerMessageService
                     'shop_id' => $shopId,
                     'status' => $statusDescription,
                 ]);
+
                 continue;
             }
 
@@ -105,6 +111,7 @@ class OrderStatusCustomerMessageService
         array $shopIds,
         int $statusId,
         ?User $actor = null,
+        ?string $declineReason = null,
     ): void {
         $statusDescription = DB::table('order_status')
             ->where('id', $statusId)
@@ -114,12 +121,13 @@ class OrderStatusCustomerMessageService
             return;
         }
 
-        $this->notifyForShops($orderId, $shopIds, $statusDescription, $actor);
+        $this->notifyForShops($orderId, $shopIds, $statusDescription, $actor, $declineReason);
     }
 
     public function messageBody(
         string $statusDescription,
         string $orderLabel,
+        ?string $declineReason = null,
     ): ?string {
         $orderLabel = trim($orderLabel);
         if ($orderLabel === '') {
@@ -137,6 +145,7 @@ class OrderStatusCustomerMessageService
             $key === 'ready for pickup' => 'Your order %s is done preparing and ready for pickup.',
             $key === 'in-transit', $key === 'in transit' => 'Your order %s is now in transit.',
             $key === 'delivered' => 'Your order %s has been delivered.',
+            $key === 'cancelled' => 'Your order %s was declined.',
             default => null,
         };
 
@@ -146,7 +155,25 @@ class OrderStatusCustomerMessageService
 
         $body = sprintf($template, $orderLabel);
 
+        if ($key === 'cancelled') {
+            $reason = trim((string) $declineReason);
+            if ($reason !== '') {
+                $body .= ' Reason: '.$reason;
+            }
+        }
+
         return $body;
+    }
+
+    private function isCancelledStatus(string $statusDescription): bool
+    {
+        return strtolower(trim($statusDescription)) === 'cancelled';
+    }
+
+    private function isShopStaff(?User $actor): bool
+    {
+        return $actor !== null
+            && in_array($actor->user_type, [User::TYPE_OWNER_MANAGER, User::TYPE_VENDOR], true);
     }
 
     private function orderLabel(Order $order): string
