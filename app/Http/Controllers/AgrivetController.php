@@ -1109,19 +1109,40 @@ class AgrivetController extends Controller
                 ->withErrors(['bundle_name' => 'A bundle with this name already exists in the store.']);
         }
 
-        $catalogProducts = ProductCatalog::approved()
+        $catalogProductsById = ProductCatalog::approved()
             ->whereIn('id', $validated['product_catalog_ids'])
-            ->get();
+            ->get()
+            ->keyBy('id');
 
-        if ($catalogProducts->count() !== count($validated['product_catalog_ids'])) {
+        if ($catalogProductsById->count() !== count($validated['product_catalog_ids'])) {
             return redirect()->back()
                 ->withErrors(['product_catalog_ids' => 'One or more selected products are invalid.']);
         }
 
+        $catalogProducts = collect($validated['product_catalog_ids'])
+            ->map(fn ($catalogId) => $catalogProductsById->get($catalogId))
+            ->values();
+
         $firstProduct = $catalogProducts->first();
-        $images = $this->normalizeCatalogImagePaths($firstProduct->images ?? []);
+        $images = $catalogProducts
+            ->flatMap(function (ProductCatalog $catalogProduct) {
+                $catalogImages = array_values($catalogProduct->images ?? []);
+                $primaryImageIndex = (int) ($catalogProduct->primary_image_index ?? 0);
+
+                if (array_key_exists($primaryImageIndex, $catalogImages)) {
+                    $primaryImage = $catalogImages[$primaryImageIndex];
+                    unset($catalogImages[$primaryImageIndex]);
+                    array_unshift($catalogImages, $primaryImage);
+                }
+
+                $normalizedImages = $this->normalizeCatalogImagePaths(array_values($catalogImages));
+
+                return array_slice($normalizedImages, 0, 3);
+            })
+            ->values()
+            ->all();
         $bundleProductNames = $catalogProducts->pluck('product_name')->join(', ');
-        $description = $validated['description']
+        $description = ($validated['description'] ?? null)
             ?: "Bundle containing: {$bundleProductNames}";
         ['weight' => $bundleWeight, 'metric' => $bundleMetric] = $this->computeBundleWeightAndMetric($catalogProducts);
 

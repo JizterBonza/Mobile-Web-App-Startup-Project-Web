@@ -132,7 +132,7 @@ class OrderStatusTransitionService
                 );
             }
 
-            DB::afterCommit(function () use ($leg, $toStatus, $actor) {
+            DB::afterCommit(function () use ($leg, $toStatus, $actor, $notes) {
                 try {
                     $this->shopWallets->syncUncreditedSales([(int) $leg->shop_id]);
                 } catch (\Throwable $e) {
@@ -149,6 +149,7 @@ class OrderStatusTransitionService
                         [(int) $leg->shop_id],
                         (int) $toStatus->id,
                         $actor,
+                        $notes,
                     );
                 } catch (\Throwable $e) {
                     Log::warning('Order status changed but customer notification failed.', [
