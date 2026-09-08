@@ -350,6 +350,7 @@ export default function AgrivetStoreInformation({
 }) {
   const isOwnerManager = auth?.user?.user_type === 'owner_manager'
   const isVendor = auth?.user?.user_type === 'vendor'
+  const canManageStoreStatus = !isVendor
   const visibleTabs = isVendor ? vendorTabOrder : tabOrder
   const vendorOrdersApiBasePath = shop?.id ? `/dashboard/vendor/stores/${shop.id}/orders` : ''
 
@@ -506,6 +507,8 @@ export default function AgrivetStoreInformation({
         } else {
           showSuccess('add', flash.success)
         }
+      } else if (lower.includes('reactivated') || lower.includes('deactivated')) {
+        showSuccess('status', store.storeName)
       } else if (lower.includes('cover photo') || lower.includes('shop updated') || lower.includes('business permit')) {
         showSuccess('storeEdit', store.storeName)
       }
@@ -515,6 +518,8 @@ export default function AgrivetStoreInformation({
   // Edit Store Information modal state
   const [showEditStoreModal, setShowEditStoreModal] = useState(false)
   const [showEditStoreConfirmModal, setShowEditStoreConfirmModal] = useState(false)
+  const [showStoreStatusConfirmModal, setShowStoreStatusConfirmModal] = useState(false)
+  const [isUpdatingStoreStatus, setIsUpdatingStoreStatus] = useState(false)
   const [editStoreData, setEditStoreData] = useState(() => {
     if (!shop) {
       return {
@@ -671,6 +676,26 @@ export default function AgrivetStoreInformation({
 
   const handleSaveStoreInfo = () => {
     setShowEditStoreConfirmModal(true)
+  }
+
+  const openStoreStatusConfirm = () => {
+    if (!canManageStoreStatus || isUpdatingStoreStatus) return
+    setShowStoreStatusConfirmModal(true)
+  }
+
+  const confirmStoreStatusChange = () => {
+    if (!shopBasePath || isUpdatingStoreStatus) return
+    setIsUpdatingStoreStatus(true)
+    const options = {
+      preserveScroll: true,
+      onFinish: () => setIsUpdatingStoreStatus(false),
+      onSuccess: () => setShowStoreStatusConfirmModal(false),
+    }
+    if (store?.status === 'Active') {
+      router.delete(shopBasePath, options)
+    } else {
+      router.post(`${shopBasePath}/reactivate`, {}, options)
+    }
   }
 
   const handleConfirmSaveStoreInfo = () => {
@@ -1266,13 +1291,15 @@ export default function AgrivetStoreInformation({
                   </div>
                 )}
               </div>
-              <button
-                className="absolute top-4 right-4 w-10 h-10 bg-white/90 hover:bg-white rounded-full flex items-center justify-center shadow-lg transition-all hover:scale-110"
-                onClick={() => setShowEditCoverPhotoModal(true)}
-                title="Update cover photo"
-              >
-                <Pencil className="w-5 h-5 text-[#244693]" />
-              </button>
+              {!isVendor && (
+                <button
+                  className="absolute top-4 right-4 w-10 h-10 bg-white/90 hover:bg-white rounded-full flex items-center justify-center shadow-lg transition-all hover:scale-110"
+                  onClick={() => setShowEditCoverPhotoModal(true)}
+                  title="Update cover photo"
+                >
+                  <Pencil className="w-5 h-5 text-[#244693]" />
+                </button>
+              )}
             </div>
 
             {/* Page Info */}
@@ -1286,11 +1313,20 @@ export default function AgrivetStoreInformation({
                 <div className="flex items-center gap-3 justify-between">
                   <div className="flex items-center gap-3">
                     <button
-                      disabled
+                      type="button"
+                      disabled={!canManageStoreStatus || isUpdatingStoreStatus}
+                      onClick={openStoreStatusConfirm}
                       className={`relative inline-flex h-6 w-11 items-center rounded-full transition-all duration-300 ${
                         store.status === 'Active' ? 'bg-[#00C950]' : 'bg-[#D1D5DB]'
-                      } opacity-60 cursor-not-allowed`}
-                      title="Status toggle shown for reference (read-only here)"
+                      } ${canManageStoreStatus ? '' : 'opacity-60 cursor-not-allowed'}`}
+                      title={
+                        canManageStoreStatus
+                          ? store.status === 'Active'
+                            ? 'Deactivate store'
+                            : 'Reactivate store'
+                          : 'Status toggle shown for reference (read-only here)'
+                      }
+                      aria-pressed={store.status === 'Active'}
                       style={{ borderRadius: '0.7rem' }}
                     >
                       <span
@@ -1304,7 +1340,7 @@ export default function AgrivetStoreInformation({
                     </span>
                   </div>
 
-                  {activeTab === 'about' && (
+                  {activeTab === 'about' && !isVendor && (
                     <button
                       className="px-4 py-2 bg-[#244693] text-white text-sm font-semibold rounded-lg hover:bg-[#1a3570] transition-colors flex items-center gap-2"
                       onClick={openEditStoreModal}
@@ -2627,6 +2663,66 @@ export default function AgrivetStoreInformation({
           </div>
         )}
 
+        {showStoreStatusConfirmModal && store && (
+          <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4">
+            <div className="bg-white rounded-xl max-w-md w-full p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-xl font-bold text-[#102059]">
+                  {store.status === 'Active' ? 'Deactivate Store' : 'Reactivate Store'}
+                </h3>
+                <button
+                  className="w-8 h-8 bg-[#F0F2F5] hover:bg-[#E5E7EB] rounded-full flex items-center justify-center text-[#65676B] transition-colors disabled:opacity-50"
+                  onClick={() => setShowStoreStatusConfirmModal(false)}
+                  disabled={isUpdatingStoreStatus}
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+              <p className="text-sm text-[#65676B] leading-relaxed">
+                {store.status === 'Active' ? (
+                  <>
+                    Are you sure you want to deactivate{' '}
+                    <span className="font-semibold text-[#102059]">{store.storeName}</span>? The store
+                    will not be visible to customers.
+                  </>
+                ) : (
+                  <>
+                    Are you sure you want to reactivate{' '}
+                    <span className="font-semibold text-[#102059]">{store.storeName}</span>? The store
+                    will be visible to customers again.
+                  </>
+                )}
+              </p>
+              <div className="flex items-center justify-end mt-6 gap-2">
+                <button
+                  className="px-4 py-2.5 bg-white border border-[#E5E7EB] text-sm font-semibold rounded-lg hover:bg-[#F9FAFB] transition-colors disabled:opacity-50"
+                  onClick={() => setShowStoreStatusConfirmModal(false)}
+                  disabled={isUpdatingStoreStatus}
+                >
+                  Cancel
+                </button>
+                <button
+                  className={`px-4 py-2.5 text-white text-sm font-semibold rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                    store.status === 'Active'
+                      ? 'bg-[#E20E28] hover:bg-[#C10D23]'
+                      : 'bg-[#00C950] hover:bg-[#00B548]'
+                  }`}
+                  onClick={confirmStoreStatusChange}
+                  disabled={isUpdatingStoreStatus}
+                >
+                  {isUpdatingStoreStatus
+                    ? store.status === 'Active'
+                      ? 'Deactivating...'
+                      : 'Reactivating...'
+                    : store.status === 'Active'
+                      ? 'Deactivate Store'
+                      : 'Reactivate Store'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Update Cover Photo Modal */}
         {showEditCoverPhotoModal && (
           <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
@@ -3402,8 +3498,8 @@ export default function AgrivetStoreInformation({
         {/* Product Detail Modal */}
         {showProductDetailModal && selectedListingDetail && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-lg border border-[#E5E7EB] w-full max-w-2xl">
-              <div className="flex items-center justify-between p-6 border-b border-[#E5E7EB]">
+            <div className="bg-white rounded-lg border border-[#E5E7EB] w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
+              <div className="flex items-center justify-between p-6 border-b border-[#E5E7EB] shrink-0">
                 <div>
                   <h2 className="text-xl font-bold text-[#102059]">
                     {selectedListingDetail.isBundle ? 'Bundle Details' : 'Product Details'}
@@ -3435,7 +3531,7 @@ export default function AgrivetStoreInformation({
                 </div>
               </div>
 
-              <div className="p-6 space-y-6">
+              <div className="flex-1 min-h-0 overflow-y-auto p-6 space-y-6">
                 <div>
                   <label className="text-xs font-semibold text-[#102059] uppercase tracking-wider block mb-2">
                     {selectedListingDetail.isBundle ? 'Bundle Name' : 'Product Name'}
@@ -3603,7 +3699,7 @@ export default function AgrivetStoreInformation({
                 )}
               </div>
 
-              <div className="flex items-center justify-between gap-3 p-6 border-t border-[#E5E7EB]">
+              <div className="flex items-center justify-between gap-3 p-6 border-t border-[#E5E7EB] shrink-0">
                 <div>
                   {canAddListings && (
                     <button

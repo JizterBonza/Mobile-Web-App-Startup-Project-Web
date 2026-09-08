@@ -139,6 +139,7 @@ Route::middleware(['auth', 'session.valid', 'user.type:super_admin'])->prefix('d
     Route::post('/{id}/shops', [AgrivetController::class, 'storeShop'])->name('shops.store');
     Route::put('/{id}/shops/{shopId}', [AgrivetController::class, 'updateShop'])->name('shops.update');
     Route::delete('/{id}/shops/{shopId}', [AgrivetController::class, 'removeShop'])->name('shops.remove');
+    Route::post('/{id}/shops/{shopId}/reactivate', [AgrivetController::class, 'reactivateShop'])->name('shops.reactivate');
     Route::get('/{id}/shops/{shopId}/store-information', [AgrivetController::class, 'showStoreInformation'])->name('shops.store-information');
     Route::post('/{id}/shops/{shopId}/cover-photo', [AgrivetController::class, 'updateShopCoverPhoto'])->name('shops.cover-photo');
     Route::post('/{id}/shops/{shopId}/permit-photo', [AgrivetController::class, 'updateShopPermitPhoto'])->name('shops.permit-photo');
@@ -236,6 +237,7 @@ Route::middleware(['auth', 'session.valid', 'user.type:owner_manager'])->prefix(
     Route::get('/stores/{shopId}/income', [DashboardController::class, 'ownerManagerStoreIncome'])->name('stores.income');
     Route::put('/stores/{shopId}', [DashboardController::class, 'ownerManagerUpdateShop'])->name('stores.update');
     Route::delete('/stores/{shopId}', [DashboardController::class, 'ownerManagerRemoveShop'])->name('stores.destroy');
+    Route::post('/stores/{shopId}/reactivate', [DashboardController::class, 'ownerManagerReactivateShop'])->name('stores.reactivate');
     Route::post('/stores/{shopId}/cover-photo', [DashboardController::class, 'ownerManagerUpdateShopCoverPhoto'])->name('stores.cover-photo');
     Route::post('/stores/{shopId}/permit-photo', [DashboardController::class, 'ownerManagerUpdateShopPermitPhoto'])->name('stores.permit-photo');
     Route::post('/stores/{shopId}/listings', [DashboardController::class, 'ownerManagerStoreShopListing'])->name('stores.listings.store');
@@ -330,6 +332,7 @@ Route::middleware(['auth', 'session.valid', 'user.type:admin'])->prefix('dashboa
     Route::post('/{id}/shops', [AgrivetController::class, 'storeShop'])->name('shops.store');
     Route::put('/{id}/shops/{shopId}', [AgrivetController::class, 'updateShop'])->name('shops.update');
     Route::delete('/{id}/shops/{shopId}', [AgrivetController::class, 'removeShop'])->name('shops.remove');
+    Route::post('/{id}/shops/{shopId}/reactivate', [AgrivetController::class, 'reactivateShop'])->name('shops.reactivate');
     Route::get('/{id}/shops/{shopId}/store-information', [AgrivetController::class, 'showStoreInformation'])->name('shops.store-information');
     Route::post('/{id}/shops/{shopId}/cover-photo', [AgrivetController::class, 'updateShopCoverPhoto'])->name('shops.cover-photo');
     Route::post('/{id}/shops/{shopId}/permit-photo', [AgrivetController::class, 'updateShopPermitPhoto'])->name('shops.permit-photo');

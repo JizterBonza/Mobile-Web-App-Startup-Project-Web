@@ -429,6 +429,14 @@ class DashboardController extends Controller
         return app(AgrivetController::class)->removeShop($agrivet->id, $shopId);
     }
 
+    public function ownerManagerReactivateShop($shopId)
+    {
+        $agrivet = auth()->user()->managedAgrivet;
+        abort_unless($agrivet, 404);
+
+        return app(AgrivetController::class)->reactivateShop($agrivet->id, $shopId);
+    }
+
     public function ownerManagerUpdateShopCoverPhoto(Request $request, $shopId)
     {
         $agrivet = auth()->user()->managedAgrivet;

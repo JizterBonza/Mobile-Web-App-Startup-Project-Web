@@ -7,7 +7,7 @@ const pageBg = '#DCDCDC'
 
 const HERO_SLIDES = [
   '/KlasmeytArtboard 1.jpg',
-  '/KlasmeytArtboard 2.jpg',
+  '/hero-rooster-2.png',
   '/KlasmeytArtboard 3.jpg',
 ]
 

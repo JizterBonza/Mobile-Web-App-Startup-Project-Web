@@ -17,6 +17,7 @@ use Carbon\Carbon;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
 class ShopMessagingService
@@ -188,7 +189,8 @@ class ShopMessagingService
         ShopConversation $conversation,
         User $sender,
         string $body,
-        array $files = []
+        array $files = [],
+        bool $notify = false,
     ): ShopConversationMessage {
         $sender->loadMissing('userDetail');
         $role = $this->senderRole($sender);
@@ -217,6 +219,9 @@ class ShopMessagingService
             return $message->fresh(['attachments', 'sender.userDetail']);
         });
 
+        if ($notify) {
+            $this->notifyCounterpartSafely($conversation, $sender, $message);
+        }
         $this->broadcastMessage($conversation->fresh(), $message);
 
         return $message;
@@ -281,7 +286,7 @@ class ShopMessagingService
         });
 
         if ($notify) {
-            $this->notifyCounterpart($conversation, $sender, $message);
+            $this->notifyCounterpartSafely($conversation, $sender, $message);
         }
         $this->broadcastMessage($conversation->fresh(), $message);
 
@@ -331,7 +336,7 @@ class ShopMessagingService
             return $message->fresh(['attachments', 'sender.userDetail']);
         });
 
-        $this->notifyCounterpart($conversation, $sender, $message);
+        $this->notifyCounterpartSafely($conversation, $sender, $message);
         $this->broadcastMessage($conversation->fresh(), $message);
 
         return $message;
@@ -494,6 +499,7 @@ class ShopMessagingService
         $conversation->loadMissing(['customer.userDetail']);
 
         $createdAt = $message->created_at ?? now();
+        $displayAt = $this->inDisplayTimezone($createdAt);
 
         $formatted = [
             'id' => $message->id,
@@ -501,10 +507,10 @@ class ShopMessagingService
             'sender_user_id' => (int) $message->sender_user_id,
             'sender_role' => $message->sender_role,
             'sent_by' => $this->displayName($message->sender),
-            'time' => $createdAt->format('g.i A'),
+            'time' => $this->formatClockTime($createdAt),
             'created_at' => $createdAt->toIso8601String(),
-            'date_key' => $createdAt->toDateString(),
-            'date_label' => $this->dateSeparatorLabel($createdAt),
+            'date_key' => $displayAt->toDateString(),
+            'date_label' => $this->dateSeparatorLabel($displayAt),
         ];
 
         $attachments = $message->attachments ?? collect();
@@ -551,11 +557,20 @@ class ShopMessagingService
         ShopConversation $conversation,
         ShopConversationMessage $message
     ): void {
-        broadcast(new ShopMessageSent(
-            $conversation,
-            $message,
-            $this->formatBroadcastPayload($conversation, $message),
-        ));
+        try {
+            $pending = broadcast(new ShopMessageSent(
+                $conversation,
+                $message,
+                $this->formatBroadcastPayload($conversation, $message),
+            ));
+            unset($pending);
+        } catch (\Throwable $e) {
+            Log::warning('Failed to broadcast shop message.', [
+                'conversation_id' => $conversation->id,
+                'message_id' => $message->id,
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
 
     public function markRead(ShopConversation $conversation, User $user): void
@@ -607,14 +622,14 @@ class ShopMessagingService
         $lastDateKey = null;
 
         foreach ($messages as $message) {
-            $createdAt = $message->created_at ?? now();
-            $dateKey = $createdAt->toDateString();
+            $displayAt = $this->inDisplayTimezone($message->created_at ?? now());
+            $dateKey = $displayAt->toDateString();
 
             if ($dateKey !== $lastDateKey) {
                 $formatted[] = [
                     'id' => 'date-'.$dateKey,
                     'type' => 'date',
-                    'label' => $this->dateSeparatorLabel($createdAt),
+                    'label' => $this->dateSeparatorLabel($displayAt),
                 ];
                 $lastDateKey = $dateKey;
             }
@@ -641,7 +656,7 @@ class ShopMessagingService
             'id' => $message->id,
             'type' => $message->type,
             'side' => $isOutgoing ? 'outgoing' : 'incoming',
-            'time' => $message->created_at?->format('g.i A') ?? '',
+            'time' => $this->formatClockTime($message->created_at),
         ];
 
         if ($isOutgoing) {
@@ -961,6 +976,22 @@ class ShopMessagingService
         return $name !== '' ? Str::limit($name, 180) : 'Shared a product';
     }
 
+    private function notifyCounterpartSafely(
+        ShopConversation $conversation,
+        User $sender,
+        ShopConversationMessage $message
+    ): void {
+        try {
+            $this->notifyCounterpart($conversation, $sender, $message);
+        } catch (\Throwable $e) {
+            Log::warning('Failed to create shop message notification.', [
+                'conversation_id' => $conversation->id,
+                'message_id' => $message->id,
+                'error' => $e->getMessage(),
+            ]);
+        }
+    }
+
     private function notifyCounterpart(
         ShopConversation $conversation,
         User $sender,
@@ -1063,7 +1094,7 @@ class ShopMessagingService
             return '';
         }
 
-        $at = Carbon::parse($at);
+        $at = $this->inDisplayTimezone($at);
 
         if ($at->isToday()) {
             return $at->format('g:i A');
@@ -1100,6 +1131,8 @@ class ShopMessagingService
 
     private function dateSeparatorLabel(Carbon $at): string
     {
+        $at = $this->inDisplayTimezone($at);
+
         if ($at->isToday()) {
             return 'Today';
         }
@@ -1113,6 +1146,25 @@ class ShopMessagingService
         }
 
         return $at->format('F j, Y');
+    }
+
+    /**
+     * Convert a stored UTC instant to the timezone shown on message clocks.
+     */
+    private function inDisplayTimezone($at): Carbon
+    {
+        $carbon = $at instanceof Carbon ? $at->copy() : Carbon::parse($at);
+
+        return $carbon->timezone((string) config('app.display_timezone', 'Asia/Manila'));
+    }
+
+    private function formatClockTime($at): string
+    {
+        if (! $at) {
+            return '';
+        }
+
+        return $this->inDisplayTimezone($at)->format('g.i A');
     }
 
     private function fileLabel(?string $mime): string

@@ -20,18 +20,20 @@ export default function SuperAdminKlasmeytLayout({
             renderHeader={({ toggleSidebar, sidebarOpen, isLarge }) => (
                 <DashboardHeader
                     menuToggle={
-                        <button
-                            type="button"
-                            className="rounded-lg border border-[#E5E7EB] p-2 text-[#6B7280] hover:bg-[#F9FAFB]"
-                            onClick={toggleSidebar}
-                            aria-expanded={sidebarOpen}
-                            aria-label="Toggle sidebar"
-                        >
-                            <Menu className="h-5 w-5" />
-                        </button>
+                        toggleSidebar ? (
+                            <button
+                                type="button"
+                                className="rounded-lg border border-[#E5E7EB] p-2 text-[#6B7280] hover:bg-[#F9FAFB]"
+                                onClick={toggleSidebar}
+                                aria-expanded={sidebarOpen}
+                                aria-label="Toggle sidebar"
+                            >
+                                <Menu className="h-5 w-5" />
+                            </button>
+                        ) : null
                     }
                     sidebarHideToggle={
-                        sidebarOpen && isLarge ? (
+                        toggleSidebar && sidebarOpen && isLarge ? (
                             <button
                                 type="button"
                                 className="rounded-lg border border-[#E5E7EB] p-2 text-[#6B7280] hover:bg-[#F9FAFB]"

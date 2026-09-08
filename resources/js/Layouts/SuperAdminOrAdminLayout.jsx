@@ -1,5 +1,7 @@
 import AdminKlasmeytLayout from './AdminKlasmeytLayout'
+import OwnerManagerKlasmeytLayout from './OwnerManagerKlasmeytLayout'
 import SuperAdminKlasmeytLayout from './SuperAdminKlasmeytLayout'
+import VendorKlasmeytLayout from './VendorKlasmeytLayout'
 
 export default function SuperAdminOrAdminLayout({
     children,
@@ -8,26 +10,20 @@ export default function SuperAdminOrAdminLayout({
     notificationCount = 0,
     mainClassName = '',
 }) {
-    if (auth?.user?.user_type === 'super_admin') {
-        return (
-            <SuperAdminKlasmeytLayout
-                auth={auth}
-                title={title}
-                notificationCount={notificationCount}
-                mainClassName={mainClassName}
-            >
-                {children}
-            </SuperAdminKlasmeytLayout>
-        )
+    const userType = auth?.user?.user_type
+    const layoutProps = { auth, title, notificationCount }
+    if (mainClassName) {
+        layoutProps.mainClassName = mainClassName
     }
-    return (
-        <AdminKlasmeytLayout
-            auth={auth}
-            title={title}
-            notificationCount={notificationCount}
-            mainClassName={mainClassName}
-        >
-            {children}
-        </AdminKlasmeytLayout>
-    )
+
+    if (userType === 'super_admin') {
+        return <SuperAdminKlasmeytLayout {...layoutProps}>{children}</SuperAdminKlasmeytLayout>
+    }
+    if (userType === 'owner_manager') {
+        return <OwnerManagerKlasmeytLayout {...layoutProps}>{children}</OwnerManagerKlasmeytLayout>
+    }
+    if (userType === 'vendor') {
+        return <VendorKlasmeytLayout {...layoutProps}>{children}</VendorKlasmeytLayout>
+    }
+    return <AdminKlasmeytLayout {...layoutProps}>{children}</AdminKlasmeytLayout>
 }
