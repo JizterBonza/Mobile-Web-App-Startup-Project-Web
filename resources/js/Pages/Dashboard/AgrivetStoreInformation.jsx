@@ -1266,13 +1266,15 @@ export default function AgrivetStoreInformation({
                   </div>
                 )}
               </div>
-              <button
-                className="absolute top-4 right-4 w-10 h-10 bg-white/90 hover:bg-white rounded-full flex items-center justify-center shadow-lg transition-all hover:scale-110"
-                onClick={() => setShowEditCoverPhotoModal(true)}
-                title="Update cover photo"
-              >
-                <Pencil className="w-5 h-5 text-[#244693]" />
-              </button>
+              {!isVendor && (
+                <button
+                  className="absolute top-4 right-4 w-10 h-10 bg-white/90 hover:bg-white rounded-full flex items-center justify-center shadow-lg transition-all hover:scale-110"
+                  onClick={() => setShowEditCoverPhotoModal(true)}
+                  title="Update cover photo"
+                >
+                  <Pencil className="w-5 h-5 text-[#244693]" />
+                </button>
+              )}
             </div>
 
             {/* Page Info */}
@@ -1304,7 +1306,7 @@ export default function AgrivetStoreInformation({
                     </span>
                   </div>
 
-                  {activeTab === 'about' && (
+                  {activeTab === 'about' && !isVendor && (
                     <button
                       className="px-4 py-2 bg-[#244693] text-white text-sm font-semibold rounded-lg hover:bg-[#1a3570] transition-colors flex items-center gap-2"
                       onClick={openEditStoreModal}
