@@ -699,26 +699,46 @@ class AgrivetController extends Controller
         $shop = Shop::where('agrivet_id', $agrivet->id)->findOrFail($shopId);
 
         try {
+            $oldShopValues = $shop->toArray();
             $shop->update([
                 'shop_status' => 'inactive',
             ]);
 
-            ActivityLog::log('deactivated', "Shop deactivated: {$shop->shop_name}", $shop, $shop->toArray(), null);
+            ActivityLog::log('deactivated', "Shop deactivated: {$shop->shop_name}", $shop, $oldShopValues, $shop->fresh()->toArray());
 
-            if ($currentUser->user_type === 'owner_manager') {
-                return redirect()->route('dashboard.owner-manager.stores')
-                    ->with('success', 'Shop deactivated successfully.');
-            }
-
-            $redirectRoute = $currentUser->user_type === 'admin'
-                ? 'dashboard.admin.agrivets.shops.index'
-                : 'dashboard.super-admin.agrivets.shops.index';
-
-            return redirect()->route($redirectRoute, $id)
-                ->with('success', 'Shop deactivated successfully.');
+            return $this->redirectAfterShopStatusChange($id, $shopId, 'Shop deactivated successfully.');
         } catch (\Exception $e) {
             return redirect()->back()
                 ->withErrors(['error' => 'Failed to deactivate shop. Please try again.']);
+        }
+    }
+
+    /**
+     * Reactivate a shop.
+     */
+    public function reactivateShop($id, $shopId)
+    {
+        $agrivet = Agrivet::findOrFail($id);
+        $currentUser = auth()->user();
+
+        if ($currentUser->user_type === 'owner_manager' && (int) $currentUser->agrivet_id !== (int) $agrivet->id) {
+            abort(403);
+        }
+
+        $shop = Shop::where('agrivet_id', $agrivet->id)->findOrFail($shopId);
+
+        try {
+            $oldShopValues = $shop->toArray();
+            $shop->update([
+                'shop_status' => 'active',
+            ]);
+
+            ActivityLog::log('reactivated', "Shop reactivated: {$shop->shop_name}", $shop, $oldShopValues, $shop->fresh()->toArray());
+
+            return $this->redirectAfterShopStatusChange($id, $shopId, 'Shop reactivated successfully.');
+        } catch (\Exception $e) {
+            return redirect()->back()
+                ->withErrors(['error' => 'Failed to reactivate shop. Please try again.']);
         }
     }
 
@@ -1583,6 +1603,29 @@ class AgrivetController extends Controller
             ],
             'created_at' => $vendor->created_at->format('Y-m-d H:i:s'),
         ];
+    }
+
+    private function redirectAfterShopStatusChange($agrivetId, $shopId, string $message)
+    {
+        $previous = url()->previous();
+        if (str_contains($previous, 'store-information')) {
+            return $this->redirectToStoreInformation($agrivetId, $shopId)
+                ->with('success', $message);
+        }
+
+        $currentUser = auth()->user();
+
+        if ($currentUser->user_type === 'owner_manager') {
+            return redirect()->route('dashboard.owner-manager.stores')
+                ->with('success', $message);
+        }
+
+        $redirectRoute = $currentUser->user_type === 'admin'
+            ? 'dashboard.admin.agrivets.shops.index'
+            : 'dashboard.super-admin.agrivets.shops.index';
+
+        return redirect()->route($redirectRoute, $agrivetId)
+            ->with('success', $message);
     }
 
     private function redirectToStoreInformation($agrivetId, $shopId)

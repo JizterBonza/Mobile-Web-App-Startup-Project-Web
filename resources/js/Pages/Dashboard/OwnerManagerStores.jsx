@@ -30,7 +30,9 @@ export default function OwnerManagerStores({ auth, agrivet, shops = [], zones = 
     const ownerDisplayName = agrivet?.owner_name || auth.user.name
     const [showAddModal, setShowAddModal] = useState(false)
     const [shopToRemove, setShopToRemove] = useState(null)
+    const [shopToReactivate, setShopToReactivate] = useState(null)
     const [isDeleting, setIsDeleting] = useState(false)
+    const [isReactivating, setIsReactivating] = useState(false)
     const [operatingDays, setOperatingDays] = useState([])
     const [storeImagePreview, setStoreImagePreview] = useState(null)
     const [permitImagePreview, setPermitImagePreview] = useState(null)
@@ -182,6 +184,26 @@ export default function OwnerManagerStores({ auth, agrivet, shops = [], zones = 
             preserveScroll: true,
             onFinish: () => setIsDeleting(false),
             onSuccess: () => setShopToRemove(null),
+        })
+    }
+
+    const openReactivateStore = (shop) => {
+        if (!agrivet || shop.shop_status === 'active') return
+        setShopToReactivate(shop)
+    }
+
+    const closeReactivateModal = () => {
+        if (isReactivating) return
+        setShopToReactivate(null)
+    }
+
+    const confirmReactivateShop = () => {
+        if (!shopToReactivate || isReactivating) return
+        setIsReactivating(true)
+        router.post(`/dashboard/owner-manager/stores/${shopToReactivate.id}/reactivate`, {}, {
+            preserveScroll: true,
+            onFinish: () => setIsReactivating(false),
+            onSuccess: () => setShopToReactivate(null),
         })
     }
 
@@ -362,14 +384,25 @@ export default function OwnerManagerStores({ auth, agrivet, shops = [], zones = 
 
                                     <div className="px-5 pb-5">
                                         <div className="flex items-center gap-2">
-                                            <button
-                                                type="button"
-                                                disabled={!isActive || !agrivet}
-                                                onClick={() => openRemoveStore(shop)}
-                                                className="flex-1 px-3 py-2 text-xs font-semibold text-[#1F2937] bg-white border border-[#E5E7EB] rounded-lg hover:bg-[#F8F9FB] transition-colors disabled:cursor-not-allowed disabled:opacity-50"
-                                            >
-                                                Delete Store
-                                            </button>
+                                            {isActive ? (
+                                                <button
+                                                    type="button"
+                                                    disabled={!agrivet}
+                                                    onClick={() => openRemoveStore(shop)}
+                                                    className="flex-1 px-3 py-2 text-xs font-semibold text-[#1F2937] bg-white border border-[#E5E7EB] rounded-lg hover:bg-[#F8F9FB] transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+                                                >
+                                                    Delete Store
+                                                </button>
+                                            ) : (
+                                                <button
+                                                    type="button"
+                                                    disabled={!agrivet}
+                                                    onClick={() => openReactivateStore(shop)}
+                                                    className="flex-1 px-3 py-2 text-xs font-semibold text-white bg-[#00C950] rounded-lg hover:bg-[#00B548] transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+                                                >
+                                                    Reactivate Store
+                                                </button>
+                                            )}
                                             <button
                                                 type="button"
                                                 onClick={() => {
@@ -465,6 +498,59 @@ export default function OwnerManagerStores({ auth, agrivet, shops = [], zones = 
                                 disabled={isDeleting}
                             >
                                 {isDeleting ? 'Deleting...' : 'Delete Store'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {shopToReactivate && (
+                <div
+                    className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
+                    onClick={closeReactivateModal}
+                >
+                    <div
+                        className="bg-white rounded-xl max-w-md w-full"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div className="px-6 py-4 border-b border-[#E5E7EB] flex items-center justify-between">
+                            <h3 className="text-lg font-bold text-[#102059]">Reactivate Store</h3>
+                            <button
+                                type="button"
+                                className="w-8 h-8 bg-[#F0F2F5] hover:bg-[#E5E7EB] rounded-full flex items-center justify-center text-[#65676B] transition-colors disabled:opacity-50"
+                                onClick={closeReactivateModal}
+                                disabled={isReactivating}
+                                aria-label="Close"
+                            >
+                                <X className="w-4 h-4" />
+                            </button>
+                        </div>
+                        <div className="px-6 py-5 space-y-2">
+                            <p className="text-sm text-[#102059]">
+                                Are you sure you want to reactivate{' '}
+                                <span className="font-semibold">{shopToReactivate.shop_name}</span>?
+                            </p>
+                            <p className="text-sm text-[#6B7280]">
+                                This will set the store status to Active. The store will be visible
+                                to customers again.
+                            </p>
+                        </div>
+                        <div className="px-6 py-4 border-t border-[#E5E7EB] flex items-center justify-end gap-3">
+                            <button
+                                type="button"
+                                className="px-4 py-2.5 bg-white text-[#65676B] border border-[#E5E7EB] text-sm font-semibold rounded-lg hover:bg-[#F9FAFB] transition-colors disabled:opacity-50"
+                                onClick={closeReactivateModal}
+                                disabled={isReactivating}
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="button"
+                                className="px-4 py-2.5 bg-[#00C950] text-white text-sm font-semibold rounded-lg hover:bg-[#00B548] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                onClick={confirmReactivateShop}
+                                disabled={isReactivating}
+                            >
+                                {isReactivating ? 'Reactivating...' : 'Reactivate Store'}
                             </button>
                         </div>
                     </div>

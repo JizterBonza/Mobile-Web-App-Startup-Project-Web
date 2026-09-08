@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useForm, router } from '@inertiajs/react'
-import { ArrowLeft, Plus, Star, Store, Trash2, Upload } from 'lucide-react'
+import { ArrowLeft, Plus, RotateCcw, Star, Store, Trash2, Upload } from 'lucide-react'
 import SuperAdminOrAdminLayout from '../../Layouts/SuperAdminOrAdminLayout'
 import PinLocationMap from '../../Components/PinLocationMap'
 import { storageUrl } from '../../utils/storageUrl'
@@ -38,8 +38,12 @@ export default function AgrivetShops({ auth, agrivet, zones = [], shops = [], fl
   const [showEditModalAnimation, setShowEditModalAnimation] = useState(false)
   const [showRemoveModal, setShowRemoveModal] = useState(false)
   const [showRemoveModalAnimation, setShowRemoveModalAnimation] = useState(false)
+  const [showReactivateModal, setShowReactivateModal] = useState(false)
+  const [showReactivateModalAnimation, setShowReactivateModalAnimation] = useState(false)
   const [selectedShop, setSelectedShop] = useState(null)
   const [shopToRemove, setShopToRemove] = useState(null)
+  const [shopToReactivate, setShopToReactivate] = useState(null)
+  const [isReactivating, setIsReactivating] = useState(false)
   const [flashSuccessDismissed, setFlashSuccessDismissed] = useState(false)
   const [flashErrorDismissed, setFlashErrorDismissed] = useState(false)
   const [operatingDays, setOperatingDays] = useState([])
@@ -110,6 +114,14 @@ export default function AgrivetShops({ auth, agrivet, zones = [], shops = [], fl
     }
   }, [showRemoveModal])
 
+  useEffect(() => {
+    if (showReactivateModal) {
+      setTimeout(() => setShowReactivateModalAnimation(true), 10)
+    } else {
+      setShowReactivateModalAnimation(false)
+    }
+  }, [showReactivateModal])
+
   const resetAddFormState = () => {
     addForm.reset()
     setOperatingDays([])
@@ -144,12 +156,23 @@ export default function AgrivetShops({ auth, agrivet, zones = [], shops = [], fl
     }, 300)
   }
 
+  const closeReactivateModal = () => {
+    if (isReactivating) return
+    setShowReactivateModalAnimation(false)
+    setTimeout(() => {
+      setShowReactivateModal(false)
+      setShopToReactivate(null)
+    }, 300)
+  }
+
   // Show success/error messages
   useEffect(() => {
     if (flash?.success) {
       closeAddModal()
       closeEditModal()
       closeRemoveModal()
+      setShowReactivateModal(false)
+      setShopToReactivate(null)
       resetAddFormState()
       editForm.reset()
       setShopToRemove(null)
@@ -284,6 +307,27 @@ export default function AgrivetShops({ auth, agrivet, zones = [], shops = [], fl
   const openRemoveStore = (e, shop) => {
     e.stopPropagation()
     handleRemoveShop(shop.id)
+  }
+
+  const openReactivateStore = (e, shop) => {
+    e.stopPropagation()
+    if (shop.shop_status === 'active') return
+    setShopToReactivate(shop)
+    setShowReactivateModal(true)
+    setShowReactivateModalAnimation(false)
+  }
+
+  const confirmReactivateShop = () => {
+    if (!shopToReactivate || isReactivating) return
+    setIsReactivating(true)
+    router.post(`${getBaseRoute()}/${agrivet.id}/shops/${shopToReactivate.id}/reactivate`, {}, {
+      preserveScroll: true,
+      onFinish: () => setIsReactivating(false),
+      onSuccess: () => {
+        setShowReactivateModal(false)
+        setShopToReactivate(null)
+      },
+    })
   }
 
   const ratingValue = (shop) => {
@@ -445,7 +489,7 @@ export default function AgrivetShops({ auth, agrivet, zones = [], shops = [], fl
                           >
                             <Pencil className="h-4 w-4" />
                           </button> */}
-                          {shop.shop_status === 'active' && (
+                          {shop.shop_status === 'active' ? (
                             <button
                               type="button"
                               onClick={(e) => openRemoveStore(e, shop)}
@@ -453,6 +497,15 @@ export default function AgrivetShops({ auth, agrivet, zones = [], shops = [], fl
                               title="Remove store"
                             >
                               <Trash2 className="h-4 w-4" />
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={(e) => openReactivateStore(e, shop)}
+                              className="rounded-lg p-1.5 text-[#00C950] transition-colors hover:bg-[#E8F5E9]"
+                              title="Reactivate store"
+                            >
+                              <RotateCcw className="h-4 w-4" />
                             </button>
                           )}
                         </div>
@@ -1322,6 +1375,55 @@ export default function AgrivetShops({ auth, agrivet, zones = [], shops = [], fl
                     onClick={confirmRemoveShop}
                   >
                     Deactivate Shop
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+
+      {showReactivateModal && shopToReactivate && (
+        <>
+          <div className={`modal-backdrop fade ${showReactivateModalAnimation ? 'show' : ''}`} onClick={closeReactivateModal}></div>
+          <div className={`modal fade ${showReactivateModalAnimation ? 'show' : ''} d-block`} tabIndex="-1" style={{ zIndex: 1050 }}>
+            <div className="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+              <div className="modal-content">
+                <div className="modal-header">
+                  <h4 className="modal-title">Confirm Reactivation</h4>
+                  <button
+                    type="button"
+                    className="close"
+                    onClick={closeReactivateModal}
+                    disabled={isReactivating}
+                  >
+                    <span>&times;</span>
+                  </button>
+                </div>
+                <div className="modal-body">
+                  <p>
+                    Are you sure you want to reactivate <strong>{shopToReactivate.shop_name}</strong>?
+                  </p>
+                  <p className="text-muted mb-0">
+                    This will set the shop status to "Active". The shop will be visible to customers again.
+                  </p>
+                </div>
+                <div className="modal-footer">
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={closeReactivateModal}
+                    disabled={isReactivating}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-success"
+                    onClick={confirmReactivateShop}
+                    disabled={isReactivating}
+                  >
+                    {isReactivating ? 'Reactivating...' : 'Reactivate Shop'}
                   </button>
                 </div>
               </div>
