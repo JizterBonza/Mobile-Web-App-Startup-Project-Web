@@ -3404,8 +3404,8 @@ export default function AgrivetStoreInformation({
         {/* Product Detail Modal */}
         {showProductDetailModal && selectedListingDetail && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-lg border border-[#E5E7EB] w-full max-w-2xl">
-              <div className="flex items-center justify-between p-6 border-b border-[#E5E7EB]">
+            <div className="bg-white rounded-lg border border-[#E5E7EB] w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
+              <div className="flex items-center justify-between p-6 border-b border-[#E5E7EB] shrink-0">
                 <div>
                   <h2 className="text-xl font-bold text-[#102059]">
                     {selectedListingDetail.isBundle ? 'Bundle Details' : 'Product Details'}
@@ -3437,7 +3437,7 @@ export default function AgrivetStoreInformation({
                 </div>
               </div>
 
-              <div className="p-6 space-y-6">
+              <div className="flex-1 min-h-0 overflow-y-auto p-6 space-y-6">
                 <div>
                   <label className="text-xs font-semibold text-[#102059] uppercase tracking-wider block mb-2">
                     {selectedListingDetail.isBundle ? 'Bundle Name' : 'Product Name'}
@@ -3605,7 +3605,7 @@ export default function AgrivetStoreInformation({
                 )}
               </div>
 
-              <div className="flex items-center justify-between gap-3 p-6 border-t border-[#E5E7EB]">
+              <div className="flex items-center justify-between gap-3 p-6 border-t border-[#E5E7EB] shrink-0">
                 <div>
                   {canAddListings && (
                     <button
