@@ -5,6 +5,7 @@ import AdminKlasmeytLayout from '../../Layouts/AdminKlasmeytLayout'
 import KlasmeytDashboardLayout from '../../Layouts/KlasmeytDashboardLayout'
 import OwnerManagerKlasmeytLayout from '../../Layouts/OwnerManagerKlasmeytLayout'
 import SuperAdminKlasmeytLayout from '../../Layouts/SuperAdminKlasmeytLayout'
+import VendorKlasmeytLayout from '../../Layouts/VendorKlasmeytLayout'
 import { useDashboardSession } from '../../hooks/useDashboardSession'
 import PasswordInput from '../../Components/PasswordInput'
 
@@ -32,6 +33,13 @@ function VendorRegistrationShell({ auth, title, children }) {
             <OwnerManagerKlasmeytLayout auth={auth} title={title} notificationCount={0}>
                 {children}
             </OwnerManagerKlasmeytLayout>
+        )
+    }
+    if (userType === 'vendor') {
+        return (
+            <VendorKlasmeytLayout auth={auth} title={title} notificationCount={0}>
+                {children}
+            </VendorKlasmeytLayout>
         )
     }
     return <KlasmeytDashboardLayout auth={auth} title={title}>{children}</KlasmeytDashboardLayout>

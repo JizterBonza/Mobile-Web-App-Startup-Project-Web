@@ -207,12 +207,13 @@ export default function KlasmeytDashboardLayout({
     }
 
     const userType = auth?.user?.user_type
+    const hideSidebar = userType === 'vendor' || userType === 'owner_manager'
 
     return (
         <>
             <Head title={title} />
             <div className="klasmeyt-landing min-h-screen bg-[#F8F9FB]">
-                {sidebarOpen && !isLarge && (
+                {!hideSidebar && sidebarOpen && !isLarge && (
                     <button
                         type="button"
                         className="fixed inset-0 z-30 bg-[#102059]/40"
@@ -221,6 +222,7 @@ export default function KlasmeytDashboardLayout({
                     />
                 )}
 
+                {!hideSidebar && (
                 <aside
                     className={`fixed inset-y-0 left-0 z-40 flex w-72 flex-col border-r border-[#1a2d6e] bg-[#102059] shadow-xl transition-transform duration-200 ease-out ${
                         sidebarOpen ? 'translate-x-0' : '-translate-x-full'
@@ -346,21 +348,23 @@ export default function KlasmeytDashboardLayout({
                         )}
                     </div>
                 </aside>
+                )}
 
                 <div
                     className={`transition-[padding] duration-200 ease-out ${
-                        sidebarOpen && isLarge ? 'lg:pl-72' : 'lg:pl-0'
+                        !hideSidebar && sidebarOpen && isLarge ? 'lg:pl-72' : 'lg:pl-0'
                     }`}
                 >
                     {typeof renderHeader === 'function' ? (
                         renderHeader({
-                            toggleSidebar,
-                            sidebarOpen,
+                            toggleSidebar: hideSidebar ? undefined : toggleSidebar,
+                            sidebarOpen: hideSidebar ? false : sidebarOpen,
                             isLarge,
                             auth,
                         })
                     ) : (
                         <header className="sticky top-0 z-20 flex h-16 items-center gap-3 border-b border-[#E5E7EB] bg-white/90 px-4 backdrop-blur-md sm:gap-4 sm:px-6">
+                            {!hideSidebar && (
                             <button
                                 type="button"
                                 className="rounded-lg border border-[#E5E7EB] p-2 text-[#6B7280] hover:bg-[#F9FAFB]"
@@ -370,6 +374,7 @@ export default function KlasmeytDashboardLayout({
                             >
                                 <Menu className="h-5 w-5" />
                             </button>
+                            )}
                             <div className="min-w-0 flex-1">
                                 <h1 className="truncate text-lg font-semibold text-[#102059] sm:text-xl">
                                     {title}
