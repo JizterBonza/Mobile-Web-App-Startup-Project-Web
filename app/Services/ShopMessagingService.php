@@ -499,6 +499,7 @@ class ShopMessagingService
         $conversation->loadMissing(['customer.userDetail']);
 
         $createdAt = $message->created_at ?? now();
+        $displayAt = $this->inDisplayTimezone($createdAt);
 
         $formatted = [
             'id' => $message->id,
@@ -506,10 +507,10 @@ class ShopMessagingService
             'sender_user_id' => (int) $message->sender_user_id,
             'sender_role' => $message->sender_role,
             'sent_by' => $this->displayName($message->sender),
-            'time' => $createdAt->format('g.i A'),
+            'time' => $this->formatClockTime($createdAt),
             'created_at' => $createdAt->toIso8601String(),
-            'date_key' => $createdAt->toDateString(),
-            'date_label' => $this->dateSeparatorLabel($createdAt),
+            'date_key' => $displayAt->toDateString(),
+            'date_label' => $this->dateSeparatorLabel($displayAt),
         ];
 
         $attachments = $message->attachments ?? collect();
@@ -621,14 +622,14 @@ class ShopMessagingService
         $lastDateKey = null;
 
         foreach ($messages as $message) {
-            $createdAt = $message->created_at ?? now();
-            $dateKey = $createdAt->toDateString();
+            $displayAt = $this->inDisplayTimezone($message->created_at ?? now());
+            $dateKey = $displayAt->toDateString();
 
             if ($dateKey !== $lastDateKey) {
                 $formatted[] = [
                     'id' => 'date-'.$dateKey,
                     'type' => 'date',
-                    'label' => $this->dateSeparatorLabel($createdAt),
+                    'label' => $this->dateSeparatorLabel($displayAt),
                 ];
                 $lastDateKey = $dateKey;
             }
@@ -655,7 +656,7 @@ class ShopMessagingService
             'id' => $message->id,
             'type' => $message->type,
             'side' => $isOutgoing ? 'outgoing' : 'incoming',
-            'time' => $message->created_at?->format('g.i A') ?? '',
+            'time' => $this->formatClockTime($message->created_at),
         ];
 
         if ($isOutgoing) {
@@ -1093,7 +1094,7 @@ class ShopMessagingService
             return '';
         }
 
-        $at = Carbon::parse($at);
+        $at = $this->inDisplayTimezone($at);
 
         if ($at->isToday()) {
             return $at->format('g:i A');
@@ -1130,6 +1131,8 @@ class ShopMessagingService
 
     private function dateSeparatorLabel(Carbon $at): string
     {
+        $at = $this->inDisplayTimezone($at);
+
         if ($at->isToday()) {
             return 'Today';
         }
@@ -1143,6 +1146,25 @@ class ShopMessagingService
         }
 
         return $at->format('F j, Y');
+    }
+
+    /**
+     * Convert a stored UTC instant to the timezone shown on message clocks.
+     */
+    private function inDisplayTimezone($at): Carbon
+    {
+        $carbon = $at instanceof Carbon ? $at->copy() : Carbon::parse($at);
+
+        return $carbon->timezone((string) config('app.display_timezone', 'Asia/Manila'));
+    }
+
+    private function formatClockTime($at): string
+    {
+        if (! $at) {
+            return '';
+        }
+
+        return $this->inDisplayTimezone($at)->format('g.i A');
     }
 
     private function fileLabel(?string $mime): string
