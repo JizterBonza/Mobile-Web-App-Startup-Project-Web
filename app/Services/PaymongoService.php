@@ -107,8 +107,8 @@ class PaymongoService
             'payment_method_types' => [
                 'gcash',
                 'paymaya',
+                'qrph',
                 //'card',
-                //'qrph'
             ],
         ];
 
