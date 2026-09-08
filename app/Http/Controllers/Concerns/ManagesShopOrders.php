@@ -18,14 +18,20 @@ trait ManagesShopOrders
     protected function buildShopOrders(array $shopIds, int $preparingItemStatusId = 0): array
     {
         $orderIds = DB::table('order_shops')
+            ->join('orders', 'order_shops.order_id', '=', 'orders.id')
+            ->join('order_details', 'orders.order_detail_id', '=', 'order_details.id')
             ->whereIn('shop_id', $shopIds)
+            ->where('order_details.payment_status', 'paid')
             ->distinct()
-            ->pluck('order_id')
+            ->pluck('order_shops.order_id')
             ->merge(
                 DB::table('order_items')
-                    ->whereIn('shop_id', $shopIds)
+                    ->join('orders', 'order_items.order_id', '=', 'orders.id')
+                    ->join('order_details', 'orders.order_detail_id', '=', 'order_details.id')
+                    ->whereIn('order_items.shop_id', $shopIds)
+                    ->where('order_details.payment_status', 'paid')
                     ->distinct()
-                    ->pluck('order_id')
+                    ->pluck('order_items.order_id')
             )
             ->unique()
             ->values();
@@ -53,9 +59,10 @@ trait ManagesShopOrders
             ->leftJoin('order_status', 'os_agg.order_status', '=', 'order_status.id')
             ->join('users', 'orders.user_id', '=', 'users.id')
             ->join('user_details', 'users.user_detail_id', '=', 'user_details.id')
-            ->leftJoin('order_details', 'orders.order_detail_id', '=', 'order_details.id')
+            ->join('order_details', 'orders.order_detail_id', '=', 'order_details.id')
             ->leftJoin('delivery_method', 'order_details.delivery_method_id', '=', 'delivery_method.id')
             ->leftJoin('addresses', 'order_details.address_id', '=', 'addresses.id')
+            ->where('order_details.payment_status', 'paid')
             ->select(
                 'orders.id',
                 'orders.user_id',
@@ -298,6 +305,14 @@ trait ManagesShopOrders
      */
     protected function assertShopOrderAccess(int $orderId, array $shopIds): void
     {
+        $isPaid = DB::table('orders')
+            ->join('order_details', 'orders.order_detail_id', '=', 'order_details.id')
+            ->where('orders.id', $orderId)
+            ->where('order_details.payment_status', 'paid')
+            ->exists();
+
+        abort_unless($isPaid, 404);
+
         $accessible = DB::table('order_shops')
             ->where('order_id', $orderId)
             ->whereIn('shop_id', $shopIds)
