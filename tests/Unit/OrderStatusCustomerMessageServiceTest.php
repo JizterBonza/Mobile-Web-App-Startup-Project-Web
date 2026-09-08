@@ -66,6 +66,10 @@ class OrderStatusCustomerMessageServiceTest extends TestCase
             'Your order AGF-1001 was declined.',
             $this->service->messageBody('Cancelled', 'AGF-1001', '   ')
         );
+        $this->assertSame(
+            'Your order AGF-1001 was declined. Reason: Out of stock.',
+            $this->service->messageBody('Canceled', 'AGF-1001', 'Out of stock.')
+        );
     }
 
     public function test_does_not_message_pending_status(): void
@@ -77,9 +81,11 @@ class OrderStatusCustomerMessageServiceTest extends TestCase
     {
         $messaging = $this->createMock(ShopMessagingService::class);
         $messaging->expects($this->never())->method('sendOrderUpdateMessage');
+        $messaging->expects($this->never())->method('sendMessage');
         $service = new OrderStatusCustomerMessageService($messaging);
         $customer = new User(['user_type' => User::TYPE_CUSTOMER]);
 
         $service->notifyForShops(123, [456], 'Cancelled', $customer, 'Changed my mind.');
+        $service->notifyForShops(123, [456], 'Cancelled', $customer, 'Changed my mind.', 'api_cancellation');
     }
 }

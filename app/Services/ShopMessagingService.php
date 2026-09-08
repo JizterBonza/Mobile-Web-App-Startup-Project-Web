@@ -17,6 +17,7 @@ use Carbon\Carbon;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
 class ShopMessagingService
@@ -188,7 +189,8 @@ class ShopMessagingService
         ShopConversation $conversation,
         User $sender,
         string $body,
-        array $files = []
+        array $files = [],
+        bool $notify = false,
     ): ShopConversationMessage {
         $sender->loadMissing('userDetail');
         $role = $this->senderRole($sender);
@@ -217,6 +219,9 @@ class ShopMessagingService
             return $message->fresh(['attachments', 'sender.userDetail']);
         });
 
+        if ($notify) {
+            $this->notifyCounterpartSafely($conversation, $sender, $message);
+        }
         $this->broadcastMessage($conversation->fresh(), $message);
 
         return $message;
@@ -281,7 +286,7 @@ class ShopMessagingService
         });
 
         if ($notify) {
-            $this->notifyCounterpart($conversation, $sender, $message);
+            $this->notifyCounterpartSafely($conversation, $sender, $message);
         }
         $this->broadcastMessage($conversation->fresh(), $message);
 
@@ -331,7 +336,7 @@ class ShopMessagingService
             return $message->fresh(['attachments', 'sender.userDetail']);
         });
 
-        $this->notifyCounterpart($conversation, $sender, $message);
+        $this->notifyCounterpartSafely($conversation, $sender, $message);
         $this->broadcastMessage($conversation->fresh(), $message);
 
         return $message;
@@ -551,11 +556,20 @@ class ShopMessagingService
         ShopConversation $conversation,
         ShopConversationMessage $message
     ): void {
-        broadcast(new ShopMessageSent(
-            $conversation,
-            $message,
-            $this->formatBroadcastPayload($conversation, $message),
-        ));
+        try {
+            $pending = broadcast(new ShopMessageSent(
+                $conversation,
+                $message,
+                $this->formatBroadcastPayload($conversation, $message),
+            ));
+            unset($pending);
+        } catch (\Throwable $e) {
+            Log::warning('Failed to broadcast shop message.', [
+                'conversation_id' => $conversation->id,
+                'message_id' => $message->id,
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
 
     public function markRead(ShopConversation $conversation, User $user): void
@@ -959,6 +973,22 @@ class ShopMessagingService
         }
 
         return $name !== '' ? Str::limit($name, 180) : 'Shared a product';
+    }
+
+    private function notifyCounterpartSafely(
+        ShopConversation $conversation,
+        User $sender,
+        ShopConversationMessage $message
+    ): void {
+        try {
+            $this->notifyCounterpart($conversation, $sender, $message);
+        } catch (\Throwable $e) {
+            Log::warning('Failed to create shop message notification.', [
+                'conversation_id' => $conversation->id,
+                'message_id' => $message->id,
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
 
     private function notifyCounterpart(

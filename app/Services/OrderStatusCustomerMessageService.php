@@ -25,8 +25,9 @@ class OrderStatusCustomerMessageService
         string $statusDescription,
         ?User $actor = null,
         ?string $declineReason = null,
+        ?string $source = null,
     ): void {
-        if ($this->isCancelledStatus($statusDescription) && ! $this->isShopStaff($actor)) {
+        if ($this->shouldSkipCancelledCustomerMessage($statusDescription, $actor, $source)) {
             return;
         }
 
@@ -35,12 +36,31 @@ class OrderStatusCustomerMessageService
             return;
         }
 
-        $order = Order::query()->with(['user', 'orderDetail', 'orderItems.item'])->find($orderId);
+        $order = Order::query()->with(['user', 'orderDetail', 'orderItems'])->find($orderId);
         if (! $order?->user) {
+            Log::warning('Skipped order status customer message: order or customer missing.', [
+                'order_id' => $orderId,
+                'status' => $statusDescription,
+            ]);
+
             return;
         }
 
         $orderLabel = $this->orderLabel($order);
+        $body = $this->messageBody($statusDescription, $orderLabel, $declineReason);
+        if ($body === null) {
+            return;
+        }
+
+        try {
+            $order->load(['orderItems.item']);
+        } catch (\Throwable $e) {
+            Log::warning('Order status customer message: failed to load order items.', [
+                'order_id' => $orderId,
+                'error' => $e->getMessage(),
+            ]);
+        }
+
         $shops = Shop::query()->whereIn('id', $shopIds)->get()->keyBy('id');
 
         foreach ($shopIds as $shopId) {
@@ -58,11 +78,6 @@ class OrderStatusCustomerMessageService
                     fn ($item) => (float) $item->price_at_purchase * (int) $item->quantity
                 ), 2);
 
-            $body = $this->messageBody($statusDescription, $orderLabel, $declineReason);
-            if ($body === null) {
-                return;
-            }
-
             $sender = $this->resolveStaffSender($shop, $actor);
             if (! $sender) {
                 Log::warning('Skipped order status customer message: no shop staff sender.', [
@@ -74,24 +89,50 @@ class OrderStatusCustomerMessageService
                 continue;
             }
 
+            $products = $shopItems
+                ->map(function ($orderItem) use ($orderId, $shopId) {
+                    try {
+                        return $this->messaging->productMetadataFromOrderItem($orderItem);
+                    } catch (\Throwable $e) {
+                        Log::warning('Order status customer message: skipped product snapshot.', [
+                            'order_id' => $orderId,
+                            'shop_id' => $shopId,
+                            'order_item_id' => $orderItem->id ?? null,
+                            'error' => $e->getMessage(),
+                        ]);
+
+                        return null;
+                    }
+                })
+                ->filter()
+                ->values()
+                ->all();
+
             try {
                 $conversation = $this->messaging->findOrCreate($shop, $order->user);
-                $products = $shopItems
-                    ->map(fn ($orderItem) => $this->messaging->productMetadataFromOrderItem($orderItem))
-                    ->values()
-                    ->all();
 
-                $this->messaging->sendOrderUpdateMessage(
-                    $conversation,
-                    $sender,
-                    $body,
-                    $products,
-                    $total,
-                    [
+                try {
+                    $this->messaging->sendOrderUpdateMessage(
+                        $conversation,
+                        $sender,
+                        $body,
+                        $products,
+                        $total,
+                        [
+                            'order_id' => $orderId,
+                            'status' => $statusDescription,
+                        ],
+                    );
+                } catch (\Throwable $e) {
+                    Log::warning('Order update message failed; falling back to text.', [
                         'order_id' => $orderId,
+                        'shop_id' => $shopId,
                         'status' => $statusDescription,
-                    ],
-                );
+                        'error' => $e->getMessage(),
+                    ]);
+
+                    $this->messaging->sendMessage($conversation, $sender, $body, [], true);
+                }
             } catch (\Throwable $e) {
                 Log::warning('Failed to send order status customer message.', [
                     'order_id' => $orderId,
@@ -112,6 +153,7 @@ class OrderStatusCustomerMessageService
         int $statusId,
         ?User $actor = null,
         ?string $declineReason = null,
+        ?string $source = null,
     ): void {
         $statusDescription = DB::table('order_status')
             ->where('id', $statusId)
@@ -121,7 +163,7 @@ class OrderStatusCustomerMessageService
             return;
         }
 
-        $this->notifyForShops($orderId, $shopIds, $statusDescription, $actor, $declineReason);
+        $this->notifyForShops($orderId, $shopIds, $statusDescription, $actor, $declineReason, $source);
     }
 
     public function messageBody(
@@ -134,9 +176,7 @@ class OrderStatusCustomerMessageService
             $orderLabel = 'your order';
         }
 
-        $key = strtolower(trim($statusDescription));
-        $key = str_replace(['_', '–', '—'], '-', $key);
-        $key = preg_replace('/\s+/', ' ', $key) ?? $key;
+        $key = $this->statusKey($statusDescription);
 
         $template = match (true) {
             $key === 'preparing' => 'Your order %s has been accepted and is now being prepared.',
@@ -145,7 +185,7 @@ class OrderStatusCustomerMessageService
             $key === 'ready for pickup' => 'Your order %s is done preparing and ready for pickup.',
             $key === 'in-transit', $key === 'in transit' => 'Your order %s is now in transit.',
             $key === 'delivered' => 'Your order %s has been delivered.',
-            $key === 'cancelled' => 'Your order %s was declined.',
+            $this->isCancelledStatus($statusDescription) => 'Your order %s was declined.',
             default => null,
         };
 
@@ -155,7 +195,7 @@ class OrderStatusCustomerMessageService
 
         $body = sprintf($template, $orderLabel);
 
-        if ($key === 'cancelled') {
+        if ($this->isCancelledStatus($statusDescription)) {
             $reason = trim((string) $declineReason);
             if ($reason !== '') {
                 $body .= ' Reason: '.$reason;
@@ -165,9 +205,36 @@ class OrderStatusCustomerMessageService
         return $body;
     }
 
+    private function shouldSkipCancelledCustomerMessage(
+        string $statusDescription,
+        ?User $actor,
+        ?string $source,
+    ): bool {
+        if (! $this->isCancelledStatus($statusDescription)) {
+            return false;
+        }
+
+        if (in_array($source, ['owner_manager_dashboard', 'vendor_dashboard'], true)) {
+            return false;
+        }
+
+        return ! $this->isShopStaff($actor);
+    }
+
     private function isCancelledStatus(string $statusDescription): bool
     {
-        return strtolower(trim($statusDescription)) === 'cancelled';
+        $key = $this->statusKey($statusDescription);
+
+        return in_array($key, ['cancelled', 'canceled', 'declined'], true)
+            || str_starts_with($key, 'cancel');
+    }
+
+    private function statusKey(string $status): string
+    {
+        $status = strtolower(trim($status));
+        $status = str_replace(['_', '–', '—'], '-', $status);
+
+        return preg_replace('/\s+/', ' ', $status) ?? $status;
     }
 
     private function isShopStaff(?User $actor): bool
@@ -188,7 +255,7 @@ class OrderStatusCustomerMessageService
 
     private function resolveStaffSender(Shop $shop, ?User $actor): ?User
     {
-        if ($actor && in_array($actor->user_type, [User::TYPE_OWNER_MANAGER, User::TYPE_VENDOR], true)) {
+        if ($actor && $actor->user_type !== User::TYPE_CUSTOMER) {
             return $actor;
         }
 
