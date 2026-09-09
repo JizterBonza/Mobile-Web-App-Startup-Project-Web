@@ -2,15 +2,14 @@
 
 namespace App\Http\Controllers;
 
-use Illuminate\Http\Request;
 use App\Http\Controllers\Concerns\EnsuresApiOwnership;
-use App\Services\PaymongoService;
-use App\Services\VoucherService;
+use App\Models\Notification;
 use App\Models\Order;
 use App\Models\Payment;
-use App\Models\Notification;
-use App\Models\Voucher;
-use App\Models\VoucherUsage;
+use App\Services\PaymentStatusService;
+use App\Services\PaymongoService;
+use App\Services\VoucherService;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 
 class PaymentController extends Controller
@@ -21,10 +20,16 @@ class PaymentController extends Controller
 
     protected VoucherService $voucherService;
 
-    public function __construct(PaymongoService $paymongo, VoucherService $voucherService)
-    {
+    protected PaymentStatusService $paymentStatuses;
+
+    public function __construct(
+        PaymongoService $paymongo,
+        VoucherService $voucherService,
+        PaymentStatusService $paymentStatuses,
+    ) {
         $this->paymongo = $paymongo;
         $this->voucherService = $voucherService;
+        $this->paymentStatuses = $paymentStatuses;
     }
 
     public function createIntent(Request $request)
@@ -63,7 +68,7 @@ class PaymentController extends Controller
                 ->first();
 
             if ($payment) {
-                $this->syncPendingPaymentFromPaymongo($payment);
+                $this->paymentStatuses->syncPendingFromPaymongo($payment);
                 $payment->refresh();
                 $payment->load('order.orderDetail');
 
@@ -147,7 +152,7 @@ class PaymentController extends Controller
             ->first();
 
         if ($payment) {
-            $this->syncPendingPaymentFromPaymongo($payment);
+            $this->paymentStatuses->syncPendingFromPaymongo($payment);
             $payment->refresh();
             $payment->load('order.orderDetail');
         }
@@ -291,7 +296,7 @@ class PaymentController extends Controller
             return false;
         }
 
-        $computed = hash_hmac('sha256', $timestamp . '.' . $rawBody, $secret);
+        $computed = hash_hmac('sha256', $timestamp.'.'.$rawBody, $secret);
 
         // PayMongo sends te for test-mode events and li for live-mode events.
         // Match whichever signature is present — do not rely on APP_ENV.
@@ -330,7 +335,7 @@ class PaymentController extends Controller
             ?? $paymentAttrs['payment_intent_id']
             ?? null;
 
-        $this->markPaymentPaid(
+        $this->paymentStatuses->markPaid(
             $payment,
             $paymongoPayment['id'] ?? null,
             $paymentMethod,
@@ -374,7 +379,7 @@ class PaymentController extends Controller
         $attrs = $data['attributes'] ?? [];
         $paymentMethod = $attrs['source']['type'] ?? null;
 
-        $this->markPaymentPaid(
+        $this->paymentStatuses->markPaid(
             $payment,
             $data['id'] ?? null,
             $paymentMethod,
@@ -397,87 +402,6 @@ class PaymentController extends Controller
             $data,
             $data['id'] ?? null,
             $attrs['payment_intent_id'] ?? null
-        );
-    }
-
-    private function markPaymentPaid(
-        Payment $payment,
-        ?string $paymongoPaymentId,
-        ?string $paymentMethod,
-        array $metadata,
-        ?string $paymentIntentId = null
-    ): void {
-        if ($payment->status === 'paid') {
-            return;
-        }
-
-        // If this webhook is for an older rotated session, still mark paid and
-        // restore the session id that actually completed payment when present.
-        $sessionIdFromPayload = $metadata['id'] ?? null;
-        $update = [
-            'status' => 'paid',
-            'payment_method' => $paymentMethod,
-            'payment_id' => $paymongoPaymentId ?? $payment->payment_id,
-            'payment_intent_id' => $paymentIntentId ?? $payment->payment_intent_id,
-            'metadata' => $metadata,
-        ];
-
-        if (is_string($sessionIdFromPayload) && str_starts_with($sessionIdFromPayload, 'cs_')) {
-            $update['checkout_session_id'] = $sessionIdFromPayload;
-        }
-
-        $payment->update($update);
-
-        $payment->order?->orderDetail?->update(['payment_status' => 'paid']);
-
-        $order = $payment->order;
-        $orderDetail = $order?->orderDetail;
-        if ($order && $orderDetail) {
-            $this->recordVoucherUsageIfNeeded($order, $orderDetail);
-
-            Notification::createForUser(
-                $order->user_id,
-                'payment_confirmed',
-                'Payment Confirmed',
-                "Your payment for order {$orderDetail->order_code} has been confirmed. Amount: ₱" . number_format($payment->amount, 2),
-                Notification::CATEGORY_PAYMENT,
-                $order,
-                [
-                    'order_id' => $order->id,
-                    'order_code' => $orderDetail->order_code,
-                    'amount' => $payment->amount,
-                    'payment_method' => $paymentMethod,
-                ],
-                "/orders/{$order->id}"
-            );
-        }
-    }
-
-    private function recordVoucherUsageIfNeeded(Order $order, $orderDetail): void
-    {
-        if (! $orderDetail->voucher_id) {
-            return;
-        }
-
-        $alreadyRecorded = VoucherUsage::query()
-            ->where('order_id', $order->id)
-            ->where('voucher_id', $orderDetail->voucher_id)
-            ->exists();
-
-        if ($alreadyRecorded) {
-            return;
-        }
-
-        $voucher = Voucher::query()->find($orderDetail->voucher_id);
-        if (! $voucher) {
-            return;
-        }
-
-        $this->voucherService->recordUsage(
-            $voucher,
-            (int) $order->user_id,
-            (int) $order->id,
-            (float) $orderDetail->voucher_discount_amount,
         );
     }
 
@@ -632,7 +556,7 @@ class PaymentController extends Controller
      * Get checkout_url for an order by order_id.
      * Re-validates voucher before returning; recreates PayMongo session if amount changed.
      *
-     * @param int $orderId
+     * @param  int  $orderId
      * @return \Illuminate\Http\JsonResponse
      */
     public function getCheckoutUrlByOrderId(Request $request, $orderId)
@@ -764,7 +688,7 @@ class PaymentController extends Controller
     /**
      * Check whether an order's payment has been completed.
      *
-     * @param int $orderId
+     * @param  int  $orderId
      * @return \Illuminate\Http\JsonResponse
      */
     public function getPaymentStatusByOrderId(Request $request, $orderId)
@@ -783,7 +707,7 @@ class PaymentController extends Controller
         }
 
         // Localhost / missed webhooks: sync from PayMongo when still pending.
-        $this->syncPendingPaymentFromPaymongo($order->payment);
+        $this->paymentStatuses->syncPendingFromPaymongo($order->payment);
 
         $order->refresh();
         $order->load(['orderDetail', 'payment']);
@@ -802,79 +726,5 @@ class PaymentController extends Controller
                 'amount' => $order->payment->amount,
             ] : null,
         ]);
-    }
-
-    /**
-     * If a webhook never arrived (common on localhost), ask PayMongo for the
-     * checkout session status and mark the local payment paid when appropriate.
-     */
-    private function syncPendingPaymentFromPaymongo(?Payment $payment): void
-    {
-        if (! $payment || $payment->status === 'paid' || empty($payment->checkout_session_id)) {
-            return;
-        }
-
-        $session = $this->paymongo->retrieveCheckoutSession($payment->checkout_session_id);
-
-        if (! is_array($session) || empty($session['data'])) {
-            Log::warning('PayMongo sync: unable to retrieve checkout session', [
-                'payment_id' => $payment->id,
-                'checkout_session_id' => $payment->checkout_session_id,
-                'response' => $session,
-            ]);
-
-            return;
-        }
-
-        $data = $session['data'];
-        $attrs = $data['attributes'] ?? [];
-        $payments = $attrs['payments'] ?? [];
-
-        // Session status is only active/expired — paid is indicated by payments[].
-        $paymongoPayment = null;
-        if (is_array($payments)) {
-            foreach ($payments as $candidate) {
-                if (($candidate['attributes']['status'] ?? null) === 'paid') {
-                    $paymongoPayment = $candidate;
-                    break;
-                }
-            }
-        }
-
-        $isPaid = $paymongoPayment !== null
-            || ! empty($attrs['paid_at']);
-
-        if (! $isPaid) {
-            return;
-        }
-
-        // If paid_at is set but payments list is empty/unpaid, still sync with whatever we have.
-        if ($paymongoPayment === null && is_array($payments) && count($payments) > 0) {
-            $paymongoPayment = $payments[0];
-        }
-
-        $paymentMethod = $paymongoPayment['attributes']['source']['type']
-            ?? $paymongoPayment['attributes']['payment_method_used']
-            ?? $attrs['payment_method_used']
-            ?? null;
-
-        $paymentIntentId = $attrs['payment_intent']['id']
-            ?? $paymongoPayment['attributes']['payment_intent_id']
-            ?? null;
-
-        Log::info('PayMongo sync: marking local payment paid from checkout session', [
-            'payment_id' => $payment->id,
-            'checkout_session_id' => $payment->checkout_session_id,
-            'session_status' => $attrs['status'] ?? null,
-            'paid_at' => $attrs['paid_at'] ?? null,
-        ]);
-
-        $this->markPaymentPaid(
-            $payment->fresh(['order.orderDetail']),
-            $paymongoPayment['id'] ?? null,
-            $paymentMethod,
-            $data,
-            $paymentIntentId
-        );
     }
 }

@@ -86,6 +86,13 @@ Your Laravel 11 project has been successfully set up with the following configur
 3. **Access the application**:
    - Open your browser and go to `http://localhost:8000`
 
+4. **Start the queue worker** (required for delayed payment reminders):
+   ```bash
+   php artisan queue:work
+   ```
+   Keep this process running under a process manager in deployed environments.
+   See [SUPERVISOR_SETUP.md](SUPERVISOR_SETUP.md) for the production Supervisor installation guide.
+
 ## Project Structure
 
 ```
@@ -107,6 +114,7 @@ agrify-connect-web/
 
 - `php artisan serve` - Start development server
 - `php artisan migrate` - Run database migrations
+- `php artisan queue:work` - Process queued jobs, including delayed payment reminders
 - `php artisan make:model ModelName` - Create a new model
 - `php artisan make:controller ControllerName` - Create a new controller
 - `php artisan make:migration create_table_name` - Create a new migration

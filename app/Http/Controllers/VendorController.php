@@ -772,6 +772,7 @@ class VendorController extends Controller
         $orders = DB::table('orders')
             ->join('order_items', 'orders.id', '=', 'order_items.order_id')
             ->join('items', 'order_items.item_id', '=', 'items.id')
+            ->join('order_details', 'orders.order_detail_id', '=', 'order_details.id')
             ->join('order_shops', function ($join) use ($shop) {
                 $join->on('order_shops.order_id', '=', 'orders.id')
                     ->where('order_shops.shop_id', '=', $shop->id);
@@ -780,6 +781,7 @@ class VendorController extends Controller
             ->join('user_details', 'users.user_detail_id', '=', 'user_details.id')
             ->leftJoin('order_status', 'order_shops.order_status', '=', 'order_status.id')
             ->where('items.shop_id', $shop->id)
+            ->where('order_details.payment_status', 'paid')
             ->select(
                 'orders.id',
                 'order_shops.order_status',
@@ -833,9 +835,10 @@ class VendorController extends Controller
             })
             ->join('users', 'orders.user_id', '=', 'users.id')
             ->join('user_details', 'users.user_detail_id', '=', 'user_details.id')
-            ->leftJoin('order_details', 'orders.order_detail_id', '=', 'order_details.id')
+            ->join('order_details', 'orders.order_detail_id', '=', 'order_details.id')
             ->leftJoin('order_status', 'order_shops.order_status', '=', 'order_status.id')
             ->where('orders.id', $orderId)
+            ->where('order_details.payment_status', 'paid')
             ->select(
                 'orders.id',
                 'order_shops.order_status',
@@ -929,8 +932,11 @@ class VendorController extends Controller
         // Verify the order item belongs to this shop's products
         $orderItem = DB::table('order_items')
             ->join('items', 'order_items.item_id', '=', 'items.id')
+            ->join('orders', 'order_items.order_id', '=', 'orders.id')
+            ->join('order_details', 'orders.order_detail_id', '=', 'order_details.id')
             ->where('order_items.id', $id)
             ->where('items.shop_id', $shop->id)
+            ->where('order_details.payment_status', 'paid')
             ->select('order_items.*')
             ->first();
 

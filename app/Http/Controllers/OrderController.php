@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Http\Controllers\Concerns\EnsuresApiOwnership;
+use App\Jobs\SendPendingPaymentReminder;
 use App\Models\Address;
 use App\Models\Cart;
 use App\Models\Item;
@@ -20,6 +21,7 @@ use App\Services\DeliveryFeeService;
 use App\Services\OrderStatusTransitionService;
 use App\Services\PaymongoService;
 use App\Services\VoucherService;
+use App\Support\PaymentMethodType;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -1063,7 +1065,6 @@ class OrderController extends Controller
             'order_instruction' => 'nullable|string',
             'delivery_method_id' => 'required|exists:delivery_method,id',
             'payment_method' => 'nullable|string|max:50',
-            'payment_status' => 'nullable|string|max:50',
             'voucher_code' => 'nullable|string|max:50',
 
             // Order items
@@ -1109,8 +1110,10 @@ class OrderController extends Controller
             $paymentMethod = $trimmed === '' ? null : $trimmed;
         }
 
+        $isCod = PaymentMethodType::isCod($paymentMethod);
+
         // Use database transaction to ensure atomicity and prevent race conditions
-        return DB::transaction(function () use ($data, $paymentMethod, $user, $address) {
+        return DB::transaction(function () use ($data, $paymentMethod, $isCod, $user, $address) {
             $cartIds = array_column($data['items'], 'cart_id');
             $ownedCartCount = Cart::where('user_id', $user->id)
                 ->whereIn('id', $cartIds)
@@ -1269,7 +1272,9 @@ class OrderController extends Controller
                 'order_instruction' => $data['order_instruction'] ?? null,
                 'delivery_method_id' => $data['delivery_method_id'],
                 'payment_method' => $paymentMethod ?? null,
-                'payment_status' => $data['payment_status'] ?? 'pending',
+                // Payment state is server-controlled and is only promoted to
+                // paid after PayMongo confirms the checkout.
+                'payment_status' => 'pending',
                 'voucher_id' => $voucherResult['voucher_id'],
                 'voucher_code' => $voucherResult['voucher_code'],
                 'voucher_discount_amount' => $voucherResult['voucher_discount_amount'],
@@ -1291,7 +1296,7 @@ class OrderController extends Controller
 
             // COD has no delayed PayMongo gate — finalize usage at create.
             // Online payments record usage only after successful payment.
-            if ($voucherResult['voucher'] !== null && $paymentMethod === 'cod') {
+            if ($voucherResult['voucher'] !== null && $isCod) {
                 $this->voucherService->recordUsage(
                     $voucherResult['voucher'],
                     (int) $user->id,
@@ -1378,22 +1383,23 @@ class OrderController extends Controller
             // Load relationships (include orderShops for appended order_status/rider_id in response)
             $order->load(['user', 'orderDetail', 'orderItems', 'orderShops']);
 
-            // Create notification for the user
-            Notification::createForUser(
-                $user->id,
-                'order_placed',
-                'Order Placed Successfully',
-                "Your order {$orderDetail->order_code} has been placed successfully. Total amount: ₱".number_format($orderDetail->total_amount, 2),
-                Notification::CATEGORY_ORDER,
-                $order,
-                [
-                    'order_id' => $order->id,
-                    'order_code' => $orderDetail->order_code,
-                    'total_amount' => $orderDetail->total_amount,
-                    'items_count' => count($data['items']),
-                ],
-                "/orders/{$order->id}"
-            );
+            if ($isCod) {
+                Notification::createForUser(
+                    $user->id,
+                    'order_placed',
+                    'Order Placed Successfully',
+                    "Your order {$orderDetail->order_code} has been placed successfully. Total amount: ₱".number_format($orderDetail->total_amount, 2),
+                    Notification::CATEGORY_ORDER,
+                    $order,
+                    [
+                        'order_id' => $order->id,
+                        'order_code' => $orderDetail->order_code,
+                        'total_amount' => $orderDetail->total_amount,
+                        'items_count' => count($data['items']),
+                    ],
+                    "/orders/{$order->id}"
+                );
+            }
 
             $responseData = [
                 'success' => true,
@@ -1401,7 +1407,7 @@ class OrderController extends Controller
                 'data' => $order,
             ];
 
-            if ($paymentMethod !== 'cod') {
+            if (! $isCod) {
                 $finalize = $this->voucherService->finalizeForCheckout(
                     $orderDetail->fresh(),
                     (int) $user->id,
@@ -1455,6 +1461,27 @@ class OrderController extends Controller
                         'order_code' => (string) $orderDetail->order_code,
                     ],
                 ]);
+
+                Notification::createForUser(
+                    $user->id,
+                    'payment_pending',
+                    'Payment Pending',
+                    "Your order {$orderDetail->order_code} has been created. Please complete your payment to proceed.",
+                    Notification::CATEGORY_PAYMENT,
+                    $order,
+                    [
+                        'order_id' => $order->id,
+                        'order_code' => $orderDetail->order_code,
+                        'total_amount' => $orderDetail->total_amount,
+                        'items_count' => count($data['items']),
+                        'payment_status' => 'pending',
+                    ],
+                    "/orders/{$order->id}"
+                );
+
+                SendPendingPaymentReminder::dispatch((int) $order->id)
+                    ->delay(now()->addMinutes(15))
+                    ->afterCommit();
 
                 $responseData['checkout_url'] = $checkoutUrl;
                 $responseData['session_id'] = $sessionId;
@@ -1615,6 +1642,16 @@ class OrderController extends Controller
             ], 422);
         }
 
+        if ($request->has('payment_status')) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation error',
+                'errors' => [
+                    'payment_status' => ['Payment status is managed by the payment provider.'],
+                ],
+            ], 422);
+        }
+
         if ($request->has('rider_id') && ! $this->isStaff($request->user())) {
             return response()->json([
                 'success' => false,
@@ -1645,7 +1682,6 @@ class OrderController extends Controller
             'order_instruction' => 'nullable|string',
             'delivery_method_id' => 'sometimes|exists:delivery_method,id',
             'payment_method' => 'sometimes|string|max:50',
-            'payment_status' => 'nullable|string|max:50',
         ]);
 
         if ($validator->fails()) {
@@ -1659,7 +1695,7 @@ class OrderController extends Controller
         // Update order detail if any order detail fields are provided
         $orderDetailFields = [
             'order_code', 'subtotal', 'shipping_fee', 'total_amount',
-            'shipping_address', 'order_instruction', 'delivery_method_id', 'payment_method', 'payment_status',
+            'shipping_address', 'order_instruction', 'delivery_method_id', 'payment_method',
         ];
 
         $orderDetailData = [];
