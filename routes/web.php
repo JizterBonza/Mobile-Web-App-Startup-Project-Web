@@ -30,6 +30,18 @@ Route::get('/', function () {
     return Inertia::render('Welcome');
 });
 
+Route::get('/privacy-policy', function () {
+    return Inertia::render('Legal/PrivacyPolicy');
+})->name('privacy-policy');
+
+Route::get('/terms-and-conditions', function () {
+    return Inertia::render('Legal/TermsAndConditions');
+})->name('terms-and-conditions');
+
+Route::get('/cookie-policy', function () {
+    return Inertia::render('Legal/CookiePolicy');
+})->name('cookie-policy');
+
 Route::get('/storage/{path}', [PublicStorageController::class, 'show'])
     ->where('path', '.*')
     ->name('storage.public');

@@ -99,7 +99,14 @@ export default function Register() {
                         <div className="icheck-primary">
                             <input type="checkbox" id="agreeTerms" name="terms" value="agree" required />
                             <label htmlFor="agreeTerms">
-                                I agree to the <a href="#">terms</a>
+                                I agree to the{' '}
+                                <a href="/terms-and-conditions" target="_blank" rel="noopener noreferrer">
+                                    Terms and Conditions
+                                </a>
+                                {' '}and{' '}
+                                <a href="/privacy-policy" target="_blank" rel="noopener noreferrer">
+                                    Privacy Policy
+                                </a>
                             </label>
                         </div>
                     </div>

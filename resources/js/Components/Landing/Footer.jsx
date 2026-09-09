@@ -1,3 +1,5 @@
+import { Link } from '@inertiajs/react'
+
 function AgrifyWordmark() {
   return (
     <div className="mt-1 flex flex-col items-center leading-none md:items-end">
@@ -44,15 +46,15 @@ export function Footer() {
             className="flex flex-wrap items-center justify-center gap-x-12 gap-y-3 text-sm md:justify-center"
             aria-label="Legal"
           >
-            <a href="#privacy-policy" className="text-black transition-opacity hover:opacity-75" style={{ color: '#0B132B', marginRight: '30px' }}>
+            <Link href="/privacy-policy" className="text-black transition-opacity hover:opacity-75" style={{ color: '#0B132B', marginRight: '30px' }}>
               Privacy Policy
-            </a>
-            <a href="#terms-of-service" className="text-black transition-opacity hover:opacity-75" style={{ color: '#0B132B', marginRight: '30px' }}>
+            </Link>
+            <Link href="/terms-and-conditions" className="text-black transition-opacity hover:opacity-75" style={{ color: '#0B132B', marginRight: '30px' }}>
               Terms of Service
-            </a>
-            <a href="#cookie-policy" className="text-black transition-opacity hover:opacity-75" style={{ color: '#0B132B', marginRight: '30px' }}>
+            </Link>
+            <Link href="/cookie-policy" className="text-black transition-opacity hover:opacity-75" style={{ color: '#0B132B', marginRight: '30px' }}>
               Cookie Policy
-            </a>
+            </Link>
           </nav>
 
           <div className="flex flex-col items-center md:items-end">
