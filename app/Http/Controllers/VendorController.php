@@ -269,6 +269,8 @@ class VendorController extends Controller
             ->get();
 
         $products = $products->map(function ($item) {
+            ProductCatalog::applyLiveDetailsToItem($item);
+
             // Normalize image URLs to ensure they're properly formatted
             $images = $item->item_images ? json_decode($item->item_images, true) : [];
             if (!empty($images)) {
@@ -685,13 +687,15 @@ class VendorController extends Controller
 
         $inventory = DB::table('items')
             ->where('shop_id', $shop->id)
-            ->select('id', 'item_name', 'item_quantity', 'item_price', 'category', 'item_status', 'sold_count', 'is_bundle', 'bundle_catalog_ids')
+            ->select('id', 'product_catalog_id', 'item_name', 'item_quantity', 'item_price', 'category', 'item_status', 'sold_count', 'is_bundle', 'bundle_catalog_ids')
             ->orderBy('item_name', 'asc')
             ->get();
 
         $restockBlockedByItemId = ProductCatalog::restockBlockedFlagsForItems($inventory);
 
         $inventory = $inventory->map(function ($item) use ($restockBlockedByItemId) {
+            ProductCatalog::applyLiveDetailsToItem($item);
+
             return [
                 'id' => $item->id,
                 'item_name' => $item->item_name,

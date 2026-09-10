@@ -87,7 +87,7 @@ class SearchController extends Controller
         }
 
         return $query
-            ->select(['id', 'item_name', 'item_images', 'item_price', 'discount_percent', 'discount_type', 'discount_expires_at'])
+            ->select(['id', 'product_catalog_id', 'item_name', 'item_images', 'item_price', 'discount_percent', 'discount_type', 'discount_expires_at', 'is_bundle'])
             ->orderByRaw('CASE
                 WHEN item_name LIKE ? THEN 1
                 WHEN item_name LIKE ? THEN 2

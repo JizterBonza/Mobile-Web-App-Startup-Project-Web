@@ -1132,6 +1132,7 @@ export default function AgrivetStoreInformation({
         return {
           id: product.id,
           productId: product.id,
+          productCatalogId: product.product_catalog_id ?? null,
           productName: product.item_name || '',
           brand:
             product.brand ||
@@ -1170,7 +1171,9 @@ export default function AgrivetStoreInformation({
 
   const isCatalogProductListed = (catalogProduct) =>
     productListings.some(
-      (listing) => listing.productName.toLowerCase() === catalogProduct.productName.toLowerCase()
+      (listing) =>
+        (listing.productCatalogId && listing.productCatalogId === catalogProduct.id) ||
+        listing.productName.toLowerCase() === catalogProduct.productName.toLowerCase()
     )
 
   const categories = useMemo(() => ['All', ...new Set(productListings.map((l) => l.category))], [productListings])

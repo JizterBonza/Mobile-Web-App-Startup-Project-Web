@@ -160,7 +160,8 @@ class ItemController extends Controller
         $itemData = $item->only([
             'id', 'shop_id', 'item_name', 'item_description', 'item_price',
             'discount_percent', 'discount_type', 'discount_expires_at',
-            'item_quantity', 'category', 'item_images', 'item_status',
+            'item_quantity', 'category', 'sub_category_id', 'weight', 'metric',
+            'item_images', 'item_status',
             'average_rating', 'total_reviews', 'sold_count', 'created_at', 'updated_at'
         ]);
 

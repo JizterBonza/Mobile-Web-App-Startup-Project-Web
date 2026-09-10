@@ -16,7 +16,7 @@ class CartController extends Controller
     private const CART_SELECT = ['id', 'user_id', 'item_id', 'quantity', 'price_snapshot'];
 
     /** Item select: exclude item_status, created_at, updated_at */
-    private const ITEM_SELECT = ['id', 'shop_id', 'item_name', 'item_description', 'item_price', 'discount_percent', 'discount_type', 'discount_expires_at', 'item_quantity', 'category', 'item_images', 'average_rating', 'total_reviews', 'sold_count'];
+    private const ITEM_SELECT = ['id', 'shop_id', 'product_catalog_id', 'item_name', 'item_description', 'item_price', 'discount_percent', 'discount_type', 'discount_expires_at', 'item_quantity', 'category', 'item_images', 'average_rating', 'total_reviews', 'sold_count', 'weight', 'metric', 'is_bundle'];
 
     /** Shop select: exclude shop_status, created_at, updated_at */
     private const SHOP_SELECT = ['id', 'agrivet_id', 'zone_id', 'shop_name', 'shop_description', 'shop_address', 'shop_city', 'shop_postal_code', 'shop_province', 'shop_lat', 'shop_long', 'contact_number', 'average_rating', 'total_reviews'];

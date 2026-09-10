@@ -23,6 +23,7 @@ class Item extends Model
      */
     protected $fillable = [
         'shop_id',
+        'product_catalog_id',
         'item_name',
         'item_description',
         'item_price',
@@ -41,6 +42,13 @@ class Item extends Model
         'is_bundle',
         'bundle_catalog_ids',
     ];
+
+    protected static function booted(): void
+    {
+        static::retrieved(function (Item $item) {
+            ProductCatalog::overlayEloquentItem($item);
+        });
+    }
 
     /**
      * Get the attributes that should be cast.
@@ -72,6 +80,14 @@ class Item extends Model
     public function shop()
     {
         return $this->belongsTo(Shop::class);
+    }
+
+    /**
+     * Catalog product this shop listing was created from.
+     */
+    public function productCatalog()
+    {
+        return $this->belongsTo(ProductCatalog::class, 'product_catalog_id');
     }
 
     /**

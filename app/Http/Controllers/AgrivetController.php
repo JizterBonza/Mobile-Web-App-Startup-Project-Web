@@ -15,6 +15,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 use Inertia\Inertia;
 use App\Http\Controllers\Concerns\ManagesShopOrders;
 use App\Http\Controllers\Concerns\PreventsDisabledCatalogRestock;
@@ -817,11 +818,6 @@ class AgrivetController extends Controller
             ];
         });
 
-        $catalogBrandsByProductName = ProductCatalog::listedInCatalog()
-            ->whereNotNull('brand')
-            ->where('brand', '!=', '')
-            ->pluck('brand', 'product_name');
-
         $shopItems = DB::table('items')
             ->leftJoin('category', 'items.category', '=', 'category.id')
             ->leftJoin('sub_categories', 'items.sub_category_id', '=', 'sub_categories.id')
@@ -833,6 +829,8 @@ class AgrivetController extends Controller
             )
             ->orderBy('items.created_at', 'desc')
             ->get();
+
+        $shopItems->each(fn ($item) => ProductCatalog::applyLiveDetailsToItem($item));
 
         $bundleCatalogIds = $shopItems
             ->filter(fn ($item) => (bool) ($item->is_bundle ?? false))
@@ -857,7 +855,7 @@ class AgrivetController extends Controller
 
         $restockBlockedByItemId = ProductCatalog::restockBlockedFlagsForItems($shopItems);
 
-        $products = $shopItems->map(function ($item) use ($catalogBrandsByProductName, $bundleCatalogById, $restockBlockedByItemId) {
+        $products = $shopItems->map(function ($item) use ($bundleCatalogById, $restockBlockedByItemId) {
                 $images = $item->item_images ? json_decode($item->item_images, true) : [];
                 if (! empty($images)) {
                     $images = array_map(function ($image) {
@@ -874,8 +872,9 @@ class AgrivetController extends Controller
 
                 return [
                     'id' => $item->id,
+                    'product_catalog_id' => $item->product_catalog_id ?? null,
                     'item_name' => $item->item_name,
-                    'brand' => $catalogBrandsByProductName[$item->item_name] ?? '',
+                    'brand' => $item->brand ?? '',
                     'item_description' => $item->item_description,
                     'item_price' => $item->item_price,
                     'discount_percent' => $item->discount_percent,
@@ -985,19 +984,32 @@ class AgrivetController extends Controller
 
         $catalog = ProductCatalog::approved()->findOrFail($validated['product_catalog_id']);
 
-        $alreadyListed = DB::table('items')
+        $alreadyListedQuery = DB::table('items')
             ->where('shop_id', $shop->id)
-            ->where('item_name', $catalog->product_name)
-            ->exists();
+            ->where(function ($q) {
+                $q->where('is_bundle', false)->orWhereNull('is_bundle');
+            });
 
-        if ($alreadyListed) {
+        if (Schema::hasColumn('items', 'product_catalog_id')) {
+            $alreadyListedQuery->where(function ($q) use ($catalog) {
+                $q->where('product_catalog_id', $catalog->id)
+                    ->orWhere(function ($inner) use ($catalog) {
+                        $inner->whereNull('product_catalog_id')
+                            ->where('item_name', $catalog->product_name);
+                    });
+            });
+        } else {
+            $alreadyListedQuery->where('item_name', $catalog->product_name);
+        }
+
+        if ($alreadyListedQuery->exists()) {
             return redirect()->back()
                 ->withErrors(['product_catalog_id' => 'This product is already listed in the store.']);
         }
 
-        $images = $this->normalizeCatalogImagePaths($catalog->images ?? []);
+        $images = $catalog->listingImagePaths();
 
-        DB::table('items')->insert([
+        $listing = [
             'shop_id' => $shop->id,
             'item_name' => $catalog->product_name,
             'item_description' => $catalog->description,
@@ -1014,7 +1026,13 @@ class AgrivetController extends Controller
             'sold_count' => 0,
             'created_at' => now(),
             'updated_at' => now(),
-        ]);
+        ];
+
+        if (Schema::hasColumn('items', 'product_catalog_id')) {
+            $listing['product_catalog_id'] = $catalog->id;
+        }
+
+        DB::table('items')->insert($listing);
 
         return redirect()->back()
             ->with('success', 'Product added to store successfully.');
