@@ -24,7 +24,10 @@ export function useShopBranchUnread(branches = []) {
 
         channelNames.forEach((channelName) => {
             window.Echo.private(channelName).listen('.shop.message.sent', (payload) => {
-                if (payload?.message?.sender_role === 'customer') {
+                if (
+                    payload?.message?.sender_role === 'customer' &&
+                    payload?.message?.type !== 'order_update'
+                ) {
                     scheduleReload()
                 }
             })

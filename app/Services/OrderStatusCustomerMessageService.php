@@ -255,7 +255,7 @@ class OrderStatusCustomerMessageService
 
     private function resolveStaffSender(Shop $shop, ?User $actor): ?User
     {
-        if ($actor && $actor->user_type !== User::TYPE_CUSTOMER) {
+        if ($this->isShopStaff($actor)) {
             return $actor;
         }
 

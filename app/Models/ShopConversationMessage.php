@@ -64,4 +64,14 @@ class ShopConversationMessage extends Model
             self::ROLE_OWNER_MANAGER,
         ], true);
     }
+
+    /**
+     * Order status cards are always from the shop, even when an older row
+     * stored a non-staff sender_role (for example a rider).
+     */
+    public function isShopOriginated(): bool
+    {
+        return $this->isStaffMessage()
+            || $this->type === self::TYPE_ORDER_UPDATE;
+    }
 }

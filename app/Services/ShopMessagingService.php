@@ -309,6 +309,9 @@ class ShopMessagingService
     ): ShopConversationMessage {
         $sender->loadMissing('userDetail');
         $role = $this->senderRole($sender);
+        if ($role === ShopConversationMessage::ROLE_CUSTOMER) {
+            $role = ShopConversationMessage::ROLE_OWNER_MANAGER;
+        }
         $trimmedBody = trim($body);
         $metadata = array_merge($extra, [
             'products' => array_values($products),
@@ -645,9 +648,9 @@ class ShopMessagingService
      */
     private function formatSingleMessage(ShopConversationMessage $message, User $viewer): array
     {
-        // Staff shared inbox: customer = incoming, any staff message = outgoing.
+        // Staff shared inbox: customer = incoming, shop/staff messages = outgoing.
         if (in_array($viewer->user_type, [User::TYPE_VENDOR, User::TYPE_OWNER_MANAGER], true)) {
-            $isOutgoing = $message->isStaffMessage();
+            $isOutgoing = $message->isShopOriginated();
         } else {
             $isOutgoing = (int) $message->sender_user_id === (int) $viewer->id;
         }
@@ -660,7 +663,9 @@ class ShopMessagingService
         ];
 
         if ($isOutgoing) {
-            $base['sent_by'] = $this->displayName($message->sender);
+            $base['sent_by'] = $message->isStaffMessage()
+                ? $this->displayName($message->sender)
+                : 'Staff';
             $base['status'] = 'read';
         }
 
@@ -754,6 +759,7 @@ class ShopMessagingService
             ->select('shop_conversation_id', DB::raw('MAX(created_at) as latest_at'))
             ->whereIn('shop_conversation_id', $ids)
             ->where('sender_role', ShopConversationMessage::ROLE_CUSTOMER)
+            ->where('type', '!=', ShopConversationMessage::TYPE_ORDER_UPDATE)
             ->groupBy('shop_conversation_id')
             ->pluck('latest_at', 'shop_conversation_id');
 
@@ -796,10 +802,12 @@ class ShopMessagingService
         $latestStaffMessage = ShopConversationMessage::query()
             ->select('shop_conversation_id', DB::raw('MAX(created_at) as latest_at'))
             ->whereIn('shop_conversation_id', $ids)
-            ->whereIn('sender_role', [
-                ShopConversationMessage::ROLE_VENDOR,
-                ShopConversationMessage::ROLE_OWNER_MANAGER,
-            ])
+            ->where(function ($query) {
+                $query->whereIn('sender_role', [
+                    ShopConversationMessage::ROLE_VENDOR,
+                    ShopConversationMessage::ROLE_OWNER_MANAGER,
+                ])->orWhere('type', ShopConversationMessage::TYPE_ORDER_UPDATE);
+            })
             ->groupBy('shop_conversation_id')
             ->pluck('latest_at', 'shop_conversation_id');
 
@@ -1000,7 +1008,7 @@ class ShopMessagingService
         $conversation->loadMissing('shop', 'customer.userDetail');
         $preview = $conversation->fresh()->last_message_preview ?? 'New message';
 
-        if ($message->isStaffMessage()) {
+        if ($message->isShopOriginated()) {
             $customerId = (int) $conversation->customer_user_id;
             if ($customerId === (int) $sender->id) {
                 return;
@@ -1115,6 +1123,7 @@ class ShopMessagingService
     {
         $lastCustomerMessage = $conversation->messages
             ->where('sender_role', ShopConversationMessage::ROLE_CUSTOMER)
+            ->where('type', '!=', ShopConversationMessage::TYPE_ORDER_UPDATE)
             ->last();
 
         $at = $lastCustomerMessage?->created_at ?? $conversation->last_message_at;

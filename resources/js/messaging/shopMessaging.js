@@ -5,9 +5,17 @@ export function isStaffUser(user) {
     return STAFF_TYPES.has(user?.user_type)
 }
 
+export function isShopOriginatedMessage(payloadMessage) {
+    return STAFF_ROLES.has(payloadMessage?.sender_role) || payloadMessage?.type === 'order_update'
+}
+
+export function isCustomerOriginatedMessage(payloadMessage) {
+    return payloadMessage?.sender_role === 'customer' && payloadMessage?.type !== 'order_update'
+}
+
 export function toUiMessage(payloadMessage, user) {
     const isOutgoing = isStaffUser(user)
-        ? STAFF_ROLES.has(payloadMessage.sender_role)
+        ? isShopOriginatedMessage(payloadMessage)
         : Number(payloadMessage.sender_user_id) === Number(user?.id)
 
     const message = {
@@ -18,7 +26,9 @@ export function toUiMessage(payloadMessage, user) {
     }
 
     if (isOutgoing) {
-        message.sent_by = payloadMessage.sent_by || 'Staff'
+        message.sent_by = STAFF_ROLES.has(payloadMessage.sender_role)
+            ? payloadMessage.sent_by || 'Staff'
+            : 'Staff'
         message.status = 'read'
     }
 
@@ -70,7 +80,7 @@ export function applyConversationListUpdate(conversations, payload, user) {
         return { conversations, isNew: false }
     }
 
-    const isFromCustomer = payload.message?.sender_role === 'customer'
+    const isFromCustomer = isCustomerOriginatedMessage(payload.message)
     const isOwnMessage = Number(payload.message?.sender_user_id) === Number(user?.id)
     const unread = isStaffUser(user) ? isFromCustomer && !isOwnMessage : !isOwnMessage
 
