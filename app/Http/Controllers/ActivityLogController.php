@@ -23,7 +23,7 @@ class ActivityLogController extends Controller
         }
 
         $request->validate([
-            'user_id' => 'nullable|exists:users,id',
+            'user_id' => 'nullable|integer|exists:users,id',
             'action' => 'nullable|string|max:64',
             'subject_type' => 'nullable|string|max:255',
             'from_date' => 'nullable|date',

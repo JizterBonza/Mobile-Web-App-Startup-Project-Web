@@ -124,12 +124,20 @@ export default function ActivityLogs({ auth, activityLogs, filters = {}, subject
               <div>
                 <label className={labelClass}>User ID</label>
                 <input
-                  type="number"
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  autoComplete="off"
                   className={inputClass + ' w-full'}
                   placeholder="User ID"
                   value={userId}
-                  onChange={(e) => setUserId(e.target.value)}
-                  min="1"
+                  onChange={(e) => setUserId(e.target.value.replace(/\D/g, ''))}
+                  onKeyDown={(e) => {
+                    const isModifier = e.ctrlKey || e.metaKey || e.altKey
+                    if (e.key.length === 1 && !/[0-9]/.test(e.key) && !isModifier) {
+                      e.preventDefault()
+                    }
+                  }}
                 />
               </div>
               <div>
