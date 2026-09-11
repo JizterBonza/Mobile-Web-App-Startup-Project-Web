@@ -39,19 +39,19 @@ function SocialIconTikTok({ className }) {
 const socialLinks = [
   {
     label: 'Klasmeyt on Facebook',
-    href: 'https://www.facebook.com/',
+    href: 'https://www.facebook.com/profile.php?id=61590615569790',
     Icon: SocialIconFacebook,
-  },
-  {
-    label: 'Klasmeyt on Instagram',
-    href: 'https://www.instagram.com/',
-    Icon: SocialIconInstagram,
-  },
-  {
-    label: 'Klasmeyt on TikTok',
-    href: 'https://www.tiktok.com/',
-    Icon: SocialIconTikTok,
-  },
+  }
+  // {
+  //   label: 'Klasmeyt on Instagram',
+  //   href: 'https://www.instagram.com/',
+  //   Icon: SocialIconInstagram,
+  // },
+  // {
+  //   label: 'Klasmeyt on TikTok',
+  //   href: 'https://www.tiktok.com/',
+  //   Icon: SocialIconTikTok,
+  // },
 ]
 
 export function ContactSection() {
