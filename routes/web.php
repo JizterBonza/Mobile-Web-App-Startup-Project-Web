@@ -10,6 +10,7 @@ use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\SubCategoryController;
 use App\Http\Controllers\ActivityLogController;
 use App\Http\Controllers\PaymentMethodController;
+use App\Http\Controllers\ContactMessageController;
 use App\Http\Controllers\DeliveryMethodController;
 use App\Http\Controllers\DeliveryRevenueSettingController;
 use App\Http\Controllers\ZoneController;
@@ -29,6 +30,10 @@ use Inertia\Inertia;
 Route::get('/', function () {
     return Inertia::render('Welcome');
 });
+
+Route::post('/contact', [ContactMessageController::class, 'publicStore'])
+    ->middleware('throttle:5,1')
+    ->name('contact.store');
 
 Route::get('/privacy-policy', function () {
     return Inertia::render('Legal/PrivacyPolicy');
@@ -201,6 +206,15 @@ Route::middleware(['auth', 'session.valid', 'user.type:super_admin'])->prefix('d
     Route::post('/', [PaymentMethodController::class, 'store'])->name('store');
     Route::put('/{id}', [PaymentMethodController::class, 'update'])->name('update');
     Route::delete('/{id}', [PaymentMethodController::class, 'destroy'])->name('destroy');
+});
+
+// Super Admin Contact Messages
+Route::middleware(['auth', 'session.valid', 'user.type:super_admin'])->prefix('dashboard/super-admin/contact-messages')->name('dashboard.super-admin.contact-messages.')->group(function () {
+    Route::get('/', [ContactMessageController::class, 'index'])->name('index');
+    Route::post('/', [ContactMessageController::class, 'store'])->name('store');
+    Route::put('/{id}/read', [ContactMessageController::class, 'markAsRead'])->name('mark-as-read');
+    Route::put('/{id}', [ContactMessageController::class, 'update'])->name('update');
+    Route::delete('/{id}', [ContactMessageController::class, 'destroy'])->name('destroy');
 });
 
 // Super Admin Delivery Methods
@@ -394,6 +408,15 @@ Route::middleware(['auth', 'session.valid', 'user.type:admin'])->prefix('dashboa
     Route::post('/', [PaymentMethodController::class, 'store'])->name('store');
     Route::put('/{id}', [PaymentMethodController::class, 'update'])->name('update');
     Route::delete('/{id}', [PaymentMethodController::class, 'destroy'])->name('destroy');
+});
+
+// Admin Contact Messages
+Route::middleware(['auth', 'session.valid', 'user.type:admin'])->prefix('dashboard/admin/contact-messages')->name('dashboard.admin.contact-messages.')->group(function () {
+    Route::get('/', [ContactMessageController::class, 'index'])->name('index');
+    Route::post('/', [ContactMessageController::class, 'store'])->name('store');
+    Route::put('/{id}/read', [ContactMessageController::class, 'markAsRead'])->name('mark-as-read');
+    Route::put('/{id}', [ContactMessageController::class, 'update'])->name('update');
+    Route::delete('/{id}', [ContactMessageController::class, 'destroy'])->name('destroy');
 });
 
 // Admin Delivery Methods

@@ -1,3 +1,5 @@
+import { useForm, usePage } from '@inertiajs/react'
+
 const sectionBg = '#0B132B'
 const buttonBlue = '#2E4A9E'
 
@@ -53,6 +55,23 @@ const socialLinks = [
 ]
 
 export function ContactSection() {
+  const { flash } = usePage().props
+  const { data, setData, post, processing, errors, reset, recentlySuccessful } = useForm({
+    name: '',
+    email: '',
+    message: '',
+  })
+
+  const submit = (e) => {
+    e.preventDefault()
+    post('/contact', {
+      preserveScroll: true,
+      onSuccess: () => reset(),
+    })
+  }
+
+  const showSuccess = recentlySuccessful || Boolean(flash?.success)
+
   return (
     <section id="contact" className="scroll-mt-20 py-16 lg:py-24" style={{ backgroundColor: sectionBg }}>
       <div className="w-full max-w-none px-6 sm:px-10 lg:px-14 xl:px-16 2xl:px-20">
@@ -86,8 +105,13 @@ export function ContactSection() {
 
           <form
             className="w-full max-w-xl lg:max-w-none lg:justify-self-end"
-            onSubmit={(e) => e.preventDefault()}
+            onSubmit={submit}
           >
+            {showSuccess && (
+              <p className="mb-5 rounded-[10px] bg-white/10 px-4 py-3 text-sm text-white" role="status">
+                {flash?.success || 'Your message has been sent. We will get back to you soon.'}
+              </p>
+            )}
             <div className="grid gap-5 sm:grid-cols-2 sm:gap-6">
               <div>
                 <label htmlFor="contact-name" className="mb-2 block text-sm font-medium text-white">
@@ -98,9 +122,12 @@ export function ContactSection() {
                   name="name"
                   type="text"
                   autoComplete="name"
+                  value={data.name}
+                  onChange={(e) => setData('name', e.target.value)}
                   className="w-full rounded-[10px] border-0 bg-white px-4 py-3 text-sm text-[#0B132B] outline-none ring-1 ring-white/10 transition-shadow placeholder:text-gray-400 focus:ring-2 focus:ring-white/40"
                   placeholder=""
                 />
+                {errors.name && <p className="mt-2 text-sm text-red-300">{errors.name}</p>}
               </div>
               <div>
                 <label htmlFor="contact-email" className="mb-2 block text-sm font-medium text-white">
@@ -111,9 +138,12 @@ export function ContactSection() {
                   name="email"
                   type="email"
                   autoComplete="email"
+                  value={data.email}
+                  onChange={(e) => setData('email', e.target.value)}
                   className="w-full rounded-[10px] border-0 bg-white px-4 py-3 text-sm text-[#0B132B] outline-none ring-1 ring-white/10 transition-shadow placeholder:text-gray-400 focus:ring-2 focus:ring-white/40"
                   placeholder=""
                 />
+                {errors.email && <p className="mt-2 text-sm text-red-300">{errors.email}</p>}
               </div>
             </div>
             <div className="mt-5 sm:mt-6">
@@ -124,17 +154,21 @@ export function ContactSection() {
                 id="contact-message"
                 name="message"
                 rows={6}
+                value={data.message}
+                onChange={(e) => setData('message', e.target.value)}
                 className="w-full resize-y rounded-[10px] border-0 bg-white px-4 py-3 text-sm text-[#0B132B] outline-none ring-1 ring-white/10 transition-shadow placeholder:text-gray-400 focus:ring-2 focus:ring-white/40"
                 placeholder=""
                 style={{ borderRadius: '10px' }}
               />
+              {errors.message && <p className="mt-2 text-sm text-red-300">{errors.message}</p>}
             </div>
             <button
               type="submit"
-              className="mt-6 w-full rounded-[10px] px-6 py-3.5 text-sm font-bold uppercase tracking-wide text-white transition-opacity hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/50 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0B132B] sm:mt-8"
+              disabled={processing}
+              className="mt-6 w-full rounded-[10px] px-6 py-3.5 text-sm font-bold uppercase tracking-wide text-white transition-opacity hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/50 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0B132B] disabled:cursor-not-allowed disabled:opacity-70 sm:mt-8"
               style={{ backgroundColor: buttonBlue, borderRadius: '10px', marginTop: '30px' }}
             >
-              SEND MESSAGE
+              {processing ? 'SENDING...' : 'SEND MESSAGE'}
             </button>
           </form>
         </div>
