@@ -81,12 +81,12 @@ export default function OwnerManagerOrdersPanel({
     statusFilter !== 'all' || dateFrom !== '' || dateTo !== '' || userFilter !== 'all';
 
   const startOfDay = (dateString) => {
-    const date = new Date(`${dateString}T00:00:00`);
+    const date = new Date(`${dateString}T00:00:00+08:00`);
     return Number.isNaN(date.getTime()) ? null : date;
   };
 
   const endOfDay = (dateString) => {
-    const date = new Date(`${dateString}T23:59:59.999`);
+    const date = new Date(`${dateString}T23:59:59.999+08:00`);
     return Number.isNaN(date.getTime()) ? null : date;
   };
 
@@ -334,8 +334,15 @@ export default function OwnerManagerOrdersPanel({
   };
 
   const formatDate = (dateString) => {
+    if (!dateString) {
+      return "";
+    }
     const date = new Date(dateString);
-    return date.toLocaleDateString("en-PH", {
+    if (Number.isNaN(date.getTime())) {
+      return "";
+    }
+    return date.toLocaleString("en-PH", {
+      timeZone: "Asia/Manila",
       year: "numeric",
       month: "short",
       day: "numeric",

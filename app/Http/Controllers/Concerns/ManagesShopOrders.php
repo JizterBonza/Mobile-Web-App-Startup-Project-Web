@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Concerns;
 
 use App\Services\OrderStatusTransitionService;
+use App\Support\DisplayDateTime;
 use App\Support\PublicStorage;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -148,17 +149,26 @@ trait ManagesShopOrders
             ->pluck('shop_name', 'id');
 
         $declineByOrder = collect();
+        $completionByOrder = collect();
         if (Schema::hasTable('order_logs')) {
-            $declineByOrder = DB::table('order_logs')
+            $statusLogs = DB::table('order_logs')
                 ->whereIn('order_id', $orderIds)
-                ->where('event', 'cancelled')
+                ->whereIn('event', ['status_changed', 'admin_override', 'cancelled'])
                 ->orderByDesc('created_at')
+                ->orderByDesc('id')
                 ->get()
-                ->unique('order_id')
-                ->keyBy('order_id');
+                ->groupBy('order_id');
+
+            $declineByOrder = $statusLogs
+                ->map(fn ($logs) => $logs->first(fn ($log) => self::orderLogIsCancellation($log)))
+                ->filter();
+
+            $completionByOrder = $statusLogs
+                ->map(fn ($logs) => $logs->first(fn ($log) => self::orderLogIsCompletion($log)))
+                ->filter();
         }
 
-        return $orderRows->map(function ($row) use ($itemsByOrder, $ridersByOrder, $proofByOrder, $shopIdsByOrder, $shopNameById, $declineByOrder, $deliveryMethodNames, $deliveryMethodInfos, $preparingItemStatusId) {
+        return $orderRows->map(function ($row) use ($itemsByOrder, $ridersByOrder, $proofByOrder, $shopIdsByOrder, $shopNameById, $declineByOrder, $completionByOrder, $deliveryMethodNames, $deliveryMethodInfos, $preparingItemStatusId) {
             $statusMeta = $this->mapShopOrderStatus($row->status_description ?? '');
             $products = ($itemsByOrder->get($row->id) ?? collect())->map(function ($item) {
                 $thumbnail = $this->firstItemImageUrl($item->item_images);
@@ -219,7 +229,7 @@ trait ManagesShopOrders
                 'customerName'           => trim(($row->first_name ?? '').' '.($row->last_name ?? '')),
                 'customerPhone'          => $customerPhone,
                 'customerProfilePicture' => $row->profile_image_url ?: $row->avatar,
-                'dateOfOrder'            => $row->ordered_at,
+                'dateOfOrder'            => DisplayDateTime::toIso($row->ordered_at),
                 'products'               => $products,
                 'deliveryAddress'        => [
                     'street'   => $row->street_address ?? '',
@@ -247,7 +257,12 @@ trait ManagesShopOrders
             if ($statusMeta['status'] === 'completed') {
                 $payload['isSuccessful'] = $statusMeta['isSuccessful'];
                 $declineLog = $declineByOrder->get($row->id);
-                $payload['completionDate'] = $declineLog?->created_at ?? $row->ordered_at;
+                $completionLog = $statusMeta['isSuccessful'] === false
+                    ? ($declineLog ?? $completionByOrder->get($row->id))
+                    : $completionByOrder->get($row->id);
+                $payload['completionDate'] = DisplayDateTime::toIso(
+                    $completionLog?->created_at ?? $row->ordered_at
+                );
                 if ($statusMeta['isSuccessful'] === false && $declineLog?->notes) {
                     $payload['declineReason'] = $declineLog->notes;
                 }
@@ -326,6 +341,26 @@ trait ManagesShopOrders
         }
 
         abort_unless($accessible, 404);
+    }
+
+    protected static function orderLogIsCancellation(object $log): bool
+    {
+        if (($log->event ?? '') === 'cancelled') {
+            return true;
+        }
+
+        $toStatus = strtolower(trim((string) ($log->to_status ?? '')));
+
+        return str_contains($toStatus, 'cancel') || str_contains($toStatus, 'declin');
+    }
+
+    protected static function orderLogIsCompletion(object $log): bool
+    {
+        if (self::orderLogIsCancellation($log)) {
+            return true;
+        }
+
+        return str_contains(strtolower(trim((string) ($log->to_status ?? ''))), 'delivered');
     }
 
     /**
