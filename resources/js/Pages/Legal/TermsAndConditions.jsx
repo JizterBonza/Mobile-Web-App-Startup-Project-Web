@@ -1,5 +1,5 @@
 import { Link } from '@inertiajs/react'
-import LegalLayout, { LegalSection } from '../../Layouts/LegalLayout'
+import LegalLayout, { LegalContactDetails, LegalSection } from '../../Layouts/LegalLayout'
 
 export default function TermsAndConditions() {
   return (
@@ -16,10 +16,14 @@ export default function TermsAndConditions() {
           using the Services, you agree to these Terms and to our{' '}
           <Link href="/privacy-policy" className="font-medium text-[#0B132B] underline underline-offset-2">
             Privacy Policy
-          </Link>{' '}
-          and{' '}
+          </Link>
+          {', '}
           <Link href="/cookie-policy" className="font-medium text-[#0B132B] underline underline-offset-2">
             Cookie Policy
+          </Link>
+          {', and '}
+          <Link href="/refund-policy" className="font-medium text-[#0B132B] underline underline-offset-2">
+            Refund and Cancellation Policy
           </Link>
           . If you do not agree, do not use the Services.
         </p>
@@ -118,7 +122,11 @@ export default function TermsAndConditions() {
         <p>
           Cancellation and refund handling depends on order status, the payment method used, and the store&apos;s
           policies, subject to Philippine consumer protection laws. Requests may be made through in-app support
-          or the store messaging tools.
+          or the store messaging tools. The full rules are in our{' '}
+          <Link href="/refund-policy" className="font-medium text-[#0B132B] underline underline-offset-2">
+            Refund and Cancellation Policy
+          </Link>
+          .
         </p>
         <p>
           Perishable, opened, or customized goods may not be returnable except as required by law. If a refund is
@@ -207,9 +215,10 @@ export default function TermsAndConditions() {
 
       <LegalSection title="16. Contact">
         <p>
-          Questions about these Terms may be sent through the Contact section on the Klasmeyt website or through
-          in-app support.
+          Questions about these Terms may be sent to the details below, through the Contact section on the
+          Klasmeyt website, or through in-app support.
         </p>
+        <LegalContactDetails />
       </LegalSection>
     </LegalLayout>
   )

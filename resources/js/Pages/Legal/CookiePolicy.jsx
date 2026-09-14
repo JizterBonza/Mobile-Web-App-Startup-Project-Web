@@ -1,5 +1,5 @@
 import { Link } from '@inertiajs/react'
-import LegalLayout, { LegalSection } from '../../Layouts/LegalLayout'
+import LegalLayout, { LegalContactDetails, LegalSection } from '../../Layouts/LegalLayout'
 
 function CookieRow({ name, purpose, duration, type }) {
   return (
@@ -112,14 +112,22 @@ export default function CookiePolicy() {
 
       <LegalSection title="7. Contact">
         <p>
-          Questions about cookies may be sent through the Contact section on the Klasmeyt website. Related
-          documents:{' '}
+          Questions about cookies may be sent to the details below or through the Contact section on the
+          Klasmeyt website.
+        </p>
+        <LegalContactDetails />
+        <p>
+          Related documents:{' '}
           <Link href="/privacy-policy" className="font-medium text-[#0B132B] underline underline-offset-2">
             Privacy Policy
-          </Link>{' '}
-          and{' '}
+          </Link>
+          {', '}
           <Link href="/terms-and-conditions" className="font-medium text-[#0B132B] underline underline-offset-2">
             Terms and Conditions
+          </Link>
+          {', and '}
+          <Link href="/refund-policy" className="font-medium text-[#0B132B] underline underline-offset-2">
+            Refund and Cancellation Policy
           </Link>
           .
         </p>

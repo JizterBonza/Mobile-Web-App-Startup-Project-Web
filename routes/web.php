@@ -47,6 +47,10 @@ Route::get('/cookie-policy', function () {
     return Inertia::render('Legal/CookiePolicy');
 })->name('cookie-policy');
 
+Route::get('/refund-policy', function () {
+    return Inertia::render('Legal/RefundAndCancellationPolicy');
+})->name('refund-policy');
+
 Route::get('/storage/{path}', [PublicStorageController::class, 'show'])
     ->where('path', '.*')
     ->name('storage.public');

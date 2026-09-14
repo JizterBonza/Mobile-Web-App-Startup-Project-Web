@@ -1,5 +1,6 @@
 import { Link } from '@inertiajs/react'
-import LegalLayout, { LegalSection } from '../../Layouts/LegalLayout'
+import { OFFICE_ADDRESS, SUPPORT_EMAIL } from '../../Components/Landing/companyContact'
+import LegalLayout, { LegalContactDetails, LegalSection } from '../../Layouts/LegalLayout'
 
 export default function PrivacyPolicy() {
   return (
@@ -30,8 +31,14 @@ export default function PrivacyPolicy() {
           also process certain information as separate controllers or as processors, depending on the activity.
         </p>
         <p>
-          For questions about this Policy or your personal information, use the Contact section on the Klasmeyt
-          website.
+          For questions about this Policy or your personal information, email{' '}
+          <a
+            href={`mailto:${SUPPORT_EMAIL}`}
+            className="font-medium text-[#0B132B] underline underline-offset-2"
+          >
+            {SUPPORT_EMAIL}
+          </a>{' '}
+          or write to us at {OFFICE_ADDRESS}.
         </p>
       </LegalSection>
 
@@ -187,8 +194,14 @@ export default function PrivacyPolicy() {
           request a copy of information you provided to us.
         </p>
         <p>
-          You can update some account details in your profile settings. For other requests, contact us through
-          the website Contact section. We may need to verify your identity before fulfilling a request. You may
+          You can update some account details in your profile settings. For other requests, email{' '}
+          <a
+            href={`mailto:${SUPPORT_EMAIL}`}
+            className="font-medium text-[#0B132B] underline underline-offset-2"
+          >
+            {SUPPORT_EMAIL}
+          </a>
+          . We may need to verify your identity before fulfilling a request. You may
           also lodge a complaint with the National Privacy Commission of the Philippines.
         </p>
       </LegalSection>
@@ -212,17 +225,21 @@ export default function PrivacyPolicy() {
       <LegalSection title="13. Contact">
         <p>
           Agrify Connect Philippines Corporation operates Klasmeyt. For privacy questions or data-subject
-          requests, use the Contact section on our website or write to us through the support channels available
-          in your Klasmeyt account.
+          requests, contact us using the details below or through the support channels in your Klasmeyt account.
         </p>
+        <LegalContactDetails />
         <p>
           Related documents:{' '}
           <Link href="/terms-and-conditions" className="font-medium text-[#0B132B] underline underline-offset-2">
             Terms and Conditions
-          </Link>{' '}
-          and{' '}
+          </Link>
+          {', '}
           <Link href="/cookie-policy" className="font-medium text-[#0B132B] underline underline-offset-2">
             Cookie Policy
+          </Link>
+          {', and '}
+          <Link href="/refund-policy" className="font-medium text-[#0B132B] underline underline-offset-2">
+            Refund and Cancellation Policy
           </Link>
           .
         </p>

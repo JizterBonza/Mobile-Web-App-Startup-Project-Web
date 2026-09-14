@@ -55,6 +55,9 @@ export function Footer() {
             <Link href="/cookie-policy" className="text-black transition-opacity hover:opacity-75" style={{ color: '#0B132B', marginRight: '30px' }}>
               Cookie Policy
             </Link>
+            <Link href="/refund-policy" className="text-black transition-opacity hover:opacity-75" style={{ color: '#0B132B', marginRight: '30px' }}>
+              Refund Policy
+            </Link>
           </nav>
 
           <div className="flex flex-col items-center md:items-end">

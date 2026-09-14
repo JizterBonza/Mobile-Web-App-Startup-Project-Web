@@ -1,4 +1,5 @@
 import { useForm, usePage } from '@inertiajs/react'
+import { OFFICE_ADDRESS, SUPPORT_EMAIL } from './companyContact'
 
 const sectionBg = '#0B132B'
 const buttonBlue = '#2E4A9E'
@@ -85,6 +86,21 @@ export function ContactSection() {
               Learn more about our market opportunity, business model, and expansion plans—and discover how you
               can be part of Klasmeyt&apos;s growth.
             </p>
+            <div className="mt-8 space-y-4">
+              <div>
+                <p className="text-sm font-medium text-white sm:text-base">Email</p>
+                <a
+                  href={`mailto:${SUPPORT_EMAIL}`}
+                  className="mt-1 inline-block text-base text-white/90 underline underline-offset-2 transition-opacity hover:opacity-80 sm:text-lg"
+                >
+                  {SUPPORT_EMAIL}
+                </a>
+              </div>
+              <div>
+                <p className="text-sm font-medium text-white sm:text-base">Office</p>
+                <p className="mt-1 text-base leading-relaxed text-white/90 sm:text-lg">{OFFICE_ADDRESS}</p>
+              </div>
+            </div>
             <p className="mt-10 text-sm font-medium text-white sm:text-base">Follow us</p>
             <ul className="mt-4 flex flex-wrap gap-4" role="list">
               {socialLinks.map(({ label, href, Icon }) => (

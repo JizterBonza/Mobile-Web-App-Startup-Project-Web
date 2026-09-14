@@ -1,6 +1,7 @@
 import { Head, Link, usePage } from '@inertiajs/react'
 import { Footer } from '../Components/Landing/Footer'
 import { LandingHeader } from '../Components/Landing/LandingHeader'
+import { OFFICE_ADDRESS, SUPPORT_EMAIL } from '../Components/Landing/companyContact'
 
 const navy = '#0B132B'
 
@@ -8,6 +9,7 @@ const LEGAL_LINKS = [
   { href: '/privacy-policy', label: 'Privacy Policy' },
   { href: '/terms-and-conditions', label: 'Terms and Conditions' },
   { href: '/cookie-policy', label: 'Cookie Policy' },
+  { href: '/refund-policy', label: 'Refund Policy' },
 ]
 
 export function LegalSection({ title, children }) {
@@ -18,6 +20,25 @@ export function LegalSection({ title, children }) {
       </h2>
       <div className="space-y-4 text-base leading-relaxed text-[#0B132B]/80">{children}</div>
     </section>
+  )
+}
+
+export function LegalContactDetails() {
+  return (
+    <ul className="list-none space-y-2">
+      <li>
+        <strong>Support email:</strong>{' '}
+        <a
+          href={`mailto:${SUPPORT_EMAIL}`}
+          className="font-medium text-[#0B132B] underline underline-offset-2"
+        >
+          {SUPPORT_EMAIL}
+        </a>
+      </li>
+      <li>
+        <strong>Office address:</strong> {OFFICE_ADDRESS}
+      </li>
+    </ul>
   )
 }
 
