@@ -10,6 +10,7 @@ class KlasrumContent extends Model
 {
     public const STATUS_DRAFT = 'draft';
     public const STATUS_PUBLISHED = 'published';
+    public const MAX_MEDIA_ITEMS = 15;
 
     protected $table = 'klasrum_contents';
 
@@ -23,6 +24,7 @@ class KlasrumContent extends Model
         'cover_path',
         'media_path',
         'media_type',
+        'media_items',
         'status',
         'published_at',
         'created_by',
@@ -33,6 +35,7 @@ class KlasrumContent extends Model
     {
         return [
             'category_id' => 'integer',
+            'media_items' => 'array',
             'published_at' => 'datetime',
             'created_at' => 'datetime',
             'updated_at' => 'datetime',
@@ -61,7 +64,70 @@ class KlasrumContent extends Model
 
     public function mediaUrl(): ?string
     {
-        return PublicStorage::url($this->media_path);
+        $first = $this->normalizedMediaItems()[0] ?? null;
+
+        return PublicStorage::url($first['path'] ?? $this->media_path);
+    }
+
+    /**
+     * @return list<array{path: string, type: string}>
+     */
+    public function normalizedMediaItems(): array
+    {
+        $items = $this->media_items;
+        if (is_string($items)) {
+            $decoded = json_decode($items, true);
+            $items = is_array($decoded) ? $decoded : [];
+        }
+        if (! is_array($items)) {
+            $items = [];
+        }
+
+        $normalized = [];
+        foreach ($items as $item) {
+            if (is_string($item) && $item !== '') {
+                $normalized[] = [
+                    'path' => $item,
+                    'type' => 'image',
+                ];
+                continue;
+            }
+            if (! is_array($item)) {
+                continue;
+            }
+            $path = $item['path'] ?? null;
+            if (! is_string($path) || $path === '') {
+                continue;
+            }
+            $normalized[] = [
+                'path' => $path,
+                'type' => ($item['type'] ?? 'image') === 'video' ? 'video' : 'image',
+            ];
+        }
+
+        if ($normalized === [] && $this->media_items === null && $this->media_path) {
+            return [[
+                'path' => $this->media_path,
+                'type' => $this->media_type === 'video' ? 'video' : 'image',
+            ]];
+        }
+
+        return array_values($normalized);
+    }
+
+    /**
+     * @return list<array{path: string, url: ?string, type: string, is_video: bool}>
+     */
+    public function mediaPayload(bool $absolute = true): array
+    {
+        return array_map(fn (array $item) => [
+            'path' => $item['path'],
+            'url' => $absolute
+                ? $this->absoluteFileUrl($item['path'])
+                : PublicStorage::url($item['path']),
+            'type' => $item['type'],
+            'is_video' => $item['type'] === 'video',
+        ], $this->normalizedMediaItems());
     }
 
     public function isPublished(): bool
@@ -103,8 +169,9 @@ class KlasrumContent extends Model
             ...$this->toMobileListArray(),
             'body' => $this->body,
             'caption' => $this->caption,
-            'media_url' => $this->absoluteFileUrl($this->media_path),
-            'media_type' => $this->media_type,
+            'media' => $this->mediaPayload(),
+            'media_url' => $this->absoluteFileUrl($this->normalizedMediaItems()[0]['path'] ?? $this->media_path),
+            'media_type' => $this->normalizedMediaItems()[0]['type'] ?? $this->media_type,
         ];
     }
 
@@ -151,8 +218,9 @@ class KlasrumContent extends Model
             'category' => $this->category?->name ?? '',
             'caption' => $this->caption ?? '',
             'cover_url' => $this->coverUrl(),
+            'media' => $this->mediaPayload(false),
             'media_url' => $this->mediaUrl(),
-            'media_is_video' => $this->media_type === 'video',
+            'media_is_video' => ($this->normalizedMediaItems()[0]['type'] ?? $this->media_type) === 'video',
             'status' => $this->status,
         ];
     }

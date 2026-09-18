@@ -3,7 +3,9 @@
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
+use Illuminate\Http\Exceptions\PostTooLargeException;
 use Illuminate\Http\Middleware\HandleCors;
+use Illuminate\Http\Request;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -31,5 +33,15 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {
-        //
+        $exceptions->render(function (PostTooLargeException $e, Request $request) {
+            $message = 'The upload is too large. Please use smaller files or fewer files at once.';
+
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'message' => $message,
+                ], 413);
+            }
+
+            return back()->with('error', $message);
+        });
     })->create();

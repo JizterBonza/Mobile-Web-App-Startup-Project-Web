@@ -62,10 +62,11 @@ Route::middleware(['auth', 'session.valid', 'user.type:super_admin|admin'])->pre
     Route::post('/categories', [KlasrumCategoryController::class, 'store'])->name('categories.store');
     Route::put('/categories/{category}', [KlasrumCategoryController::class, 'update'])->whereNumber('category')->name('categories.update');
     Route::delete('/categories/{category}', [KlasrumCategoryController::class, 'destroy'])->name('categories.destroy')->whereNumber('category');
-    Route::get('/{content}/edit', [KlasrumContentController::class, 'edit'])->name('edit');
-    Route::post('/{content}', [KlasrumContentController::class, 'update'])->name('update');
-    Route::delete('/{content}', [KlasrumContentController::class, 'destroy'])->name('destroy');
-    Route::post('/{content}/toggle-publish', [KlasrumContentController::class, 'togglePublish'])->name('toggle-publish');
+    Route::post('/media', [KlasrumContentController::class, 'uploadMedia'])->name('media.upload');
+    Route::get('/{content}/edit', [KlasrumContentController::class, 'edit'])->name('edit')->whereNumber('content');
+    Route::post('/{content}', [KlasrumContentController::class, 'update'])->name('update')->whereNumber('content');
+    Route::delete('/{content}', [KlasrumContentController::class, 'destroy'])->name('destroy')->whereNumber('content');
+    Route::post('/{content}/toggle-publish', [KlasrumContentController::class, 'togglePublish'])->name('toggle-publish')->whereNumber('content');
 });
 
 Route::redirect('/admin', '/login');

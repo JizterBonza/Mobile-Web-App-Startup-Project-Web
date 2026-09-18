@@ -5,12 +5,15 @@ namespace App\Http\Controllers;
 use App\Models\ActivityLog;
 use App\Models\KlasrumCategory;
 use App\Models\KlasrumContent;
+use App\Support\PublicStorage;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -124,7 +127,7 @@ class KlasrumContentController extends Controller
     {
         $oldValues = $content->toArray();
         $this->deleteStoredFile($content->cover_path);
-        $this->deleteStoredFile($content->media_path);
+        $this->deleteMediaItems($content);
         $content->delete();
 
         ActivityLog::log(
@@ -163,6 +166,28 @@ class KlasrumContentController extends Controller
         );
     }
 
+    public function uploadMedia(Request $request): JsonResponse
+    {
+        $request->validate([
+            'media' => ['required', 'file', 'mimes:jpeg,jpg,png,mp4,webm,mov', 'max:20480'],
+        ]);
+
+        /** @var UploadedFile $file */
+        $file = $request->file('media');
+        $path = $file->store('klasrum/media', 'public');
+        $type = str_starts_with((string) $file->getMimeType(), 'video/') ? 'video' : 'image';
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'path' => $path,
+                'url' => PublicStorage::url($path),
+                'type' => $type,
+                'is_video' => $type === 'video',
+            ],
+        ]);
+    }
+
     /**
      * @return array<string, mixed>
      */
@@ -171,13 +196,14 @@ class KlasrumContentController extends Controller
         $request->merge([
             'category_id' => $request->input('category_id') ?: null,
         ]);
+        $this->mergeMediaInputs($request);
 
         $status = $request->input('status', KlasrumContent::STATUS_DRAFT);
         $titleRules = $status === KlasrumContent::STATUS_PUBLISHED
             ? ['required', 'string', 'max:255']
             : ['nullable', 'string', 'max:255'];
 
-        return $request->validate([
+        $validated = $request->validate([
             'title' => $titleRules,
             'description' => ['nullable', 'string'],
             'heading' => ['nullable', 'string', 'max:255'],
@@ -197,10 +223,42 @@ class KlasrumContentController extends Controller
             'caption' => ['nullable', 'string', 'max:1000'],
             'status' => ['required', Rule::in([KlasrumContent::STATUS_DRAFT, KlasrumContent::STATUS_PUBLISHED])],
             'cover' => ['nullable', 'image', 'mimes:jpeg,jpg,png', 'max:5120'],
-            'media' => ['nullable', 'file', 'mimes:jpeg,jpg,png,mp4,webm,mov', 'max:20480'],
+            'media' => ['nullable', 'array', 'max:'.KlasrumContent::MAX_MEDIA_ITEMS],
+            'media.*' => ['file', 'mimes:jpeg,jpg,png,mp4,webm,mov', 'max:20480'],
+            'keep_media' => ['nullable', 'array', 'max:'.KlasrumContent::MAX_MEDIA_ITEMS],
+            'keep_media.*' => ['nullable', 'string', 'max:500'],
             'remove_cover' => ['nullable', 'boolean'],
             'remove_media' => ['nullable', 'boolean'],
         ]);
+
+        $keepCount = count(array_filter(
+            $request->input('keep_media', []) ?? [],
+            fn ($path) => is_string($path) && $path !== ''
+        ));
+        $fileCount = count($request->file('media') ?: []);
+        if ($keepCount + $fileCount > KlasrumContent::MAX_MEDIA_ITEMS) {
+            throw ValidationException::withMessages([
+                'media' => 'You can upload up to '.KlasrumContent::MAX_MEDIA_ITEMS.' files.',
+            ]);
+        }
+
+        return $validated;
+    }
+
+    private function mergeMediaInputs(Request $request): void
+    {
+        $keepMedia = $request->input('keep_media');
+        if (is_string($keepMedia)) {
+            $decoded = json_decode($keepMedia, true);
+            $request->merge([
+                'keep_media' => is_array($decoded) ? array_values($decoded) : [],
+            ]);
+        }
+
+        $files = $request->file('media');
+        if ($files instanceof UploadedFile) {
+            $request->files->set('media', [$files]);
+        }
     }
 
     /**
@@ -240,23 +298,123 @@ class KlasrumContentController extends Controller
             $paths['cover_path'] = $request->file('cover')->store('klasrum/covers', 'public');
         }
 
-        if ($request->boolean('remove_media') && $existing?->media_path) {
-            $this->deleteStoredFile($existing->media_path);
-            $paths['media_path'] = null;
-            $paths['media_type'] = null;
-        }
+        $syncingMedia = $request->exists('keep_media')
+            || $request->hasFile('media')
+            || $request->boolean('remove_media');
 
-        if ($request->hasFile('media')) {
-            if ($existing?->media_path) {
-                $this->deleteStoredFile($existing->media_path);
-            }
-            /** @var UploadedFile $file */
-            $file = $request->file('media');
-            $paths['media_path'] = $file->store('klasrum/media', 'public');
-            $paths['media_type'] = str_starts_with((string) $file->getMimeType(), 'video/') ? 'video' : 'image';
+        if ($syncingMedia) {
+            $paths = [
+                ...$paths,
+                ...$this->syncMediaItems($request, $existing),
+            ];
         }
 
         return $paths;
+    }
+
+    /**
+     * @return array{media_items: list<array{path: string, type: string}>, media_path: ?string, media_type: ?string}
+     */
+    private function syncMediaItems(Request $request, ?KlasrumContent $existing): array
+    {
+        $existingItems = $existing?->normalizedMediaItems() ?? [];
+        $existingByPath = [];
+        foreach ($existingItems as $item) {
+            $existingByPath[$item['path']] = $item;
+        }
+
+        $requested = array_values(array_filter(
+            $request->boolean('remove_media') ? [] : ($request->input('keep_media', []) ?? []),
+            fn ($path) => is_string($path) && $this->isKlasrumMediaPath($path)
+        ));
+        $requested = array_slice($requested, 0, KlasrumContent::MAX_MEDIA_ITEMS);
+
+        $kept = [];
+        $keptPathSet = [];
+        foreach ($requested as $path) {
+            if (isset($keptPathSet[$path])) {
+                continue;
+            }
+            if (isset($existingByPath[$path])) {
+                $kept[] = $existingByPath[$path];
+                $keptPathSet[$path] = true;
+                continue;
+            }
+            if (! Storage::disk('public')->exists($path)) {
+                continue;
+            }
+            $kept[] = [
+                'path' => $path,
+                'type' => $this->mediaTypeFromPath($path),
+            ];
+            $keptPathSet[$path] = true;
+        }
+
+        foreach ($existingItems as $item) {
+            if (! isset($keptPathSet[$item['path']])) {
+                $this->deleteStoredFile($item['path']);
+            }
+        }
+
+        $uploaded = $request->file('media', []);
+        if ($uploaded instanceof UploadedFile) {
+            $uploaded = [$uploaded];
+        }
+        $uploaded = array_values(array_filter(
+            is_array($uploaded) ? $uploaded : [],
+            fn ($file) => $file instanceof UploadedFile
+        ));
+
+        $remaining = KlasrumContent::MAX_MEDIA_ITEMS - count($kept);
+        $uploaded = array_slice($uploaded, 0, max(0, $remaining));
+
+        foreach ($uploaded as $file) {
+            $kept[] = [
+                'path' => $file->store('klasrum/media', 'public'),
+                'type' => str_starts_with((string) $file->getMimeType(), 'video/') ? 'video' : 'image',
+            ];
+        }
+
+        $first = $kept[0] ?? null;
+
+        return [
+            'media_items' => $kept,
+            'media_path' => $first['path'] ?? null,
+            'media_type' => $first['type'] ?? null,
+        ];
+    }
+
+    private function isKlasrumMediaPath(string $path): bool
+    {
+        $path = ltrim(str_replace('\\', '/', $path), '/');
+
+        return str_starts_with($path, 'klasrum/media/')
+            && ! str_contains($path, '..')
+            && strlen($path) <= 500;
+    }
+
+    private function mediaTypeFromPath(string $path): string
+    {
+        $extension = strtolower((string) pathinfo($path, PATHINFO_EXTENSION));
+
+        return in_array($extension, ['mp4', 'webm', 'mov'], true) ? 'video' : 'image';
+    }
+
+    private function deleteMediaItems(KlasrumContent $content): void
+    {
+        $deleted = [];
+        foreach ($content->normalizedMediaItems() as $item) {
+            $path = $item['path'];
+            if (isset($deleted[$path])) {
+                continue;
+            }
+            $this->deleteStoredFile($path);
+            $deleted[$path] = true;
+        }
+
+        if ($content->media_path && ! isset($deleted[$content->media_path])) {
+            $this->deleteStoredFile($content->media_path);
+        }
     }
 
     private function deleteStoredFile(?string $path): void

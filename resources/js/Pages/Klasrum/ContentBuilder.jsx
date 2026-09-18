@@ -3,6 +3,8 @@ import { Link, router, usePage } from '@inertiajs/react'
 import {
     ArrowLeft,
     Bold,
+    ChevronLeft,
+    ChevronRight,
     Eye,
     Italic,
     List,
@@ -32,6 +34,81 @@ function actionButtonClass(active = false) {
 
 const editorListClass =
     '[&_ul]:my-2 [&_ul]:list-disc [&_ul]:pl-6 [&_ol]:my-2 [&_ol]:list-decimal [&_ol]:pl-6 [&_li]:my-1'
+
+const MAX_MEDIA_FILES = 15
+const MAX_MEDIA_BYTES = 20 * 1024 * 1024
+
+function csrfHeaders() {
+    const csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content')
+    return {
+        Accept: 'application/json',
+        'X-Requested-With': 'XMLHttpRequest',
+        ...(csrf ? { 'X-CSRF-TOKEN': csrf } : {}),
+    }
+}
+
+async function uploadKlasrumMedia(file) {
+    const formData = new FormData()
+    formData.append('media', file)
+    const response = await fetch('/klasrum/media', {
+        method: 'POST',
+        headers: csrfHeaders(),
+        credentials: 'same-origin',
+        body: formData,
+    })
+
+    let payload = null
+    try {
+        payload = await response.json()
+    } catch {
+        payload = null
+    }
+
+    if (!response.ok) {
+        const message = payload?.errors?.media?.[0]
+            || payload?.message
+            || (response.status === 413
+                ? 'This file is too large to upload.'
+                : 'Failed to upload media.')
+        throw new Error(message)
+    }
+
+    return payload?.data
+}
+
+function initialMediaItems(content) {
+    if (Array.isArray(content?.media) && content.media.length > 0) {
+        return content.media
+            .filter((item) => item?.url || item?.path)
+            .map((item, index) => ({
+                id: `saved-${item.path || index}`,
+                url: storageUrl(item.url) || storageUrl(item.path),
+                isVideo: Boolean(item.is_video) || item.type === 'video',
+                path: item.path || null,
+            }))
+            .filter((item) => item.url)
+    }
+
+    const url = storageUrl(content?.media_url)
+    if (!url) {
+        return []
+    }
+
+    return [
+        {
+            id: 'saved-legacy',
+            url,
+            isVideo: Boolean(content?.media_is_video),
+            path: null,
+        },
+    ]
+}
+
+function revokeMediaUrl(url) {
+    if (url?.startsWith('blob:')) {
+        URL.revokeObjectURL(url)
+    }
+}
 
 function placeCaretIn(node) {
     const selection = window.getSelection()
@@ -94,18 +171,19 @@ function PreviewArticle({
     heading,
     bodyHtml,
     coverPreview,
-    mediaPreview,
-    mediaIsVideo,
+    mediaItems = [],
     caption,
 }) {
     const hasBody = Boolean(bodyHtml && bodyHtml.replace(/<[^>]*>/g, '').trim())
 
     return (
-        <article className="overflow-hidden rounded-xl bg-white">
-            <div className="aspect-video w-full bg-[#D1D5DB]">
-                {coverPreview ? (
-                    <img src={coverPreview} alt="" className="h-full w-full object-cover" />
-                ) : null}
+        <article className="rounded-xl bg-white">
+            <div className="overflow-hidden rounded-t-xl">
+                <div className="aspect-video w-full bg-[#D1D5DB]">
+                    {coverPreview ? (
+                        <img src={coverPreview} alt="" className="h-full w-full object-cover" />
+                    ) : null}
+                </div>
             </div>
             <div className="px-6 py-8 sm:px-10 sm:py-10">
                 {category ? (
@@ -119,9 +197,9 @@ function PreviewArticle({
                 {description ? (
                     <p className="mt-4 text-base leading-relaxed text-[#374151]">{description}</p>
                 ) : null}
-                <hr className="my-6 border-[#E5E7EB]" />
+                <MediaHero items={mediaItems} caption={caption} />
                 {heading ? (
-                    <h3 className="text-xl font-bold leading-snug text-[#111827]">{heading}</h3>
+                    <h3 className="mt-8 text-xl font-bold leading-snug text-[#111827]">{heading}</h3>
                 ) : null}
                 {hasBody ? (
                     <div
@@ -129,24 +207,98 @@ function PreviewArticle({
                         dangerouslySetInnerHTML={{ __html: bodyHtml }}
                     />
                 ) : null}
-                <div className="mt-8 overflow-hidden rounded-xl bg-[#D1D5DB]">
-                    <div className="aspect-video w-full">
-                        {mediaPreview ? (
-                            mediaIsVideo ? (
-                                <video src={mediaPreview} controls className="h-full w-full object-contain" />
-                            ) : (
-                                <img src={mediaPreview} alt={caption || ''} className="h-full w-full object-cover" />
-                            )
-                        ) : null}
-                    </div>
-                    {caption ? (
-                        <div className="bg-[#4B5563] px-4 py-3 text-sm leading-relaxed text-white">
-                            {caption}
-                        </div>
-                    ) : null}
-                </div>
             </div>
         </article>
+    )
+}
+
+function MediaHero({ items = [], caption }) {
+    const [active, setActive] = useState(0)
+    const videoRef = useRef(null)
+
+    useEffect(() => {
+        setActive((current) => {
+            if (!items.length) {
+                return 0
+            }
+            return Math.min(current, items.length - 1)
+        })
+    }, [items])
+
+    if (!items.length) {
+        return null
+    }
+
+    const item = items[active] ?? items[0]
+    const showControls = items.length > 1
+
+    const goTo = (index) => {
+        videoRef.current?.pause()
+        setActive((index + items.length) % items.length)
+    }
+
+    return (
+        <div className="mt-8">
+            <div className="relative">
+                <div className="overflow-hidden rounded-xl bg-[#D1D5DB]">
+                    <div className="aspect-video w-full">
+                        {item.isVideo ? (
+                            <video
+                                key={item.id}
+                                ref={videoRef}
+                                src={item.url}
+                                controls
+                                className="h-full w-full object-contain"
+                            />
+                        ) : (
+                            <img src={item.url} alt={caption || ''} className="h-full w-full object-cover" />
+                        )}
+                    </div>
+                </div>
+                {showControls ? (
+                    <>
+                        <button
+                            type="button"
+                            aria-label="Previous media"
+                            onClick={() => goTo(active - 1)}
+                            className="absolute left-0 top-1/2 z-10 flex h-9 w-9 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-white shadow-md"
+                        >
+                            <ChevronLeft className="h-5 w-5 text-[#6B7280]" />
+                        </button>
+                        <button
+                            type="button"
+                            aria-label="Next media"
+                            onClick={() => goTo(active + 1)}
+                            className="absolute right-0 top-1/2 z-10 flex h-9 w-9 translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-white shadow-md"
+                        >
+                            <ChevronRight className="h-5 w-5 text-[#6B7280]" />
+                        </button>
+                    </>
+                ) : null}
+            </div>
+            {showControls ? (
+                <div className="mt-3 flex items-center justify-center gap-1.5" role="tablist" aria-label="Additional media">
+                    {items.map((entry, index) => (
+                        <button
+                            key={entry.id}
+                            type="button"
+                            role="tab"
+                            aria-selected={index === active}
+                            aria-label={`Show media ${index + 1}`}
+                            onClick={() => goTo(index)}
+                            className={
+                                index === active
+                                    ? 'h-1.5 w-6 rounded-full bg-[#22C55E]'
+                                    : 'h-1.5 w-1.5 rounded-full bg-[#D1D5DB]'
+                            }
+                        />
+                    ))}
+                </div>
+            ) : null}
+            {caption ? (
+                <p className="mt-3 text-sm leading-relaxed text-[#6B7280]">{caption}</p>
+            ) : null}
+        </div>
     )
 }
 
@@ -208,6 +360,82 @@ function MediaDropzone({
     )
 }
 
+function AdditionalMediaPicker({ inputRef, items, onAddFiles, onRemove }) {
+    const atLimit = items.length >= MAX_MEDIA_FILES
+
+    return (
+        <div>
+            <input
+                ref={inputRef}
+                type="file"
+                accept="image/*,video/*"
+                multiple
+                className="hidden"
+                onChange={(event) => {
+                    onAddFiles(event.target.files)
+                    event.target.value = ''
+                }}
+            />
+            {items.length === 0 ? (
+                <div className="flex min-h-[260px] flex-col items-center justify-center rounded-xl bg-[#E5E7EB] px-6 py-14 text-center">
+                    <p className="text-sm font-medium text-[#6B7280]">Upload image or video</p>
+                    <p className="mt-1 text-xs text-[#9CA3AF]">Select up to {MAX_MEDIA_FILES} files</p>
+                    <button
+                        type="button"
+                        onClick={() => inputRef.current?.click()}
+                        className="mt-4 inline-flex items-center gap-2 rounded-full bg-[#111827] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#1F2937]"
+                    >
+                        <Upload className="h-4 w-4" />
+                        Select files
+                    </button>
+                </div>
+            ) : (
+                <div className="rounded-xl bg-[#E5E7EB] p-4">
+                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                        {items.map((item) => (
+                            <div key={item.id} className="relative overflow-hidden rounded-lg bg-white">
+                                <div className="aspect-video">
+                                    {item.isVideo ? (
+                                        <video src={item.url} className="h-full w-full object-contain" />
+                                    ) : (
+                                        <img src={item.url} alt="" className="h-full w-full object-cover" />
+                                    )}
+                                </div>
+                                {item.isVideo ? (
+                                    <span className="absolute left-1.5 top-1.5 rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-white">
+                                        Video
+                                    </span>
+                                ) : null}
+                                <button
+                                    type="button"
+                                    onClick={() => onRemove(item.id)}
+                                    className="absolute right-1.5 top-1.5 rounded-full bg-black/60 p-1 text-white hover:bg-black/80"
+                                    aria-label="Remove file"
+                                >
+                                    <X className="h-3.5 w-3.5" />
+                                </button>
+                            </div>
+                        ))}
+                        {!atLimit ? (
+                            <button
+                                type="button"
+                                onClick={() => inputRef.current?.click()}
+                                className="flex aspect-video flex-col items-center justify-center rounded-lg border border-dashed border-[#9CA3AF] bg-white/70 text-[#6B7280] transition-colors hover:bg-white"
+                            >
+                                <Upload className="mb-1 h-5 w-5" />
+                                <span className="text-xs font-medium">Add files</span>
+                            </button>
+                        ) : null}
+                    </div>
+                    <p className="mt-3 text-center text-xs text-[#6B7280]">
+                        {items.length} of {MAX_MEDIA_FILES} files
+                    </p>
+                </div>
+            )}
+        </div>
+    )
+}
+
 export default function ContentBuilder({ auth, content = null, categories = [] }) {
     useDashboardSession()
     const { errors, flash } = usePage().props
@@ -224,27 +452,39 @@ export default function ContentBuilder({ auth, content = null, categories = [] }
     const [heading, setHeading] = useState(content?.heading ?? '')
     const [caption, setCaption] = useState(content?.caption ?? '')
     const [coverPreview, setCoverPreview] = useState(storageUrl(content?.cover_url) ?? null)
-    const [mediaPreview, setMediaPreview] = useState(storageUrl(content?.media_url) ?? null)
-    const [mediaIsVideo, setMediaIsVideo] = useState(Boolean(content?.media_is_video))
+    const [mediaItems, setMediaItems] = useState(() => initialMediaItems(content))
     const [coverFile, setCoverFile] = useState(null)
-    const [mediaFile, setMediaFile] = useState(null)
     const [removeCover, setRemoveCover] = useState(false)
-    const [removeMedia, setRemoveMedia] = useState(false)
     const [showPreview, setShowPreview] = useState(false)
     const [bodyHtml, setBodyHtml] = useState(content?.body ?? '')
     const [processing, setProcessing] = useState(false)
+    const [processingLabel, setProcessingLabel] = useState('Saving...')
     const [categoryModal, setCategoryModal] = useState(null)
     const [categoryName, setCategoryName] = useState('')
     const [categorySaving, setCategorySaving] = useState(false)
+
+    const savedMediaKey = Array.isArray(content?.media)
+        ? content.media.map((item) => item.path || item.url || '').join('|')
+        : (content?.media_url || '')
 
     useEffect(() => {
         if (bodyRef.current && content?.body) {
             bodyRef.current.innerHTML = content.body
         }
         setCoverPreview(storageUrl(content?.cover_url) ?? null)
-        setMediaPreview(storageUrl(content?.media_url) ?? null)
-        setMediaIsVideo(Boolean(content?.media_is_video))
-    }, [content?.id, content?.body, content?.cover_url, content?.media_url, content?.media_is_video])
+        setMediaItems((current) => {
+            current.forEach((item) => revokeMediaUrl(item.url))
+            return initialMediaItems(content)
+        })
+    }, [content?.id, content?.body, content?.cover_url, savedMediaKey, content?.media_is_video])
+
+    const mediaItemsRef = useRef(mediaItems)
+    mediaItemsRef.current = mediaItems
+    useEffect(() => {
+        return () => {
+            mediaItemsRef.current.forEach((item) => revokeMediaUrl(item.url))
+        }
+    }, [])
 
     const readFile = (file, setter, isVideoSetter) => {
         if (!file) {
@@ -256,6 +496,52 @@ export default function ContentBuilder({ auth, content = null, categories = [] }
             isVideoSetter?.(file.type.startsWith('video/'))
         }
         reader.readAsDataURL(file)
+    }
+
+    const addMediaFiles = (fileList) => {
+        const incoming = Array.from(fileList || []).filter(
+            (file) => file.type.startsWith('image/') || file.type.startsWith('video/')
+        )
+        if (!incoming.length) {
+            return
+        }
+
+        const oversized = incoming.filter((file) => file.size > MAX_MEDIA_BYTES)
+        const allowed = incoming.filter((file) => file.size <= MAX_MEDIA_BYTES)
+        if (oversized.length) {
+            window.alert('Each image or video must be 20 MB or smaller.')
+        }
+        if (!allowed.length) {
+            return
+        }
+
+        setMediaItems((current) => {
+            const room = MAX_MEDIA_FILES - current.length
+            if (room <= 0) {
+                window.alert(`You can upload up to ${MAX_MEDIA_FILES} files.`)
+                return current
+            }
+            if (allowed.length > room) {
+                window.alert(`You can upload up to ${MAX_MEDIA_FILES} files.`)
+            }
+            const next = allowed.slice(0, room).map((file) => ({
+                id: `new-${file.name}-${file.size}-${file.lastModified}-${Math.random()}`,
+                url: URL.createObjectURL(file),
+                isVideo: file.type.startsWith('video/'),
+                file,
+            }))
+            return [...current, ...next]
+        })
+    }
+
+    const removeMediaItem = (id) => {
+        setMediaItems((current) => {
+            const target = current.find((item) => item.id === id)
+            if (target) {
+                revokeMediaUrl(target.url)
+            }
+            return current.filter((item) => item.id !== id)
+        })
     }
 
     const togglePreview = () => {
@@ -340,11 +626,54 @@ export default function ContentBuilder({ auth, content = null, categories = [] }
         })
     }
 
-    const submit = (status) => {
+    const submit = async (status) => {
         const body = bodyRef.current?.innerHTML || bodyHtml || ''
         if (status === 'published' && !title.trim()) {
             window.alert('Please add a title before publishing.')
             return
+        }
+        if (processing) {
+            return
+        }
+
+        setProcessing(true)
+        let preparedMedia = mediaItems
+        const pendingUploads = mediaItems.filter((item) => item.file && !item.path)
+        if (pendingUploads.length) {
+            try {
+                const nextItems = [...mediaItems]
+                let uploadedCount = 0
+                for (let index = 0; index < nextItems.length; index += 1) {
+                    const item = nextItems[index]
+                    if (!item.file || item.path) {
+                        continue
+                    }
+                    uploadedCount += 1
+                    setProcessingLabel(`Uploading media ${uploadedCount} of ${pendingUploads.length}...`)
+                    const uploaded = await uploadKlasrumMedia(item.file)
+                    if (!uploaded?.path) {
+                        throw new Error('Failed to upload media.')
+                    }
+                    const previousUrl = item.url
+                    nextItems[index] = {
+                        id: item.id,
+                        url: storageUrl(uploaded?.url) || item.url,
+                        isVideo: Boolean(uploaded?.is_video) || item.isVideo,
+                        path: uploaded?.path,
+                    }
+                    setMediaItems([...nextItems])
+                    if (previousUrl && previousUrl !== nextItems[index].url) {
+                        revokeMediaUrl(previousUrl)
+                    }
+                }
+                preparedMedia = nextItems.filter((item) => item.path)
+                setMediaItems(preparedMedia)
+            } catch (error) {
+                setProcessing(false)
+                setProcessingLabel('Saving...')
+                window.alert(error?.message || 'Failed to upload media.')
+                return
+            }
         }
 
         const formData = new FormData()
@@ -358,23 +687,27 @@ export default function ContentBuilder({ auth, content = null, categories = [] }
         if (coverFile) {
             formData.append('cover', coverFile)
         }
-        if (mediaFile) {
-            formData.append('media', mediaFile)
-        }
+        formData.append(
+            'keep_media',
+            JSON.stringify(preparedMedia.filter((item) => item.path).map((item) => item.path))
+        )
         if (removeCover) {
             formData.append('remove_cover', '1')
         }
-        if (removeMedia) {
-            formData.append('remove_media', '1')
-        }
 
+        setProcessingLabel(status === 'published' ? 'Publishing...' : 'Saving...')
         const url = content?.id ? `/klasrum/${content.id}` : '/klasrum'
         router.post(url, formData, {
             forceFormData: true,
-            onStart: () => setProcessing(true),
-            onFinish: () => setProcessing(false),
+            onFinish: () => {
+                setProcessing(false)
+                setProcessingLabel('Saving...')
+            },
         })
     }
+
+    const mediaError = errors?.media
+        || Object.entries(errors || {}).find(([key]) => key === 'media' || key.startsWith('media.'))?.[1]
 
     return (
         <Layout auth={auth} title="Content Builder">
@@ -398,9 +731,9 @@ export default function ContentBuilder({ auth, content = null, categories = [] }
                         {flash?.success ? (
                             <p className="mt-2 text-sm text-emerald-700">{flash.success}</p>
                         ) : null}
-                        {(flash?.error || errors?.title || errors?.cover || errors?.media) && (
+                        {(flash?.error || errors?.title || errors?.cover || mediaError) && (
                             <p className="mt-2 text-sm text-[#DC2626]">
-                                {flash?.error || errors?.title || errors?.cover || errors?.media}
+                                {flash?.error || errors?.title || errors?.cover || mediaError}
                             </p>
                         )}
                         <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
@@ -411,7 +744,7 @@ export default function ContentBuilder({ auth, content = null, categories = [] }
                                 className={actionButtonClass()}
                             >
                                 <Save className="h-4 w-4" />
-                                {processing ? 'Saving...' : 'Save Draft'}
+                                {processing ? processingLabel : 'Save Draft'}
                             </button>
                             <button
                                 type="button"
@@ -437,7 +770,7 @@ export default function ContentBuilder({ auth, content = null, categories = [] }
                                 className="inline-flex items-center gap-2 rounded-lg bg-[#102059] px-3.5 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#244693] disabled:opacity-60"
                             >
                                 <Eye className="h-4 w-4" />
-                                {processing ? 'Publishing...' : 'Publish'}
+                                {processing ? processingLabel : 'Publish'}
                             </button>
                         </div>
                     </div>
@@ -595,32 +928,12 @@ export default function ContentBuilder({ auth, content = null, categories = [] }
                             <h2 className="text-base font-bold text-[#111827]">Additional Media</h2>
                             <p className="text-xs text-[#9CA3AF]">Optional</p>
                         </div>
-                        <div className="mb-8">
-                            <MediaDropzone
+                        <div className={`mb-8 ${processing ? 'pointer-events-none opacity-70' : ''}`}>
+                            <AdditionalMediaPicker
                                 inputRef={mediaInputRef}
-                                accept="image/*,video/*"
-                                previewUrl={mediaPreview}
-                                isVideo={mediaIsVideo}
-                                title="Upload image or video"
-                                hint="Optional media to enrich your article"
-                                onChange={(event) => {
-                                    const file = event.target.files?.[0]
-                                    if (!file) {
-                                        return
-                                    }
-                                    setMediaFile(file)
-                                    setRemoveMedia(false)
-                                    readFile(file, setMediaPreview, setMediaIsVideo)
-                                }}
-                                onClear={() => {
-                                    setMediaFile(null)
-                                    setMediaPreview(null)
-                                    setMediaIsVideo(false)
-                                    setRemoveMedia(true)
-                                    if (mediaInputRef.current) {
-                                        mediaInputRef.current.value = ''
-                                    }
-                                }}
+                                items={mediaItems}
+                                onAddFiles={addMediaFiles}
+                                onRemove={removeMediaItem}
                             />
                         </div>
                         <input
@@ -641,8 +954,7 @@ export default function ContentBuilder({ auth, content = null, categories = [] }
                         heading={heading}
                         bodyHtml={bodyHtml}
                         coverPreview={coverPreview}
-                        mediaPreview={mediaPreview}
-                        mediaIsVideo={mediaIsVideo}
+                        mediaItems={mediaItems}
                         caption={caption}
                     />
                 ) : null}
