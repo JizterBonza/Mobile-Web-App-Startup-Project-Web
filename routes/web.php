@@ -70,7 +70,8 @@ Route::middleware(['auth', 'session.valid', 'user.type:super_admin|admin'])->pre
 });
 
 Route::redirect('/admin', '/login');
-Route::redirect('/register-store', '/register');
+Route::redirect('/register', '/login');
+Route::redirect('/register-store', '/login');
 
 // Authentication Routes
 Route::get('/login', [AuthController::class, 'showLogin'])->name('login');
@@ -78,8 +79,6 @@ Route::post('/login', [AuthController::class, 'login']);
 Route::get('/auth/google', [GoogleAuthController::class, 'redirect'])->name('auth.google');
 Route::get('/auth/google/callback', [GoogleAuthController::class, 'callback'])->name('auth.google.callback');
 Route::post('/auth/google/token', [GoogleAuthController::class, 'token'])->name('auth.google.token');
-Route::get('/register', [AuthController::class, 'showRegister'])->name('register');
-Route::post('/register', [AuthController::class, 'register']);
 Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
 Route::get('/session/check', [AuthController::class, 'checkSession'])->middleware('auth');
 
