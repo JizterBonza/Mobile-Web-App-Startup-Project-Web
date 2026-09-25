@@ -1739,20 +1739,24 @@ export default function AgrivetStoreInformation({
                                     }`}
                                   />
                                 </button>
-                                <Link
-                                  href={vendorsRoute}
-                                  className="p-2 text-[#244693] hover:bg-[#EEF2FF] rounded-lg transition-colors flex-shrink-0"
-                                  title="Edit vendor"
-                                >
-                                  <Pencil className="w-4 h-4" />
-                                </Link>
-                                <button
-                                  className="p-2 text-[#E20E28] hover:bg-[#FEE2E2] rounded-lg transition-colors flex-shrink-0"
-                                  title="Remove vendor (reference UI)"
-                                  onClick={() => openRemoveVendor(v)}
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                </button>
+                                {!isOwnerManager && (
+                                  <>
+                                    <Link
+                                      href={vendorsRoute}
+                                      className="p-2 text-[#244693] hover:bg-[#EEF2FF] rounded-lg transition-colors flex-shrink-0"
+                                      title="Edit vendor"
+                                    >
+                                      <Pencil className="w-4 h-4" />
+                                    </Link>
+                                    <button
+                                      className="p-2 text-[#E20E28] hover:bg-[#FEE2E2] rounded-lg transition-colors flex-shrink-0"
+                                      title="Remove vendor (reference UI)"
+                                      onClick={() => openRemoveVendor(v)}
+                                    >
+                                      <Trash2 className="w-4 h-4" />
+                                    </button>
+                                  </>
+                                )}
                               </div>
                             </div>
                           </div>
