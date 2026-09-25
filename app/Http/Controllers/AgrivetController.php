@@ -754,6 +754,7 @@ class AgrivetController extends Controller
             $ownsShop = $user->shops()
                 ->where('shops.id', $shopId)
                 ->where('shops.agrivet_id', $id)
+                ->wherePivot('status', 'active')
                 ->exists();
             abort_unless($ownsShop, 403);
         }
@@ -1448,6 +1449,78 @@ class AgrivetController extends Controller
             return redirect()->back()
                 ->withErrors(['error' => 'Failed to update vendor. Please try again.'])
                 ->withInput();
+        }
+    }
+
+    /**
+     * Enable or disable a vendor assigned to this store.
+     */
+    public function updateVendorStatus($id, $shopId, $vendorId)
+    {
+        $agrivet = Agrivet::findOrFail($id);
+        $shop = Shop::where('agrivet_id', $agrivet->id)->findOrFail($shopId);
+        $vendor = User::with('userDetail')->findOrFail($vendorId);
+
+        if ($vendor->user_type !== User::TYPE_VENDOR) {
+            return redirect()->back()
+                ->with('error', 'Selected user is not a vendor.');
+        }
+
+        $assignment = $shop->vendors()->where('users.id', $vendorId)->first();
+        if (! $assignment) {
+            return redirect()->back()
+                ->with('error', 'Vendor is not associated with this shop.');
+        }
+
+        $current = strtolower((string) ($assignment->pivot->status ?? 'active'));
+        $next = $current === 'active' ? 'inactive' : 'active';
+
+        try {
+            DB::beginTransaction();
+
+            $shop->vendors()->updateExistingPivot($vendorId, [
+                'status' => $next,
+            ]);
+
+            $hasOtherActiveAssignment = DB::table('agrivet_vendor')
+                ->where('vendor_id', $vendorId)
+                ->where('shop_id', '!=', $shop->id)
+                ->where('status', 'active')
+                ->exists();
+
+            if ($next === 'active') {
+                $vendor->update(['status' => 'active']);
+            } elseif (! $hasOtherActiveAssignment) {
+                $vendor->update(['status' => 'inactive']);
+            }
+
+            DB::commit();
+
+            $vendorName = trim(($vendor->userDetail->first_name ?? '').' '.($vendor->userDetail->last_name ?? ''));
+            if ($vendorName === '') {
+                $vendorName = $vendor->userDetail->email ?? "Vendor #{$vendorId}";
+            }
+
+            $label = $next === 'active' ? 'active' : 'inactive';
+
+            ActivityLog::log(
+                'updated',
+                "Vendor {$vendorName} is now {$label} for {$shop->shop_name}",
+                $vendor,
+                ['status' => $current],
+                ['status' => $next]
+            );
+
+            $url = $this->redirectToStoreInformation($agrivet->id, $shop->id)->getTargetUrl();
+            $separator = str_contains($url, '?') ? '&' : '?';
+
+            return redirect($url.$separator.'tab=vendors')
+                ->with('success', "Vendor {$vendorName} is now {$label}.");
+        } catch (\Exception $e) {
+            DB::rollBack();
+
+            return redirect()->back()
+                ->with('error', 'Failed to update vendor status. Please try again.');
         }
     }
 

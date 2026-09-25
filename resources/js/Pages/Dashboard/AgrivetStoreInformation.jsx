@@ -408,6 +408,14 @@ export default function AgrivetStoreInformation({
       : `${getBaseRoute()}/${agrivet?.id}/shops/${shop?.id}/vendors/${vendorId}/reassign`
   )
 
+  const vendorStatusRoute = (vendorId) => (
+    isOwnerManager
+      ? `${getBaseRoute()}/stores/${shop?.id}/vendors/${vendorId}/status`
+      : `${getBaseRoute()}/${agrivet?.id}/shops/${shop?.id}/vendors/${vendorId}/status`
+  )
+
+  const isVendorAssignmentActive = (vendor) => (vendor?.pivot?.status || vendor?.status) === 'active'
+
   // Build a "store" object that matches the template fields/shape as closely as possible.
   const store = useMemo(() => {
     if (!shop) return null
@@ -502,7 +510,10 @@ export default function AgrivetStoreInformation({
           showSuccess('product', flash.success)
         }
       } else if (isVendorFlashMessage(flash.success)) {
-        if (lower.includes('updated') || lower.includes('removed')) {
+        if (lower.includes('is now active') || lower.includes('is now inactive')) {
+          const vendorName = flash.success.replace(/^Vendor\s+/i, '').split(/ is now /i)[0]?.trim() || flash.success
+          showSuccess('vendorStatus', vendorName)
+        } else if (lower.includes('updated') || lower.includes('removed')) {
           showSuccess('edit', flash.success)
         } else {
           showSuccess('add', flash.success)
@@ -579,6 +590,7 @@ export default function AgrivetStoreInformation({
   const [reassigningVendorId, setReassigningVendorId] = useState(null)
   const [showVendorStatusConfirmModal, setShowVendorStatusConfirmModal] = useState(false)
   const [vendorToToggle, setVendorToToggle] = useState(null)
+  const [isUpdatingVendorStatus, setIsUpdatingVendorStatus] = useState(false)
   const [showRemoveVendorConfirmModal, setShowRemoveVendorConfirmModal] = useState(false)
   const [vendorToRemove, setVendorToRemove] = useState(null)
 
@@ -607,10 +619,16 @@ export default function AgrivetStoreInformation({
   }
 
   const confirmStatusChange = () => {
-    // Reference parity only (no persistence here).
-    setShowVendorStatusConfirmModal(false)
-    if (vendorToToggle) showSuccess('vendorStatus', vendorDisplayName(vendorToToggle))
-    setVendorToToggle(null)
+    if (!vendorToToggle || isUpdatingVendorStatus) return
+    setIsUpdatingVendorStatus(true)
+    router.patch(vendorStatusRoute(vendorToToggle.id), {}, {
+      preserveScroll: true,
+      onSuccess: () => {
+        setShowVendorStatusConfirmModal(false)
+        setVendorToToggle(null)
+      },
+      onFinish: () => setIsUpdatingVendorStatus(false),
+    })
   }
 
   const cancelStatusChange = () => {
@@ -1671,6 +1689,12 @@ export default function AgrivetStoreInformation({
                     </div>
                   </div>
 
+                  {flash?.error && (
+                    <div className="mx-6 mt-6 rounded-lg border border-[#FECACA] bg-[#FEF2F2] px-4 py-3 text-sm text-[#991B1B]">
+                      {flash.error}
+                    </div>
+                  )}
+
                   {vendors.length > 0 ? (
                     <div className="p-6">
                       <div className="space-y-3">
@@ -1699,16 +1723,19 @@ export default function AgrivetStoreInformation({
                                   </p>
                                 </div>
                                 <button
+                                  type="button"
                                   onClick={() => openStatusConfirm(v)}
-                                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-all duration-300 flex-shrink-0 ${
-                                    (v.pivot?.status || v.status) === 'active' ? 'bg-[#00C950]' : 'bg-[#D1D5DB]'
+                                  disabled={isUpdatingVendorStatus}
+                                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-all duration-300 flex-shrink-0 disabled:opacity-60 ${
+                                    isVendorAssignmentActive(v) ? 'bg-[#00C950]' : 'bg-[#D1D5DB]'
                                   }`}
-                                  title="Toggle status (reference UI)"
+                                  title={isVendorAssignmentActive(v) ? 'Disable vendor' : 'Enable vendor'}
+                                  aria-pressed={isVendorAssignmentActive(v)}
                                   style={{ borderRadius: '0.7rem' }}
                                 >
                                   <span
                                     className={`inline-block h-5 w-5 transform rounded-full bg-white transition-all duration-300 ${
-                                      (v.pivot?.status || v.status) === 'active' ? 'translate-x-[22px]' : 'translate-x-[2px]'
+                                      isVendorAssignmentActive(v) ? 'translate-x-[22px]' : 'translate-x-[2px]'
                                     }`}
                                   />
                                 </button>
@@ -3028,17 +3055,26 @@ export default function AgrivetStoreInformation({
                 </button>
               </div>
               <p className="text-sm text-[#65676B] leading-relaxed">
-                Change status for <span className="font-semibold text-[#102059]">{vendorDisplayName(vendorToToggle)}</span>?
+                {isVendorAssignmentActive(vendorToToggle) ? 'Disable' : 'Enable'}{' '}
+                <span className="font-semibold text-[#102059]">{vendorDisplayName(vendorToToggle)}</span>?
+                {isVendorAssignmentActive(vendorToToggle)
+                  ? ' They will not be able to sign in or manage this store.'
+                  : ' They will be able to sign in and manage this store again.'}
               </p>
               <div className="flex items-center justify-end mt-6 gap-2">
                 <button
-                  className="px-4 py-2.5 bg-white border border-[#E5E7EB] text-sm font-semibold rounded-lg hover:bg-[#F9FAFB]"
+                  className="px-4 py-2.5 bg-white border border-[#E5E7EB] text-sm font-semibold rounded-lg hover:bg-[#F9FAFB] disabled:opacity-50"
                   onClick={cancelStatusChange}
+                  disabled={isUpdatingVendorStatus}
                 >
                   Cancel
                 </button>
-                <button className="px-4 py-2.5 bg-[#244693] text-white text-sm font-semibold rounded-lg hover:bg-[#1a3570]" onClick={confirmStatusChange}>
-                  Confirm
+                <button
+                  className="px-4 py-2.5 bg-[#244693] text-white text-sm font-semibold rounded-lg hover:bg-[#1a3570] disabled:opacity-50"
+                  onClick={confirmStatusChange}
+                  disabled={isUpdatingVendorStatus}
+                >
+                  {isUpdatingVendorStatus ? 'Saving...' : 'Confirm'}
                 </button>
               </div>
             </div>

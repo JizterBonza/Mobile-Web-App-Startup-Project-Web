@@ -75,7 +75,9 @@ class VendorController extends Controller
         }
 
         $vendor = $user;
-        $vendor->load(['shops.agrivet']);
+        $vendor->load(['shops' => function ($query) {
+            $query->wherePivot('status', 'active');
+        }, 'shops.agrivet']);
 
         if ($vendor->shops->isEmpty()) {
             return null;
@@ -1385,6 +1387,7 @@ class VendorController extends Controller
     {
         $ownsShop = auth()->user()
             ->shops()
+            ->wherePivot('status', 'active')
             ->where('shops.id', $shopId)
             ->exists();
 
