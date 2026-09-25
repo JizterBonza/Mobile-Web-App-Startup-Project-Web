@@ -96,6 +96,12 @@ class AuthController extends Controller
             ]);
         }
 
+        if (! $user->isActive()) {
+            throw ValidationException::withMessages([
+                'email' => User::INACTIVE_ACCOUNT_MESSAGE,
+            ]);
+        }
+
         // Check if user has a valid user_type
         if (!$user->user_type) {
             throw ValidationException::withMessages([

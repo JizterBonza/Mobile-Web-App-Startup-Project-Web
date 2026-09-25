@@ -26,6 +26,10 @@ class User extends Authenticatable
     const TYPE_RIDER = 'rider';
     const TYPE_OWNER_MANAGER = 'owner_manager';
 
+    const STATUS_ACTIVE = 'active';
+
+    const INACTIVE_ACCOUNT_MESSAGE = 'Your account is inactive. Please contact an administrator.';
+
     /**
      * The attributes that are mass assignable.
      *
@@ -59,6 +63,36 @@ class User extends Authenticatable
             'created_at' => 'datetime',
             'updated_at' => 'datetime',
         ];
+    }
+
+    protected static function booted(): void
+    {
+        static::updated(function (User $user) {
+            if ($user->wasChanged('status') && ! $user->isActive()) {
+                $user->revokeAccess();
+            }
+        });
+    }
+
+    /**
+     * Only an explicit active status may sign in or keep a session.
+     */
+    public function isActive(): bool
+    {
+        return strtolower(trim((string) $this->status)) === self::STATUS_ACTIVE;
+    }
+
+    /**
+     * Drop API tokens so a deactivated account cannot keep calling the app.
+     */
+    public function revokeAccess(): void
+    {
+        $this->tokens()->delete();
+
+        RefreshToken::query()
+            ->where('user_id', $this->id)
+            ->whereNull('revoked_at')
+            ->update(['revoked_at' => now()]);
     }
 
     /**

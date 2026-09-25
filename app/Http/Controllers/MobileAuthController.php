@@ -168,6 +168,12 @@ class MobileAuthController extends Controller
             ]);
         }
 
+        if (! $user->isActive()) {
+            throw ValidationException::withMessages([
+                $loginField => [User::INACTIVE_ACCOUNT_MESSAGE],
+            ]);
+        }
+
         // Update last login timestamp
         $user->userCredential->update([
             'last_login' => now(),
@@ -278,6 +284,12 @@ class MobileAuthController extends Controller
             ], 404);
         }
 
+        if (! $user->isActive()) {
+            return response()->json([
+                'message' => User::INACTIVE_ACCOUNT_MESSAGE,
+            ], 403);
+        }
+
         $otp = (string) random_int(100000, 999999);
         $expiresInMinutes = 60;
 
@@ -316,6 +328,12 @@ class MobileAuthController extends Controller
         }
 
         $user->loadMissing('userCredential');
+
+        if (! $user->isActive()) {
+            return response()->json([
+                'message' => User::INACTIVE_ACCOUNT_MESSAGE,
+            ], 403);
+        }
 
         $credential = $user->userCredential;
 

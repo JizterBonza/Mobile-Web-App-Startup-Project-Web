@@ -18,6 +18,7 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware) {
         $middleware->web(append: [
+            \App\Http\Middleware\EnsureUserIsActive::class,
             \App\Http\Middleware\HandleInertiaRequests::class,
         ]);
 
@@ -29,6 +30,7 @@ return Application::configure(basePath: dirname(__DIR__))
         // Register middleware aliases
         $middleware->alias([
             'session.valid' => \App\Http\Middleware\CheckSessionValidity::class,
+            'account.active' => \App\Http\Middleware\EnsureUserIsActive::class,
             'user.type' => \App\Http\Middleware\CheckUserType::class,
             'payout.automation' => \App\Http\Middleware\AuthenticatePayoutAutomation::class,
         ]);

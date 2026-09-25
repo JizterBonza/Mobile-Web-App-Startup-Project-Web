@@ -65,6 +65,12 @@ class AuthTokenService
 
         $user = $refreshToken->user;
 
+        if (! $user || ! $user->isActive()) {
+            $refreshToken->update(['revoked_at' => now()]);
+
+            return null;
+        }
+
         if ($refreshToken->personalAccessToken) {
             $refreshToken->personalAccessToken->delete();
         }
