@@ -210,6 +210,10 @@ class GoogleAuthController extends Controller
 
     protected function webDashboardAccessError(User $user): ?string
     {
+        if (! $user->isActive()) {
+            return User::INACTIVE_ACCOUNT_MESSAGE;
+        }
+
         if (! $user->user_type) {
             return 'Your account is not properly configured. Please contact support.';
         }

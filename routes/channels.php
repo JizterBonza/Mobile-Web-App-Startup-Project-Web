@@ -6,7 +6,9 @@ use App\Models\User;
 use Illuminate\Support\Facades\Broadcast;
 
 Broadcast::channel('App.Models.User.{id}', function ($user, $id) {
-    return (int) $user->id === (int) $id;
+    return $user instanceof User
+        && $user->isActive()
+        && (int) $user->id === (int) $id;
 });
 
 Broadcast::channel('shop-conversation.{conversationId}', function (User $user, int $conversationId) {
@@ -14,7 +16,7 @@ Broadcast::channel('shop-conversation.{conversationId}', function (User $user, i
         ->with('shop:id,agrivet_id')
         ->find($conversationId);
 
-    if (! $conversation || ! $conversation->shop) {
+    if (! $user->isActive() || ! $conversation || ! $conversation->shop) {
         return false;
     }
 
@@ -36,7 +38,7 @@ Broadcast::channel('shop-conversation.{conversationId}', function (User $user, i
 Broadcast::channel('shop.{shopId}', function (User $user, int $shopId) {
     $shop = Shop::query()->find($shopId, ['id', 'agrivet_id']);
 
-    if (! $shop) {
+    if (! $user->isActive() || ! $shop) {
         return false;
     }
 

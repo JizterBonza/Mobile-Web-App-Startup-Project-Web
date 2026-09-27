@@ -70,7 +70,8 @@ Route::middleware(['auth', 'session.valid', 'user.type:super_admin|admin'])->pre
 });
 
 Route::redirect('/admin', '/login');
-Route::redirect('/register-store', '/register');
+Route::redirect('/register', '/login');
+Route::redirect('/register-store', '/login');
 
 // Authentication Routes
 Route::get('/login', [AuthController::class, 'showLogin'])->name('login');
@@ -78,8 +79,6 @@ Route::post('/login', [AuthController::class, 'login']);
 Route::get('/auth/google', [GoogleAuthController::class, 'redirect'])->name('auth.google');
 Route::get('/auth/google/callback', [GoogleAuthController::class, 'callback'])->name('auth.google.callback');
 Route::post('/auth/google/token', [GoogleAuthController::class, 'token'])->name('auth.google.token');
-Route::get('/register', [AuthController::class, 'showRegister'])->name('register');
-Route::post('/register', [AuthController::class, 'register']);
 Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
 Route::get('/session/check', [AuthController::class, 'checkSession'])->middleware('auth');
 
@@ -173,6 +172,7 @@ Route::middleware(['auth', 'session.valid', 'user.type:super_admin'])->prefix('d
     Route::delete('/{id}/shops/{shopId}/vendors/{vendorId}', [AgrivetController::class, 'removeVendor'])->name('shops.vendors.remove');
     Route::post('/{id}/shops/{shopId}/vendors/add-existing', [AgrivetController::class, 'addExistingVendor'])->name('shops.vendors.add-existing');
     Route::post('/{id}/shops/{shopId}/vendors/{vendorId}/reassign', [AgrivetController::class, 'reassignVendor'])->name('shops.vendors.reassign');
+    Route::patch('/{id}/shops/{shopId}/vendors/{vendorId}/status', [AgrivetController::class, 'updateVendorStatus'])->name('shops.vendors.status');
 
     Route::put('/{id}', [AgrivetController::class, 'update'])->name('update');
     Route::delete('/{id}', [AgrivetController::class, 'destroy'])->name('destroy');
@@ -277,6 +277,7 @@ Route::middleware(['auth', 'session.valid', 'user.type:owner_manager'])->prefix(
     Route::get('/stores/{shopId}/products/create', [DashboardController::class, 'ownerManagerProductsCreate'])->name('stores.products.create');
     Route::post('/stores/{shopId}/product-catalog', [DashboardController::class, 'ownerManagerProductCatalogStore'])->name('stores.product-catalog.store');
     Route::post('/stores/{shopId}/vendors/{vendorId}/reassign', [DashboardController::class, 'ownerManagerReassignVendor'])->name('stores.vendors.reassign');
+    Route::patch('/stores/{shopId}/vendors/{vendorId}/status', [DashboardController::class, 'ownerManagerUpdateVendorStatus'])->name('stores.vendors.status');
     Route::get('/vendor-registration', [UserController::class, 'vendorRegistration'])->name('vendor-registration');
     Route::post('/stores/{shopId}/vendors', [DashboardController::class, 'ownerManagerStoreVendor'])->name('stores.vendors.store');
     Route::get('/orders', [DashboardController::class, 'ownerManagerOrders'])->name('orders');
@@ -375,6 +376,7 @@ Route::middleware(['auth', 'session.valid', 'user.type:admin'])->prefix('dashboa
     Route::delete('/{id}/shops/{shopId}/vendors/{vendorId}', [AgrivetController::class, 'removeVendor'])->name('shops.vendors.remove');
     Route::post('/{id}/shops/{shopId}/vendors/add-existing', [AgrivetController::class, 'addExistingVendor'])->name('shops.vendors.add-existing');
     Route::post('/{id}/shops/{shopId}/vendors/{vendorId}/reassign', [AgrivetController::class, 'reassignVendor'])->name('shops.vendors.reassign');
+    Route::patch('/{id}/shops/{shopId}/vendors/{vendorId}/status', [AgrivetController::class, 'updateVendorStatus'])->name('shops.vendors.status');
 
     Route::put('/{id}', [AgrivetController::class, 'update'])->name('update');
     Route::delete('/{id}', [AgrivetController::class, 'destroy'])->name('destroy');

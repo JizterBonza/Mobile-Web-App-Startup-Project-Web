@@ -61,7 +61,7 @@ Route::get('items/bundled', [ItemController::class, 'bundled']);
 Route::get('items/shop/{shopId}/category/{categoryId}', [ItemController::class, 'getByShopAndCategory']);
 // Must be registered before items/{id} so "ordered" is not captured as an id
 Route::get('items/ordered/user/{userId}', [ItemController::class, 'getOrderedByUser'])
-    ->middleware('auth:sanctum');
+    ->middleware(['auth:sanctum', 'account.active']);
 Route::get('items/{id}/reviews', [ItemController::class, 'getItemWithReviews']);
 Route::get('items/{id}', [ItemController::class, 'show']);
 
@@ -90,7 +90,7 @@ Route::post('/payment/webhook', [PaymentController::class, 'handleWebhook']);
 |--------------------------------------------------------------------------
 */
 
-Route::middleware('auth:sanctum')->group(function () {
+Route::middleware(['auth:sanctum', 'account.active'])->group(function () {
     // Private channel auth for mobile (Sanctum Bearer token)
     Route::post('broadcasting/auth', [BroadcastController::class, 'authenticate']);
 

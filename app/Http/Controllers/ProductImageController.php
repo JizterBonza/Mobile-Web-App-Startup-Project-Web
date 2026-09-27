@@ -17,7 +17,9 @@ class ProductImageController extends Controller
     private function getVendorShopWithAgrivet()
     {
         $vendor = auth()->user();
-        $vendor->load(['shops.agrivet']);
+        $vendor->load(['shops' => function ($query) {
+            $query->wherePivot('status', 'active');
+        }, 'shops.agrivet']);
         
         if ($vendor->shops->isEmpty()) {
             return null;

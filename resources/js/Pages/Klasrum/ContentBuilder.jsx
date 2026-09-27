@@ -17,6 +17,7 @@ import {
     Upload,
     X,
 } from 'lucide-react'
+import axios from 'axios'
 import AdminKlasmeytLayout from '../../Layouts/AdminKlasmeytLayout'
 import SuperAdminKlasmeytLayout from '../../Layouts/SuperAdminKlasmeytLayout'
 import { useDashboardSession } from '../../hooks/useDashboardSession'
@@ -38,42 +39,52 @@ const editorListClass =
 const MAX_MEDIA_FILES = 15
 const MAX_MEDIA_BYTES = 20 * 1024 * 1024
 
-function csrfHeaders() {
-    const csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content')
-    return {
-        Accept: 'application/json',
-        'X-Requested-With': 'XMLHttpRequest',
-        ...(csrf ? { 'X-CSRF-TOKEN': csrf } : {}),
-    }
+function readCookie(name) {
+    const escaped = name.replace(/([.$?*|{}()[\]/+^])/g, '\\$1')
+    const match = document.cookie.match(new RegExp(`(?:^|; )${escaped}=([^;]*)`))
+    return match ? decodeURIComponent(match[1]) : null
 }
 
-async function uploadKlasrumMedia(file) {
+function csrfToken(sharedToken) {
+    return sharedToken
+        || document.querySelector('meta[name="csrf-token"]')?.getAttribute('content')
+        || ''
+}
+
+async function uploadKlasrumMedia(file, sharedToken) {
+    const token = csrfToken(sharedToken)
+    const xsrf = readCookie('XSRF-TOKEN')
     const formData = new FormData()
+    if (token) {
+        formData.append('_token', token)
+    }
     formData.append('media', file)
-    const response = await fetch('/klasrum/media', {
-        method: 'POST',
-        headers: csrfHeaders(),
-        credentials: 'same-origin',
-        body: formData,
-    })
 
-    let payload = null
     try {
-        payload = await response.json()
-    } catch {
-        payload = null
-    }
+        const { data } = await axios.post('/klasrum/media', formData, {
+            withCredentials: true,
+            withXSRFToken: true,
+            headers: {
+                Accept: 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
+                ...(token ? { 'X-CSRF-TOKEN': token } : {}),
+                ...(xsrf ? { 'X-XSRF-TOKEN': xsrf } : {}),
+            },
+        })
+        return data?.data
+    } catch (error) {
+        const status = error.response?.status
+        const payload = error.response?.data
+        const message = payload?.errors?.media?.[0] || payload?.message
 
-    if (!response.ok) {
-        const message = payload?.errors?.media?.[0]
-            || payload?.message
-            || (response.status === 413
-                ? 'This file is too large to upload.'
-                : 'Failed to upload media.')
-        throw new Error(message)
+        if (status === 419) {
+            throw new Error('Your session expired. Please refresh the page and try again.')
+        }
+        if (status === 413) {
+            throw new Error('This file is too large to upload.')
+        }
+        throw new Error(message || 'Failed to upload media.')
     }
-
-    return payload?.data
 }
 
 function initialMediaItems(content) {
@@ -438,7 +449,7 @@ function AdditionalMediaPicker({ inputRef, items, onAddFiles, onRemove }) {
 
 export default function ContentBuilder({ auth, content = null, categories = [] }) {
     useDashboardSession()
-    const { errors, flash } = usePage().props
+    const { errors, flash, csrf_token } = usePage().props
     const Layout = auth?.user?.user_type === 'admin' ? AdminKlasmeytLayout : SuperAdminKlasmeytLayout
     const coverInputRef = useRef(null)
     const mediaInputRef = useRef(null)
@@ -650,7 +661,7 @@ export default function ContentBuilder({ auth, content = null, categories = [] }
                     }
                     uploadedCount += 1
                     setProcessingLabel(`Uploading media ${uploadedCount} of ${pendingUploads.length}...`)
-                    const uploaded = await uploadKlasrumMedia(item.file)
+                    const uploaded = await uploadKlasrumMedia(item.file, csrf_token)
                     if (!uploaded?.path) {
                         throw new Error('Failed to upload media.')
                     }
@@ -677,6 +688,10 @@ export default function ContentBuilder({ auth, content = null, categories = [] }
         }
 
         const formData = new FormData()
+        const token = csrfToken(csrf_token)
+        if (token) {
+            formData.append('_token', token)
+        }
         formData.append('category_id', category)
         formData.append('title', title)
         formData.append('description', description)

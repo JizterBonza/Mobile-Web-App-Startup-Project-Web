@@ -6,6 +6,7 @@ use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Exceptions\PostTooLargeException;
 use Illuminate\Http\Middleware\HandleCors;
 use Illuminate\Http\Request;
+use Symfony\Component\HttpFoundation\Response;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -17,6 +18,7 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware) {
         $middleware->web(append: [
+            \App\Http\Middleware\EnsureUserIsActive::class,
             \App\Http\Middleware\HandleInertiaRequests::class,
         ]);
 
@@ -28,6 +30,7 @@ return Application::configure(basePath: dirname(__DIR__))
         // Register middleware aliases
         $middleware->alias([
             'session.valid' => \App\Http\Middleware\CheckSessionValidity::class,
+            'account.active' => \App\Http\Middleware\EnsureUserIsActive::class,
             'user.type' => \App\Http\Middleware\CheckUserType::class,
             'payout.automation' => \App\Http\Middleware\AuthenticatePayoutAutomation::class,
         ]);
@@ -43,5 +46,21 @@ return Application::configure(basePath: dirname(__DIR__))
             }
 
             return back()->with('error', $message);
+        });
+
+        $exceptions->respond(function (Response $response, \Throwable $e, Request $request) {
+            if ($response->getStatusCode() === 419) {
+                $message = 'Your session expired. Please refresh the page and try again.';
+
+                if ($request->expectsJson()) {
+                    return response()->json([
+                        'message' => $message,
+                    ], 419);
+                }
+
+                return back()->with('error', $message);
+            }
+
+            return $response;
         });
     })->create();

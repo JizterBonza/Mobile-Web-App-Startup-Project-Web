@@ -117,6 +117,15 @@ class SocialAuthController extends Controller
                 $isNewUser = false;
             }
 
+            if (! $user->isActive()) {
+                return $this->failureResponse(
+                    $mobileRedirectUri,
+                    User::INACTIVE_ACCOUNT_MESSAGE,
+                    'account_inactive',
+                    403
+                );
+            }
+
             $token = $user->createToken('mobile-token')->plainTextToken;
             $profileComplete = $this->isProfileComplete($userDetail);
 
@@ -385,6 +394,13 @@ class SocialAuthController extends Controller
     {
         $user = $result['user'];
         $userDetail = $result['userDetail'];
+
+        if (! $user->isActive()) {
+            return response()->json([
+                'success' => false,
+                'message' => User::INACTIVE_ACCOUNT_MESSAGE,
+            ], 403);
+        }
 
         $token = $user->createToken('mobile-token')->plainTextToken;
 
