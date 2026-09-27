@@ -3,9 +3,10 @@
 namespace App\Http\Controllers;
 
 use App\Http\Controllers\Concerns\EnsuresApiOwnership;
+use App\Models\RatingReview;
 use App\Models\Shop;
 use App\Models\Zone;
-use App\Models\RatingReview;
+use App\Services\ShopZoneCoverageService;
 use App\Support\GeoDistance;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
@@ -13,6 +14,34 @@ use Illuminate\Support\Facades\Validator;
 class ShopController extends Controller
 {
     use EnsuresApiOwnership;
+
+    /**
+     * Check delivery coordinates against one or more shops' assigned zones.
+     */
+    public function checkZoneCoverage(Request $request, ShopZoneCoverageService $coverageService)
+    {
+        $validated = $request->validate([
+            'latitude' => ['required', 'numeric', 'between:-90,90'],
+            'longitude' => ['required', 'numeric', 'between:-180,180'],
+            'shop_ids' => ['required', 'array', 'min:1'],
+            'shop_ids.*' => ['required', 'integer', 'distinct', 'exists:shops,id'],
+        ]);
+
+        $latitude = (float) $validated['latitude'];
+        $longitude = (float) $validated['longitude'];
+        $coverage = $coverageService->check($latitude, $longitude, $validated['shop_ids']);
+
+        return response()->json([
+            'success' => true,
+            'all_inside_zone' => $coverage['all_inside_zone'],
+            'coordinates' => [
+                'latitude' => $latitude,
+                'longitude' => $longitude,
+            ],
+            'shops' => $coverage['shops'],
+        ]);
+    }
+
     /**
      * Fetch all shops
      *
@@ -582,4 +611,3 @@ class ShopController extends Controller
         ]);
     }
 }
-

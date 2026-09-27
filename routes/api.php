@@ -134,6 +134,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Shop reviews + shop CRUD
     Route::post('shops/{id}/reviews', [ShopController::class, 'storeReview']);
+    Route::post('shops/check-zone-coverage', [ShopController::class, 'checkZoneCoverage']);
     Route::post('shops', [ShopController::class, 'store']);
     Route::put('shops/{id}', [ShopController::class, 'update']);
     Route::delete('shops/{id}', [ShopController::class, 'destroy']);
