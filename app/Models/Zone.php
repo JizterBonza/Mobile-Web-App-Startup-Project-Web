@@ -43,7 +43,7 @@ class Zone extends Model
     public function containsPoint(float $lat, float $lng): bool
     {
         $boundary = $this->boundary;
-        if (!is_array($boundary) || count($boundary) < 3) {
+        if (! $this->hasValidBoundary()) {
             return false;
         }
 
@@ -55,16 +55,70 @@ class Zone extends Model
             $latJ = (float) ($boundary[$j]['lat'] ?? $boundary[$j]['latitude'] ?? 0);
             $lngJ = (float) ($boundary[$j]['lng'] ?? $boundary[$j]['longitude'] ?? 0);
 
+            if ($this->pointLiesOnSegment($lat, $lng, $latI, $lngI, $latJ, $lngJ)) {
+                return true;
+            }
+
             $denom = $latJ - $latI;
             if (abs($denom) < 1e-10) {
                 continue;
             }
             if ((($latI <= $lat && $lat < $latJ) || ($latJ <= $lat && $lat < $latI))
                 && ($lng < ($lat - $latI) * ($lngJ - $lngI) / $denom + $lngI)) {
-                $inside = !$inside;
+                $inside = ! $inside;
             }
         }
+
         return $inside;
+    }
+
+    /**
+     * Determine whether the stored boundary can form a polygon.
+     */
+    public function hasValidBoundary(): bool
+    {
+        $boundary = $this->boundary;
+
+        if (! is_array($boundary) || count($boundary) < 3) {
+            return false;
+        }
+
+        foreach ($boundary as $point) {
+            if (! is_array($point)) {
+                return false;
+            }
+
+            $lat = $point['lat'] ?? $point['latitude'] ?? null;
+            $lng = $point['lng'] ?? $point['longitude'] ?? null;
+
+            if (! is_numeric($lat) || ! is_numeric($lng)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private function pointLiesOnSegment(
+        float $lat,
+        float $lng,
+        float $latA,
+        float $lngA,
+        float $latB,
+        float $lngB,
+    ): bool {
+        $epsilon = 1e-10;
+        $crossProduct = ($lng - $lngA) * ($latB - $latA)
+            - ($lat - $latA) * ($lngB - $lngA);
+
+        if (abs($crossProduct) > $epsilon) {
+            return false;
+        }
+
+        return $lat >= min($latA, $latB) - $epsilon
+            && $lat <= max($latA, $latB) + $epsilon
+            && $lng >= min($lngA, $lngB) - $epsilon
+            && $lng <= max($lngA, $lngB) + $epsilon;
     }
 
     /**
@@ -83,6 +137,7 @@ class Zone extends Model
                 return $zone;
             }
         }
+
         return null;
     }
 }
