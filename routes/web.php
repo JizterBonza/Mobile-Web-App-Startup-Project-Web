@@ -260,6 +260,10 @@ Route::get('/dashboard/super-admin/support', [DashboardController::class, 'super
     ->middleware(['auth', 'session.valid', 'user.type:super_admin'])
     ->name('dashboard.super-admin.support');
 
+Route::get('/dashboard/super-admin/apk-management', [DashboardController::class, 'apkManagement'])
+    ->middleware(['auth', 'session.valid', 'user.type:super_admin'])
+    ->name('dashboard.super-admin.apk-management');
+
 Route::middleware(['auth', 'session.valid', 'user.type:owner_manager'])->prefix('dashboard/owner-manager')->name('dashboard.owner-manager.')->group(function () {
     Route::get('/', [DashboardController::class, 'ownerManager'])->name('index');
     Route::get('/stores', [DashboardController::class, 'ownerManagerStores'])->name('stores');

@@ -617,6 +617,11 @@ class DashboardController extends Controller
         ]);
     }
 
+    public function apkManagement()
+    {
+        return Inertia::render('Dashboard/ApkManagement');
+    }
+
     public function adminSupport()
     {
         return Inertia::render('Dashboard/AdminSupport', [
