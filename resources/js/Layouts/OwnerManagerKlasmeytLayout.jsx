@@ -1,4 +1,4 @@
-import { Head } from '@inertiajs/react'
+import { Head, usePage } from '@inertiajs/react'
 import { ContactSupportFab } from '../Components/Dashboard/ContactSupportFab'
 import { DashboardHeader, OWNER_MANAGER_DROPDOWN_NAV } from '../Components/Dashboard/DashboardHeader'
 import { useDashboardSession } from '../hooks/useDashboardSession'
@@ -10,6 +10,22 @@ export const OWNER_MANAGER_NAV = [
 ]
 
 export function OwnerManagerNoAgrivetAlert() {
+    const farmName = usePage().props?.auth?.user?.farm_name
+
+    if (farmName) {
+        return (
+            <div
+                role="status"
+                className="mb-6 rounded-xl border border-[#DBEAFE] bg-[#EFF6FF] p-4 text-sm text-[#1E3A8A]"
+            >
+                <p className="font-semibold">{farmName}</p>
+                <p className="mt-1">
+                    This owner/manager account is linked to a farm. Store, order, and messaging tools apply to Agrivet businesses.
+                </p>
+            </div>
+        )
+    }
+
     return (
         <div
             role="alert"

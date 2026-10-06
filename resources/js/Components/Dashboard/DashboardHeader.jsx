@@ -359,6 +359,7 @@ export const SUPER_ADMIN_HEADER_NAV = [
     { label: 'Dashboard', id: 'dashboard', href: '/dashboard/super-admin', exactMatch: true },
     { label: 'Accounts', id: 'accounts', href: '/dashboard/super-admin/users' },
     { label: 'Agrivets', id: 'agrivets', href: '/dashboard/super-admin/agrivets' },
+    { label: 'Farms', id: 'farms', href: '/dashboard/super-admin/farms' },
     {
         label: 'Products',
         id: 'products',
@@ -388,6 +389,7 @@ export const ADMIN_HEADER_NAV = [
     { label: 'Dashboard', id: 'dashboard', href: '/dashboard/admin', exactMatch: true },
     { label: 'Accounts', id: 'accounts', href: '/dashboard/admin/users' },
     { label: 'Agrivets', id: 'agrivets', href: '/dashboard/admin/agrivets' },
+    { label: 'Farms', id: 'farms', href: '/dashboard/admin/farms' },
     {
         label: 'Products',
         id: 'products',

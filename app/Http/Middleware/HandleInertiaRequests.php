@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\User;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
 
@@ -40,16 +41,25 @@ class HandleInertiaRequests extends Middleware
             $user->load('userDetail');
         }
 
+        $authUser = null;
+        if ($user) {
+            $authUser = [
+                'id' => $user->id,
+                'name' => ($user->userDetail ? $user->userDetail->first_name . ' ' . $user->userDetail->last_name : 'User'),
+                'email' => $user->userDetail->email ?? '',
+                'user_type' => $user->user_type,
+            ];
+
+            if ($user->user_type === User::TYPE_OWNER_MANAGER && $user->farm_id) {
+                $authUser['farm_name'] = $user->managedFarm?->name;
+            }
+        }
+
         return [
             ...parent::share($request),
             'csrf_token' => csrf_token(),
             'auth' => [
-                'user' => $user ? [
-                    'id' => $user->id,
-                    'name' => ($user->userDetail ? $user->userDetail->first_name . ' ' . $user->userDetail->last_name : 'User'),
-                    'email' => $user->userDetail->email ?? '',
-                    'user_type' => $user->user_type,
-                ] : null,
+                'user' => $authUser,
             ],
             'flash' => [
                 'success' => $request->session()->get('success'),
