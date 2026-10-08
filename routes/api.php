@@ -3,6 +3,7 @@
 use App\Http\Controllers\ActivityLogController;
 use App\Http\Controllers\AddressController;
 use App\Http\Controllers\Api\SocialAuthController;
+use App\Http\Controllers\AppReleaseApiController;
 use App\Http\Controllers\CartController;
 use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\CustomerShopMessageController;
@@ -47,6 +48,14 @@ Route::get('search', [SearchController::class, 'index']);
 
 Route::get('categories', [CategoryController::class, 'index']);
 Route::get('categories/{id}', [CategoryController::class, 'show']);
+
+// Mobile app releases (version check + tracked APK download)
+Route::get('app-releases/latest', [AppReleaseApiController::class, 'latest'])
+    ->middleware('throttle:60,1')
+    ->name('api.app-releases.latest');
+Route::get('app-releases/{release}/download', [AppReleaseApiController::class, 'download'])
+    ->middleware('throttle:20,1')
+    ->name('api.app-releases.download');
 
 Route::get('klasrum/categories', [KlasrumApiController::class, 'categories']);
 Route::get('klasrum/contents', [KlasrumApiController::class, 'contents']);

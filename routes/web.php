@@ -4,6 +4,7 @@ use App\Http\Controllers\Auth\AuthController;
 use App\Http\Controllers\Auth\GoogleAuthController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\AgrivetController;
+use App\Http\Controllers\AppReleaseController;
 use App\Http\Controllers\FarmController;
 use App\Http\Controllers\VendorController;
 use App\Http\Controllers\ProductImageController;
@@ -269,6 +270,18 @@ Route::middleware(['auth', 'session.valid', 'user.type:super_admin'])->prefix('d
 Route::get('/dashboard/super-admin/support', [DashboardController::class, 'superAdminSupport'])
     ->middleware(['auth', 'session.valid', 'user.type:super_admin'])
     ->name('dashboard.super-admin.support');
+
+// Super Admin APK Management
+Route::middleware(['auth', 'session.valid', 'user.type:super_admin'])->prefix('dashboard/super-admin/apk-management')->group(function () {
+    Route::get('/', [AppReleaseController::class, 'index'])->name('dashboard.super-admin.apk-management');
+    Route::name('dashboard.super-admin.apk-management.releases.')->prefix('releases')->group(function () {
+        Route::post('/', [AppReleaseController::class, 'store'])->name('store');
+        Route::post('/{release}/publish', [AppReleaseController::class, 'publish'])->name('publish');
+        Route::post('/{release}/archive', [AppReleaseController::class, 'archive'])->name('archive');
+        Route::delete('/{release}', [AppReleaseController::class, 'destroy'])->name('destroy');
+        Route::get('/{release}/download', [AppReleaseController::class, 'download'])->name('download');
+    });
+});
 
 Route::middleware(['auth', 'session.valid', 'user.type:owner_manager'])->prefix('dashboard/owner-manager')->name('dashboard.owner-manager.')->group(function () {
     Route::get('/', [DashboardController::class, 'ownerManager'])->name('index');
