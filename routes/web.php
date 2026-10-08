@@ -4,6 +4,7 @@ use App\Http\Controllers\Auth\AuthController;
 use App\Http\Controllers\Auth\GoogleAuthController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\AgrivetController;
+use App\Http\Controllers\AppReleaseController;
 use App\Http\Controllers\FarmController;
 use App\Http\Controllers\VendorController;
 use App\Http\Controllers\ProductImageController;
