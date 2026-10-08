@@ -8,6 +8,7 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
 use App\Models\Agrivet;
+use App\Models\Farm;
 use App\Models\Shop;
 use App\Models\Notification;
 
@@ -41,6 +42,7 @@ class User extends Authenticatable
         'status',
         'user_type',
         'agrivet_id',
+        'farm_id',
     ];
 
     /**
@@ -132,6 +134,14 @@ class User extends Authenticatable
     public function managedAgrivet()
     {
         return $this->belongsTo(Agrivet::class, 'agrivet_id');
+    }
+
+    /**
+     * Farm this owner/manager account manages.
+     */
+    public function managedFarm()
+    {
+        return $this->belongsTo(Farm::class, 'farm_id');
     }
 
     /**

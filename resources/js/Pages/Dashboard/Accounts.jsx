@@ -3,6 +3,7 @@ import { Head, useForm, router } from '@inertiajs/react'
 import {
     Bike,
     Building2,
+    Tractor,
     Database,
     Pencil,
     Plus,
@@ -196,9 +197,17 @@ export default function Accounts({ auth, users = [], flash }) {
     const getAddAgrivetUrl = () =>
         auth?.user?.user_type === 'admin' ? '/dashboard/admin/agrivets/create' : '/dashboard/super-admin/agrivets/create'
 
+    const getAddFarmUrl = () =>
+        auth?.user?.user_type === 'admin' ? '/dashboard/admin/farms/create' : '/dashboard/super-admin/farms/create'
+
     const handleNavigateToAddAgrivet = () => {
         setShowRoleSelectionModal(false)
         router.visit(getAddAgrivetUrl())
+    }
+
+    const handleNavigateToAddFarm = () => {
+        setShowRoleSelectionModal(false)
+        router.visit(getAddFarmUrl())
     }
 
     const handleOpenCreateAccount = () => {
@@ -875,6 +884,26 @@ export default function Accounts({ auth, users = [], flash }) {
                                             Agrivet
                                         </h4>
                                         <p className="text-xs text-[#6B7280]">Agrivet store owner and manager — full onboarding wizard</p>
+                                    </div>
+                                </button>
+                            )}
+                            {(auth?.user?.user_type === 'super_admin' || auth?.user?.user_type === 'admin') && (
+                                <button
+                                    type="button"
+                                    onClick={handleNavigateToAddFarm}
+                                    className="group flex items-start gap-4 rounded-lg border border-[#E5E7EB] p-4 text-left transition-all hover:border-[#102059] hover:bg-[#F8F9FB]"
+                                >
+                                    <div className="rounded-lg bg-[#F8F9FB] p-2 transition-colors group-hover:bg-[#102059]">
+                                        <Tractor className="h-6 w-6 text-[#244693] transition-colors group-hover:text-white" />
+                                    </div>
+                                    <div className="min-w-0 flex-1">
+                                        <h4
+                                            className="mb-1 font-semibold text-[#102059]"
+                                            style={{ fontFamily: 'Inter Condensed, sans-serif' }}
+                                        >
+                                            Farm
+                                        </h4>
+                                        <p className="text-xs text-[#6B7280]">Farm owner and manager — full onboarding wizard</p>
                                     </div>
                                 </button>
                             )}

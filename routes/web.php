@@ -4,7 +4,7 @@ use App\Http\Controllers\Auth\AuthController;
 use App\Http\Controllers\Auth\GoogleAuthController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\AgrivetController;
-use App\Http\Controllers\AppReleaseController;
+use App\Http\Controllers\FarmController;
 use App\Http\Controllers\VendorController;
 use App\Http\Controllers\ProductImageController;
 use App\Http\Controllers\CategoryController;
@@ -177,6 +177,15 @@ Route::middleware(['auth', 'session.valid', 'user.type:super_admin'])->prefix('d
 
     Route::put('/{id}', [AgrivetController::class, 'update'])->name('update');
     Route::delete('/{id}', [AgrivetController::class, 'destroy'])->name('destroy');
+});
+
+// Farm Management Routes
+Route::middleware(['auth', 'session.valid', 'user.type:super_admin'])->prefix('dashboard/super-admin/farms')->name('dashboard.super-admin.farms.')->group(function () {
+    Route::get('/', [FarmController::class, 'index'])->name('index');
+    Route::get('/create', [FarmController::class, 'create'])->name('create');
+    Route::post('/setup-wizard', [FarmController::class, 'storeSetupWizard'])->name('setup-wizard.store');
+    Route::put('/{id}', [FarmController::class, 'update'])->name('update');
+    Route::delete('/{id}', [FarmController::class, 'destroy'])->name('destroy');
 });
 
 // Super Admin Category Management Routes
@@ -393,6 +402,15 @@ Route::middleware(['auth', 'session.valid', 'user.type:admin'])->prefix('dashboa
 
     Route::put('/{id}', [AgrivetController::class, 'update'])->name('update');
     Route::delete('/{id}', [AgrivetController::class, 'destroy'])->name('destroy');
+});
+
+// Admin Farm Management Routes
+Route::middleware(['auth', 'session.valid', 'user.type:admin'])->prefix('dashboard/admin/farms')->name('dashboard.admin.farms.')->group(function () {
+    Route::get('/', [FarmController::class, 'index'])->name('index');
+    Route::get('/create', [FarmController::class, 'create'])->name('create');
+    Route::post('/setup-wizard', [FarmController::class, 'storeSetupWizard'])->name('setup-wizard.store');
+    Route::put('/{id}', [FarmController::class, 'update'])->name('update');
+    Route::delete('/{id}', [FarmController::class, 'destroy'])->name('destroy');
 });
 
 // Admin Category Management Routes
