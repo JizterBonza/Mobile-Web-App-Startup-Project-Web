@@ -11,6 +11,7 @@ use App\Http\Controllers\Concerns\CreatesProductCatalogEntry;
 use App\Http\Controllers\Concerns\ManagesShopOrders;
 use App\Models\ActivityLog;
 use App\Models\Category;
+use App\Models\Farm;
 use App\Models\ProductCatalog;
 use App\Models\SubCategory;
 use App\Http\Controllers\SupportTicketController;
@@ -151,11 +152,13 @@ class DashboardController extends Controller
     {
         $user = auth()->user();
         $agrivet = $user->managedAgrivet;
+        $farm = $this->ownerManagerFarmPayload($user);
         $period = $this->ownerManagerPeriod($request);
 
         if (!$agrivet) {
             return Inertia::render('Dashboard/OwnerManagerDashboard', [
                 'agrivet' => null,
+                'farm'    => $farm,
                 'shops'   => [],
                 'stats'   => $this->emptyOwnerManagerStats($period),
                 'period'  => $period,
@@ -168,6 +171,7 @@ class DashboardController extends Controller
         if (empty($shopIds)) {
             return Inertia::render('Dashboard/OwnerManagerDashboard', [
                 'agrivet' => $agrivet,
+                'farm'    => null,
                 'shops'   => [],
                 'stats'   => $this->emptyOwnerManagerStats($period),
                 'period'  => $period,
@@ -281,6 +285,7 @@ class DashboardController extends Controller
 
         return Inertia::render('Dashboard/OwnerManagerDashboard', [
             'agrivet' => $agrivet,
+            'farm'    => null,
             'shops'   => $shops,
             'period'  => $period,
             'stats'   => [
@@ -305,10 +310,154 @@ class DashboardController extends Controller
         ]);
     }
 
+    public function ownerManagerFarm()
+    {
+        $farm = $this->managedFarmOrRedirect();
+        if ($farm instanceof \Illuminate\Http\RedirectResponse) {
+            return $farm;
+        }
+
+        return Inertia::render('Dashboard/OwnerManagerFarm', [
+            'farm' => $this->ownerManagerFarmPagePayload($farm),
+        ]);
+    }
+
+    public function ownerManagerUpdateFarm(Request $request)
+    {
+        $farm = $this->managedFarmOrRedirect();
+        if ($farm instanceof \Illuminate\Http\RedirectResponse) {
+            return $farm;
+        }
+
+        $validated = $request->validate([
+            'name' => 'required|string|max:150',
+            'contact_number' => 'nullable|string|max:30',
+            'address' => 'nullable|string|max:255',
+            'city' => 'nullable|string|max:100',
+            'province' => 'nullable|string|max:100',
+            'postal_code' => 'nullable|string|max:20',
+            'latitude' => 'nullable|numeric',
+            'longitude' => 'nullable|numeric',
+            'bank_name' => 'nullable|string|max:150',
+            'account_name' => 'nullable|string|max:150',
+            'account_number' => 'nullable|string|max:50',
+            'operating_days' => 'required|string|max:500',
+            'opening_time' => 'required|string|max:10',
+            'closing_time' => 'required|string|max:10',
+        ]);
+
+        $oldValues = $farm->toArray();
+        $farm->update([
+            'name' => $validated['name'],
+            'contact_number' => $validated['contact_number'] ?? null,
+            'address' => $validated['address'] ?? null,
+            'city' => $validated['city'] ?? null,
+            'province' => $validated['province'] ?? null,
+            'postal_code' => $validated['postal_code'] ?? null,
+            'latitude' => $request->filled('latitude') ? (float) $validated['latitude'] : null,
+            'longitude' => $request->filled('longitude') ? (float) $validated['longitude'] : null,
+            'bank_name' => $validated['bank_name'] ?? null,
+            'account_name' => $validated['account_name'] ?? null,
+            'account_number' => $validated['account_number'] ?? null,
+            'operating_days' => $validated['operating_days'],
+            'operating_hours' => $validated['opening_time'].' - '.$validated['closing_time'],
+        ]);
+
+        ActivityLog::log('updated', "Farm updated: {$farm->name}", $farm, $oldValues, $farm->fresh()->toArray());
+
+        return redirect()->route('dashboard.owner-manager.farm')
+            ->with('success', 'Farm information updated.');
+    }
+
+    public function ownerManagerUpdateFarmStatus(Request $request)
+    {
+        $farm = $this->managedFarmOrRedirect();
+        if ($farm instanceof \Illuminate\Http\RedirectResponse) {
+            return $farm;
+        }
+
+        $validated = $request->validate([
+            'status' => 'required|string|in:active,inactive',
+        ]);
+
+        $farm->update(['status' => $validated['status']]);
+
+        return redirect()->route('dashboard.owner-manager.farm')
+            ->with('success', $validated['status'] === 'active' ? 'Farm is now active.' : 'Farm is now inactive.');
+    }
+
+    public function ownerManagerUpdateFarmCover(Request $request)
+    {
+        $farm = $this->managedFarmOrRedirect();
+        if ($farm instanceof \Illuminate\Http\RedirectResponse) {
+            return $farm;
+        }
+
+        $request->validate([
+            'cover_image' => 'required|file|mimes:jpeg,jpg,png,webp|max:10240',
+        ]);
+
+        $path = $request->file('cover_image')->store('farms/covers', 'public');
+        $farm->update(['cover_url' => $path]);
+
+        return redirect()->route('dashboard.owner-manager.farm')
+            ->with('success', 'Cover photo updated.');
+    }
+
+    /**
+     * @return Farm|\Illuminate\Http\RedirectResponse
+     */
+    private function managedFarmOrRedirect()
+    {
+        $user = auth()->user();
+        $farm = $user->managedFarm;
+
+        if (! $farm || $user->managedAgrivet) {
+            return redirect()->route('dashboard.owner-manager.stores');
+        }
+
+        return $farm;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function ownerManagerFarmPagePayload(Farm $farm): array
+    {
+        $permitUrl = $farm->permit_url;
+
+        return [
+            'id' => $farm->id,
+            'name' => $farm->name,
+            'owner_name' => $farm->owner_name,
+            'contact_number' => $farm->contact_number,
+            'address' => $farm->address,
+            'city' => $farm->city,
+            'province' => $farm->province,
+            'postal_code' => $farm->postal_code,
+            'latitude' => $farm->latitude,
+            'longitude' => $farm->longitude,
+            'cover_url' => $farm->cover_url,
+            'banner_url' => $farm->banner_url,
+            'permit_url' => $permitUrl,
+            'permit_is_pdf' => is_string($permitUrl) && str_ends_with(strtolower($permitUrl), '.pdf'),
+            'operating_days' => $farm->operating_days,
+            'operating_hours' => $farm->operating_hours,
+            'bank_name' => $farm->bank_name,
+            'account_name' => $farm->account_name,
+            'account_number' => $farm->account_number,
+            'status' => $farm->status,
+        ];
+    }
+
     public function ownerManagerStores()
     {
         $user = auth()->user();
         $agrivet = $user->managedAgrivet;
+
+        if (! $agrivet && $user->managedFarm) {
+            return redirect()->route('dashboard.owner-manager.farm');
+        }
 
         $zones = Zone::where('status', true)->orderBy('name')->get(['id', 'name', 'boundary']);
 
@@ -940,6 +1089,23 @@ class DashboardController extends Controller
         abort_unless($agrivet, 404);
 
         return $agrivet->shops()->pluck('id')->all();
+    }
+
+    /**
+     * @return array{id: int, name: string}|null
+     */
+    private function ownerManagerFarmPayload($user): ?array
+    {
+        $farm = $user->managedFarm;
+
+        if (! $farm) {
+            return null;
+        }
+
+        return [
+            'id' => $farm->id,
+            'name' => $farm->name,
+        ];
     }
 
     private function ownerManagerPeriod(Request $request): string

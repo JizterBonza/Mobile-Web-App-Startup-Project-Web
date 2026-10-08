@@ -52,6 +52,7 @@ class HandleInertiaRequests extends Middleware
 
             if ($user->user_type === User::TYPE_OWNER_MANAGER && $user->farm_id) {
                 $authUser['farm_name'] = $user->managedFarm?->name;
+                $authUser['manages_farm'] = ! $user->agrivet_id;
             }
         }
 

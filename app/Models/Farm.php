@@ -26,6 +26,9 @@ class Farm extends Model
         'permit_url',
         'operating_days',
         'operating_hours',
+        'bank_name',
+        'account_name',
+        'account_number',
         'status',
     ];
 

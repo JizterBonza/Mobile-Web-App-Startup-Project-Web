@@ -50,6 +50,15 @@ export default function OwnerManagerKlasmeytLayout({
 }) {
     useDashboardSession()
 
+    const managesFarm = Boolean(auth?.user?.manages_farm)
+    const navigationItems = managesFarm
+        ? OWNER_MANAGER_NAV.map((item) =>
+              item.id === 'stores'
+                  ? { label: 'Farm', id: 'farm', href: '/dashboard/owner-manager/farm' }
+                  : item,
+          )
+        : OWNER_MANAGER_NAV
+
     return (
         <>
             <Head title={title} />
@@ -58,7 +67,7 @@ export default function OwnerManagerKlasmeytLayout({
                     compactNav
                     showMessaging
                     messagingHref="/dashboard/owner-manager/messages"
-                    navigationItems={OWNER_MANAGER_NAV}
+                    navigationItems={navigationItems}
                     dropdownNavItems={OWNER_MANAGER_DROPDOWN_NAV}
                     userName={auth.user.name}
                     userEmail={auth.user.email}
