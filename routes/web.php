@@ -6,6 +6,8 @@ use App\Http\Controllers\UserController;
 use App\Http\Controllers\AgrivetController;
 use App\Http\Controllers\AppReleaseController;
 use App\Http\Controllers\FarmController;
+use App\Http\Controllers\GamefowlCatalogController;
+use App\Http\Controllers\GamefowlLookupController;
 use App\Http\Controllers\VendorController;
 use App\Http\Controllers\ProductImageController;
 use App\Http\Controllers\CategoryController;
@@ -107,6 +109,40 @@ Route::post('/dashboard/super-admin/products', [SuperAdminProductController::cla
 Route::get('/dashboard/super-admin/products', [SuperAdminProductController::class, 'index'])
     ->middleware(['auth', 'session.valid', 'user.type:super_admin'])
     ->name('dashboard.super-admin.products');
+
+foreach (['super_admin' => 'super-admin', 'admin' => 'admin'] as $gamefowlRole => $gamefowlSegment) {
+    Route::middleware(['auth', 'session.valid', "user.type:{$gamefowlRole}"])
+        ->prefix("dashboard/{$gamefowlSegment}")
+        ->name("dashboard.{$gamefowlSegment}.")
+        ->group(function () {
+            Route::get('gamefowls/create', [GamefowlCatalogController::class, 'create'])->name('gamefowls.create');
+            Route::post('gamefowls', [GamefowlCatalogController::class, 'store'])->name('gamefowls.store');
+            Route::get('gamefowls', [GamefowlCatalogController::class, 'index'])->name('gamefowls');
+            Route::get('gamefowls/requests', [GamefowlCatalogController::class, 'requests'])->name('gamefowls.requests');
+            Route::post('gamefowls/requests/{id}/approve', [GamefowlCatalogController::class, 'approve'])->name('gamefowls.requests.approve');
+            Route::post('gamefowls/requests/{id}/reject', [GamefowlCatalogController::class, 'reject'])->name('gamefowls.requests.reject');
+
+            Route::get('gamefowls/bloodlines', [GamefowlLookupController::class, 'bloodlines'])->name('gamefowls.bloodlines');
+            Route::post('gamefowls/bloodlines', [GamefowlLookupController::class, 'storeBloodline'])->name('gamefowls.bloodlines.store');
+            Route::put('gamefowls/bloodlines/{id}', [GamefowlLookupController::class, 'updateBloodline'])->name('gamefowls.bloodlines.update');
+            Route::delete('gamefowls/bloodlines/{id}', [GamefowlLookupController::class, 'destroyBloodline'])->name('gamefowls.bloodlines.destroy');
+
+            Route::get('gamefowls/age-types', [GamefowlLookupController::class, 'ageTypes'])->name('gamefowls.age-types');
+            Route::post('gamefowls/age-types', [GamefowlLookupController::class, 'storeAgeType'])->name('gamefowls.age-types.store');
+            Route::put('gamefowls/age-types/{id}', [GamefowlLookupController::class, 'updateAgeType'])->name('gamefowls.age-types.update');
+            Route::delete('gamefowls/age-types/{id}', [GamefowlLookupController::class, 'destroyAgeType'])->name('gamefowls.age-types.destroy');
+
+            Route::get('gamefowls/classes', [GamefowlLookupController::class, 'classes'])->name('gamefowls.classes');
+            Route::post('gamefowls/classes', [GamefowlLookupController::class, 'storeClass'])->name('gamefowls.classes.store');
+            Route::put('gamefowls/classes/{id}', [GamefowlLookupController::class, 'updateClass'])->name('gamefowls.classes.update');
+            Route::delete('gamefowls/classes/{id}', [GamefowlLookupController::class, 'destroyClass'])->name('gamefowls.classes.destroy');
+
+            Route::get('gamefowls/{id}/edit', [GamefowlCatalogController::class, 'edit'])->name('gamefowls.edit');
+            Route::put('gamefowls/{id}', [GamefowlCatalogController::class, 'update'])->name('gamefowls.update');
+            Route::patch('gamefowls/{id}/status', [GamefowlCatalogController::class, 'updateStatus'])->name('gamefowls.status');
+            Route::get('gamefowls/{id}', [GamefowlCatalogController::class, 'show'])->name('gamefowls.show');
+        });
+}
 
 Route::get('/dashboard/super-admin/products/{id}/edit', [SuperAdminProductController::class, 'edit'])
     ->middleware(['auth', 'session.valid', 'user.type:super_admin'])

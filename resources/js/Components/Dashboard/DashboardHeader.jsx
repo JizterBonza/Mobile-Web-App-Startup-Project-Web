@@ -383,6 +383,7 @@ export const SUPER_ADMIN_HEADER_NAV = [
             '/dashboard/super-admin/sub-categories',
         ],
     },
+    { label: 'Gamefowls', id: 'gamefowls', href: '/dashboard/super-admin/gamefowls' },
     { label: 'Klasrum', id: 'klasrum', href: '/klasrum' },
     { label: 'Support', id: 'support', href: '/dashboard/super-admin/support' },
 ]
@@ -414,6 +415,7 @@ export const ADMIN_HEADER_NAV = [
             '/dashboard/admin/sub-categories',
         ],
     },
+    { label: 'Gamefowls', id: 'gamefowls', href: '/dashboard/admin/gamefowls' },
     { label: 'Klasrum', id: 'klasrum', href: '/klasrum' },
     { label: 'Support', id: 'support', href: '/dashboard/admin/support' },
 ]
