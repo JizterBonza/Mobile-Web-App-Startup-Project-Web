@@ -132,7 +132,7 @@ class GamefowlCatalogController extends Controller
     public function requests()
     {
         $requests = GamefowlCatalog::pending()
-            ->with(['bloodline', 'ageType', 'gamefowlClass', 'creator.userDetail'])
+            ->with(['bloodline', 'ageType', 'gamefowlClass', 'creator.userDetail', 'creator.managedFarm'])
             ->latest()
             ->get()
             ->map(fn (GamefowlCatalog $gamefowl) => $this->detailPayload($gamefowl));
@@ -168,6 +168,53 @@ class GamefowlCatalogController extends Controller
         ActivityLog::log('updated', "Gamefowl request rejected: {$gamefowl->name}", $gamefowl);
 
         return redirect()->back()->with('success', 'Gamefowl request rejected.');
+    }
+
+    public function ownerRequestForm()
+    {
+        $farm = $this->managedFarmOrRedirect();
+        if ($farm instanceof \Illuminate\Http\RedirectResponse) {
+            return $farm;
+        }
+
+        return Inertia::render('Dashboard/RegisterGamefowl', [
+            ...$this->formOptions(),
+            'requestMode' => true,
+        ]);
+    }
+
+    public function ownerRequestStore(Request $request)
+    {
+        $farm = $this->managedFarmOrRedirect();
+        if ($farm instanceof \Illuminate\Http\RedirectResponse) {
+            return $farm;
+        }
+
+        $validated = $this->validateEntry($request, true);
+        $images = $this->resolveImages($request);
+
+        if (count($images) < 5) {
+            return back()->withInput()->withErrors(['images' => 'Please upload all 5 gamefowl images.']);
+        }
+
+        $gamefowl = GamefowlCatalog::create([
+            'name' => $validated['name'],
+            'bloodline_id' => $validated['bloodline_id'],
+            'age_type_id' => $validated['age_type_id'],
+            'class_id' => $validated['class_id'],
+            'sex' => $validated['sex'],
+            'hatch_date' => $validated['hatch_date'] ?? null,
+            'description' => $validated['description'] ?? null,
+            'images' => array_values($images),
+            'primary_image_index' => (int) $validated['primary_image_index'],
+            'status' => GamefowlCatalog::STATUS_PENDING,
+            'created_by' => auth()->id(),
+        ]);
+
+        ActivityLog::log('created', "Gamefowl registration requested by {$farm->name}: {$gamefowl->name}", $gamefowl, null, $gamefowl->toArray());
+
+        return redirect('/dashboard/owner-manager/farm?tab=gamefowl')
+            ->with('success', 'Gamefowl registration request submitted. It will be reviewed by an administrator.');
     }
 
     private function validateEntry(Request $request, bool $creating): array
@@ -280,6 +327,7 @@ class GamefowlCatalogController extends Controller
             'sex' => $gamefowl->sex,
             'hatch_date' => $gamefowl->hatch_date?->format('Y-m-d'),
             'created_by_role' => $gamefowl->creator?->user_type,
+            'farm_name' => $gamefowl->creator?->managedFarm?->name,
         ];
     }
 
@@ -300,5 +348,20 @@ class GamefowlCatalogController extends Controller
         $segment = auth()->user()?->user_type === 'admin' ? 'admin' : 'super-admin';
 
         return "/dashboard/{$segment}/gamefowls";
+    }
+
+    /**
+     * @return \App\Models\Farm|\Illuminate\Http\RedirectResponse
+     */
+    private function managedFarmOrRedirect()
+    {
+        $user = auth()->user();
+        $farm = $user?->managedFarm;
+
+        if (! $farm || $user->managedAgrivet) {
+            return redirect()->route('dashboard.owner-manager.stores');
+        }
+
+        return $farm;
     }
 }

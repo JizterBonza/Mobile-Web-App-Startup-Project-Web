@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { router, useForm, usePage } from '@inertiajs/react'
-import { Clock, Landmark, MapPin, Package, Pencil, Star, X } from 'lucide-react'
+import { Link, router, useForm, usePage } from '@inertiajs/react'
+import { Bird, Box, ChevronDown, CirclePlus, Clock, Landmark, MapPin, Pencil, Search, Star, X } from 'lucide-react'
 import PinLocationMap from '../../Components/PinLocationMap'
 import OwnerManagerKlasmeytLayout from '../../Layouts/OwnerManagerKlasmeytLayout'
 import { storageUrl } from '../../utils/storageUrl'
@@ -51,11 +51,240 @@ function statusLabel(status) {
     return status === 'inactive' ? 'Inactive' : 'Active'
 }
 
-export default function OwnerManagerFarm({ auth, farm }) {
-    const { flash } = usePage().props
+function initialFarmTab(url) {
+    const query = String(url || '').split('?')[1] || ''
+    const tab = new URLSearchParams(query).get('tab')
+    return ['about', 'gamefowl', 'insights'].includes(tab) ? tab : 'about'
+}
+
+function formatPeso(value) {
+    const amount = Number(value)
+    return `₱${Number.isFinite(amount) ? amount.toFixed(2) : '0.00'}/per head`
+}
+
+function formatReleaseDate(value) {
+    if (!value) return '—'
+    const match = String(value).match(/^(\d{4})-(\d{2})-(\d{2})/)
+    if (match) return `${match[2]}/${match[3]}/${match[1]}`
+    return String(value)
+}
+
+function normalizeListing(item) {
+    const composition = item.composition || item.bloodline_name || '—'
+    const age = item.age || item.age_type_name || '—'
+    const sex = item.sex || '—'
+    const category = item.category || item.class_name || item.bloodline_name || 'Uncategorized'
+
+    return {
+        id: item.id,
+        title: item.title || item.name || `${composition} / ${category}`,
+        composition,
+        age,
+        sex,
+        category,
+        price: item.price ?? 0,
+        stocks: item.stocks ?? item.stock ?? 0,
+        releaseDate: formatReleaseDate(item.release_date || item.releaseDate),
+        popularity: item.popularity ?? 0,
+        status: String(item.status || 'active').toLowerCase(),
+        image: item.image || item.image_url || null,
+    }
+}
+
+function GamefowlCatalogPanel({ listings = [] }) {
+    const [searchQuery, setSearchQuery] = useState('')
+    const [categoryFilter, setCategoryFilter] = useState('')
+    const [statusFilter, setStatusFilter] = useState('')
+    const [sortBy, setSortBy] = useState('')
+
+    const rows = useMemo(() => listings.map(normalizeListing), [listings])
+
+    const categories = useMemo(() => {
+        return Array.from(new Set(rows.map((item) => item.category).filter((name) => name && name !== 'Uncategorized'))).sort()
+    }, [rows])
+
+    const visible = useMemo(() => {
+        const query = searchQuery.trim().toLowerCase()
+        const filtered = rows.filter((item) => {
+            const haystack = [item.title, item.composition, item.age, item.sex, item.category].join(' ').toLowerCase()
+            const matchesSearch = !query || haystack.includes(query)
+            const matchesCategory = !categoryFilter || item.category === categoryFilter
+            const matchesStatus = !statusFilter || item.status === statusFilter
+            return matchesSearch && matchesCategory && matchesStatus
+        })
+
+        const sorted = [...filtered]
+        sorted.sort((a, b) => {
+            if (sortBy === 'name') return a.title.localeCompare(b.title)
+            if (sortBy === 'price-asc') return Number(a.price) - Number(b.price)
+            if (sortBy === 'price-desc') return Number(b.price) - Number(a.price)
+            if (sortBy === 'popularity') return Number(b.popularity) - Number(a.popularity)
+            return 0
+        })
+        return sorted
+    }, [rows, searchQuery, categoryFilter, statusFilter, sortBy])
+
+    const selectClass = (value) =>
+        `w-full appearance-none rounded-lg border border-[#E5E7EB] bg-white py-2.5 pl-3 pr-9 text-sm focus:border-[#244693] focus:outline-none ${
+            value ? 'text-[#102059]' : 'text-[#9CA3AF]'
+        }`
+
+    return (
+        <section className="rounded-xl border border-[#E5E7EB] bg-white p-6 sm:p-8">
+            <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                <div>
+                    <h2 className="text-xl font-semibold text-[#102059]">Gamefowl Catalog</h2>
+                    <p className="mt-1 text-sm text-[#9CA3AF]">Manage the gamefowl listed for sale on this farm.</p>
+                </div>
+                <div className="flex flex-wrap items-center gap-3">
+                    <button
+                        type="button"
+                        className="inline-flex items-center gap-2 rounded-lg bg-[#244693] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#1a3570]"
+                    >
+                        <CirclePlus className="h-4 w-4" />
+                        Add Listing
+                    </button>
+                    <Link
+                        href="/dashboard/owner-manager/farm/gamefowls/request"
+                        className="inline-flex items-center gap-2 rounded-lg border border-[#244693] bg-white px-4 py-2 text-sm font-semibold text-[#244693] transition-colors hover:bg-[#F4F7FF]"
+                    >
+                        <Bird className="h-4 w-4" />
+                        Register Gamefowl
+                    </Link>
+                    <button
+                        type="button"
+                        className="inline-flex items-center gap-2 rounded-lg border border-[#244693] bg-white px-4 py-2 text-sm font-semibold text-[#244693] transition-colors hover:bg-[#F4F7FF]"
+                    >
+                        <Box className="h-4 w-4" />
+                        Create Bundle
+                    </button>
+                </div>
+            </div>
+
+            <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                <div className="relative">
+                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#9CA3AF]" />
+                    <input
+                        type="text"
+                        value={searchQuery}
+                        onChange={(event) => setSearchQuery(event.target.value)}
+                        placeholder="Search"
+                        className="w-full rounded-lg border border-[#E5E7EB] bg-white py-2.5 pl-10 pr-3 text-sm text-[#102059] placeholder:text-[#9CA3AF] focus:border-[#244693] focus:outline-none"
+                    />
+                </div>
+                <div className="relative">
+                    <select
+                        value={categoryFilter}
+                        onChange={(event) => setCategoryFilter(event.target.value)}
+                        className={selectClass(categoryFilter)}
+                        aria-label="Category"
+                    >
+                        <option value="">Category</option>
+                        {categories.map((name) => (
+                            <option key={name} value={name}>
+                                {name}
+                            </option>
+                        ))}
+                    </select>
+                    <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#9CA3AF]" />
+                </div>
+                <div className="relative">
+                    <select
+                        value={statusFilter}
+                        onChange={(event) => setStatusFilter(event.target.value)}
+                        className={selectClass(statusFilter)}
+                        aria-label="Status"
+                    >
+                        <option value="">Status</option>
+                        <option value="active">Active</option>
+                        <option value="inactive">Inactive</option>
+                    </select>
+                    <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#9CA3AF]" />
+                </div>
+                <div className="relative">
+                    <select
+                        value={sortBy}
+                        onChange={(event) => setSortBy(event.target.value)}
+                        className={selectClass(sortBy)}
+                        aria-label="Filter"
+                    >
+                        <option value="">Filter</option>
+                        <option value="name">Name A–Z</option>
+                        <option value="price-asc">Price: Low to High</option>
+                        <option value="price-desc">Price: High to Low</option>
+                        <option value="popularity">Popularity</option>
+                    </select>
+                    <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#9CA3AF]" />
+                </div>
+            </div>
+
+            {visible.length === 0 ? (
+                <div className="flex min-h-[280px] items-center justify-center text-center">
+                    <div>
+                        <h3 className="text-lg font-semibold text-[#102059]">
+                            {rows.length === 0 ? 'No Gamefowl Listed Yet' : 'No Matching Gamefowl'}
+                        </h3>
+                        <p className="mt-1 text-sm text-[#9CA3AF]">
+                            {rows.length === 0
+                                ? 'Gamefowl you list for sale will appear here.'
+                                : 'Try a different search or filter.'}
+                        </p>
+                    </div>
+                </div>
+            ) : (
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+                    {visible.map((listing) => {
+                        const isActive = listing.status !== 'inactive'
+                        return (
+                            <article
+                                key={listing.id}
+                                className="overflow-hidden rounded-lg border border-[#E5E7EB] bg-white"
+                            >
+                                <div className="aspect-[5/6] bg-[#E5E7EB]">
+                                    {listing.image ? (
+                                        <img src={listing.image} alt="" className="h-full w-full object-cover" />
+                                    ) : null}
+                                </div>
+                                <div className="p-3">
+                                    <h3 className="truncate text-sm font-bold text-[#102059]">{listing.title}</h3>
+                                    <p className="mt-0.5 truncate text-[11px] text-[#9CA3AF]">
+                                        {listing.composition} | {listing.age} | {listing.sex}
+                                    </p>
+                                    <div className="mt-2 flex flex-wrap items-start justify-between gap-x-2 gap-y-1">
+                                        <p className="text-xs font-bold leading-4 text-[#102059]">
+                                            {formatPeso(listing.price)}
+                                        </p>
+                                        <div className="ml-auto grid shrink-0 grid-cols-[auto_auto] gap-x-2 gap-y-0.5 text-right text-[10px] leading-4">
+                                            <span className="text-[#9CA3AF]">Stocks:</span>
+                                            <span className="font-medium text-[#102059]">{listing.stocks}</span>
+                                            <span className="text-[#9CA3AF]">Release Date:</span>
+                                            <span className="font-medium text-[#102059]">{listing.releaseDate}</span>
+                                            <span className="text-[#9CA3AF]">Popularity:</span>
+                                            <span className="font-medium text-[#102059]">{listing.popularity}</span>
+                                        </div>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        className="mt-3 w-full rounded-lg bg-[#F3F4F6] py-2 text-xs font-semibold text-[#9CA3AF] transition-colors hover:bg-[#E5E7EB] hover:text-[#6B7280]"
+                                    >
+                                        {isActive ? 'Deactivate' : 'Activate'}
+                                    </button>
+                                </div>
+                            </article>
+                        )
+                    })}
+                </div>
+            )}
+        </section>
+    )
+}
+
+export default function OwnerManagerFarm({ auth, farm, listings = [] }) {
+    const page = usePage()
+    const { flash } = page.props
     const coverInputRef = useRef(null)
     const leftColumnRef = useRef(null)
-    const [activeTab, setActiveTab] = useState('about')
+    const [activeTab, setActiveTab] = useState(() => initialFarmTab(page.url))
     const [starFilter, setStarFilter] = useState(null)
     const [leftColumnHeight, setLeftColumnHeight] = useState(0)
     const [showEditModal, setShowEditModal] = useState(false)
@@ -453,15 +682,7 @@ export default function OwnerManagerFarm({ auth, farm }) {
                         </div>
                     )}
 
-                    {activeTab === 'gamefowl' && (
-                        <div className="flex min-h-[420px] items-center justify-center rounded-lg border border-[#E5E7EB] bg-white p-8">
-                            <div className="text-center">
-                                <Package className="mx-auto mb-4 h-16 w-16 text-[#E5E7EB]" />
-                                <h2 className="mb-2 text-xl font-bold text-[#102059]">No Gamefowl Listed Yet</h2>
-                                <p className="text-sm text-[#6B7280]">Gamefowl you list for sale will appear here.</p>
-                            </div>
-                        </div>
-                    )}
+                    {activeTab === 'gamefowl' && <GamefowlCatalogPanel listings={listings} />}
 
                     {activeTab === 'insights' && (
                         <div className="space-y-4">

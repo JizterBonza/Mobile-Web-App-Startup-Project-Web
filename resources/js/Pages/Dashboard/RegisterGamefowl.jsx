@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { router, useForm } from '@inertiajs/react'
-import { Star, X } from 'lucide-react'
+import { ChevronLeft, Star, X } from 'lucide-react'
 import SuperAdminOrAdminLayout from '../../Layouts/SuperAdminOrAdminLayout'
 
 const SEX_OPTIONS = ['Not yet determined', 'Male', 'Female']
@@ -27,9 +27,11 @@ function lookupName(items, id) {
     return items.find((item) => String(item.id) === String(id))?.name ?? '—'
 }
 
-export default function RegisterGamefowl({ auth, bloodlines = [], ageTypes = [], classes = [], gamefowl = null }) {
+export default function RegisterGamefowl({ auth, bloodlines = [], ageTypes = [], classes = [], gamefowl = null, requestMode = false }) {
     const base = gamefowlBase(auth?.user?.user_type)
     const isEdit = Boolean(gamefowl?.id)
+    const cancelHref = requestMode ? '/dashboard/owner-manager/farm?tab=gamefowl' : (isEdit ? `${base}/${gamefowl.id}` : base)
+    const submitHref = requestMode ? '/dashboard/owner-manager/farm/gamefowls/request' : (isEdit ? `${base}/${gamefowl.id}` : base)
 
     const [currentStep, setCurrentStep] = useState(1)
     const [errorMessage, setErrorMessage] = useState(null)
@@ -164,7 +166,7 @@ export default function RegisterGamefowl({ auth, bloodlines = [], ageTypes = [],
             return payload
         })
 
-        form.post(isEdit ? `${base}/${gamefowl.id}` : base, {
+        form.post(submitHref, {
             preserveScroll: true,
             forceFormData: true,
         })
@@ -180,8 +182,24 @@ export default function RegisterGamefowl({ auth, bloodlines = [], ageTypes = [],
     ]
 
     return (
-        <SuperAdminOrAdminLayout auth={auth} title={isEdit ? 'Edit Gamefowl' : 'Register Gamefowl'}>
-            <div className="mx-auto max-w-6xl">
+        <SuperAdminOrAdminLayout auth={auth} title={requestMode ? 'Request Gamefowl Register' : (isEdit ? 'Edit Gamefowl' : 'Register Gamefowl')}>
+            <div className={`mx-auto ${requestMode ? 'max-w-5xl' : 'max-w-6xl'}`}>
+                {requestMode && (
+                    <div className="mb-8 flex items-center gap-4">
+                        <button
+                            type="button"
+                            onClick={() => router.visit(cancelHref)}
+                            className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full bg-[#E5E7EB] text-[#374151] transition-colors hover:bg-[#D1D5DB]"
+                            aria-label="Back to farm"
+                        >
+                            <ChevronLeft className="h-5 w-5" />
+                        </button>
+                        <div>
+                            <h1 className="text-2xl font-bold tracking-tight text-[#111827]">Request Gamefowl Register</h1>
+                            <p className="text-sm text-[#6B7280]">Create a new gamefowl catalog</p>
+                        </div>
+                    </div>
+                )}
                 <div className="mb-6 flex flex-wrap items-center gap-y-3">
                     {steps.map((step, index) => {
                         const reached = currentStep >= step.number
@@ -223,7 +241,7 @@ export default function RegisterGamefowl({ auth, bloodlines = [], ageTypes = [],
                                 <div>
                                     <label className={labelClass}>Bloodline Category</label>
                                     <select className={inputClass} value={form.data.bloodline_id} onChange={(event) => form.setData('bloodline_id', event.target.value)}>
-                                        <option value="">Select bloodline category</option>
+                                        <option value="">{'Select bloodline category'}</option>
                                         {bloodlines.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
                                     </select>
                                     {form.errors.bloodline_id && <p className="mt-1 text-xs text-[#E20E28]">{form.errors.bloodline_id}</p>}
@@ -234,14 +252,14 @@ export default function RegisterGamefowl({ auth, bloodlines = [], ageTypes = [],
                                         className={inputClass}
                                         value={form.data.name}
                                         onChange={(event) => form.setData('name', event.target.value)}
-                                        placeholder="Enter bloodline composition"
+                                        placeholder={'Enter bloodline composition'}  
                                     />
                                     {form.errors.name && <p className="mt-1 text-xs text-[#E20E28]">{form.errors.name}</p>}
-                                </div>
+                                </div>  
                                 <div>
                                     <label className={labelClass}>Age Type</label>
                                     <select className={inputClass} value={form.data.age_type_id} onChange={(event) => form.setData('age_type_id', event.target.value)}>
-                                        <option value="">Select age type</option>
+                                        <option value="">{'Select age type'}</option>
                                         {ageTypes.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
                                     </select>
                                     {form.errors.age_type_id && <p className="mt-1 text-xs text-[#E20E28]">{form.errors.age_type_id}</p>}
@@ -249,7 +267,7 @@ export default function RegisterGamefowl({ auth, bloodlines = [], ageTypes = [],
                                 <div>
                                     <label className={labelClass}>Sex</label>
                                     <select className={inputClass} value={form.data.sex} onChange={(event) => form.setData('sex', event.target.value)}>
-                                        <option value="">Select sex</option>
+                                        <option value="">{'Select sex'}</option>
                                         {SEX_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
                                     </select>
                                     {form.errors.sex && <p className="mt-1 text-xs text-[#E20E28]">{form.errors.sex}</p>}
@@ -267,7 +285,7 @@ export default function RegisterGamefowl({ auth, bloodlines = [], ageTypes = [],
                                 <div>
                                     <label className={labelClass}>Class</label>
                                     <select className={inputClass} value={form.data.class_id} onChange={(event) => form.setData('class_id', event.target.value)}>
-                                        <option value="">Select class</option>
+                                        <option value="">{'Select class'}</option>
                                         {classes.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
                                     </select>
                                     {form.errors.class_id && <p className="mt-1 text-xs text-[#E20E28]">{form.errors.class_id}</p>}
@@ -275,7 +293,7 @@ export default function RegisterGamefowl({ auth, bloodlines = [], ageTypes = [],
                             </div>
 
                             <div className="mt-10 flex items-center justify-between">
-                                <button type="button" onClick={() => router.visit(isEdit ? `${base}/${gamefowl.id}` : base)} className="rounded-lg border border-[#102059] bg-white px-5 py-2.5 text-sm font-medium text-[#102059] hover:bg-[#F0F7FF]">
+                                <button type="button" onClick={() => router.visit(cancelHref)} className="rounded-lg border border-[#102059] bg-white px-5 py-2.5 text-sm font-medium text-[#102059] hover:bg-[#F0F7FF]">
                                     Cancel
                                 </button>
                                 <button type="button" onClick={nextStep} className="rounded-lg bg-[#102059] px-5 py-2.5 text-sm font-medium text-white hover:bg-[#244693]">

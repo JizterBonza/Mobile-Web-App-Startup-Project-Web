@@ -12,6 +12,13 @@ function formatRole(role) {
     return role.replace(/_/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase())
 }
 
+function formatHatchDate(value) {
+    if (!value) return 'N/A'
+    const [year, month, day] = String(value).split('-')
+    if (!year || !month || !day) return 'N/A'
+    return `${month}/${day}/${year}`
+}
+
 export default function GamefowlRequests({ auth, requests = [], flash }) {
     const base = gamefowlBase(auth?.user?.user_type)
     const [expandedId, setExpandedId] = useState(null)
@@ -64,10 +71,11 @@ export default function GamefowlRequests({ auth, requests = [], flash }) {
                                         <div className="min-w-0 flex-1">
                                             <p className="truncate text-sm font-bold text-[#102059]">{request.name}</p>
                                             <p className="truncate text-xs text-[#6B7280]">
-                                                {[request.bloodline_name, request.age_type_name, request.class_name].filter(Boolean).join(' • ') || '—'}
+                                                {[request.bloodline_name, request.age_type_name, request.sex, request.class_name].filter(Boolean).join(' • ') || '—'}
                                             </p>
                                             <p className="mt-1 text-xs text-[#9CA3AF]">
                                                 Requested by {request.created_by_name || '—'} ({formatRole(request.created_by_role)})
+                                                {request.farm_name ? ` · ${request.farm_name}` : ''}
                                             </p>
                                         </div>
                                         <span className="inline-flex items-center gap-1 rounded-full bg-[#D3A218]/10 px-2.5 py-0.5 text-xs font-semibold text-[#D3A218]">
@@ -76,7 +84,39 @@ export default function GamefowlRequests({ auth, requests = [], flash }) {
                                     </button>
                                     {isExpanded && (
                                         <div className="border-t border-[#E5E7EB] px-6 py-6">
-                                            <p className="mb-6 text-sm text-[#102059]">{request.description || '—'}</p>
+                                            <dl className="mb-6 overflow-hidden rounded-lg border border-[#EEF0F4] bg-[#F8FAFC]">
+                                                {[
+                                                    ['Bloodline Category', request.bloodline_name],
+                                                    ['Bloodline Composition', request.name],
+                                                    ['Age Type', request.age_type_name],
+                                                    ['Sex', request.sex],
+                                                    ['Hatch Date', formatHatchDate(request.hatch_date)],
+                                                    ['Class', request.class_name],
+                                                    ['Farm', request.farm_name],
+                                                ].map(([label, value]) => (
+                                                    <div key={label} className="flex items-center justify-between gap-4 border-b border-[#EEF0F4] px-4 py-3 last:border-b-0">
+                                                        <dt className="text-sm text-[#6B7280]">{label}</dt>
+                                                        <dd className="text-right text-sm font-medium text-[#111827]">{value || '—'}</dd>
+                                                    </div>
+                                                ))}
+                                            </dl>
+                                            {request.description ? (
+                                                <p className="mb-6 text-sm text-[#102059]">{request.description}</p>
+                                            ) : null}
+                                            {Array.isArray(request.images) && request.images.length > 0 && (
+                                                <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-5">
+                                                    {request.images.map((src, index) => (
+                                                        <div key={`${request.id}-${index}`} className="relative aspect-[3/4] overflow-hidden rounded-lg bg-[#E5E7EB]">
+                                                            <img src={src} alt="" className="h-full w-full object-cover" />
+                                                            {index === (request.primary_image_index ?? 0) && (
+                                                                <span className="absolute top-2 right-2 rounded-full bg-[#D3A218] px-2 py-0.5 text-[10px] font-semibold text-white">
+                                                                    Primary
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
                                             <div className="flex flex-wrap justify-end gap-3">
                                                 <button
                                                     type="button"

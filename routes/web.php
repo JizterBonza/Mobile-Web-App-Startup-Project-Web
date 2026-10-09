@@ -322,6 +322,8 @@ Route::middleware(['auth', 'session.valid', 'user.type:super_admin'])->prefix('d
 Route::middleware(['auth', 'session.valid', 'user.type:owner_manager'])->prefix('dashboard/owner-manager')->name('dashboard.owner-manager.')->group(function () {
     Route::get('/', [DashboardController::class, 'ownerManager'])->name('index');
     Route::get('/farm', [DashboardController::class, 'ownerManagerFarm'])->name('farm');
+    Route::get('/farm/gamefowls/request', [GamefowlCatalogController::class, 'ownerRequestForm'])->name('farm.gamefowls.request');
+    Route::post('/farm/gamefowls/request', [GamefowlCatalogController::class, 'ownerRequestStore'])->name('farm.gamefowls.request.store');
     Route::put('/farm', [DashboardController::class, 'ownerManagerUpdateFarm'])->name('farm.update');
     Route::patch('/farm/status', [DashboardController::class, 'ownerManagerUpdateFarmStatus'])->name('farm.status');
     Route::post('/farm/cover', [DashboardController::class, 'ownerManagerUpdateFarmCover'])->name('farm.cover');
