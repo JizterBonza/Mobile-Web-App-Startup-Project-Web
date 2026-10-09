@@ -33,16 +33,23 @@ class GamefowlCatalogController extends Controller
 
     public function store(Request $request)
     {
-        $validated = $this->validateEntry($request);
+        $validated = $this->validateEntry($request, true);
+        $images = $this->resolveImages($request);
+
+        if (count($images) < 5) {
+            return back()->withInput()->withErrors(['images' => 'Please upload all 5 gamefowl images.']);
+        }
 
         $gamefowl = GamefowlCatalog::create([
             'name' => $validated['name'],
-            'bloodline_id' => $validated['bloodline_id'] ?? null,
-            'age_type_id' => $validated['age_type_id'] ?? null,
-            'class_id' => $validated['class_id'] ?? null,
+            'bloodline_id' => $validated['bloodline_id'],
+            'age_type_id' => $validated['age_type_id'],
+            'class_id' => $validated['class_id'],
+            'sex' => $validated['sex'],
+            'hatch_date' => $validated['hatch_date'] ?? null,
             'description' => $validated['description'] ?? null,
-            'images' => $this->storeImages($request),
-            'primary_image_index' => (int) ($validated['primary_image_index'] ?? 0),
+            'images' => array_values($images),
+            'primary_image_index' => (int) $validated['primary_image_index'],
             'status' => GamefowlCatalog::STATUS_ACTIVE,
             'created_by' => auth()->id(),
             'reviewed_by' => auth()->id(),
@@ -77,21 +84,23 @@ class GamefowlCatalogController extends Controller
     {
         $gamefowl = GamefowlCatalog::listed()->findOrFail($id);
         $oldValues = $gamefowl->toArray();
-        $validated = $this->validateEntry($request);
+        $validated = $this->validateEntry($request, false);
+        $images = $this->resolveImages($request, $gamefowl->images ?? []);
 
-        $images = $gamefowl->images ?? [];
-        if ($request->hasFile('images')) {
-            $images = $this->storeImages($request);
+        if (count($images) < 5) {
+            return back()->withInput()->withErrors(['images' => 'Please keep or replace all 5 gamefowl images.']);
         }
 
         $gamefowl->update([
             'name' => $validated['name'],
-            'bloodline_id' => $validated['bloodline_id'] ?? null,
-            'age_type_id' => $validated['age_type_id'] ?? null,
-            'class_id' => $validated['class_id'] ?? null,
+            'bloodline_id' => $validated['bloodline_id'],
+            'age_type_id' => $validated['age_type_id'],
+            'class_id' => $validated['class_id'],
+            'sex' => $validated['sex'],
+            'hatch_date' => $validated['hatch_date'] ?? null,
             'description' => $validated['description'] ?? null,
-            'images' => $images,
-            'primary_image_index' => (int) ($validated['primary_image_index'] ?? 0),
+            'images' => array_values($images),
+            'primary_image_index' => (int) $validated['primary_image_index'],
         ]);
 
         ActivityLog::log('updated', "Gamefowl catalog entry updated: {$gamefowl->name}", $gamefowl, $oldValues, $gamefowl->fresh()->toArray());
@@ -161,32 +170,45 @@ class GamefowlCatalogController extends Controller
         return redirect()->back()->with('success', 'Gamefowl request rejected.');
     }
 
-    private function validateEntry(Request $request): array
+    private function validateEntry(Request $request, bool $creating): array
     {
+        $request->merge([
+            'hatch_date' => $request->filled('hatch_date') ? $request->hatch_date : null,
+            'description' => $request->filled('description') ? $request->description : null,
+        ]);
+
         return $request->validate([
             'name' => 'required|string|max:150',
-            'bloodline_id' => ['nullable', Rule::exists('gamefowl_lookups', 'id')->where('type', GamefowlLookup::TYPE_BLOODLINE)],
-            'age_type_id' => ['nullable', Rule::exists('gamefowl_lookups', 'id')->where('type', GamefowlLookup::TYPE_AGE)],
-            'class_id' => ['nullable', Rule::exists('gamefowl_lookups', 'id')->where('type', GamefowlLookup::TYPE_CLASS)],
+            'bloodline_id' => ['required', Rule::exists('gamefowl_lookups', 'id')->where('type', GamefowlLookup::TYPE_BLOODLINE)],
+            'age_type_id' => ['required', Rule::exists('gamefowl_lookups', 'id')->where('type', GamefowlLookup::TYPE_AGE)],
+            'class_id' => ['required', Rule::exists('gamefowl_lookups', 'id')->where('type', GamefowlLookup::TYPE_CLASS)],
+            'sex' => 'required|string|in:Not yet determined,Male,Female',
+            'hatch_date' => 'nullable|date',
             'description' => 'nullable|string|max:2000',
-            'images' => 'nullable|array|max:5',
-            'images.*' => 'image|mimes:jpeg,png,jpg,gif,webp|max:5120',
-            'primary_image_index' => 'nullable|integer|min:0|max:4',
+            'images' => $creating ? 'required|array|size:5' : 'nullable|array|max:5',
+            'images.*' => 'nullable|image|mimes:jpeg,png,jpg|max:5120',
+            'primary_image_index' => 'required|integer|min:0|max:4',
         ]);
     }
 
     /**
-     * @return list<string>
+     * @param  list<string>|null  $existing
+     * @return array<int, string>
      */
-    private function storeImages(Request $request): array
+    private function resolveImages(Request $request, ?array $existing = null): array
     {
+        $existing = array_values($existing ?? []);
         $paths = [];
-        foreach ($request->file('images', []) as $image) {
-            if (! $image) {
-                continue;
+
+        for ($i = 0; $i < 5; $i++) {
+            if ($request->hasFile("images.{$i}")) {
+                $paths[$i] = '/storage/'.$request->file("images.{$i}")->store('gamefowl-catalog', 'public');
+            } elseif (! empty($existing[$i])) {
+                $paths[$i] = $existing[$i];
             }
-            $paths[] = '/storage/'.$image->store('gamefowl-catalog', 'public');
         }
+
+        ksort($paths);
 
         return $paths;
     }
@@ -255,6 +277,8 @@ class GamefowlCatalogController extends Controller
             'bloodline_id' => $gamefowl->bloodline_id,
             'age_type_id' => $gamefowl->age_type_id,
             'class_id' => $gamefowl->class_id,
+            'sex' => $gamefowl->sex,
+            'hatch_date' => $gamefowl->hatch_date?->format('Y-m-d'),
             'created_by_role' => $gamefowl->creator?->user_type,
         ];
     }

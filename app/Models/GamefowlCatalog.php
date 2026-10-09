@@ -22,6 +22,8 @@ class GamefowlCatalog extends Model
         'bloodline_id',
         'age_type_id',
         'class_id',
+        'sex',
+        'hatch_date',
         'description',
         'images',
         'primary_image_index',
@@ -33,6 +35,7 @@ class GamefowlCatalog extends Model
 
     protected $casts = [
         'images' => 'array',
+        'hatch_date' => 'date',
         'reviewed_at' => 'datetime',
     ];
 
