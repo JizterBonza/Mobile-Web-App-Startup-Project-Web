@@ -3,6 +3,7 @@ import { Link, router, usePage } from '@inertiajs/react'
 import { ArrowLeft, ChevronLeft, ChevronRight, Eye, Save, Upload, X } from 'lucide-react'
 import axios from 'axios'
 import AdminKlasmeytLayout from '../../Layouts/AdminKlasmeytLayout'
+import OwnerManagerKlasmeytLayout from '../../Layouts/OwnerManagerKlasmeytLayout'
 import SuperAdminKlasmeytLayout from '../../Layouts/SuperAdminKlasmeytLayout'
 import { useDashboardSession } from '../../hooks/useDashboardSession'
 import { storageUrl } from '../../utils/storageUrl'
@@ -169,7 +170,11 @@ function initialMedia(post) {
 export default function CreatePost({ auth, post = null }) {
     useDashboardSession()
     const { errors, csrf_token } = usePage().props
-    const Layout = auth?.user?.user_type === 'admin' ? AdminKlasmeytLayout : SuperAdminKlasmeytLayout
+    const Layout = auth?.user?.user_type === 'admin'
+        ? AdminKlasmeytLayout
+        : auth?.user?.user_type === 'owner_manager'
+            ? OwnerManagerKlasmeytLayout
+            : SuperAdminKlasmeytLayout
     const mediaInputRef = useRef(null)
     const [title, setTitle] = useState(post?.title ?? '')
     const [body, setBody] = useState(post?.body ?? '')
