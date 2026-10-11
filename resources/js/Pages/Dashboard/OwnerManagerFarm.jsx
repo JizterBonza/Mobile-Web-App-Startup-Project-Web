@@ -917,6 +917,7 @@ export default function OwnerManagerFarm({ auth, farm, listings = [], catalog = 
     const [showEditModal, setShowEditModal] = useState(false)
     const [showEditConfirm, setShowEditConfirm] = useState(false)
     const [showStatusConfirm, setShowStatusConfirm] = useState(false)
+    const [showFlash, setShowFlash] = useState(Boolean(flash?.success))
     const [formError, setFormError] = useState('')
     const [operatingDays, setOperatingDays] = useState(() => parseDays(farm?.operating_days))
 
@@ -964,6 +965,13 @@ export default function OwnerManagerFarm({ auth, farm, listings = [], catalog = 
         observer.observe(leftColumnRef.current)
         return () => observer.disconnect()
     }, [activeTab, farm])
+
+    useEffect(() => {
+        if (!flash?.success) return undefined
+        setShowFlash(true)
+        const timer = window.setTimeout(() => setShowFlash(false), 5000)
+        return () => window.clearTimeout(timer)
+    }, [flash?.success])
 
     const openEditModal = () => {
         const nextHours = parseHours(farm?.operating_hours)
@@ -1056,14 +1064,6 @@ export default function OwnerManagerFarm({ auth, farm, listings = [], catalog = 
     return (
         <OwnerManagerKlasmeytLayout auth={auth} title={farm?.name || 'My Farm'} mainClassName="w-full p-0">
             <div className="min-h-screen bg-[#F0F2F5]">
-                {flash?.success && (
-                    <div className="mx-auto max-w-[1110px] px-6 pt-4">
-                        <div className="rounded-lg border border-[#BBF7D0] bg-[#F0FDF4] px-4 py-3 text-sm text-[#166534]">
-                            {flash.success}
-                        </div>
-                    </div>
-                )}
-
                 <div className="bg-white">
                     <div className="relative">
                         <div className="h-56 overflow-hidden bg-[#E5E7EB] sm:h-64">
@@ -1089,6 +1089,19 @@ export default function OwnerManagerFarm({ auth, farm, listings = [], catalog = 
                     </div>
 
                     <div className="mx-auto max-w-[1110px] px-6 pb-0 pt-6">
+                        {showFlash && flash?.success && (
+                            <div className="mb-4 flex items-center justify-between gap-3 rounded-lg border border-[#BBF7D0] bg-[#F0FDF4] px-4 py-3 text-sm text-[#166534]">
+                                <p>{flash.success}</p>
+                                <button
+                                    type="button"
+                                    onClick={() => setShowFlash(false)}
+                                    className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full text-[#166534] hover:bg-[#DCFCE7]"
+                                    aria-label="Dismiss notification"
+                                >
+                                    <X className="h-4 w-4" />
+                                </button>
+                            </div>
+                        )}
                         <div className="flex items-start justify-between gap-4">
                             <div>
                                 <h1 className="mb-1 text-[32px] font-bold leading-tight text-[#102059]">{farm?.name}</h1>
