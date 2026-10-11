@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, router, useForm, usePage } from '@inertiajs/react'
-import { Bird, Box, ChevronDown, CirclePlus, Clock, Landmark, MapPin, Pencil, Search, Star, X } from 'lucide-react'
+import { Bird, Box, Calendar, Check, ChevronDown, CirclePlus, Clock, Landmark, MapPin, Pencil, Search, Star, X } from 'lucide-react'
 import PinLocationMap from '../../Components/PinLocationMap'
 import OwnerManagerKlasmeytLayout from '../../Layouts/OwnerManagerKlasmeytLayout'
 import { storageUrl } from '../../utils/storageUrl'
@@ -57,9 +57,9 @@ function initialFarmTab(url) {
     return ['about', 'gamefowl', 'insights'].includes(tab) ? tab : 'about'
 }
 
-function formatPeso(value) {
+function formatPeso(value, unit = 'per head') {
     const amount = Number(value)
-    return `₱${Number.isFinite(amount) ? amount.toFixed(2) : '0.00'}/per head`
+    return `₱${Number.isFinite(amount) ? amount.toFixed(2) : '0.00'}/${unit || 'per head'}`
 }
 
 function formatReleaseDate(value) {
@@ -67,6 +67,15 @@ function formatReleaseDate(value) {
     const match = String(value).match(/^(\d{4})-(\d{2})-(\d{2})/)
     if (match) return `${match[2]}/${match[3]}/${match[1]}`
     return String(value)
+}
+
+function toIsoDate(value) {
+    if (!value) return ''
+    const iso = String(value).match(/^(\d{4})-(\d{2})-(\d{2})/)
+    if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`
+    const us = String(value).match(/^(\d{2})\/(\d{2})\/(\d{4})/)
+    if (us) return `${us[3]}-${us[1]}-${us[2]}`
+    return ''
 }
 
 function normalizeListing(item) {
@@ -83,19 +92,603 @@ function normalizeListing(item) {
         sex,
         category,
         price: item.price ?? 0,
+        unit: item.selling_unit || item.unit || 'per head',
         stocks: item.stocks ?? item.stock ?? 0,
+        releaseOption: item.release_option || item.releaseOption || '',
+        releaseDateIso: toIsoDate(item.release_date || item.releaseDate),
         releaseDate: formatReleaseDate(item.release_date || item.releaseDate),
         popularity: item.popularity ?? 0,
         status: String(item.status || 'active').toLowerCase(),
-        image: item.image || item.image_url || null,
+        image: storageUrl(item.image || item.image_url || null),
     }
 }
 
-function GamefowlCatalogPanel({ listings = [] }) {
+function catalogCard(item) {
+    const images = Array.isArray(item.images) ? item.images : []
+    const image = item.image || images[item.primary_image_index ?? 0] || images[0] || null
+
+    return {
+        id: item.id,
+        title: item.title || item.bloodline_name || item.name || 'Gamefowl',
+        composition: item.composition || item.name || '—',
+        age: item.age || item.age_type_name || '—',
+        sex: item.sex || '—',
+        image: storageUrl(image),
+    }
+}
+
+function isCatalogListed(item, listings) {
+    return listings.some((listing) => {
+        const catalogId = listing.catalog_id ?? listing.gamefowl_catalog_id
+        return catalogId != null && String(catalogId) === String(item.id)
+    })
+}
+
+function GamefowlListingDetailsModal({ gamefowl, listing = null, onClose, onSaved }) {
+    const isEdit = Boolean(listing?.id)
+    const [editing, setEditing] = useState(true)
+    const [saving, setSaving] = useState(false)
+    const [price, setPrice] = useState(() => (isEdit ? Number(listing.price || 0).toFixed(2) : ''))
+    const [sellingUnit, setSellingUnit] = useState(() => (isEdit ? listing.unit || '' : ''))
+    const [stock, setStock] = useState(() => (isEdit ? String(listing.stocks ?? '') : ''))
+    const [releaseOption, setReleaseOption] = useState(() => (isEdit ? listing.releaseOption || '' : ''))
+    const [releaseDate, setReleaseDate] = useState(() => (isEdit ? listing.releaseDateIso || '' : ''))
+    const [error, setError] = useState('')
+
+    useEffect(() => {
+        const onKey = (event) => {
+            if (event.key === 'Escape') onClose()
+        }
+        window.addEventListener('keydown', onKey)
+        return () => window.removeEventListener('keydown', onKey)
+    }, [onClose])
+
+    const fieldClass =
+        'w-full rounded-lg border border-[#E5E7EB] bg-white px-4 py-2.5 text-sm text-[#111827] placeholder:text-[#9CA3AF] focus:border-[#244693] focus:outline-none disabled:bg-[#F9FAFB] disabled:text-[#6B7280]'
+    const selectClass = (value) =>
+        `${fieldClass} appearance-none pr-10 ${value ? 'text-[#111827]' : 'text-[#9CA3AF]'}`
+
+    const handleSave = () => {
+        const missing = []
+        if (!price.trim()) missing.push('Price')
+        if (!sellingUnit) missing.push('Selling Unit')
+        if (!stock.trim()) missing.push('Stock Quantity')
+        if (!releaseOption) missing.push('Stock Release Options')
+        if (releaseOption === 'Set Release Date' && !releaseDate) missing.push('Stock Release Schedule')
+        if (missing.length) {
+            setError(`Please fill in: ${missing.join(', ')}.`)
+            return
+        }
+
+        setError('')
+        setSaving(true)
+        const payload = {
+            price,
+            selling_unit: sellingUnit,
+            stock,
+            release_option: releaseOption,
+            release_date: releaseOption === 'Set Release Date' ? releaseDate : null,
+        }
+        const options = {
+            preserveScroll: true,
+            onSuccess: () => onSaved(),
+            onError: (errors) => {
+                const first = Object.values(errors)[0]
+                const message = Array.isArray(first) ? first[0] : first
+                setError(typeof message === 'string' ? message : 'Could not save this gamefowl listing.')
+            },
+            onFinish: () => setSaving(false),
+        }
+
+        if (isEdit) {
+            router.put(`/dashboard/owner-manager/farm/gamefowls/listings/${listing.id}`, payload, options)
+            return
+        }
+
+        router.post(
+            '/dashboard/owner-manager/farm/gamefowls/listings',
+            { ...payload, gamefowl_catalog_id: gamefowl.id },
+            options,
+        )
+    }
+
+    return (
+        <div
+            className="fixed inset-0 z-[60] flex items-center justify-center bg-black/45 p-4"
+            onClick={(event) => {
+                event.stopPropagation()
+                onClose()
+            }}
+        >
+            <div
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="gamefowl-listing-details-title"
+                className="w-full max-w-4xl rounded-2xl bg-white shadow-xl"
+                onClick={(event) => event.stopPropagation()}
+            >
+                <div className="flex items-start justify-between gap-4 px-8 pb-5 pt-7">
+                    <div>
+                        <h2 id="gamefowl-listing-details-title" className="text-xl font-bold text-[#111827]">
+                            Gamefowl Listing Details
+                        </h2>
+                        <p className="mt-1 text-sm text-[#6B7280]">View and manage listing information</p>
+                    </div>
+                    <div className="flex items-center gap-1">
+                        <button
+                            type="button"
+                            onClick={() => setEditing((current) => !current)}
+                            className={`flex h-8 w-8 items-center justify-center rounded-full transition-colors hover:bg-[#F3F4F6] ${
+                                editing ? 'text-[#111827]' : 'text-[#9CA3AF]'
+                            }`}
+                            aria-label={editing ? 'Stop editing' : 'Edit listing'}
+                            aria-pressed={editing}
+                        >
+                            <Pencil className="h-4 w-4" />
+                        </button>
+                        <button
+                            type="button"
+                            onClick={onClose}
+                            className="flex h-8 w-8 items-center justify-center rounded-full text-[#9CA3AF] transition-colors hover:bg-[#F3F4F6] hover:text-[#111827]"
+                            aria-label="Close"
+                        >
+                            <X className="h-4 w-4" />
+                        </button>
+                    </div>
+                </div>
+
+                <div className="border-t border-[#E5E7EB] px-8 pb-7 pt-7">
+                    {error && <p className="mb-4 text-sm text-[#E20E28]">{error}</p>}
+                    <div className="grid grid-cols-1 gap-x-8 gap-y-6 md:grid-cols-2">
+                        <div>
+                            <label htmlFor="listing-bloodline" className="mb-2 block text-sm font-semibold text-[#111827]">
+                                Bloodline Category
+                            </label>
+                            <input id="listing-bloodline" type="text" readOnly value={gamefowl.title} className={`${fieldClass} bg-[#F9FAFB]`} />
+                        </div>
+                        <div>
+                            <label htmlFor="listing-composition" className="mb-2 block text-sm font-semibold text-[#111827]">
+                                Bloodline Composition
+                            </label>
+                            <input id="listing-composition" type="text" readOnly value={gamefowl.composition} className={`${fieldClass} bg-[#F9FAFB]`} />
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <label htmlFor="listing-price" className="mb-2 block text-sm font-semibold text-[#111827]">
+                                    Price
+                                </label>
+                                <input
+                                    id="listing-price"
+                                    type="text"
+                                    inputMode="decimal"
+                                    disabled={!editing}
+                                    value={price}
+                                    onChange={(event) => setPrice(event.target.value.replace(/[^\d.]/g, ''))}
+                                    placeholder="400.00"
+                                    className={fieldClass}
+                                />
+                            </div>
+                            <div>
+                                <label htmlFor="listing-unit" className="mb-2 block text-sm font-semibold text-[#111827]">
+                                    Selling Unit
+                                </label>
+                                <div className="relative">
+                                    <select
+                                        id="listing-unit"
+                                        disabled={!editing}
+                                        value={sellingUnit}
+                                        onChange={(event) => setSellingUnit(event.target.value)}
+                                        className={selectClass(sellingUnit)}
+                                    >
+                                        <option value="">Select Selling Unit</option>
+                                        <option value="per head">per head</option>
+                                        <option value="per pair">per pair</option>
+                                        <option value="per trio">per trio</option>
+                                    </select>
+                                    <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#9CA3AF]" />
+                                </div>
+                            </div>
+                        </div>
+                        <div>
+                            <label htmlFor="listing-stock" className="mb-2 block text-sm font-semibold text-[#111827]">
+                                Stock Quantity
+                            </label>
+                            <input
+                                id="listing-stock"
+                                type="text"
+                                inputMode="numeric"
+                                disabled={!editing}
+                                value={stock}
+                                onChange={(event) => setStock(event.target.value.replace(/\D/g, ''))}
+                                placeholder="50"
+                                className={fieldClass}
+                            />
+                        </div>
+                        <div>
+                            <label htmlFor="listing-release-option" className="mb-2 block text-sm font-semibold text-[#111827]">
+                                Stock Release Options
+                            </label>
+                            <div className="relative">
+                                <select
+                                    id="listing-release-option"
+                                    disabled={!editing}
+                                    value={releaseOption}
+                                    onChange={(event) => setReleaseOption(event.target.value)}
+                                    className={selectClass(releaseOption)}
+                                >
+                                    <option value="">Select Stock Release Options</option>
+                                    <option value="Release Immediately">Release Immediately</option>
+                                    <option value="Set Release Date">Set Release Date</option>
+                                </select>
+                                <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#9CA3AF]" />
+                            </div>
+                        </div>
+                        <div>
+                            <label htmlFor="listing-release-date" className="mb-2 block text-sm font-semibold text-[#111827]">
+                                Stock Release Schedule
+                            </label>
+                            <div className="relative">
+                                <input
+                                    id="listing-release-date"
+                                    type="date"
+                                    disabled={!editing}
+                                    value={releaseDate}
+                                    onChange={(event) => setReleaseDate(event.target.value)}
+                                    className={`${fieldClass} pr-10 [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:right-3 [&::-webkit-calendar-picker-indicator]:h-5 [&::-webkit-calendar-picker-indicator]:w-5 [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:opacity-0 ${
+                                        releaseDate ? '' : 'text-transparent'
+                                    }`}
+                                />
+                                {!releaseDate && (
+                                    <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm text-[#9CA3AF]">
+                                    </span>
+                                )}
+                                <Calendar className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#9CA3AF]" />
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="mt-8 flex items-center justify-between border-t border-[#E5E7EB] pt-6">
+                        <button
+                            type="button"
+                            onClick={onClose}
+                            className="rounded-lg border border-[#244693] bg-white px-5 py-2.5 text-sm font-semibold text-[#244693] transition-colors hover:bg-[#F4F7FF]"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            type="button"
+                            onClick={handleSave}
+                            disabled={!editing || saving}
+                            className="rounded-lg bg-[#102059] px-6 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#244693] disabled:opacity-50"
+                        >
+                            {saving ? 'Saving...' : 'Save'}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    )
+}
+
+function PublishGamefowlListingModal({ catalog = [], listings = [], onClose }) {
+    const [query, setQuery] = useState('')
+    const [detailsItem, setDetailsItem] = useState(null)
+
+    const cards = useMemo(() => {
+        const needle = query.trim().toLowerCase()
+        return catalog.map(catalogCard).filter((item) => {
+            if (!needle) return true
+            return [item.title, item.composition, item.age, item.sex].join(' ').toLowerCase().includes(needle)
+        })
+    }, [catalog, query])
+
+    useEffect(() => {
+        const onKey = (event) => {
+            if (event.key !== 'Escape' || detailsItem) return
+            onClose()
+        }
+        window.addEventListener('keydown', onKey)
+        return () => window.removeEventListener('keydown', onKey)
+    }, [onClose, detailsItem])
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4" onClick={onClose}>
+            <div
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="publish-gamefowl-title"
+                className="flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white shadow-xl"
+                onClick={(event) => event.stopPropagation()}
+            >
+                <div className="flex items-start justify-between gap-4 px-6 pb-4 pt-6">
+                    <div>
+                        <h2 id="publish-gamefowl-title" className="text-lg font-bold text-[#111827]">
+                            Publish Gamefowl Listing
+                        </h2>
+                        <p className="mt-1 text-sm text-[#6B7280]">Make this gamefowl offering available for buyer inquiries.</p>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={onClose}
+                        className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-[#9CA3AF] transition-colors hover:bg-[#F3F4F6] hover:text-[#111827]"
+                        aria-label="Close"
+                    >
+                        <X className="h-4 w-4" />
+                    </button>
+                </div>
+
+                <div className="overflow-y-auto border-t border-[#E5E7EB] px-6 py-5">
+                    <h3 className="mb-3 text-sm font-semibold text-[#111827]">Select a gamefowl</h3>
+                    <div className="relative mb-4">
+                        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#9CA3AF]" />
+                        <input
+                            type="text"
+                            value={query}
+                            onChange={(event) => setQuery(event.target.value)}
+                            placeholder="Search"
+                            className="w-full rounded-lg border border-[#E5E7EB] bg-white py-2.5 pl-10 pr-3 text-sm text-[#111827] placeholder:text-[#9CA3AF] focus:border-[#244693] focus:outline-none"
+                        />
+                    </div>
+
+                    {cards.length === 0 ? (
+                        <div className="flex min-h-[220px] items-center justify-center text-center">
+                            <p className="text-sm text-[#9CA3AF]">
+                                {catalog.length === 0
+                                    ? 'No approved gamefowl are available to list yet.'
+                                    : 'No gamefowl match your search.'}
+                            </p>
+                        </div>
+                    ) : (
+                        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+                            {cards.map((item) => {
+                                const listed = isCatalogListed(item, listings)
+                                const selected = !listed && detailsItem && String(detailsItem.id) === String(item.id)
+                                return (
+                                    <button
+                                        key={item.id}
+                                        type="button"
+                                        disabled={listed}
+                                        onClick={() => setDetailsItem(item)}
+                                        className={`overflow-hidden rounded-lg border bg-white text-left ${
+                                            selected ? 'border-[#244693]' : 'border-[#E5E7EB]'
+                                        } ${listed ? 'cursor-default disabled:opacity-100' : 'cursor-pointer'}`}
+                                    >
+                                        <div className="relative aspect-[5/6] bg-[#E5E7EB]">
+                                            {item.image ? <img src={item.image} alt="" className="h-full w-full object-cover" /> : null}
+                                            <span
+                                                className={`absolute top-2 right-2 flex h-4 w-4 items-center justify-center rounded-[3px] border ${
+                                                    selected ? 'border-[#244693] bg-[#244693]' : 'border-[#D1D5DB] bg-white'
+                                                }`}
+                                            >
+                                                {selected ? <Check className="h-3 w-3 text-white" strokeWidth={3} /> : null}
+                                            </span>
+                                        </div>
+                                        <div className="px-3 pb-3 pt-2.5">
+                                            <p className="truncate text-sm font-bold text-[#111827]">{item.title}</p>
+                                            <p className="mt-0.5 truncate text-[11px] text-[#9CA3AF]">
+                                                {item.composition} | {item.age} | {item.sex}
+                                            </p>
+                                            {listed ? (
+                                                <p className="mt-4 text-center text-xs text-[#C5C8CE]">Already listed</p>
+                                            ) : (
+                                                <span className="mt-4 block h-4" />
+                                            )}
+                                        </div>
+                                    </button>
+                                )
+                            })}
+                        </div>
+                    )}
+                </div>
+            </div>
+            {detailsItem && (
+                <GamefowlListingDetailsModal
+                    gamefowl={detailsItem}
+                    onClose={() => setDetailsItem(null)}
+                    onSaved={() => {
+                        setDetailsItem(null)
+                        onClose()
+                    }}
+                />
+            )}
+        </div>
+    )
+}
+
+function CreateGamefowlBundleModal({ onClose }) {
+    const [bundleName, setBundleName] = useState('')
+    const [bundleType, setBundleType] = useState('')
+    const [price, setPrice] = useState('')
+    const [stock, setStock] = useState('')
+    const [releaseOption, setReleaseOption] = useState('')
+    const [releaseDate, setReleaseDate] = useState('')
+    const [error, setError] = useState('')
+
+    useEffect(() => {
+        const onKey = (event) => {
+            if (event.key === 'Escape') onClose()
+        }
+        window.addEventListener('keydown', onKey)
+        return () => window.removeEventListener('keydown', onKey)
+    }, [onClose])
+
+    const fieldClass =
+        'w-full rounded-lg border border-[#E5E7EB] bg-white px-4 py-2.5 text-sm text-[#111827] placeholder:text-[#9CA3AF] focus:border-[#244693] focus:outline-none'
+    const selectClass = (value) =>
+        `${fieldClass} appearance-none pr-10 ${value ? 'text-[#111827]' : 'text-[#9CA3AF]'}`
+
+    const handleNext = () => {
+        const missing = []
+        if (!bundleName.trim()) missing.push('Bundle Name')
+        if (!bundleType) missing.push('Bundle Type')
+        if (!price.trim()) missing.push('Price')
+        if (!stock.trim()) missing.push('Stock Quantity')
+        if (!releaseOption) missing.push('Stock Release Options')
+        if (releaseOption === 'Set Release Date' && !releaseDate) missing.push('Stock Release Schedule')
+        setError(missing.length ? `Please fill in: ${missing.join(', ')}.` : '')
+    }
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4" onClick={onClose}>
+            <div
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="create-gamefowl-bundle-title"
+                className="w-full max-w-4xl rounded-2xl bg-white shadow-xl"
+                onClick={(event) => event.stopPropagation()}
+            >
+                <div className="flex items-start justify-between gap-4 px-8 pb-5 pt-7">
+                    <div>
+                        <h2 id="create-gamefowl-bundle-title" className="text-xl font-bold text-[#111827]">
+                            Create Gamefowl Bundle
+                        </h2>
+                        <p className="mt-1 text-sm text-[#6B7280]">Choose from registered gamefowl and set listing details</p>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={onClose}
+                        className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-[#9CA3AF] transition-colors hover:bg-[#F3F4F6] hover:text-[#111827]"
+                        aria-label="Close"
+                    >
+                        <X className="h-4 w-4" />
+                    </button>
+                </div>
+
+                <div className="border-t border-[#E5E7EB] px-8 pb-7 pt-7">
+                    {error && <p className="mb-4 text-sm text-[#E20E28]">{error}</p>}
+                    <div className="grid grid-cols-1 gap-x-10 gap-y-6 md:grid-cols-2">
+                        <div>
+                            <label htmlFor="bundle-name" className="mb-2 block text-sm font-semibold text-[#111827]">
+                                Bundle Name
+                            </label>
+                            <input
+                                id="bundle-name"
+                                type="text"
+                                value={bundleName}
+                                onChange={(event) => setBundleName(event.target.value)}
+                                placeholder="Broodstag Pair"
+                                className={fieldClass}
+                            />
+                        </div>
+                        <div>
+                            <label htmlFor="bundle-type" className="mb-2 block text-sm font-semibold text-[#111827]">
+                                Bundle Type
+                            </label>
+                            <div className="relative">
+                                <select
+                                    id="bundle-type"
+                                    value={bundleType}
+                                    onChange={(event) => setBundleType(event.target.value)}
+                                    className={selectClass(bundleType)}
+                                >
+                                    <option value="">Select Bundle Type</option>
+                                    <option value="Pair">Pair</option>
+                                    <option value="Trio">Trio</option>
+                                    <option value="Pen">Pen</option>
+                                </select>
+                                <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#9CA3AF]" />
+                            </div>
+                        </div>
+                        <div>
+                            <label htmlFor="bundle-price" className="mb-2 block text-sm font-semibold text-[#111827]">
+                                Price
+                            </label>
+                            <input
+                                id="bundle-price"
+                                type="text"
+                                inputMode="decimal"
+                                value={price}
+                                onChange={(event) => setPrice(event.target.value.replace(/[^\d.]/g, ''))}
+                                placeholder="400.00"
+                                className={fieldClass}
+                            />
+                        </div>
+                        <div>
+                            <label htmlFor="bundle-stock" className="mb-2 block text-sm font-semibold text-[#111827]">
+                                Stock Quantity
+                            </label>
+                            <input
+                                id="bundle-stock"
+                                type="text"
+                                inputMode="numeric"
+                                value={stock}
+                                onChange={(event) => setStock(event.target.value.replace(/\D/g, ''))}
+                                placeholder="500"
+                                className={fieldClass}
+                            />
+                        </div>
+                        <div>
+                            <label htmlFor="bundle-release-option" className="mb-2 block text-sm font-semibold text-[#111827]">
+                                Stock Release Options
+                            </label>
+                            <div className="relative">
+                                <select
+                                    id="bundle-release-option"
+                                    value={releaseOption}
+                                    onChange={(event) => setReleaseOption(event.target.value)}
+                                    className={selectClass(releaseOption)}
+                                >
+                                    <option value="">Select Stock Release Options</option>
+                                    <option value="Set Release Date">Set Release Date</option>
+                                    <option value="Release Immediately">Release Immediately</option>
+                                </select>
+                                <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#9CA3AF]" />
+                            </div>
+                        </div>
+                        <div>
+                            <label htmlFor="bundle-release-date" className="mb-2 block text-sm font-semibold text-[#111827]">
+                                Stock Release Schedule
+                            </label>
+                            <div className="relative">
+                                <input
+                                    id="bundle-release-date"
+                                    type="date"
+                                    value={releaseDate}
+                                    onChange={(event) => setReleaseDate(event.target.value)}
+                                    className={`${fieldClass} pr-10 [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:right-3 [&::-webkit-calendar-picker-indicator]:h-5 [&::-webkit-calendar-picker-indicator]:w-5 [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:opacity-0 ${
+                                        releaseDate ? '' : 'text-transparent'
+                                    }`}
+                                />
+                                {!releaseDate && (
+                                    <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm text-[#9CA3AF]">
+                                    </span>
+                                )}
+                                <Calendar className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#9CA3AF]" />
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="mt-8 flex items-center justify-between">
+                        <button
+                            type="button"
+                            onClick={onClose}
+                            className="rounded-lg border border-[#244693] bg-white px-5 py-2.5 text-sm font-semibold text-[#244693] transition-colors hover:bg-[#F4F7FF]"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            type="button"
+                            onClick={handleNext}
+                            className="rounded-lg bg-[#102059] px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#244693]"
+                        >
+                            Next: Select Gamefowl
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    )
+}
+
+function GamefowlCatalogPanel({ listings = [], catalog = [] }) {
     const [searchQuery, setSearchQuery] = useState('')
     const [categoryFilter, setCategoryFilter] = useState('')
     const [statusFilter, setStatusFilter] = useState('')
     const [sortBy, setSortBy] = useState('')
+    const [showPublishModal, setShowPublishModal] = useState(false)
+    const [showBundleModal, setShowBundleModal] = useState(false)
+    const [selectedListing, setSelectedListing] = useState(null)
+    const [updatingListingId, setUpdatingListingId] = useState(null)
 
     const rows = useMemo(() => listings.map(normalizeListing), [listings])
 
@@ -133,12 +726,13 @@ function GamefowlCatalogPanel({ listings = [] }) {
         <section className="rounded-xl border border-[#E5E7EB] bg-white p-6 sm:p-8">
             <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                 <div>
-                    <h2 className="text-xl font-semibold text-[#102059]">Gamefowl Catalog</h2>
+                    <h2 className="text-xl font-semibold text-[#102059]">Gamefowl Listings</h2>
                     <p className="mt-1 text-sm text-[#9CA3AF]">Manage the gamefowl listed for sale on this farm.</p>
                 </div>
                 <div className="flex flex-wrap items-center gap-3">
                     <button
                         type="button"
+                        onClick={() => setShowPublishModal(true)}
                         className="inline-flex items-center gap-2 rounded-lg bg-[#244693] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#1a3570]"
                     >
                         <CirclePlus className="h-4 w-4" />
@@ -153,6 +747,7 @@ function GamefowlCatalogPanel({ listings = [] }) {
                     </Link>
                     <button
                         type="button"
+                        onClick={() => setShowBundleModal(true)}
                         className="inline-flex items-center gap-2 rounded-lg border border-[#244693] bg-white px-4 py-2 text-sm font-semibold text-[#244693] transition-colors hover:bg-[#F4F7FF]"
                     >
                         <Box className="h-4 w-4" />
@@ -238,7 +833,8 @@ function GamefowlCatalogPanel({ listings = [] }) {
                         return (
                             <article
                                 key={listing.id}
-                                className="overflow-hidden rounded-lg border border-[#E5E7EB] bg-white"
+                                onClick={() => setSelectedListing(listing)}
+                                className="cursor-pointer overflow-hidden rounded-lg border border-[#E5E7EB] bg-white text-left transition-shadow hover:shadow-sm"
                             >
                                 <div className="aspect-[5/6] bg-[#E5E7EB]">
                                     {listing.image ? (
@@ -252,9 +848,9 @@ function GamefowlCatalogPanel({ listings = [] }) {
                                     </p>
                                     <div className="mt-2 flex flex-wrap items-start justify-between gap-x-2 gap-y-1">
                                         <p className="text-xs font-bold leading-4 text-[#102059]">
-                                            {formatPeso(listing.price)}
+                                            {formatPeso(listing.price, listing.unit)}
                                         </p>
-                                        <div className="ml-auto grid shrink-0 grid-cols-[auto_auto] gap-x-2 gap-y-0.5 text-right text-[10px] leading-4">
+                                        <div className="grid shrink-0 grid-cols-[auto_auto] gap-x-2 gap-y-0.5 text-[10px] leading-4">
                                             <span className="text-[#9CA3AF]">Stocks:</span>
                                             <span className="font-medium text-[#102059]">{listing.stocks}</span>
                                             <span className="text-[#9CA3AF]">Release Date:</span>
@@ -265,7 +861,22 @@ function GamefowlCatalogPanel({ listings = [] }) {
                                     </div>
                                     <button
                                         type="button"
-                                        className="mt-3 w-full rounded-lg bg-[#F3F4F6] py-2 text-xs font-semibold text-[#9CA3AF] transition-colors hover:bg-[#E5E7EB] hover:text-[#6B7280]"
+                                        disabled={updatingListingId === listing.id}
+                                        onClick={(event) => {
+                                            event.stopPropagation()
+                                            const nextStatus = isActive ? 'inactive' : 'active'
+                                            if (!window.confirm(`${isActive ? 'Deactivate' : 'Activate'} this gamefowl listing?`)) return
+                                            setUpdatingListingId(listing.id)
+                                            router.patch(
+                                                `/dashboard/owner-manager/farm/gamefowls/listings/${listing.id}/status`,
+                                                { status: nextStatus },
+                                                {
+                                                    preserveScroll: true,
+                                                    onFinish: () => setUpdatingListingId(null),
+                                                },
+                                            )
+                                        }}
+                                        className="mt-3 w-full rounded-lg bg-[#F3F4F6] py-2 text-xs font-semibold text-[#9CA3AF] transition-colors hover:bg-[#E5E7EB] hover:text-[#6B7280] disabled:opacity-60"
                                     >
                                         {isActive ? 'Deactivate' : 'Activate'}
                                     </button>
@@ -275,11 +886,27 @@ function GamefowlCatalogPanel({ listings = [] }) {
                     })}
                 </div>
             )}
+            {showPublishModal && (
+                <PublishGamefowlListingModal
+                    catalog={catalog}
+                    listings={listings}
+                    onClose={() => setShowPublishModal(false)}
+                />
+            )}
+            {showBundleModal && <CreateGamefowlBundleModal onClose={() => setShowBundleModal(false)} />}
+            {selectedListing && (
+                <GamefowlListingDetailsModal
+                    gamefowl={selectedListing}
+                    listing={selectedListing}
+                    onClose={() => setSelectedListing(null)}
+                    onSaved={() => setSelectedListing(null)}
+                />
+            )}
         </section>
     )
 }
 
-export default function OwnerManagerFarm({ auth, farm, listings = [] }) {
+export default function OwnerManagerFarm({ auth, farm, listings = [], catalog = [] }) {
     const page = usePage()
     const { flash } = page.props
     const coverInputRef = useRef(null)
@@ -682,7 +1309,7 @@ export default function OwnerManagerFarm({ auth, farm, listings = [] }) {
                         </div>
                     )}
 
-                    {activeTab === 'gamefowl' && <GamefowlCatalogPanel listings={listings} />}
+                    {activeTab === 'gamefowl' && <GamefowlCatalogPanel listings={listings} catalog={catalog} />}
 
                     {activeTab === 'insights' && (
                         <div className="space-y-4">

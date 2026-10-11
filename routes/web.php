@@ -324,6 +324,9 @@ Route::middleware(['auth', 'session.valid', 'user.type:owner_manager'])->prefix(
     Route::get('/farm', [DashboardController::class, 'ownerManagerFarm'])->name('farm');
     Route::get('/farm/gamefowls/request', [GamefowlCatalogController::class, 'ownerRequestForm'])->name('farm.gamefowls.request');
     Route::post('/farm/gamefowls/request', [GamefowlCatalogController::class, 'ownerRequestStore'])->name('farm.gamefowls.request.store');
+    Route::post('/farm/gamefowls/listings', [DashboardController::class, 'ownerManagerStoreGamefowlListing'])->name('farm.gamefowls.listings.store');
+    Route::put('/farm/gamefowls/listings/{id}', [DashboardController::class, 'ownerManagerUpdateGamefowlListing'])->name('farm.gamefowls.listings.update');
+    Route::patch('/farm/gamefowls/listings/{id}/status', [DashboardController::class, 'ownerManagerUpdateGamefowlListingStatus'])->name('farm.gamefowls.listings.status');
     Route::put('/farm', [DashboardController::class, 'ownerManagerUpdateFarm'])->name('farm.update');
     Route::patch('/farm/status', [DashboardController::class, 'ownerManagerUpdateFarmStatus'])->name('farm.status');
     Route::post('/farm/cover', [DashboardController::class, 'ownerManagerUpdateFarmCover'])->name('farm.cover');
