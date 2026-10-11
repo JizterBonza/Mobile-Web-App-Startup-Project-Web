@@ -124,6 +124,16 @@ function isCatalogListed(item, listings) {
     })
 }
 
+function pairSlot(item) {
+    const sex = String(item.sex || '').trim().toLowerCase()
+    const age = String(item.age || '').trim().toLowerCase()
+    if (sex === 'male' || sex === 'stag') return 'stag'
+    if (sex === 'female' || sex === 'pullet') return 'pullet'
+    if (age.includes('pullet') || age.includes('hen')) return 'pullet'
+    if (age.includes('stag') || age.includes('cock') || age.includes('rooster')) return 'stag'
+    return null
+}
+
 function GamefowlListingDetailsModal({ gamefowl, listing = null, onClose, onSaved }) {
     const isEdit = Boolean(listing?.id)
     const [editing, setEditing] = useState(true)
@@ -495,7 +505,7 @@ function PublishGamefowlListingModal({ catalog = [], listings = [], onClose }) {
     )
 }
 
-function CreateGamefowlBundleModal({ onClose }) {
+function CreateGamefowlBundleModal({ catalog = [], listings = [], onClose }) {
     const [bundleName, setBundleName] = useState('')
     const [bundleType, setBundleType] = useState('')
     const [price, setPrice] = useState('')
@@ -503,6 +513,26 @@ function CreateGamefowlBundleModal({ onClose }) {
     const [releaseOption, setReleaseOption] = useState('')
     const [releaseDate, setReleaseDate] = useState('')
     const [error, setError] = useState('')
+    const [step, setStep] = useState('details')
+    const [slot, setSlot] = useState('stag')
+    const [query, setQuery] = useState('')
+    const [selected, setSelected] = useState({ stag: [], pullet: [] })
+    const [selectError, setSelectError] = useState('')
+
+    const bundleSelection = {
+        Pair: { stag: 1, pullet: 1, heading: 'Select 1 Stag and 1 Pullet only', requirement: 'Select 1 stag and 1 pullet.' },
+        Trio: { stag: 1, pullet: 2, heading: 'Select 1 Stag and 2 Pullets only', requirement: 'Select 1 stag and 2 pullets.' },
+        Quadruplet: { stag: 1, pullet: 3, heading: 'Select 1 Stag and 3 Pullets only', requirement: 'Select 1 stag and 3 pullets.' },
+    }[bundleType] || { stag: 1, pullet: 1, heading: 'Select 1 Stag and 1 Pullet only', requirement: 'Select 1 stag and 1 pullet.' }
+
+    const pairCards = useMemo(() => {
+        const needle = query.trim().toLowerCase()
+        return catalog.map(catalogCard).filter((item) => {
+            if (pairSlot(item) !== slot) return false
+            if (!needle) return true
+            return [item.title, item.composition, item.age, item.sex].join(' ').toLowerCase().includes(needle)
+        })
+    }, [catalog, query, slot])
 
     useEffect(() => {
         const onKey = (event) => {
@@ -525,7 +555,176 @@ function CreateGamefowlBundleModal({ onClose }) {
         if (!stock.trim()) missing.push('Stock Quantity')
         if (!releaseOption) missing.push('Stock Release Options')
         if (releaseOption === 'Set Release Date' && !releaseDate) missing.push('Stock Release Schedule')
-        setError(missing.length ? `Please fill in: ${missing.join(', ')}.` : '')
+        if (missing.length) {
+            setError(`Please fill in: ${missing.join(', ')}.`)
+            return
+        }
+        setError('')
+        if (bundleType === 'Pair' || bundleType === 'Trio' || bundleType === 'Quadruplet') {
+            setSlot('stag')
+            setQuery('')
+            setSelected({ stag: [], pullet: [] })
+            setSelectError('')
+            setStep('select')
+        }
+    }
+
+    const togglePairCard = (item) => {
+        if (isCatalogListed(item, listings)) return
+        setSelectError('')
+        setSelected((current) => {
+            const items = current[slot]
+            const exists = items.some((entry) => String(entry.id) === String(item.id))
+            if (exists) {
+                return { ...current, [slot]: items.filter((entry) => String(entry.id) !== String(item.id)) }
+            }
+            const limit = bundleSelection[slot]
+            if (items.length >= limit) {
+                return limit === 1 ? { ...current, [slot]: [item] } : current
+            }
+            return { ...current, [slot]: [...items, item] }
+        })
+    }
+
+    if (step === 'select' && (bundleType === 'Pair' || bundleType === 'Trio' || bundleType === 'Quadruplet')) {
+        return (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4" onClick={onClose}>
+                <div
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="add-gamefowl-to-store-title"
+                    className="flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white shadow-xl"
+                    onClick={(event) => event.stopPropagation()}
+                >
+                    <div className="flex items-start justify-between gap-4 px-6 pb-4 pt-6">
+                        <div>
+                            <h2 id="add-gamefowl-to-store-title" className="text-lg font-bold text-[#111827]">
+                                Add Gamefowl to Store
+                            </h2>
+                            <p className="mt-1 text-sm text-[#6B7280]">Choose from registered gamefowl and set listing details</p>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={onClose}
+                            className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-[#9CA3AF] transition-colors hover:bg-[#F3F4F6] hover:text-[#111827]"
+                            aria-label="Close"
+                        >
+                            <X className="h-4 w-4" />
+                        </button>
+                    </div>
+
+                    <div className="overflow-y-auto border-t border-[#E5E7EB] px-6 py-5">
+                        <h3 className="text-sm font-semibold text-[#111827]">{bundleSelection.heading}</h3>
+                        {selectError && <p className="mt-2 text-sm text-[#E20E28]">{selectError}</p>}
+                        <div className="mt-4 grid grid-cols-2 gap-3">
+                            {[
+                                ['stag', `Stag (${bundleSelection.stag})`],
+                                ['pullet', `Pullet (${bundleSelection.pullet})`],
+                            ].map(([id, label]) => (
+                                <button
+                                    key={id}
+                                    type="button"
+                                    onClick={() => {
+                                        setSlot(id)
+                                        setQuery('')
+                                    }}
+                                    className={`rounded-lg px-4 py-2.5 text-sm font-semibold ${
+                                        slot === id
+                                            ? 'bg-[#244693] text-white'
+                                            : 'border border-[#E5E7EB] bg-white text-[#6B7280]'
+                                    }`}
+                                >
+                                    {label}
+                                </button>
+                            ))}
+                        </div>
+                        <div className="relative mt-4">
+                            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#9CA3AF]" />
+                            <input
+                                type="text"
+                                value={query}
+                                onChange={(event) => setQuery(event.target.value)}
+                                placeholder="Search Gamefowl"
+                                className="w-full rounded-lg border border-[#E5E7EB] bg-white py-2.5 pl-10 pr-3 text-sm text-[#111827] placeholder:text-[#9CA3AF] focus:border-[#244693] focus:outline-none"
+                            />
+                        </div>
+
+                        {pairCards.length === 0 ? (
+                            <div className="flex min-h-[220px] items-center justify-center text-center">
+                                <p className="text-sm text-[#9CA3AF]">
+                                    {catalog.length === 0
+                                        ? 'No approved gamefowl are available yet.'
+                                        : `No ${slot === 'stag' ? 'stags' : 'pullets'} match your search.`}
+                                </p>
+                            </div>
+                        ) : (
+                            <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+                                {pairCards.map((item) => {
+                                    const listed = isCatalogListed(item, listings)
+                                    const picked = selected[slot].some((entry) => String(entry.id) === String(item.id))
+                                    return (
+                                        <button
+                                            key={item.id}
+                                            type="button"
+                                            disabled={listed}
+                                            onClick={() => togglePairCard(item)}
+                                            className={`overflow-hidden rounded-lg border bg-white text-left ${
+                                                picked ? 'border-[#244693]' : 'border-[#E5E7EB]'
+                                            } ${listed ? 'cursor-default disabled:opacity-100' : 'cursor-pointer'}`}
+                                        >
+                                            <div className="relative aspect-[5/6] bg-[#E5E7EB]">
+                                                {item.image ? <img src={item.image} alt="" className="h-full w-full object-cover" /> : null}
+                                                <span
+                                                    className={`absolute top-2 right-2 flex h-4 w-4 items-center justify-center rounded-[3px] border ${
+                                                        picked ? 'border-[#244693] bg-[#244693]' : 'border-[#D1D5DB] bg-white'
+                                                    }`}
+                                                >
+                                                    {picked ? <Check className="h-3 w-3 text-white" strokeWidth={3} /> : null}
+                                                </span>
+                                            </div>
+                                            <div className="px-3 pb-3 pt-2.5">
+                                                <p className="truncate text-sm font-bold text-[#111827]">{item.title}</p>
+                                                <p className="mt-0.5 truncate text-[11px] text-[#9CA3AF]">
+                                                    {item.composition} | {item.age} | {item.sex}
+                                                </p>
+                                                {listed ? (
+                                                    <p className="mt-4 text-center text-xs text-[#C5C8CE]">Already listed</p>
+                                                ) : (
+                                                    <span className="mt-4 block h-4" />
+                                                )}
+                                            </div>
+                                        </button>
+                                    )
+                                })}
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="flex items-center justify-between border-t border-[#E5E7EB] px-6 py-4">
+                        <button
+                            type="button"
+                            onClick={() => setStep('details')}
+                            className="rounded-lg border border-[#244693] bg-white px-5 py-2.5 text-sm font-semibold text-[#244693] transition-colors hover:bg-[#F4F7FF]"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => {
+                                if (selected.stag.length !== bundleSelection.stag || selected.pullet.length !== bundleSelection.pullet) {
+                                    setSelectError(bundleSelection.requirement)
+                                    return
+                                }
+                                setSelectError('')
+                            }}
+                            className="rounded-lg bg-[#102059] px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#244693]"
+                        >
+                            Create Bundle
+                        </button>
+                    </div>
+                </div>
+            </div>
+        )
     }
 
     return (
@@ -584,7 +783,7 @@ function CreateGamefowlBundleModal({ onClose }) {
                                     <option value="">Select Bundle Type</option>
                                     <option value="Pair">Pair</option>
                                     <option value="Trio">Trio</option>
-                                    <option value="Pen">Pen</option>
+                                    <option value="Quadruplet">Quadruplet</option>
                                 </select>
                                 <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#9CA3AF]" />
                             </div>
@@ -893,7 +1092,13 @@ function GamefowlCatalogPanel({ listings = [], catalog = [] }) {
                     onClose={() => setShowPublishModal(false)}
                 />
             )}
-            {showBundleModal && <CreateGamefowlBundleModal onClose={() => setShowBundleModal(false)} />}
+            {showBundleModal && (
+                <CreateGamefowlBundleModal
+                    catalog={catalog}
+                    listings={listings}
+                    onClose={() => setShowBundleModal(false)}
+                />
+            )}
             {selectedListing && (
                 <GamefowlListingDetailsModal
                     gamefowl={selectedListing}
