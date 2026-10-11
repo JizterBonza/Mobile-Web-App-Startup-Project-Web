@@ -62,6 +62,10 @@ Route::get('/storage/{path}', [PublicStorageController::class, 'show'])
 Route::middleware(['auth', 'session.valid', 'user.type:super_admin|admin'])->prefix('klasrum')->name('klasrum.')->group(function () {
     Route::get('/', [KlasrumContentController::class, 'index'])->name('index');
     Route::get('/new', [KlasrumContentController::class, 'create'])->name('create');
+    Route::get('/posts/new', [KlasrumContentController::class, 'createPost'])->name('posts.create');
+    Route::post('/posts', [KlasrumContentController::class, 'storePost'])->name('posts.store');
+    Route::get('/posts/{post}/edit', [KlasrumContentController::class, 'editPost'])->whereNumber('post')->name('posts.edit');
+    Route::post('/posts/{post}', [KlasrumContentController::class, 'updatePost'])->whereNumber('post')->name('posts.update');
     Route::post('/', [KlasrumContentController::class, 'store'])->name('store');
     Route::post('/categories', [KlasrumCategoryController::class, 'store'])->name('categories.store');
     Route::put('/categories/{category}', [KlasrumCategoryController::class, 'update'])->whereNumber('category')->name('categories.update');

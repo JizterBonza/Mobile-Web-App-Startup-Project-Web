@@ -12,6 +12,7 @@ use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
@@ -23,14 +24,30 @@ class KlasrumContentController extends Controller
     {
         $contents = KlasrumContent::query()
             ->with('category')
+            ->articles()
             ->orderByRaw("CASE WHEN status = ? THEN 0 ELSE 1 END", [KlasrumContent::STATUS_PUBLISHED])
             ->orderByDesc('published_at')
             ->orderByDesc('updated_at')
             ->get()
             ->map(fn (KlasrumContent $content) => $content->toListArray());
 
+        $posts = KlasrumContent::query()
+            ->posts()
+            ->orderByRaw("CASE WHEN status = ? THEN 0 ELSE 1 END", [KlasrumContent::STATUS_PUBLISHED])
+            ->orderByDesc('published_at')
+            ->orderByDesc('updated_at')
+            ->get()
+            ->map(fn (KlasrumContent $post) => [
+                'id' => $post->id,
+                'title' => $post->title ?: 'Untitled',
+                'excerpt' => Str::limit(trim(preg_replace('/\s+/', ' ', strip_tags((string) $post->body)) ?? ''), 160),
+                'status' => $post->status,
+                'publishedAt' => $post->published_at?->format('F j, Y'),
+            ]);
+
         return Inertia::render('Klasrum', [
             'contents' => $contents,
+            'posts' => $posts,
             'categories' => KlasrumCategory::options(),
         ]);
     }
@@ -43,6 +60,11 @@ class KlasrumContentController extends Controller
         ]);
     }
 
+    public function createPost(): Response
+    {
+        return Inertia::render('Klasrum/CreatePost');
+    }
+
     public function store(Request $request): RedirectResponse
     {
         $validated = $this->validatedPayload($request);
@@ -52,6 +74,7 @@ class KlasrumContentController extends Controller
         $content = KlasrumContent::create([
             ...$this->contentFields($validated),
             ...$paths,
+            'kind' => KlasrumContent::KIND_ARTICLE,
             'status' => $status,
             'published_at' => $status === KlasrumContent::STATUS_PUBLISHED ? now() : null,
             'created_by' => Auth::id(),
@@ -70,6 +93,95 @@ class KlasrumContentController extends Controller
             'success',
             $status === KlasrumContent::STATUS_PUBLISHED
                 ? 'Content published successfully.'
+                : 'Draft saved successfully.'
+        );
+    }
+
+    public function storePost(Request $request): RedirectResponse
+    {
+        $validated = $this->validatedPayload($request);
+        $paths = $this->storeUploads($request);
+
+        $status = $validated['status'];
+        $post = KlasrumContent::create([
+            ...$this->contentFields($validated),
+            ...$paths,
+            'kind' => KlasrumContent::KIND_POST,
+            'status' => $status,
+            'published_at' => $status === KlasrumContent::STATUS_PUBLISHED ? now() : null,
+            'created_by' => Auth::id(),
+            'updated_by' => Auth::id(),
+        ]);
+
+        ActivityLog::log(
+            'created',
+            'Klasrum post created: ' . ($post->title ?: 'Untitled'),
+            $post,
+            null,
+            $post->toArray()
+        );
+
+        return redirect()->route('klasrum.index', ['tab' => 'newsfeed'])->with(
+            'success',
+            $status === KlasrumContent::STATUS_PUBLISHED
+                ? 'Post published successfully.'
+                : 'Draft saved successfully.'
+        );
+    }
+
+    public function editPost(KlasrumContent $post): Response
+    {
+        abort_unless($post->kind === KlasrumContent::KIND_POST, 404);
+
+        return Inertia::render('Klasrum/CreatePost', [
+            'post' => [
+                'id' => $post->id,
+                'title' => $post->title ?? '',
+                'body' => $post->body ?? '',
+                'status' => $post->status,
+                'media' => $post->mediaPayload(false),
+            ],
+        ]);
+    }
+
+    public function updatePost(Request $request, KlasrumContent $post): RedirectResponse
+    {
+        abort_unless($post->kind === KlasrumContent::KIND_POST, 404);
+
+        $validated = $this->validatedPayload($request, $post);
+        $oldValues = $post->toArray();
+        $paths = $this->storeUploads($request, $post);
+
+        $status = $validated['status'];
+        $publishedAt = $post->published_at;
+        if ($status === KlasrumContent::STATUS_PUBLISHED && ! $post->isPublished()) {
+            $publishedAt = now();
+        }
+        if ($status === KlasrumContent::STATUS_DRAFT) {
+            $publishedAt = $post->isPublished() ? $post->published_at : null;
+        }
+
+        $post->update([
+            ...$this->contentFields($validated),
+            ...$paths,
+            'kind' => KlasrumContent::KIND_POST,
+            'status' => $status,
+            'published_at' => $publishedAt,
+            'updated_by' => Auth::id(),
+        ]);
+
+        ActivityLog::log(
+            'updated',
+            'Klasrum post updated: ' . ($post->title ?: 'Untitled'),
+            $post,
+            $oldValues,
+            $post->fresh()->toArray()
+        );
+
+        return redirect()->route('klasrum.index', ['tab' => 'newsfeed'])->with(
+            'success',
+            $status === KlasrumContent::STATUS_PUBLISHED
+                ? 'Post updated successfully.'
                 : 'Draft saved successfully.'
         );
     }
@@ -138,7 +250,7 @@ class KlasrumContentController extends Controller
             null
         );
 
-        return redirect()->route('klasrum.index')->with('success', 'Content deleted successfully.');
+        return $this->redirectToKlasrum($content)->with('success', 'Content deleted successfully.');
     }
 
     public function togglePublish(KlasrumContent $content): RedirectResponse
@@ -160,7 +272,7 @@ class KlasrumContentController extends Controller
             $content->fresh()->toArray()
         );
 
-        return redirect()->route('klasrum.index')->with(
+        return $this->redirectToKlasrum($content)->with(
             'success',
             $publishing ? 'Content published successfully.' : 'Content unpublished successfully.'
         );
@@ -415,6 +527,13 @@ class KlasrumContentController extends Controller
         if ($content->media_path && ! isset($deleted[$content->media_path])) {
             $this->deleteStoredFile($content->media_path);
         }
+    }
+
+    private function redirectToKlasrum(KlasrumContent $content): RedirectResponse
+    {
+        $params = $content->kind === KlasrumContent::KIND_POST ? ['tab' => 'newsfeed'] : [];
+
+        return redirect()->route('klasrum.index', $params);
     }
 
     private function deleteStoredFile(?string $path): void
