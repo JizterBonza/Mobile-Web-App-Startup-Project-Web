@@ -1,6 +1,7 @@
 import { Link, router, usePage } from '@inertiajs/react'
-import { BookOpen, Clock, FileMinus, FileText, Heart, MessageCircle, MoreHorizontal, Pencil, Plus, Rss, Trash2 } from 'lucide-react'
+import { BookOpen, Clock, FileMinus, FileText, MoreHorizontal, Pencil, Plus, Rss, Trash2 } from 'lucide-react'
 import { useState } from 'react'
+import { FollowButton, PostSocial } from '../Components/Klasrum/PostSocial'
 import AdminKlasmeytLayout from '../Layouts/AdminKlasmeytLayout'
 import OwnerManagerKlasmeytLayout from '../Layouts/OwnerManagerKlasmeytLayout'
 import SuperAdminKlasmeytLayout from '../Layouts/SuperAdminKlasmeytLayout'
@@ -305,27 +306,33 @@ export default function Klasrum({ auth, contents = [], posts = [], canManage = f
                                             <div className="flex items-start gap-3">
                                                 <Link
                                                     href={`/klasrum/posts/${item.id}`}
-                                                    className="flex min-w-0 flex-1 items-start gap-3"
+                                                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#EDE9FE] text-xs font-semibold text-[#6D28D9]"
                                                 >
-                                                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#EDE9FE] text-xs font-semibold text-[#6D28D9]">
-                                                        {authorInitials(item.authorName)}
-                                                    </div>
-                                                    <div className="min-w-0 flex-1">
-                                                        <p className="text-sm font-semibold text-[#2563EB]" style={{ marginBottom: '0px' }}>
-                                                            {item.authorName}
-                                                            <span className="font-medium"> • Follow</span>
-                                                        </p>
-                                                        <p className="mt-0.5 flex items-center gap-1 text-xs text-[#9CA3AF]" style={{ marginTop: '0px' }}>
-                                                            <Clock className="h-3 w-3" />
-                                                            <span>{item.postedLabel || 'Just now'}</span>
-                                                            {!isPublished ? (
-                                                                <span className="ml-1 rounded-full bg-[#F3F4F6] px-2 py-0.5 font-semibold text-[#6B7280]">
-                                                                    Draft
-                                                                </span>
-                                                            ) : null}
-                                                        </p>
-                                                    </div>
+                                                    {authorInitials(item.authorName)}
                                                 </Link>
+                                                <div className="min-w-0 flex-1">
+                                                    <p className="text-sm font-semibold text-[#2563EB]" style={{ marginBottom: '0px' }}>
+                                                        <Link href={`/klasrum/posts/${item.id}`} className="hover:underline">
+                                                            {item.authorName}
+                                                        </Link>
+                                                        {item.canFollow ? (
+                                                            <FollowButton authorId={item.authorId} following={item.isFollowing} />
+                                                        ) : null}
+                                                    </p>
+                                                    <Link
+                                                        href={`/klasrum/posts/${item.id}`}
+                                                        className="mt-0.5 flex items-center gap-1 text-xs text-[#9CA3AF]"
+                                                        style={{ marginTop: '0px' }}
+                                                    >
+                                                        <Clock className="h-3 w-3" />
+                                                        <span>{item.postedLabel || 'Just now'}</span>
+                                                        {!isPublished ? (
+                                                            <span className="ml-1 rounded-full bg-[#F3F4F6] px-2 py-0.5 font-semibold text-[#6B7280]">
+                                                                Draft
+                                                            </span>
+                                                        ) : null}
+                                                    </Link>
+                                                </div>
                                                 {canManage ? (
                                                     <div className="relative">
                                                         <button
@@ -388,16 +395,14 @@ export default function Klasrum({ auth, contents = [], posts = [], canManage = f
                                                     </div>
                                                 </div>
                                             </Link>
-                                            <div className="mt-3 flex items-center gap-4 border-t border-[#F3F4F6] pt-3 text-sm text-[#6B7280]">
-                                                <span className="inline-flex items-center gap-1.5">
-                                                    <Heart className="h-4 w-4" />
-                                                    0 reactions
-                                                </span>
-                                                <span className="inline-flex items-center gap-1.5">
-                                                    <MessageCircle className="h-4 w-4" />
-                                                    0 comments
-                                                </span>
-                                            </div>
+                                            <PostSocial
+                                                className="mt-3"
+                                                postId={item.id}
+                                                canEngage={item.canEngage}
+                                                reactionCount={item.reactionCount}
+                                                reacted={item.reacted}
+                                                comments={item.comments}
+                                            />
                                         </>
                                     )
 

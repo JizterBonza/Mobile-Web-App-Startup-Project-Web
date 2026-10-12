@@ -202,6 +202,8 @@ Route::middleware(['auth:sanctum', 'account.active'])->group(function () {
     Route::get('messages/unread-count', [CustomerShopMessageController::class, 'unreadCount']);
     Route::get('shops/{shopId}/messages/products', [CustomerShopMessageController::class, 'products']);
     Route::post('shops/{shopId}/messages', [CustomerShopMessageController::class, 'start']);
+    Route::get('farms/{farmId}/messages/products', [CustomerShopMessageController::class, 'farmProducts']);
+    Route::post('farms/{farmId}/messages', [CustomerShopMessageController::class, 'startFarm']);
     Route::get('messages/{conversationId}', [CustomerShopMessageController::class, 'show']);
     Route::post('messages/{conversationId}', [CustomerShopMessageController::class, 'send']);
 

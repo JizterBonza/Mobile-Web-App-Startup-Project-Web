@@ -27,6 +27,7 @@ use App\Http\Controllers\VoucherController;
 use App\Http\Controllers\PayoutRecordController;
 use App\Http\Controllers\KlasrumCategoryController;
 use App\Http\Controllers\KlasrumContentController;
+use App\Http\Controllers\KlasrumPostEngagementController;
 use App\Http\Controllers\PublicStorageController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -66,6 +67,10 @@ Route::middleware(['auth', 'session.valid', 'user.type:super_admin|admin|owner_m
     Route::post('/media', [KlasrumContentController::class, 'uploadMedia'])->name('media.upload');
     Route::get('/articles/{content}', [KlasrumContentController::class, 'showArticle'])->whereNumber('content')->name('articles.show');
     Route::get('/posts/{post}', [KlasrumContentController::class, 'showPost'])->whereNumber('post')->name('posts.show');
+    Route::post('/users/{user}/follow', [KlasrumPostEngagementController::class, 'toggleFollow'])->whereNumber('user')->name('users.follow');
+    Route::post('/posts/{post}/reactions', [KlasrumPostEngagementController::class, 'toggleReaction'])->whereNumber('post')->name('posts.react');
+    Route::post('/posts/{post}/comments', [KlasrumPostEngagementController::class, 'storeComment'])->whereNumber('post')->name('posts.comments.store');
+    Route::delete('/posts/{post}/comments/{comment}', [KlasrumPostEngagementController::class, 'destroyComment'])->whereNumber('post')->whereNumber('comment')->name('posts.comments.destroy');
 });
 
 Route::middleware(['auth', 'session.valid', 'user.type:super_admin|admin'])->prefix('klasrum')->name('klasrum.')->group(function () {
@@ -359,6 +364,8 @@ Route::middleware(['auth', 'session.valid', 'user.type:owner_manager'])->prefix(
     Route::post('/stores/{shopId}/vendors', [DashboardController::class, 'ownerManagerStoreVendor'])->name('stores.vendors.store');
     Route::get('/orders', [DashboardController::class, 'ownerManagerOrders'])->name('orders');
     Route::get('/messages', [ShopMessageController::class, 'ownerManagerIndex'])->name('messages');
+    Route::get('/messages/products', [ShopMessageController::class, 'farmProducts'])->name('messages.inbox.products');
+    Route::post('/messages/{conversationId}', [ShopMessageController::class, 'farmSend'])->name('messages.inbox.send');
     Route::get('/messages/{shopId}', [ShopMessageController::class, 'ownerManagerBranch'])->name('messages.branch');
     Route::get('/messages/{shopId}/products', [ShopMessageController::class, 'ownerManagerProducts'])->name('messages.products');
     Route::get('/messages/{shopId}/{conversationId}', [ShopMessageController::class, 'ownerManagerConversation'])->name('messages.conversation');

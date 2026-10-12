@@ -10,6 +10,7 @@ class ShopConversation extends Model
 {
     protected $fillable = [
         'shop_id',
+        'farm_id',
         'customer_user_id',
         'last_message_at',
         'last_message_preview',
@@ -27,6 +28,11 @@ class ShopConversation extends Model
     public function shop(): BelongsTo
     {
         return $this->belongsTo(Shop::class);
+    }
+
+    public function farm(): BelongsTo
+    {
+        return $this->belongsTo(Farm::class);
     }
 
     public function customer(): BelongsTo

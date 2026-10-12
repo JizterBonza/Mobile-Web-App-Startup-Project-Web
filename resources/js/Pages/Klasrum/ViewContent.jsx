@@ -1,6 +1,7 @@
 import { Link } from '@inertiajs/react'
 import { ArrowLeft, Clock } from 'lucide-react'
 import ArticlePreview from '../../Components/Klasrum/ArticlePreview'
+import { FollowButton, PostSocial } from '../../Components/Klasrum/PostSocial'
 import AdminKlasmeytLayout from '../../Layouts/AdminKlasmeytLayout'
 import OwnerManagerKlasmeytLayout from '../../Layouts/OwnerManagerKlasmeytLayout'
 import SuperAdminKlasmeytLayout from '../../Layouts/SuperAdminKlasmeytLayout'
@@ -67,7 +68,9 @@ export default function ViewContent({ auth, item }) {
                             <div className="min-w-0">
                                 <p className="text-sm font-semibold text-[#2563EB]" style={{ marginBottom: '0px' }}>
                                     {item?.authorName || 'Klasrum'}
-                                    <span className="font-medium"> • Follow</span>
+                                    {item?.canFollow ? (
+                                        <FollowButton authorId={item.authorId} following={item.isFollowing} />
+                                    ) : null}
                                 </p>
                                 <p className="mt-0.5 flex items-center gap-1 text-xs text-[#9CA3AF]" style={{ marginTop: '0px' }}>
                                     <Clock className="h-3 w-3" />
@@ -109,6 +112,15 @@ export default function ViewContent({ auth, item }) {
                                 ) : null}
                             </div>
                         ) : null}
+                        <PostSocial
+                            className="mt-8"
+                            postId={item?.id}
+                            canEngage={item?.canEngage}
+                            reactionCount={item?.reactionCount}
+                            reacted={item?.reacted}
+                            comments={item?.comments}
+                            startOpen
+                        />
                     </div>
                 </div>
                 ) : (

@@ -28,10 +28,19 @@ class ShopMessageSent implements ShouldBroadcastNow
      */
     public function broadcastOn(): array
     {
-        return [
+        $channels = [
             new PrivateChannel('shop-conversation.'.$this->conversation->id),
-            new PrivateChannel('shop.'.$this->conversation->shop_id),
         ];
+
+        if ($this->conversation->shop_id) {
+            $channels[] = new PrivateChannel('shop.'.$this->conversation->shop_id);
+        }
+
+        if ($this->conversation->farm_id) {
+            $channels[] = new PrivateChannel('farm.'.$this->conversation->farm_id);
+        }
+
+        return $channels;
     }
 
     public function broadcastAs(): string

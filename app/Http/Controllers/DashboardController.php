@@ -902,6 +902,9 @@ class DashboardController extends Controller
             if (! empty($shopIds)) {
                 $orders = $this->buildShopOrders($shopIds, $preparingItemStatusId);
             }
+        }
+
+        if ($agrivet || $user->managedFarm) {
             $deliveryMethods = $this->activeDeliveryMethods();
         }
 

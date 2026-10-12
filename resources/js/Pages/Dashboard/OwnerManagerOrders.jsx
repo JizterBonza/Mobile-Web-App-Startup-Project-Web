@@ -1,4 +1,3 @@
-import OwnerManagerFarmOrdersPanel from '../../Components/Dashboard/OwnerManagerFarmOrdersPanel'
 import OwnerManagerOrdersPanel from '../../Components/Dashboard/OwnerManagerOrdersPanel'
 import OwnerManagerKlasmeytLayout, {
     OwnerManagerNoAgrivetAlert,
@@ -26,18 +25,12 @@ export default function OwnerManagerOrders({
                     {flash.error}
                 </div>
             )}
-            {managesFarm ? (
-                <OwnerManagerFarmOrdersPanel orders={orders} />
-            ) : (
-                <>
-                    {!agrivet && <OwnerManagerNoAgrivetAlert />}
-                    <OwnerManagerOrdersPanel
-                        orders={orders}
-                        deliveryMethods={deliveryMethods}
-                        preparingItemStatusId={preparingItemStatusId}
-                    />
-                </>
-            )}
+            {!managesFarm && !agrivet && <OwnerManagerNoAgrivetAlert />}
+            <OwnerManagerOrdersPanel
+                orders={orders}
+                deliveryMethods={deliveryMethods}
+                preparingItemStatusId={preparingItemStatusId}
+            />
         </OwnerManagerKlasmeytLayout>
     )
 }
