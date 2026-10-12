@@ -126,11 +126,8 @@ function isCatalogListed(item, listings) {
 
 function pairSlot(item) {
     const sex = String(item.sex || '').trim().toLowerCase()
-    const age = String(item.age || '').trim().toLowerCase()
-    if (sex === 'male' || sex === 'stag') return 'stag'
-    if (sex === 'female' || sex === 'pullet') return 'pullet'
-    if (age.includes('pullet') || age.includes('hen')) return 'pullet'
-    if (age.includes('stag') || age.includes('cock') || age.includes('rooster')) return 'stag'
+    if (sex === 'male' || sex === 'm') return 'stag'
+    if (sex === 'female' || sex === 'f') return 'pullet'
     return null
 }
 
@@ -654,7 +651,9 @@ function CreateGamefowlBundleModal({ catalog = [], listings = [], onClose }) {
                                 <p className="text-sm text-[#9CA3AF]">
                                     {catalog.length === 0
                                         ? 'No approved gamefowl are available yet.'
-                                        : `No ${slot === 'stag' ? 'stags' : 'pullets'} match your search.`}
+                                        : query.trim()
+                                          ? `No ${slot === 'stag' ? 'male' : 'female'} gamefowl match your search.`
+                                          : `No ${slot === 'stag' ? 'male' : 'female'} gamefowl are available.`}
                                 </p>
                             </div>
                         ) : (
