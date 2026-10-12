@@ -3,6 +3,8 @@
 namespace App\Services;
 
 use App\Events\ShopMessageSent;
+use App\Models\Farm;
+use App\Models\FarmGamefowlListing;
 use App\Models\Item;
 use App\Models\Notification;
 use App\Models\OrderItem;
@@ -68,6 +70,32 @@ class ShopMessagingService
             ->orderByDesc('id')
             ->get();
 
+        return $this->presentConversationList($conversations, $viewer);
+    }
+
+    /**
+     * Conversation list for a farm, relative to the owner/manager viewer.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function formatFarmConversationList(Farm $farm, User $viewer): array
+    {
+        $conversations = ShopConversation::query()
+            ->where('farm_id', $farm->id)
+            ->with(['customer.userDetail'])
+            ->orderByDesc('last_message_at')
+            ->orderByDesc('id')
+            ->get();
+
+        return $this->presentConversationList($conversations, $viewer);
+    }
+
+    /**
+     * @param  Collection<int, ShopConversation>  $conversations
+     * @return list<array<string, mixed>>
+     */
+    private function presentConversationList(Collection $conversations, User $viewer): array
+    {
         if ($conversations->isEmpty()) {
             return [];
         }
@@ -111,7 +139,8 @@ class ShopMessagingService
             return [
                 'id' => $conversation->id,
                 'shop_id' => $conversation->shop_id,
-                'shop_name' => $conversation->shop?->shop_name,
+                'farm_id' => $conversation->farm_id,
+                'shop_name' => $conversation->shop?->shop_name ?? $conversation->farm?->name,
                 'last_message' => $conversation->last_message_preview,
                 'last_message_at' => $conversation->last_message_at?->toIso8601String(),
                 'last_sender' => $this->formatLastSender($lastMessages->get($conversation->id)),
@@ -174,6 +203,24 @@ class ShopMessagingService
                 'customer_user_id' => $customer->id,
             ],
             [
+                'last_message_at' => null,
+                'last_message_preview' => null,
+            ]
+        );
+    }
+
+    /**
+     * Find or create a farm–customer conversation.
+     */
+    public function findOrCreateForFarm(Farm $farm, User $customer): ShopConversation
+    {
+        return ShopConversation::firstOrCreate(
+            [
+                'farm_id' => $farm->id,
+                'customer_user_id' => $customer->id,
+            ],
+            [
+                'shop_id' => null,
                 'last_message_at' => null,
                 'last_message_preview' => null,
             ]
@@ -381,6 +428,94 @@ class ShopMessagingService
     }
 
     /**
+     * Active gamefowl listings for the farm messaging picker.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function listFarmListingsForPicker(Farm $farm, ?string $search = null): array
+    {
+        $query = FarmGamefowlListing::query()
+            ->where('farm_id', $farm->id)
+            ->where('status', 'active')
+            ->with(['gamefowl.bloodline'])
+            ->orderByDesc('id');
+
+        $term = trim((string) $search);
+        if ($term !== '') {
+            $query->whereHas('gamefowl', function ($gamefowl) use ($term) {
+                $gamefowl->where('name', 'like', '%'.$term.'%')
+                    ->orWhereHas('bloodline', function ($bloodline) use ($term) {
+                        $bloodline->where('name', 'like', '%'.$term.'%');
+                    });
+            });
+        }
+
+        return $query->get()->map(function (FarmGamefowlListing $listing) {
+            $metadata = $this->listingMetadata($listing);
+
+            return [
+                'id' => $listing->id,
+                'item_name' => $metadata['product_name'],
+                'item_price' => $metadata['item_price'],
+                'effective_price' => $metadata['effective_price'],
+                'active_discount_percent' => $metadata['active_discount_percent'],
+                'image_url' => $metadata['image_url'],
+                'unit_label' => $metadata['unit_label'],
+                'weight' => null,
+                'metric' => null,
+                'item_quantity' => $metadata['item_quantity'],
+            ];
+        })->values()->all();
+    }
+
+    /**
+     * Share a farm gamefowl listing as a product message.
+     */
+    public function sendFarmListingMessage(
+        ShopConversation $conversation,
+        User $sender,
+        FarmGamefowlListing $listing,
+        string $body = ''
+    ): ShopConversationMessage {
+        if ((int) $listing->farm_id !== (int) $conversation->farm_id) {
+            abort(422, 'Listing does not belong to this farm.');
+        }
+
+        $listing->loadMissing('gamefowl.bloodline');
+
+        return $this->sendProductSnapshotMessage(
+            $conversation,
+            $sender,
+            $this->listingMetadata($listing),
+            $body,
+        );
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function listingMetadata(FarmGamefowlListing $listing): array
+    {
+        $listing->loadMissing('gamefowl.bloodline');
+        $gamefowl = $listing->gamefowl;
+        $images = $gamefowl?->images ?? [];
+        $image = $images[$gamefowl?->primary_image_index ?? 0] ?? ($images[0] ?? null);
+        $name = $gamefowl?->bloodline?->name ?: $gamefowl?->name ?: 'Gamefowl';
+        $price = round((float) $listing->price, 2);
+
+        return [
+            'listing_id' => (int) $listing->id,
+            'product_name' => (string) $name,
+            'item_price' => $price,
+            'effective_price' => $price,
+            'active_discount_percent' => 0,
+            'image_url' => $image,
+            'unit_label' => $listing->selling_unit,
+            'item_quantity' => (int) $listing->stock,
+        ];
+    }
+
+    /**
      * @return array<string, mixed>
      */
     public function productMetadataFromItem(Item $item): array
@@ -544,7 +679,8 @@ class ShopMessagingService
 
         return [
             'conversation_id' => (int) $conversation->id,
-            'shop_id' => (int) $conversation->shop_id,
+            'shop_id' => $conversation->shop_id ? (int) $conversation->shop_id : null,
+            'farm_id' => $conversation->farm_id ? (int) $conversation->farm_id : null,
             'message' => $formatted,
             'preview' => [
                 'name' => $this->displayName($conversation->customer),
@@ -611,6 +747,14 @@ class ShopMessagingService
     {
         return ShopConversation::query()
             ->where('shop_id', $shop->id)
+            ->where('id', $conversationId)
+            ->firstOrFail();
+    }
+
+    public function findConversationForFarm(Farm $farm, int $conversationId): ShopConversation
+    {
+        return ShopConversation::query()
+            ->where('farm_id', $farm->id)
             ->where('id', $conversationId)
             ->firstOrFail();
     }
@@ -890,7 +1034,7 @@ class ShopMessagingService
             ->orderByDesc('id');
 
         if ($withShop) {
-            $query->with(['shop']);
+            $query->with(['shop', 'farm']);
         }
 
         return $query->get();
@@ -1005,8 +1149,9 @@ class ShopMessagingService
         User $sender,
         ShopConversationMessage $message
     ): void {
-        $conversation->loadMissing('shop', 'customer.userDetail');
+        $conversation->loadMissing('shop', 'farm', 'customer.userDetail');
         $preview = $conversation->fresh()->last_message_preview ?? 'New message';
+        $label = $conversation->shop?->shop_name ?? $conversation->farm?->name ?? 'New message';
 
         if ($message->isShopOriginated()) {
             $customerId = (int) $conversation->customer_user_id;
@@ -1017,12 +1162,13 @@ class ShopMessagingService
             Notification::createForUser(
                 $customerId,
                 'shop_message',
-                $conversation->shop->shop_name ?? 'New message',
+                $label,
                 $preview,
                 'messages',
                 $conversation,
                 [
                     'shop_id' => $conversation->shop_id,
+                    'farm_id' => $conversation->farm_id,
                     'conversation_id' => $conversation->id,
                 ],
             );
@@ -1030,8 +1176,35 @@ class ShopMessagingService
             return;
         }
 
+        if ($conversation->farm_id && ! $conversation->shop_id) {
+            $ownerManagerId = User::query()
+                ->where('user_type', User::TYPE_OWNER_MANAGER)
+                ->where('farm_id', $conversation->farm_id)
+                ->value('id');
+
+            if ($ownerManagerId && (int) $ownerManagerId !== (int) $sender->id) {
+                Notification::createForUser(
+                    (int) $ownerManagerId,
+                    'shop_message',
+                    "Message from {$this->displayName($conversation->customer)}",
+                    $preview,
+                    'messages',
+                    $conversation,
+                    [
+                        'farm_id' => $conversation->farm_id,
+                        'conversation_id' => $conversation->id,
+                    ],
+                );
+            }
+
+            return;
+        }
+
         // Customer → notify assigned vendors + owner/manager of the agrivet
         $shop = $conversation->shop;
+        if (! $shop) {
+            return;
+        }
         $recipientIds = $shop->vendors()->pluck('users.id')->all();
 
         $ownerManagerId = User::query()

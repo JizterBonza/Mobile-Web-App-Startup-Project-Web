@@ -364,6 +364,8 @@ Route::middleware(['auth', 'session.valid', 'user.type:owner_manager'])->prefix(
     Route::post('/stores/{shopId}/vendors', [DashboardController::class, 'ownerManagerStoreVendor'])->name('stores.vendors.store');
     Route::get('/orders', [DashboardController::class, 'ownerManagerOrders'])->name('orders');
     Route::get('/messages', [ShopMessageController::class, 'ownerManagerIndex'])->name('messages');
+    Route::get('/messages/products', [ShopMessageController::class, 'farmProducts'])->name('messages.inbox.products');
+    Route::post('/messages/{conversationId}', [ShopMessageController::class, 'farmSend'])->name('messages.inbox.send');
     Route::get('/messages/{shopId}', [ShopMessageController::class, 'ownerManagerBranch'])->name('messages.branch');
     Route::get('/messages/{shopId}/products', [ShopMessageController::class, 'ownerManagerProducts'])->name('messages.products');
     Route::get('/messages/{shopId}/{conversationId}', [ShopMessageController::class, 'ownerManagerConversation'])->name('messages.conversation');

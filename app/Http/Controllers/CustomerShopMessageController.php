@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Farm;
+use App\Models\FarmGamefowlListing;
 use App\Models\Item;
 use App\Models\Shop;
 use App\Models\ShopConversation;
@@ -88,6 +90,56 @@ class CustomerShopMessageController extends Controller
     }
 
     /**
+     * Active farm listings for the mobile product picker.
+     */
+    public function farmProducts(Request $request, int $farmId)
+    {
+        $this->customerOrAbort($request);
+        $farm = Farm::query()->where('status', 'active')->findOrFail($farmId);
+
+        return response()->json([
+            'products' => $this->messaging->listFarmListingsForPicker(
+                $farm,
+                $request->string('search')->toString()
+            ),
+        ]);
+    }
+
+    /**
+     * Start or resume a conversation with a farm, optionally sending the first message.
+     */
+    public function startFarm(Request $request, int $farmId)
+    {
+        $user = $this->customerOrAbort($request);
+        $farm = Farm::query()->where('status', 'active')->findOrFail($farmId);
+
+        $validated = $request->validate($this->farmMessageRules());
+
+        $conversation = $this->messaging->findOrCreateForFarm($farm, $user);
+        $body = trim((string) ($validated['body'] ?? ''));
+        $files = array_values(array_filter($request->file('attachments', []) ?? []));
+        $listingId = $validated['item_id'] ?? null;
+
+        if ($listingId) {
+            $listing = $this->resolveActiveFarmListing($farm->id, (int) $listingId);
+            $this->messaging->sendFarmListingMessage($conversation, $user, $listing, $body);
+        } elseif ($body !== '' || $files !== []) {
+            $this->messaging->sendMessage($conversation, $user, $body, $files);
+        }
+
+        $thread = $this->messaging->formatConversationThread($conversation->fresh(), $user);
+
+        return response()->json([
+            'conversation' => $thread['conversation'],
+            'messages' => $thread['messages'],
+            'farm' => [
+                'id' => $farm->id,
+                'name' => $farm->name,
+            ],
+        ], 201);
+    }
+
+    /**
      * Show a conversation thread owned by the customer.
      */
     public function show(Request $request, int $conversationId)
@@ -99,10 +151,14 @@ class CustomerShopMessageController extends Controller
         return response()->json([
             'conversation' => $thread['conversation'],
             'messages' => $thread['messages'],
-            'shop' => [
+            'shop' => $conversation->shop_id ? [
                 'id' => $conversation->shop_id,
                 'shop_name' => $conversation->shop?->shop_name,
-            ],
+            ] : null,
+            'farm' => $conversation->farm_id ? [
+                'id' => $conversation->farm_id,
+                'name' => $conversation->farm?->name,
+            ] : null,
         ]);
     }
 
@@ -114,15 +170,23 @@ class CustomerShopMessageController extends Controller
         $user = $this->customerOrAbort($request);
         $conversation = $this->ownedConversation($user, $conversationId);
 
-        $validated = $request->validate($this->messageRules());
+        $rules = ($conversation->farm_id && ! $conversation->shop_id)
+            ? $this->farmMessageRules()
+            : $this->messageRules();
+        $validated = $request->validate($rules);
 
         $body = trim((string) ($validated['body'] ?? ''));
         $files = array_values(array_filter($request->file('attachments', []) ?? []));
         $itemId = $validated['item_id'] ?? null;
 
         if ($itemId) {
-            $item = $this->resolveActiveShopItem((int) $conversation->shop_id, (int) $itemId);
-            $this->messaging->sendProductMessage($conversation, $user, $item, $body);
+            if ($conversation->farm_id && ! $conversation->shop_id) {
+                $listing = $this->resolveActiveFarmListing((int) $conversation->farm_id, (int) $itemId);
+                $this->messaging->sendFarmListingMessage($conversation, $user, $listing, $body);
+            } else {
+                $item = $this->resolveActiveShopItem((int) $conversation->shop_id, (int) $itemId);
+                $this->messaging->sendProductMessage($conversation, $user, $item, $body);
+            }
         } else {
             if ($body === '' && $files === []) {
                 return response()->json(['message' => 'Message cannot be empty.'], 422);
@@ -156,6 +220,17 @@ class CustomerShopMessageController extends Controller
         ];
     }
 
+    /**
+     * @return array<string, mixed>
+     */
+    private function farmMessageRules(): array
+    {
+        $rules = $this->messageRules();
+        $rules['item_id'] = ['nullable', 'integer'];
+
+        return $rules;
+    }
+
     private function resolveActiveShopItem(int $shopId, int $itemId): Item
     {
         $item = Item::query()
@@ -171,6 +246,21 @@ class CustomerShopMessageController extends Controller
         return $item;
     }
 
+    private function resolveActiveFarmListing(int $farmId, int $listingId): FarmGamefowlListing
+    {
+        $listing = FarmGamefowlListing::query()
+            ->where('id', $listingId)
+            ->where('farm_id', $farmId)
+            ->where('status', 'active')
+            ->first();
+
+        if (! $listing) {
+            abort(422, 'Gamefowl not found on this farm.');
+        }
+
+        return $listing;
+    }
+
     private function customerOrAbort(Request $request): User
     {
         $user = $request->user();
@@ -184,7 +274,7 @@ class CustomerShopMessageController extends Controller
     private function ownedConversation(User $user, int $conversationId): ShopConversation
     {
         return ShopConversation::query()
-            ->with('shop')
+            ->with(['shop', 'farm'])
             ->where('customer_user_id', $user->id)
             ->where('id', $conversationId)
             ->firstOrFail();

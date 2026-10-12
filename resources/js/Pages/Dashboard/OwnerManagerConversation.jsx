@@ -185,6 +185,7 @@ export default function OwnerManagerConversation({
     messages = [],
     sendUrl,
     productsUrl,
+    listUrl,
 }) {
     const [draft, setDraft] = useState('')
     const [pendingAttachments, setPendingAttachments] = useState([])
@@ -351,7 +352,7 @@ export default function OwnerManagerConversation({
                     <button
                         type="button"
                         onClick={() =>
-                            router.visit(`/dashboard/owner-manager/messages/${shop.id}`)
+                            router.visit(listUrl || `/dashboard/owner-manager/messages/${shop.id}`)
                         }
                         className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#D1D5DB] text-[#4B5563] transition-colors hover:bg-[#9CA3AF] hover:text-white"
                         title="Back to conversations"

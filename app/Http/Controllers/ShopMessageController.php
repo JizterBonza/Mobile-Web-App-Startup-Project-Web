@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\FarmGamefowlListing;
 use App\Models\Item;
 use App\Models\Shop;
 use App\Models\User;
@@ -18,6 +19,23 @@ class ShopMessageController extends Controller
     public function ownerManagerIndex()
     {
         $user = auth()->user();
+
+        if ($this->isFarmOwner($user)) {
+            $farm = $user->managedFarm;
+
+            return Inertia::render('Dashboard/OwnerManagerMessages', [
+                'agrivet' => null,
+                'inbox' => true,
+                'farm' => $farm ? [
+                    'id' => $farm->id,
+                    'name' => $farm->name,
+                ] : null,
+                'conversations' => $farm
+                    ? $this->messaging->formatFarmConversationList($farm, $user)
+                    : [],
+            ]);
+        }
+
         $agrivet = $user->managedAgrivet;
         $shops = $agrivet
             ? $agrivet->shops()->orderBy('shop_name')->get()
@@ -29,9 +47,82 @@ class ShopMessageController extends Controller
         ]);
     }
 
+    public function farmProducts(Request $request)
+    {
+        $user = auth()->user();
+        abort_unless($this->isFarmOwner($user), 404);
+
+        $farm = $user->managedFarm;
+        if (! $farm) {
+            return response()->json(['products' => []]);
+        }
+
+        return response()->json([
+            'products' => $this->messaging->listFarmListingsForPicker(
+                $farm,
+                $request->string('search')->toString()
+            ),
+        ]);
+    }
+
+    public function farmSend(Request $request, int $conversationId)
+    {
+        $user = auth()->user();
+        abort_unless($this->isFarmOwner($user), 404);
+
+        $farm = $user->managedFarm;
+        abort_unless($farm, 404);
+
+        $conversation = $this->messaging->findConversationForFarm($farm, $conversationId);
+
+        $validated = $request->validate([
+            'body' => ['nullable', 'string', 'max:5000'],
+            'item_id' => ['nullable', 'integer'],
+            'attachments' => ['nullable', 'array', 'max:10'],
+            'attachments.*' => [
+                'file',
+                'max:20480',
+                'mimes:jpg,jpeg,png,gif,webp,mp4,pdf,docx',
+            ],
+        ]);
+
+        $files = array_values(array_filter($request->file('attachments', []) ?? []));
+        $body = trim((string) ($validated['body'] ?? ''));
+        $listingId = $validated['item_id'] ?? null;
+
+        if ($listingId) {
+            $listing = FarmGamefowlListing::query()
+                ->where('id', $listingId)
+                ->where('farm_id', $farm->id)
+                ->where('status', 'active')
+                ->first();
+
+            if (! $listing) {
+                return redirect()->back()->withErrors(['item_id' => 'Gamefowl not found on this farm.']);
+            }
+
+            $this->messaging->sendFarmListingMessage($conversation, $user, $listing, $body);
+
+            return redirect()->back()->with('success', 'Message sent.');
+        }
+
+        if ($body === '' && $files === []) {
+            return redirect()->back()->withErrors(['body' => 'Message cannot be empty.']);
+        }
+
+        $this->messaging->sendMessage($conversation, $user, $body, $files);
+
+        return redirect()->back()->with('success', 'Message sent.');
+    }
+
     public function ownerManagerBranch(int $shopId)
     {
         $user = auth()->user();
+
+        if ($this->isFarmOwner($user)) {
+            return $this->farmConversation($user, $shopId);
+        }
+
         $agrivet = $user->managedAgrivet;
         if (! $agrivet) {
             return redirect()->route('dashboard.owner-manager.messages');
@@ -51,6 +142,11 @@ class ShopMessageController extends Controller
     public function ownerManagerConversation(int $shopId, int $conversationId)
     {
         $user = auth()->user();
+
+        if ($this->isFarmOwner($user)) {
+            return redirect()->route('dashboard.owner-manager.messages');
+        }
+
         $agrivet = $user->managedAgrivet;
         if (! $agrivet) {
             return redirect()->route('dashboard.owner-manager.messages');
@@ -80,6 +176,11 @@ class ShopMessageController extends Controller
     public function ownerManagerProducts(Request $request, int $shopId)
     {
         $user = auth()->user();
+
+        if ($this->isFarmOwner($user)) {
+            abort(404);
+        }
+
         $shop = $this->messaging->assertOwnerManagerShopAccess($user, $shopId);
 
         return response()->json([
@@ -93,6 +194,11 @@ class ShopMessageController extends Controller
     public function ownerManagerSend(Request $request, int $shopId, int $conversationId)
     {
         $user = auth()->user();
+
+        if ($this->isFarmOwner($user)) {
+            abort(404);
+        }
+
         $shop = $this->messaging->assertOwnerManagerShopAccess($user, $shopId);
         $conversation = $this->messaging->findConversationForShop($shop, $conversationId);
 
@@ -222,6 +328,36 @@ class ShopMessageController extends Controller
         $this->messaging->sendMessage($conversation, $user, $body, $files);
 
         return redirect()->back()->with('success', 'Message sent.');
+    }
+
+    private function farmConversation(User $user, int $conversationId)
+    {
+        $farm = $user->managedFarm;
+        if (! $farm) {
+            return redirect()->route('dashboard.owner-manager.messages');
+        }
+
+        $conversation = $this->messaging->findConversationForFarm($farm, $conversationId);
+        $thread = $this->messaging->formatConversationThread($conversation, $user);
+
+        return Inertia::render('Dashboard/OwnerManagerConversation', [
+            'shop' => [
+                'id' => $farm->id,
+                'shop_name' => $farm->name,
+            ],
+            'listUrl' => '/dashboard/owner-manager/messages',
+            'conversation' => $thread['conversation'],
+            'messages' => $thread['messages'],
+            'sendUrl' => route('dashboard.owner-manager.messages.inbox.send', [
+                'conversationId' => $conversation->id,
+            ]),
+            'productsUrl' => route('dashboard.owner-manager.messages.inbox.products'),
+        ]);
+    }
+
+    private function isFarmOwner(User $user): bool
+    {
+        return (bool) $user->farm_id && ! $user->agrivet_id;
     }
 
     private function resolveVendorShop(User $user): ?Shop
