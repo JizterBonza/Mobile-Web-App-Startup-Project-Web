@@ -13,7 +13,7 @@ export function LandingHeader({
 }) {
   const { auth } = usePage().props
   const [menuOpen, setMenuOpen] = useState(false)
-  const canAccessKlasrum = ['super_admin', 'admin'].includes(auth?.user?.user_type)
+  const canAccessKlasrum = ['super_admin', 'admin', 'owner_manager'].includes(auth?.user?.user_type)
 
   const navLinkClass =
     'text-[15px] font-medium text-black transition-opacity hover:opacity-70'

@@ -72,6 +72,9 @@ function SuperAdminNav({ productOpen, setProductOpen }) {
                     <SubNavLink href="/dashboard/super-admin/sub-categories">Sub-Categories</SubNavLink>
                 </div>
             )}
+            <NavLink href="/dashboard/super-admin/gamefowls" iconClass="fas fa-feather-alt">
+                Gamefowls
+            </NavLink>
             <NavLink href="/klasrum" iconClass="fas fa-book-open">
                 Klasrum
             </NavLink>
@@ -108,6 +111,9 @@ function AdminNav({ productOpen, setProductOpen }) {
                     <SubNavLink href="/dashboard/admin/sub-categories">Sub-Categories</SubNavLink>
                 </div>
             )}
+            <NavLink href="/dashboard/admin/gamefowls" iconClass="fas fa-feather-alt">
+                Gamefowls
+            </NavLink>
             <NavLink href="/klasrum" iconClass="fas fa-book-open">
                 Klasrum
             </NavLink>

@@ -5,16 +5,20 @@ namespace App\Models;
 use App\Support\PublicStorage;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class KlasrumContent extends Model
 {
     public const STATUS_DRAFT = 'draft';
     public const STATUS_PUBLISHED = 'published';
+    public const KIND_ARTICLE = 'article';
+    public const KIND_POST = 'post';
     public const MAX_MEDIA_ITEMS = 15;
 
     protected $table = 'klasrum_contents';
 
     protected $fillable = [
+        'kind',
         'title',
         'description',
         'heading',
@@ -55,6 +59,16 @@ class KlasrumContent extends Model
     public function editor(): BelongsTo
     {
         return $this->belongsTo(User::class, 'updated_by');
+    }
+
+    public function reactions(): HasMany
+    {
+        return $this->hasMany(KlasrumReaction::class, 'klasrum_content_id');
+    }
+
+    public function comments(): HasMany
+    {
+        return $this->hasMany(KlasrumComment::class, 'klasrum_content_id')->orderBy('created_at')->orderBy('id');
     }
 
     public function coverUrl(): ?string
@@ -138,6 +152,16 @@ class KlasrumContent extends Model
     public function scopePublished($query)
     {
         return $query->where('status', self::STATUS_PUBLISHED);
+    }
+
+    public function scopeArticles($query)
+    {
+        return $query->where('kind', self::KIND_ARTICLE);
+    }
+
+    public function scopePosts($query)
+    {
+        return $query->where('kind', self::KIND_POST);
     }
 
     /**

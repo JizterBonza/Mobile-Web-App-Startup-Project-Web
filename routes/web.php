@@ -4,6 +4,10 @@ use App\Http\Controllers\Auth\AuthController;
 use App\Http\Controllers\Auth\GoogleAuthController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\AgrivetController;
+use App\Http\Controllers\AppReleaseController;
+use App\Http\Controllers\FarmController;
+use App\Http\Controllers\GamefowlCatalogController;
+use App\Http\Controllers\GamefowlLookupController;
 use App\Http\Controllers\VendorController;
 use App\Http\Controllers\ProductImageController;
 use App\Http\Controllers\CategoryController;
@@ -23,6 +27,7 @@ use App\Http\Controllers\VoucherController;
 use App\Http\Controllers\PayoutRecordController;
 use App\Http\Controllers\KlasrumCategoryController;
 use App\Http\Controllers\KlasrumContentController;
+use App\Http\Controllers\KlasrumPostEngagementController;
 use App\Http\Controllers\PublicStorageController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -55,14 +60,27 @@ Route::get('/storage/{path}', [PublicStorageController::class, 'show'])
     ->where('path', '.*')
     ->name('storage.public');
 
-Route::middleware(['auth', 'session.valid', 'user.type:super_admin|admin'])->prefix('klasrum')->name('klasrum.')->group(function () {
+Route::middleware(['auth', 'session.valid', 'user.type:super_admin|admin|owner_manager'])->prefix('klasrum')->name('klasrum.')->group(function () {
     Route::get('/', [KlasrumContentController::class, 'index'])->name('index');
+    Route::get('/posts/new', [KlasrumContentController::class, 'createPost'])->name('posts.create');
+    Route::post('/posts', [KlasrumContentController::class, 'storePost'])->name('posts.store');
+    Route::post('/media', [KlasrumContentController::class, 'uploadMedia'])->name('media.upload');
+    Route::get('/articles/{content}', [KlasrumContentController::class, 'showArticle'])->whereNumber('content')->name('articles.show');
+    Route::get('/posts/{post}', [KlasrumContentController::class, 'showPost'])->whereNumber('post')->name('posts.show');
+    Route::post('/users/{user}/follow', [KlasrumPostEngagementController::class, 'toggleFollow'])->whereNumber('user')->name('users.follow');
+    Route::post('/posts/{post}/reactions', [KlasrumPostEngagementController::class, 'toggleReaction'])->whereNumber('post')->name('posts.react');
+    Route::post('/posts/{post}/comments', [KlasrumPostEngagementController::class, 'storeComment'])->whereNumber('post')->name('posts.comments.store');
+    Route::delete('/posts/{post}/comments/{comment}', [KlasrumPostEngagementController::class, 'destroyComment'])->whereNumber('post')->whereNumber('comment')->name('posts.comments.destroy');
+});
+
+Route::middleware(['auth', 'session.valid', 'user.type:super_admin|admin'])->prefix('klasrum')->name('klasrum.')->group(function () {
     Route::get('/new', [KlasrumContentController::class, 'create'])->name('create');
+    Route::get('/posts/{post}/edit', [KlasrumContentController::class, 'editPost'])->whereNumber('post')->name('posts.edit');
+    Route::post('/posts/{post}', [KlasrumContentController::class, 'updatePost'])->whereNumber('post')->name('posts.update');
     Route::post('/', [KlasrumContentController::class, 'store'])->name('store');
     Route::post('/categories', [KlasrumCategoryController::class, 'store'])->name('categories.store');
     Route::put('/categories/{category}', [KlasrumCategoryController::class, 'update'])->whereNumber('category')->name('categories.update');
     Route::delete('/categories/{category}', [KlasrumCategoryController::class, 'destroy'])->name('categories.destroy')->whereNumber('category');
-    Route::post('/media', [KlasrumContentController::class, 'uploadMedia'])->name('media.upload');
     Route::get('/{content}/edit', [KlasrumContentController::class, 'edit'])->name('edit')->whereNumber('content');
     Route::post('/{content}', [KlasrumContentController::class, 'update'])->name('update')->whereNumber('content');
     Route::delete('/{content}', [KlasrumContentController::class, 'destroy'])->name('destroy')->whereNumber('content');
@@ -105,6 +123,40 @@ Route::post('/dashboard/super-admin/products', [SuperAdminProductController::cla
 Route::get('/dashboard/super-admin/products', [SuperAdminProductController::class, 'index'])
     ->middleware(['auth', 'session.valid', 'user.type:super_admin'])
     ->name('dashboard.super-admin.products');
+
+foreach (['super_admin' => 'super-admin', 'admin' => 'admin'] as $gamefowlRole => $gamefowlSegment) {
+    Route::middleware(['auth', 'session.valid', "user.type:{$gamefowlRole}"])
+        ->prefix("dashboard/{$gamefowlSegment}")
+        ->name("dashboard.{$gamefowlSegment}.")
+        ->group(function () {
+            Route::get('gamefowls/create', [GamefowlCatalogController::class, 'create'])->name('gamefowls.create');
+            Route::post('gamefowls', [GamefowlCatalogController::class, 'store'])->name('gamefowls.store');
+            Route::get('gamefowls', [GamefowlCatalogController::class, 'index'])->name('gamefowls');
+            Route::get('gamefowls/requests', [GamefowlCatalogController::class, 'requests'])->name('gamefowls.requests');
+            Route::post('gamefowls/requests/{id}/approve', [GamefowlCatalogController::class, 'approve'])->name('gamefowls.requests.approve');
+            Route::post('gamefowls/requests/{id}/reject', [GamefowlCatalogController::class, 'reject'])->name('gamefowls.requests.reject');
+
+            Route::get('gamefowls/bloodlines', [GamefowlLookupController::class, 'bloodlines'])->name('gamefowls.bloodlines');
+            Route::post('gamefowls/bloodlines', [GamefowlLookupController::class, 'storeBloodline'])->name('gamefowls.bloodlines.store');
+            Route::put('gamefowls/bloodlines/{id}', [GamefowlLookupController::class, 'updateBloodline'])->name('gamefowls.bloodlines.update');
+            Route::delete('gamefowls/bloodlines/{id}', [GamefowlLookupController::class, 'destroyBloodline'])->name('gamefowls.bloodlines.destroy');
+
+            Route::get('gamefowls/age-types', [GamefowlLookupController::class, 'ageTypes'])->name('gamefowls.age-types');
+            Route::post('gamefowls/age-types', [GamefowlLookupController::class, 'storeAgeType'])->name('gamefowls.age-types.store');
+            Route::put('gamefowls/age-types/{id}', [GamefowlLookupController::class, 'updateAgeType'])->name('gamefowls.age-types.update');
+            Route::delete('gamefowls/age-types/{id}', [GamefowlLookupController::class, 'destroyAgeType'])->name('gamefowls.age-types.destroy');
+
+            Route::get('gamefowls/classes', [GamefowlLookupController::class, 'classes'])->name('gamefowls.classes');
+            Route::post('gamefowls/classes', [GamefowlLookupController::class, 'storeClass'])->name('gamefowls.classes.store');
+            Route::put('gamefowls/classes/{id}', [GamefowlLookupController::class, 'updateClass'])->name('gamefowls.classes.update');
+            Route::delete('gamefowls/classes/{id}', [GamefowlLookupController::class, 'destroyClass'])->name('gamefowls.classes.destroy');
+
+            Route::get('gamefowls/{id}/edit', [GamefowlCatalogController::class, 'edit'])->name('gamefowls.edit');
+            Route::put('gamefowls/{id}', [GamefowlCatalogController::class, 'update'])->name('gamefowls.update');
+            Route::patch('gamefowls/{id}/status', [GamefowlCatalogController::class, 'updateStatus'])->name('gamefowls.status');
+            Route::get('gamefowls/{id}', [GamefowlCatalogController::class, 'show'])->name('gamefowls.show');
+        });
+}
 
 Route::get('/dashboard/super-admin/products/{id}/edit', [SuperAdminProductController::class, 'edit'])
     ->middleware(['auth', 'session.valid', 'user.type:super_admin'])
@@ -176,6 +228,15 @@ Route::middleware(['auth', 'session.valid', 'user.type:super_admin'])->prefix('d
 
     Route::put('/{id}', [AgrivetController::class, 'update'])->name('update');
     Route::delete('/{id}', [AgrivetController::class, 'destroy'])->name('destroy');
+});
+
+// Farm Management Routes
+Route::middleware(['auth', 'session.valid', 'user.type:super_admin'])->prefix('dashboard/super-admin/farms')->name('dashboard.super-admin.farms.')->group(function () {
+    Route::get('/', [FarmController::class, 'index'])->name('index');
+    Route::get('/create', [FarmController::class, 'create'])->name('create');
+    Route::post('/setup-wizard', [FarmController::class, 'storeSetupWizard'])->name('setup-wizard.store');
+    Route::put('/{id}', [FarmController::class, 'update'])->name('update');
+    Route::delete('/{id}', [FarmController::class, 'destroy'])->name('destroy');
 });
 
 // Super Admin Category Management Routes
@@ -260,8 +321,29 @@ Route::get('/dashboard/super-admin/support', [DashboardController::class, 'super
     ->middleware(['auth', 'session.valid', 'user.type:super_admin'])
     ->name('dashboard.super-admin.support');
 
+// Super Admin APK Management
+Route::middleware(['auth', 'session.valid', 'user.type:super_admin'])->prefix('dashboard/super-admin/apk-management')->group(function () {
+    Route::get('/', [AppReleaseController::class, 'index'])->name('dashboard.super-admin.apk-management');
+    Route::name('dashboard.super-admin.apk-management.releases.')->prefix('releases')->group(function () {
+        Route::post('/', [AppReleaseController::class, 'store'])->name('store');
+        Route::post('/{release}/publish', [AppReleaseController::class, 'publish'])->name('publish');
+        Route::post('/{release}/archive', [AppReleaseController::class, 'archive'])->name('archive');
+        Route::delete('/{release}', [AppReleaseController::class, 'destroy'])->name('destroy');
+        Route::get('/{release}/download', [AppReleaseController::class, 'download'])->name('download');
+    });
+});
+
 Route::middleware(['auth', 'session.valid', 'user.type:owner_manager'])->prefix('dashboard/owner-manager')->name('dashboard.owner-manager.')->group(function () {
     Route::get('/', [DashboardController::class, 'ownerManager'])->name('index');
+    Route::get('/farm', [DashboardController::class, 'ownerManagerFarm'])->name('farm');
+    Route::get('/farm/gamefowls/request', [GamefowlCatalogController::class, 'ownerRequestForm'])->name('farm.gamefowls.request');
+    Route::post('/farm/gamefowls/request', [GamefowlCatalogController::class, 'ownerRequestStore'])->name('farm.gamefowls.request.store');
+    Route::post('/farm/gamefowls/listings', [DashboardController::class, 'ownerManagerStoreGamefowlListing'])->name('farm.gamefowls.listings.store');
+    Route::put('/farm/gamefowls/listings/{id}', [DashboardController::class, 'ownerManagerUpdateGamefowlListing'])->name('farm.gamefowls.listings.update');
+    Route::patch('/farm/gamefowls/listings/{id}/status', [DashboardController::class, 'ownerManagerUpdateGamefowlListingStatus'])->name('farm.gamefowls.listings.status');
+    Route::put('/farm', [DashboardController::class, 'ownerManagerUpdateFarm'])->name('farm.update');
+    Route::patch('/farm/status', [DashboardController::class, 'ownerManagerUpdateFarmStatus'])->name('farm.status');
+    Route::post('/farm/cover', [DashboardController::class, 'ownerManagerUpdateFarmCover'])->name('farm.cover');
     Route::get('/stores', [DashboardController::class, 'ownerManagerStores'])->name('stores');
     Route::post('/stores', [DashboardController::class, 'ownerManagerStoreShop'])->name('stores.store');
     Route::get('/stores/{shopId}/store-information', [DashboardController::class, 'ownerManagerStoreInformation'])->name('stores.store-information');
@@ -282,6 +364,8 @@ Route::middleware(['auth', 'session.valid', 'user.type:owner_manager'])->prefix(
     Route::post('/stores/{shopId}/vendors', [DashboardController::class, 'ownerManagerStoreVendor'])->name('stores.vendors.store');
     Route::get('/orders', [DashboardController::class, 'ownerManagerOrders'])->name('orders');
     Route::get('/messages', [ShopMessageController::class, 'ownerManagerIndex'])->name('messages');
+    Route::get('/messages/products', [ShopMessageController::class, 'farmProducts'])->name('messages.inbox.products');
+    Route::post('/messages/{conversationId}', [ShopMessageController::class, 'farmSend'])->name('messages.inbox.send');
     Route::get('/messages/{shopId}', [ShopMessageController::class, 'ownerManagerBranch'])->name('messages.branch');
     Route::get('/messages/{shopId}/products', [ShopMessageController::class, 'ownerManagerProducts'])->name('messages.products');
     Route::get('/messages/{shopId}/{conversationId}', [ShopMessageController::class, 'ownerManagerConversation'])->name('messages.conversation');
@@ -380,6 +464,15 @@ Route::middleware(['auth', 'session.valid', 'user.type:admin'])->prefix('dashboa
 
     Route::put('/{id}', [AgrivetController::class, 'update'])->name('update');
     Route::delete('/{id}', [AgrivetController::class, 'destroy'])->name('destroy');
+});
+
+// Admin Farm Management Routes
+Route::middleware(['auth', 'session.valid', 'user.type:admin'])->prefix('dashboard/admin/farms')->name('dashboard.admin.farms.')->group(function () {
+    Route::get('/', [FarmController::class, 'index'])->name('index');
+    Route::get('/create', [FarmController::class, 'create'])->name('create');
+    Route::post('/setup-wizard', [FarmController::class, 'storeSetupWizard'])->name('setup-wizard.store');
+    Route::put('/{id}', [FarmController::class, 'update'])->name('update');
+    Route::delete('/{id}', [FarmController::class, 'destroy'])->name('destroy');
 });
 
 // Admin Category Management Routes

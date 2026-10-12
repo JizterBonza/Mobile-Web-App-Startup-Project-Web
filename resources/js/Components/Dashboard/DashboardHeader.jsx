@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useForm, usePage } from '@inertiajs/react'
-import { Bell, ChevronDown, CreditCard, History, LogOut, Map, MessageSquareMore, Settings, SlidersHorizontal, Ticket, Truck, Wallet } from 'lucide-react'
+import { Bell, ChevronDown, CreditCard, History, LogOut, Map, MessageSquareMore, Settings, SlidersHorizontal, Smartphone, Ticket, Truck, Wallet } from 'lucide-react'
 import primaryLogo from '../../../../Logo/Primary Logo.png'
 
 /**
@@ -229,17 +229,30 @@ export function DashboardHeader({
                                 />
                                 <div className="absolute right-0 z-20 mt-2 w-56 overflow-hidden rounded-lg border border-[#E5E7EB] bg-white">
                                     {dropdownNavItems.map((item, index) => (
-                                        <Fragment key={item.href}>
+                                        <Fragment key={item.id ?? item.href ?? item.label}>
                                             {index > 0 && <div className="border-t border-[#E5E7EB]" />}
-                                            <Link
-                                                href={item.href}
-                                                onClick={() => setShowUserDropdown(false)}
-                                                className="flex w-full items-center gap-3 px-4 py-3 text-sm text-[#1F2937] transition-colors hover:bg-[#F3F4F6]"
-                                                style={{ fontFamily: 'Inter Condensed, sans-serif' }}
-                                            >
-                                                <item.Icon className="h-4 w-4 text-[#6B7280]" />
-                                                {item.label}
-                                            </Link>
+                                            {item.disabled ? (
+                                                <button
+                                                    type="button"
+                                                    disabled
+                                                    aria-disabled="true"
+                                                    className="flex w-full cursor-not-allowed items-center gap-3 px-4 py-3 text-left text-sm text-[#9CA3AF]"
+                                                    style={{ fontFamily: 'Inter Condensed, sans-serif' }}
+                                                >
+                                                    <item.Icon className="h-4 w-4 text-[#9CA3AF]" />
+                                                    {item.label}
+                                                </button>
+                                            ) : (
+                                                <Link
+                                                    href={item.href}
+                                                    onClick={() => setShowUserDropdown(false)}
+                                                    className="flex w-full items-center gap-3 px-4 py-3 text-sm text-[#1F2937] transition-colors hover:bg-[#F3F4F6]"
+                                                    style={{ fontFamily: 'Inter Condensed, sans-serif' }}
+                                                >
+                                                    <item.Icon className="h-4 w-4 text-[#6B7280]" />
+                                                    {item.label}
+                                                </Link>
+                                            )}
                                         </Fragment>
                                     ))}
                                     {dropdownNavItems.length > 0 && <div className="border-t border-[#E5E7EB]" />}
@@ -359,6 +372,7 @@ export const SUPER_ADMIN_HEADER_NAV = [
     { label: 'Dashboard', id: 'dashboard', href: '/dashboard/super-admin', exactMatch: true },
     { label: 'Accounts', id: 'accounts', href: '/dashboard/super-admin/users' },
     { label: 'Agrivets', id: 'agrivets', href: '/dashboard/super-admin/agrivets' },
+    { label: 'Farms', id: 'farms', href: '/dashboard/super-admin/farms' },
     {
         label: 'Products',
         id: 'products',
@@ -369,6 +383,7 @@ export const SUPER_ADMIN_HEADER_NAV = [
             '/dashboard/super-admin/sub-categories',
         ],
     },
+    { label: 'Gamefowls', id: 'gamefowls', href: '/dashboard/super-admin/gamefowls' },
     { label: 'Klasrum', id: 'klasrum', href: '/klasrum' },
     { label: 'Support', id: 'support', href: '/dashboard/super-admin/support' },
 ]
@@ -382,12 +397,14 @@ export const SUPER_ADMIN_DROPDOWN_NAV = [
     { label: 'Delivery Methods', href: '/dashboard/super-admin/delivery-methods', Icon: Truck },
     { label: 'Delivery Revenue Settings', href: '/dashboard/super-admin/delivery-revenue-settings', Icon: SlidersHorizontal },
     { label: 'Zones', href: '/dashboard/super-admin/zones', Icon: Map },
+    { label: 'APK Management', id: 'apk-management', href: '/dashboard/super-admin/apk-management', Icon: Smartphone },
 ]
 
 export const ADMIN_HEADER_NAV = [
     { label: 'Dashboard', id: 'dashboard', href: '/dashboard/admin', exactMatch: true },
     { label: 'Accounts', id: 'accounts', href: '/dashboard/admin/users' },
     { label: 'Agrivets', id: 'agrivets', href: '/dashboard/admin/agrivets' },
+    { label: 'Farms', id: 'farms', href: '/dashboard/admin/farms' },
     {
         label: 'Products',
         id: 'products',
@@ -398,6 +415,7 @@ export const ADMIN_HEADER_NAV = [
             '/dashboard/admin/sub-categories',
         ],
     },
+    { label: 'Gamefowls', id: 'gamefowls', href: '/dashboard/admin/gamefowls' },
     { label: 'Klasrum', id: 'klasrum', href: '/klasrum' },
     { label: 'Support', id: 'support', href: '/dashboard/admin/support' },
 ]

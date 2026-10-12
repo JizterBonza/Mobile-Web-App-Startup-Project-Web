@@ -16,12 +16,21 @@ Broadcast::channel('shop-conversation.{conversationId}', function (User $user, i
         ->with('shop:id,agrivet_id')
         ->find($conversationId);
 
-    if (! $user->isActive() || ! $conversation || ! $conversation->shop) {
+    if (! $user->isActive() || ! $conversation) {
         return false;
     }
 
     if ((int) $user->id === (int) $conversation->customer_user_id) {
         return true;
+    }
+
+    if ($conversation->farm_id && ! $conversation->shop_id) {
+        return $user->user_type === User::TYPE_OWNER_MANAGER
+            && (int) $user->farm_id === (int) $conversation->farm_id;
+    }
+
+    if (! $conversation->shop) {
+        return false;
     }
 
     if ($user->user_type === User::TYPE_OWNER_MANAGER) {
@@ -33,6 +42,12 @@ Broadcast::channel('shop-conversation.{conversationId}', function (User $user, i
     }
 
     return false;
+});
+
+Broadcast::channel('farm.{farmId}', function (User $user, int $farmId) {
+    return $user->isActive()
+        && $user->user_type === User::TYPE_OWNER_MANAGER
+        && (int) $user->farm_id === (int) $farmId;
 });
 
 Broadcast::channel('shop.{shopId}', function (User $user, int $shopId) {

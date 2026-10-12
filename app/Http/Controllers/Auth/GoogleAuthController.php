@@ -230,8 +230,8 @@ class GoogleAuthController extends Controller
             }
         }
 
-        if ($user->user_type === User::TYPE_OWNER_MANAGER && ! $user->agrivet_id) {
-            return 'Your owner/manager account is not linked to an Agrivet. Please contact support.';
+        if ($user->user_type === User::TYPE_OWNER_MANAGER && ! $user->agrivet_id && ! $user->farm_id) {
+            return 'Your owner/manager account is not linked to an Agrivet or Farm. Please contact support.';
         }
 
         return null;

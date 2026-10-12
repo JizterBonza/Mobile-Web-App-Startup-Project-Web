@@ -53,6 +53,7 @@ function MetricTrend({ value, label }) {
 export default function OwnerManagerDashboard({
     auth,
     agrivet,
+    farm = null,
     shops = [],
     stats = {},
     period = 'month',
@@ -94,10 +95,16 @@ export default function OwnerManagerDashboard({
     const revenueByCategory = stats.revenue_by_category ?? []
     const comparisonLabel = stats.comparison_label ?? 'from last period'
     const trends = stats.trends ?? {}
+    const isFarmDashboard = Boolean(farm) && !agrivet
+    const topSellersTitle = isFarmDashboard ? 'Top Selling Gamefowl' : 'Top Selling Products'
+    const topSellersSubtitle = isFarmDashboard ? 'Best performing gamefowl' : 'Best performing items'
+    const topSellersEmpty = isFarmDashboard
+        ? 'No gamefowl data available yet.'
+        : 'No product data available yet.'
 
     return (
         <OwnerManagerKlasmeytLayout auth={auth} title="Owner Manager Dashboard">
-            {!agrivet && <OwnerManagerNoAgrivetAlert />}
+            {!agrivet && !farm && <OwnerManagerNoAgrivetAlert />}
 
             <div className="space-y-6">
                         {/* Page Header with Time Period Filter */}
@@ -439,10 +446,10 @@ export default function OwnerManagerDashboard({
                                     </div>
                                     <div>
                                         <h2 className="text-lg font-bold text-[#102059]">
-                                            Top Selling Products
+                                            {topSellersTitle}
                                         </h2>
                                         <p className="text-sm text-[#6B7280]">
-                                            Best performing items
+                                            {topSellersSubtitle}
                                         </p>
                                     </div>
                                 </div>
@@ -477,7 +484,7 @@ export default function OwnerManagerDashboard({
                                     </div>
                                 ) : (
                                     <div className="flex items-center justify-center h-32 text-sm text-[#6B7280]">
-                                        No product data available yet.
+                                        {topSellersEmpty}
                                     </div>
                                 )}
                             </div>

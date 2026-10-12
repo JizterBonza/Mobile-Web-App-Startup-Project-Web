@@ -11,9 +11,10 @@ export default function OwnerManagerOrders({
     preparingItemStatusId = null,
     flash,
 }) {
+    const managesFarm = Boolean(auth?.user?.manages_farm)
+
     return (
         <OwnerManagerKlasmeytLayout auth={auth} title="Order Management">
-            {!agrivet && <OwnerManagerNoAgrivetAlert />}
             {flash?.success && (
                 <div className="mb-4 rounded-lg border border-[#BBF7D0] bg-[#F0FDF4] px-4 py-3 text-sm text-[#166534]">
                     {flash.success}
@@ -24,6 +25,7 @@ export default function OwnerManagerOrders({
                     {flash.error}
                 </div>
             )}
+            {!managesFarm && !agrivet && <OwnerManagerNoAgrivetAlert />}
             <OwnerManagerOrdersPanel
                 orders={orders}
                 deliveryMethods={deliveryMethods}

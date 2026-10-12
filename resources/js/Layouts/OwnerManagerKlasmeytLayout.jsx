@@ -1,4 +1,4 @@
-import { Head } from '@inertiajs/react'
+import { Head, usePage } from '@inertiajs/react'
 import { ContactSupportFab } from '../Components/Dashboard/ContactSupportFab'
 import { DashboardHeader, OWNER_MANAGER_DROPDOWN_NAV } from '../Components/Dashboard/DashboardHeader'
 import { useDashboardSession } from '../hooks/useDashboardSession'
@@ -7,9 +7,26 @@ export const OWNER_MANAGER_NAV = [
     { label: 'Dashboard', id: 'dashboard', href: '/dashboard/owner-manager' },
     { label: 'Stores', id: 'stores', href: '/dashboard/owner-manager/stores' },
     { label: 'Orders', id: 'orders', href: '/dashboard/owner-manager/orders' },
+    { label: 'Klasrum', id: 'klasrum', href: '/klasrum' },
 ]
 
 export function OwnerManagerNoAgrivetAlert() {
+    const farmName = usePage().props?.auth?.user?.farm_name
+
+    if (farmName) {
+        return (
+            <div
+                role="status"
+                className="mb-6 rounded-xl border border-[#DBEAFE] bg-[#EFF6FF] p-4 text-sm text-[#1E3A8A]"
+            >
+                <p className="font-semibold">{farmName}</p>
+                <p className="mt-1">
+                    This owner/manager account is linked to a farm. Store, order, and messaging tools apply to Agrivet businesses.
+                </p>
+            </div>
+        )
+    }
+
     return (
         <div
             role="alert"
@@ -34,6 +51,15 @@ export default function OwnerManagerKlasmeytLayout({
 }) {
     useDashboardSession()
 
+    const managesFarm = Boolean(auth?.user?.manages_farm)
+    const navigationItems = managesFarm
+        ? OWNER_MANAGER_NAV.map((item) =>
+              item.id === 'stores'
+                  ? { label: 'Farm', id: 'farm', href: '/dashboard/owner-manager/farm' }
+                  : item,
+          )
+        : OWNER_MANAGER_NAV
+
     return (
         <>
             <Head title={title} />
@@ -42,7 +68,7 @@ export default function OwnerManagerKlasmeytLayout({
                     compactNav
                     showMessaging
                     messagingHref="/dashboard/owner-manager/messages"
-                    navigationItems={OWNER_MANAGER_NAV}
+                    navigationItems={navigationItems}
                     dropdownNavItems={OWNER_MANAGER_DROPDOWN_NAV}
                     userName={auth.user.name}
                     userEmail={auth.user.email}

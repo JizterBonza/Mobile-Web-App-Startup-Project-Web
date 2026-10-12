@@ -4,7 +4,11 @@ namespace App\Http\Controllers;
 
 use App\Models\ActivityLog;
 use App\Models\KlasrumCategory;
+use App\Models\KlasrumComment;
 use App\Models\KlasrumContent;
+use App\Models\KlasrumFollow;
+use App\Models\KlasrumReaction;
+use App\Models\User;
 use App\Support\PublicStorage;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -21,17 +25,97 @@ class KlasrumContentController extends Controller
 {
     public function index(): Response
     {
+        $canManage = $this->canManageKlasrum();
+
         $contents = KlasrumContent::query()
             ->with('category')
+            ->articles()
+            ->when(! $canManage, fn ($query) => $query->published())
             ->orderByRaw("CASE WHEN status = ? THEN 0 ELSE 1 END", [KlasrumContent::STATUS_PUBLISHED])
             ->orderByDesc('published_at')
             ->orderByDesc('updated_at')
             ->get()
             ->map(fn (KlasrumContent $content) => $content->toListArray());
 
+        $viewerId = (int) Auth::id();
+        $postModels = KlasrumContent::query()
+            ->with([
+                'creator.userDetail',
+                'comments.author.userDetail',
+            ])
+            ->withCount(['reactions', 'comments'])
+            ->posts()
+            ->when(! $canManage, function ($query) use ($viewerId) {
+                $query->where(function ($inner) use ($viewerId) {
+                    $inner->published()->orWhere('created_by', $viewerId);
+                });
+            })
+            ->orderByRaw("CASE WHEN status = ? THEN 0 ELSE 1 END", [KlasrumContent::STATUS_PUBLISHED])
+            ->orderByDesc('published_at')
+            ->orderByDesc('updated_at')
+            ->get();
+
+        $reactedIds = KlasrumReaction::query()
+            ->where('user_id', $viewerId)
+            ->whereIn('klasrum_content_id', $postModels->pluck('id'))
+            ->pluck('klasrum_content_id');
+
+        $followingIds = KlasrumFollow::query()
+            ->where('follower_id', $viewerId)
+            ->whereIn('following_id', $postModels->pluck('created_by')->filter()->unique()->values())
+            ->pluck('following_id');
+
+        $posts = $postModels->map(function (KlasrumContent $post) use ($reactedIds, $followingIds) {
+            $media = $post->mediaPayload(false);
+            $firstMedia = $media[0] ?? null;
+            $when = $post->isPublished() ? $post->published_at : ($post->updated_at ?? $post->created_at);
+
+            return [
+                'id' => $post->id,
+                'title' => $post->title ?: 'Untitled',
+                'body' => trim(preg_replace('/\s+/', ' ', strip_tags((string) $post->body)) ?? ''),
+                'status' => $post->status,
+                'authorName' => $this->personName($post->creator),
+                'postedLabel' => $this->feedTimeLabel($when),
+                'mediaUrl' => $firstMedia['url'] ?? null,
+                'mediaIsVideo' => ($firstMedia['type'] ?? null) === 'video',
+                ...$this->postSocialPayload(
+                    $post,
+                    $reactedIds->contains($post->id),
+                    $post->created_by ? $followingIds->contains($post->created_by) : false,
+                ),
+            ];
+        });
+
         return Inertia::render('Klasrum', [
             'contents' => $contents,
+            'posts' => $posts,
             'categories' => KlasrumCategory::options(),
+            'canManage' => $canManage,
+            'canCreatePost' => $canManage || Auth::user()?->user_type === 'owner_manager',
+        ]);
+    }
+
+    public function showArticle(KlasrumContent $content): Response
+    {
+        abort_unless($content->kind === KlasrumContent::KIND_ARTICLE, 404);
+        $this->authorizeKlasrumView($content);
+        $content->load('category');
+
+        return Inertia::render('Klasrum/ViewContent', [
+            'item' => $this->viewerPayload($content),
+        ]);
+    }
+
+    public function showPost(KlasrumContent $post): Response
+    {
+        abort_unless($post->kind === KlasrumContent::KIND_POST, 404);
+        $this->authorizeKlasrumView($post);
+        $post->load(['creator.userDetail', 'comments.author.userDetail']);
+        $post->loadCount(['reactions', 'comments']);
+
+        return Inertia::render('Klasrum/ViewContent', [
+            'item' => $this->viewerPayload($post),
         ]);
     }
 
@@ -43,6 +127,11 @@ class KlasrumContentController extends Controller
         ]);
     }
 
+    public function createPost(): Response
+    {
+        return Inertia::render('Klasrum/CreatePost');
+    }
+
     public function store(Request $request): RedirectResponse
     {
         $validated = $this->validatedPayload($request);
@@ -52,6 +141,7 @@ class KlasrumContentController extends Controller
         $content = KlasrumContent::create([
             ...$this->contentFields($validated),
             ...$paths,
+            'kind' => KlasrumContent::KIND_ARTICLE,
             'status' => $status,
             'published_at' => $status === KlasrumContent::STATUS_PUBLISHED ? now() : null,
             'created_by' => Auth::id(),
@@ -70,6 +160,95 @@ class KlasrumContentController extends Controller
             'success',
             $status === KlasrumContent::STATUS_PUBLISHED
                 ? 'Content published successfully.'
+                : 'Draft saved successfully.'
+        );
+    }
+
+    public function storePost(Request $request): RedirectResponse
+    {
+        $validated = $this->validatedPayload($request);
+        $paths = $this->storeUploads($request);
+
+        $status = $validated['status'];
+        $post = KlasrumContent::create([
+            ...$this->contentFields($validated),
+            ...$paths,
+            'kind' => KlasrumContent::KIND_POST,
+            'status' => $status,
+            'published_at' => $status === KlasrumContent::STATUS_PUBLISHED ? now() : null,
+            'created_by' => Auth::id(),
+            'updated_by' => Auth::id(),
+        ]);
+
+        ActivityLog::log(
+            'created',
+            'Klasrum post created: ' . ($post->title ?: 'Untitled'),
+            $post,
+            null,
+            $post->toArray()
+        );
+
+        return redirect()->route('klasrum.index', ['tab' => 'newsfeed'])->with(
+            'success',
+            $status === KlasrumContent::STATUS_PUBLISHED
+                ? 'Post published successfully.'
+                : 'Draft saved successfully.'
+        );
+    }
+
+    public function editPost(KlasrumContent $post): Response
+    {
+        abort_unless($post->kind === KlasrumContent::KIND_POST, 404);
+
+        return Inertia::render('Klasrum/CreatePost', [
+            'post' => [
+                'id' => $post->id,
+                'title' => $post->title ?? '',
+                'body' => $post->body ?? '',
+                'status' => $post->status,
+                'media' => $post->mediaPayload(false),
+            ],
+        ]);
+    }
+
+    public function updatePost(Request $request, KlasrumContent $post): RedirectResponse
+    {
+        abort_unless($post->kind === KlasrumContent::KIND_POST, 404);
+
+        $validated = $this->validatedPayload($request, $post);
+        $oldValues = $post->toArray();
+        $paths = $this->storeUploads($request, $post);
+
+        $status = $validated['status'];
+        $publishedAt = $post->published_at;
+        if ($status === KlasrumContent::STATUS_PUBLISHED && ! $post->isPublished()) {
+            $publishedAt = now();
+        }
+        if ($status === KlasrumContent::STATUS_DRAFT) {
+            $publishedAt = $post->isPublished() ? $post->published_at : null;
+        }
+
+        $post->update([
+            ...$this->contentFields($validated),
+            ...$paths,
+            'kind' => KlasrumContent::KIND_POST,
+            'status' => $status,
+            'published_at' => $publishedAt,
+            'updated_by' => Auth::id(),
+        ]);
+
+        ActivityLog::log(
+            'updated',
+            'Klasrum post updated: ' . ($post->title ?: 'Untitled'),
+            $post,
+            $oldValues,
+            $post->fresh()->toArray()
+        );
+
+        return redirect()->route('klasrum.index', ['tab' => 'newsfeed'])->with(
+            'success',
+            $status === KlasrumContent::STATUS_PUBLISHED
+                ? 'Post updated successfully.'
                 : 'Draft saved successfully.'
         );
     }
@@ -138,7 +317,7 @@ class KlasrumContentController extends Controller
             null
         );
 
-        return redirect()->route('klasrum.index')->with('success', 'Content deleted successfully.');
+        return $this->redirectToKlasrum($content)->with('success', 'Content deleted successfully.');
     }
 
     public function togglePublish(KlasrumContent $content): RedirectResponse
@@ -160,7 +339,7 @@ class KlasrumContentController extends Controller
             $content->fresh()->toArray()
         );
 
-        return redirect()->route('klasrum.index')->with(
+        return $this->redirectToKlasrum($content)->with(
             'success',
             $publishing ? 'Content published successfully.' : 'Content unpublished successfully.'
         );
@@ -415,6 +594,127 @@ class KlasrumContentController extends Controller
         if ($content->media_path && ! isset($deleted[$content->media_path])) {
             $this->deleteStoredFile($content->media_path);
         }
+    }
+
+    private function feedTimeLabel($when): ?string
+    {
+        if (! $when) {
+            return null;
+        }
+
+        $when = $when->copy()->timezone((string) config('app.display_timezone', 'Asia/Manila'));
+        $time = $when->format('g:i A');
+        if ($when->isToday()) {
+            return 'Today at '.$time;
+        }
+        if ($when->isYesterday()) {
+            return 'Yesterday at '.$time;
+        }
+
+        return $when->format('F j').' at '.$time;
+    }
+
+    private function canManageKlasrum(): bool
+    {
+        return in_array(Auth::user()?->user_type, ['super_admin', 'admin'], true);
+    }
+
+    private function authorizeKlasrumView(KlasrumContent $content): void
+    {
+        if ($this->canManageKlasrum() || $content->isPublished()) {
+            return;
+        }
+
+        abort_unless((int) $content->created_by === (int) Auth::id(), 404);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function viewerPayload(KlasrumContent $content): array
+    {
+        $when = $content->isPublished() ? $content->published_at : ($content->updated_at ?? $content->created_at);
+
+        return [
+            'id' => $content->id,
+            'kind' => $content->kind,
+            'title' => $content->title ?: 'Untitled',
+            'description' => $content->description,
+            'heading' => $content->heading,
+            'body' => $content->body,
+            'category' => $content->category?->name,
+            'caption' => $content->caption,
+            'coverUrl' => $content->coverUrl(),
+            'media' => $content->mediaPayload(false),
+            'publishedAt' => $content->published_at?->format('F j, Y'),
+            'authorName' => $this->personName($content->creator),
+            'postedLabel' => $this->feedTimeLabel($when),
+            ...($content->kind === KlasrumContent::KIND_POST ? $this->postSocialPayload($content) : []),
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function postSocialPayload(KlasrumContent $post, ?bool $reacted = null, ?bool $following = null): array
+    {
+        $viewerId = (int) Auth::id();
+
+        if ($reacted === null) {
+            $reacted = KlasrumReaction::query()
+                ->where('klasrum_content_id', $post->id)
+                ->where('user_id', $viewerId)
+                ->exists();
+        }
+
+        if ($following === null) {
+            $following = $post->created_by
+                && KlasrumFollow::query()
+                    ->where('follower_id', $viewerId)
+                    ->where('following_id', $post->created_by)
+                    ->exists();
+        }
+
+        if (! $post->relationLoaded('comments')) {
+            $post->load(['comments.author.userDetail']);
+        }
+
+        if (! array_key_exists('reactions_count', $post->getAttributes())) {
+            $post->loadCount('reactions');
+        }
+
+        $canModerate = $this->canManageKlasrum();
+
+        return [
+            'authorId' => $post->created_by,
+            'isFollowing' => (bool) $following,
+            'canFollow' => $post->created_by && (int) $post->created_by !== $viewerId,
+            'canEngage' => $post->isPublished(),
+            'reactionCount' => (int) ($post->reactions_count ?? 0),
+            'reacted' => (bool) $reacted,
+            'comments' => $post->comments->map(fn (KlasrumComment $comment) => [
+                'id' => $comment->id,
+                'body' => $comment->body,
+                'authorName' => $this->personName($comment->author),
+                'createdLabel' => $this->feedTimeLabel($comment->created_at),
+                'canDelete' => $canModerate || (int) $comment->user_id === $viewerId,
+            ])->values()->all(),
+        ];
+    }
+
+    private function personName(?User $user): string
+    {
+        $detail = $user?->userDetail;
+        $name = trim(($detail->first_name ?? '').' '.($detail->last_name ?? ''));
+
+        return $name !== '' ? $name : 'Klasrum';
+    }
+
+    private function redirectToKlasrum(KlasrumContent $content): RedirectResponse
+    {
+        $params = $content->kind === KlasrumContent::KIND_POST ? ['tab' => 'newsfeed'] : [];
+
+        return redirect()->route('klasrum.index', $params);
     }
 
     private function deleteStoredFile(?string $path): void

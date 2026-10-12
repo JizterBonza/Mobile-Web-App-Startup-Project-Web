@@ -4,7 +4,7 @@ import { applyConversationListUpdate } from '../messaging/shopMessaging'
 /**
  * Keep a shop's conversation list in sync with Reverb broadcasts.
  */
-export function useShopConversationsList(shopId, initialConversations = [], user) {
+export function useShopConversationsList(shopId, initialConversations = [], user, channelPrefix = 'shop') {
     const [conversations, setConversations] = useState(initialConversations)
 
     useEffect(() => {
@@ -14,7 +14,7 @@ export function useShopConversationsList(shopId, initialConversations = [], user
     useEffect(() => {
         if (!window.Echo || !shopId) return undefined
 
-        const channelName = `shop.${shopId}`
+        const channelName = `${channelPrefix}.${shopId}`
         const channel = window.Echo.private(channelName)
 
         channel.listen('.shop.message.sent', (payload) => {
@@ -31,7 +31,7 @@ export function useShopConversationsList(shopId, initialConversations = [], user
         return () => {
             window.Echo.leave(channelName)
         }
-    }, [shopId, user?.id, user?.user_type])
+    }, [shopId, channelPrefix, user?.id, user?.user_type])
 
     return conversations
 }

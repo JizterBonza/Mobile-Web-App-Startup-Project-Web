@@ -31,6 +31,7 @@ class KlasrumApiController extends Controller
     {
         $query = KlasrumContent::query()
             ->with('category')
+            ->articles()
             ->published();
 
         if ($request->filled('category_id')) {
@@ -63,6 +64,7 @@ class KlasrumApiController extends Controller
     {
         $contents = KlasrumContent::query()
             ->with('category')
+            ->articles()
             ->published()
             ->orderByDesc('published_at')
             ->orderByDesc('id')
@@ -80,6 +82,7 @@ class KlasrumApiController extends Controller
     {
         $content = KlasrumContent::query()
             ->with('category')
+            ->articles()
             ->published()
             ->find($id);
 
