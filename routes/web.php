@@ -27,6 +27,7 @@ use App\Http\Controllers\VoucherController;
 use App\Http\Controllers\PayoutRecordController;
 use App\Http\Controllers\KlasrumCategoryController;
 use App\Http\Controllers\KlasrumContentController;
+use App\Http\Controllers\KlasrumPostEngagementController;
 use App\Http\Controllers\PublicStorageController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -66,6 +67,10 @@ Route::middleware(['auth', 'session.valid', 'user.type:super_admin|admin|owner_m
     Route::post('/media', [KlasrumContentController::class, 'uploadMedia'])->name('media.upload');
     Route::get('/articles/{content}', [KlasrumContentController::class, 'showArticle'])->whereNumber('content')->name('articles.show');
     Route::get('/posts/{post}', [KlasrumContentController::class, 'showPost'])->whereNumber('post')->name('posts.show');
+    Route::post('/users/{user}/follow', [KlasrumPostEngagementController::class, 'toggleFollow'])->whereNumber('user')->name('users.follow');
+    Route::post('/posts/{post}/reactions', [KlasrumPostEngagementController::class, 'toggleReaction'])->whereNumber('post')->name('posts.react');
+    Route::post('/posts/{post}/comments', [KlasrumPostEngagementController::class, 'storeComment'])->whereNumber('post')->name('posts.comments.store');
+    Route::delete('/posts/{post}/comments/{comment}', [KlasrumPostEngagementController::class, 'destroyComment'])->whereNumber('post')->whereNumber('comment')->name('posts.comments.destroy');
 });
 
 Route::middleware(['auth', 'session.valid', 'user.type:super_admin|admin'])->prefix('klasrum')->name('klasrum.')->group(function () {

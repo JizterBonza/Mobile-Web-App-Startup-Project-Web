@@ -4,7 +4,11 @@ namespace App\Http\Controllers;
 
 use App\Models\ActivityLog;
 use App\Models\KlasrumCategory;
+use App\Models\KlasrumComment;
 use App\Models\KlasrumContent;
+use App\Models\KlasrumFollow;
+use App\Models\KlasrumReaction;
+use App\Models\User;
 use App\Support\PublicStorage;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -33,36 +37,55 @@ class KlasrumContentController extends Controller
             ->get()
             ->map(fn (KlasrumContent $content) => $content->toListArray());
 
-        $posts = KlasrumContent::query()
-            ->with(['creator.userDetail'])
+        $viewerId = (int) Auth::id();
+        $postModels = KlasrumContent::query()
+            ->with([
+                'creator.userDetail',
+                'comments.author.userDetail',
+            ])
+            ->withCount(['reactions', 'comments'])
             ->posts()
-            ->when(! $canManage, function ($query) {
-                $query->where(function ($inner) {
-                    $inner->published()->orWhere('created_by', Auth::id());
+            ->when(! $canManage, function ($query) use ($viewerId) {
+                $query->where(function ($inner) use ($viewerId) {
+                    $inner->published()->orWhere('created_by', $viewerId);
                 });
             })
             ->orderByRaw("CASE WHEN status = ? THEN 0 ELSE 1 END", [KlasrumContent::STATUS_PUBLISHED])
             ->orderByDesc('published_at')
             ->orderByDesc('updated_at')
-            ->get()
-            ->map(function (KlasrumContent $post) {
-                $detail = $post->creator?->userDetail;
-                $authorName = trim(($detail->first_name ?? '').' '.($detail->last_name ?? ''));
-                $media = $post->mediaPayload(false);
-                $firstMedia = $media[0] ?? null;
-                $when = $post->isPublished() ? $post->published_at : ($post->updated_at ?? $post->created_at);
+            ->get();
 
-                return [
-                    'id' => $post->id,
-                    'title' => $post->title ?: 'Untitled',
-                    'body' => trim(preg_replace('/\s+/', ' ', strip_tags((string) $post->body)) ?? ''),
-                    'status' => $post->status,
-                    'authorName' => $authorName !== '' ? $authorName : 'Klasrum',
-                    'postedLabel' => $this->feedTimeLabel($when),
-                    'mediaUrl' => $firstMedia['url'] ?? null,
-                    'mediaIsVideo' => ($firstMedia['type'] ?? null) === 'video',
-                ];
-            });
+        $reactedIds = KlasrumReaction::query()
+            ->where('user_id', $viewerId)
+            ->whereIn('klasrum_content_id', $postModels->pluck('id'))
+            ->pluck('klasrum_content_id');
+
+        $followingIds = KlasrumFollow::query()
+            ->where('follower_id', $viewerId)
+            ->whereIn('following_id', $postModels->pluck('created_by')->filter()->unique()->values())
+            ->pluck('following_id');
+
+        $posts = $postModels->map(function (KlasrumContent $post) use ($reactedIds, $followingIds) {
+            $media = $post->mediaPayload(false);
+            $firstMedia = $media[0] ?? null;
+            $when = $post->isPublished() ? $post->published_at : ($post->updated_at ?? $post->created_at);
+
+            return [
+                'id' => $post->id,
+                'title' => $post->title ?: 'Untitled',
+                'body' => trim(preg_replace('/\s+/', ' ', strip_tags((string) $post->body)) ?? ''),
+                'status' => $post->status,
+                'authorName' => $this->personName($post->creator),
+                'postedLabel' => $this->feedTimeLabel($when),
+                'mediaUrl' => $firstMedia['url'] ?? null,
+                'mediaIsVideo' => ($firstMedia['type'] ?? null) === 'video',
+                ...$this->postSocialPayload(
+                    $post,
+                    $reactedIds->contains($post->id),
+                    $post->created_by ? $followingIds->contains($post->created_by) : false,
+                ),
+            ];
+        });
 
         return Inertia::render('Klasrum', [
             'contents' => $contents,
@@ -88,7 +111,8 @@ class KlasrumContentController extends Controller
     {
         abort_unless($post->kind === KlasrumContent::KIND_POST, 404);
         $this->authorizeKlasrumView($post);
-        $post->load(['creator.userDetail']);
+        $post->load(['creator.userDetail', 'comments.author.userDetail']);
+        $post->loadCount(['reactions', 'comments']);
 
         return Inertia::render('Klasrum/ViewContent', [
             'item' => $this->viewerPayload($post),
@@ -609,8 +633,6 @@ class KlasrumContentController extends Controller
      */
     private function viewerPayload(KlasrumContent $content): array
     {
-        $detail = $content->creator?->userDetail;
-        $authorName = trim(($detail->first_name ?? '').' '.($detail->last_name ?? ''));
         $when = $content->isPublished() ? $content->published_at : ($content->updated_at ?? $content->created_at);
 
         return [
@@ -625,9 +647,67 @@ class KlasrumContentController extends Controller
             'coverUrl' => $content->coverUrl(),
             'media' => $content->mediaPayload(false),
             'publishedAt' => $content->published_at?->format('F j, Y'),
-            'authorName' => $authorName !== '' ? $authorName : 'Klasrum',
+            'authorName' => $this->personName($content->creator),
             'postedLabel' => $this->feedTimeLabel($when),
+            ...($content->kind === KlasrumContent::KIND_POST ? $this->postSocialPayload($content) : []),
         ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function postSocialPayload(KlasrumContent $post, ?bool $reacted = null, ?bool $following = null): array
+    {
+        $viewerId = (int) Auth::id();
+
+        if ($reacted === null) {
+            $reacted = KlasrumReaction::query()
+                ->where('klasrum_content_id', $post->id)
+                ->where('user_id', $viewerId)
+                ->exists();
+        }
+
+        if ($following === null) {
+            $following = $post->created_by
+                && KlasrumFollow::query()
+                    ->where('follower_id', $viewerId)
+                    ->where('following_id', $post->created_by)
+                    ->exists();
+        }
+
+        if (! $post->relationLoaded('comments')) {
+            $post->load(['comments.author.userDetail']);
+        }
+
+        if (! array_key_exists('reactions_count', $post->getAttributes())) {
+            $post->loadCount('reactions');
+        }
+
+        $canModerate = $this->canManageKlasrum();
+
+        return [
+            'authorId' => $post->created_by,
+            'isFollowing' => (bool) $following,
+            'canFollow' => $post->created_by && (int) $post->created_by !== $viewerId,
+            'canEngage' => $post->isPublished(),
+            'reactionCount' => (int) ($post->reactions_count ?? 0),
+            'reacted' => (bool) $reacted,
+            'comments' => $post->comments->map(fn (KlasrumComment $comment) => [
+                'id' => $comment->id,
+                'body' => $comment->body,
+                'authorName' => $this->personName($comment->author),
+                'createdLabel' => $this->feedTimeLabel($comment->created_at),
+                'canDelete' => $canModerate || (int) $comment->user_id === $viewerId,
+            ])->values()->all(),
+        ];
+    }
+
+    private function personName(?User $user): string
+    {
+        $detail = $user?->userDetail;
+        $name = trim(($detail->first_name ?? '').' '.($detail->last_name ?? ''));
+
+        return $name !== '' ? $name : 'Klasrum';
     }
 
     private function redirectToKlasrum(KlasrumContent $content): RedirectResponse
