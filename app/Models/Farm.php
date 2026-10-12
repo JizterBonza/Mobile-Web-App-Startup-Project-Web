@@ -48,4 +48,9 @@ class Farm extends Model
         return $this->hasOne(User::class, 'farm_id')
             ->where('user_type', User::TYPE_OWNER_MANAGER);
     }
+
+    public function gamefowlListings()
+    {
+        return $this->hasMany(FarmGamefowlListing::class);
+    }
 };

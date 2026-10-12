@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { router, useForm, usePage } from '@inertiajs/react'
-import { Clock, Landmark, MapPin, Package, Pencil, Star, X } from 'lucide-react'
+import { Link, router, useForm, usePage } from '@inertiajs/react'
+import { Bird, Box, Calendar, Check, ChevronDown, CirclePlus, Clock, Landmark, MapPin, Pencil, Search, Star, X } from 'lucide-react'
 import PinLocationMap from '../../Components/PinLocationMap'
 import OwnerManagerKlasmeytLayout from '../../Layouts/OwnerManagerKlasmeytLayout'
 import { storageUrl } from '../../utils/storageUrl'
@@ -51,16 +51,1078 @@ function statusLabel(status) {
     return status === 'inactive' ? 'Inactive' : 'Active'
 }
 
-export default function OwnerManagerFarm({ auth, farm }) {
-    const { flash } = usePage().props
+function initialFarmTab(url) {
+    const query = String(url || '').split('?')[1] || ''
+    const tab = new URLSearchParams(query).get('tab')
+    return ['about', 'gamefowl', 'insights'].includes(tab) ? tab : 'about'
+}
+
+function formatPeso(value, unit = 'per head') {
+    const amount = Number(value)
+    return `₱${Number.isFinite(amount) ? amount.toFixed(2) : '0.00'}/${unit || 'per head'}`
+}
+
+function formatReleaseDate(value) {
+    if (!value) return '—'
+    const match = String(value).match(/^(\d{4})-(\d{2})-(\d{2})/)
+    if (match) return `${match[2]}/${match[3]}/${match[1]}`
+    return String(value)
+}
+
+function toIsoDate(value) {
+    if (!value) return ''
+    const iso = String(value).match(/^(\d{4})-(\d{2})-(\d{2})/)
+    if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`
+    const us = String(value).match(/^(\d{2})\/(\d{2})\/(\d{4})/)
+    if (us) return `${us[3]}-${us[1]}-${us[2]}`
+    return ''
+}
+
+function normalizeListing(item) {
+    const composition = item.composition || item.bloodline_name || '—'
+    const age = item.age || item.age_type_name || '—'
+    const sex = item.sex || '—'
+    const category = item.category || item.class_name || item.bloodline_name || 'Uncategorized'
+
+    return {
+        id: item.id,
+        title: item.title || item.name || `${composition} / ${category}`,
+        composition,
+        age,
+        sex,
+        category,
+        price: item.price ?? 0,
+        unit: item.selling_unit || item.unit || 'per head',
+        stocks: item.stocks ?? item.stock ?? 0,
+        releaseOption: item.release_option || item.releaseOption || '',
+        releaseDateIso: toIsoDate(item.release_date || item.releaseDate),
+        releaseDate: formatReleaseDate(item.release_date || item.releaseDate),
+        popularity: item.popularity ?? 0,
+        status: String(item.status || 'active').toLowerCase(),
+        image: storageUrl(item.image || item.image_url || null),
+    }
+}
+
+function catalogCard(item) {
+    const images = Array.isArray(item.images) ? item.images : []
+    const image = item.image || images[item.primary_image_index ?? 0] || images[0] || null
+
+    return {
+        id: item.id,
+        title: item.title || item.bloodline_name || item.name || 'Gamefowl',
+        composition: item.composition || item.name || '—',
+        age: item.age || item.age_type_name || '—',
+        sex: item.sex || '—',
+        image: storageUrl(image),
+    }
+}
+
+function isCatalogListed(item, listings) {
+    return listings.some((listing) => {
+        const catalogId = listing.catalog_id ?? listing.gamefowl_catalog_id
+        return catalogId != null && String(catalogId) === String(item.id)
+    })
+}
+
+function pairSlot(item) {
+    const sex = String(item.sex || '').trim().toLowerCase()
+    const age = String(item.age || '').trim().toLowerCase()
+    if (sex === 'male' || sex === 'stag') return 'stag'
+    if (sex === 'female' || sex === 'pullet') return 'pullet'
+    if (age.includes('pullet') || age.includes('hen')) return 'pullet'
+    if (age.includes('stag') || age.includes('cock') || age.includes('rooster')) return 'stag'
+    return null
+}
+
+function GamefowlListingDetailsModal({ gamefowl, listing = null, onClose, onSaved }) {
+    const isEdit = Boolean(listing?.id)
+    const [editing, setEditing] = useState(true)
+    const [saving, setSaving] = useState(false)
+    const [price, setPrice] = useState(() => (isEdit ? Number(listing.price || 0).toFixed(2) : ''))
+    const [sellingUnit, setSellingUnit] = useState(() => (isEdit ? listing.unit || '' : ''))
+    const [stock, setStock] = useState(() => (isEdit ? String(listing.stocks ?? '') : ''))
+    const [releaseOption, setReleaseOption] = useState(() => (isEdit ? listing.releaseOption || '' : ''))
+    const [releaseDate, setReleaseDate] = useState(() => (isEdit ? listing.releaseDateIso || '' : ''))
+    const [error, setError] = useState('')
+
+    useEffect(() => {
+        const onKey = (event) => {
+            if (event.key === 'Escape') onClose()
+        }
+        window.addEventListener('keydown', onKey)
+        return () => window.removeEventListener('keydown', onKey)
+    }, [onClose])
+
+    const fieldClass =
+        'w-full rounded-lg border border-[#E5E7EB] bg-white px-4 py-2.5 text-sm text-[#111827] placeholder:text-[#9CA3AF] focus:border-[#244693] focus:outline-none disabled:bg-[#F9FAFB] disabled:text-[#6B7280]'
+    const selectClass = (value) =>
+        `${fieldClass} appearance-none pr-10 ${value ? 'text-[#111827]' : 'text-[#9CA3AF]'}`
+
+    const handleSave = () => {
+        const missing = []
+        if (!price.trim()) missing.push('Price')
+        if (!sellingUnit) missing.push('Selling Unit')
+        if (!stock.trim()) missing.push('Stock Quantity')
+        if (!releaseOption) missing.push('Stock Release Options')
+        if (releaseOption === 'Set Release Date' && !releaseDate) missing.push('Stock Release Schedule')
+        if (missing.length) {
+            setError(`Please fill in: ${missing.join(', ')}.`)
+            return
+        }
+
+        setError('')
+        setSaving(true)
+        const payload = {
+            price,
+            selling_unit: sellingUnit,
+            stock,
+            release_option: releaseOption,
+            release_date: releaseOption === 'Set Release Date' ? releaseDate : null,
+        }
+        const options = {
+            preserveScroll: true,
+            onSuccess: () => onSaved(),
+            onError: (errors) => {
+                const first = Object.values(errors)[0]
+                const message = Array.isArray(first) ? first[0] : first
+                setError(typeof message === 'string' ? message : 'Could not save this gamefowl listing.')
+            },
+            onFinish: () => setSaving(false),
+        }
+
+        if (isEdit) {
+            router.put(`/dashboard/owner-manager/farm/gamefowls/listings/${listing.id}`, payload, options)
+            return
+        }
+
+        router.post(
+            '/dashboard/owner-manager/farm/gamefowls/listings',
+            { ...payload, gamefowl_catalog_id: gamefowl.id },
+            options,
+        )
+    }
+
+    return (
+        <div
+            className="fixed inset-0 z-[60] flex items-center justify-center bg-black/45 p-4"
+            onClick={(event) => {
+                event.stopPropagation()
+                onClose()
+            }}
+        >
+            <div
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="gamefowl-listing-details-title"
+                className="w-full max-w-4xl rounded-2xl bg-white shadow-xl"
+                onClick={(event) => event.stopPropagation()}
+            >
+                <div className="flex items-start justify-between gap-4 px-8 pb-5 pt-7">
+                    <div>
+                        <h2 id="gamefowl-listing-details-title" className="text-xl font-bold text-[#111827]">
+                            Gamefowl Listing Details
+                        </h2>
+                        <p className="mt-1 text-sm text-[#6B7280]">View and manage listing information</p>
+                    </div>
+                    <div className="flex items-center gap-1">
+                        <button
+                            type="button"
+                            onClick={() => setEditing((current) => !current)}
+                            className={`flex h-8 w-8 items-center justify-center rounded-full transition-colors hover:bg-[#F3F4F6] ${
+                                editing ? 'text-[#111827]' : 'text-[#9CA3AF]'
+                            }`}
+                            aria-label={editing ? 'Stop editing' : 'Edit listing'}
+                            aria-pressed={editing}
+                        >
+                            <Pencil className="h-4 w-4" />
+                        </button>
+                        <button
+                            type="button"
+                            onClick={onClose}
+                            className="flex h-8 w-8 items-center justify-center rounded-full text-[#9CA3AF] transition-colors hover:bg-[#F3F4F6] hover:text-[#111827]"
+                            aria-label="Close"
+                        >
+                            <X className="h-4 w-4" />
+                        </button>
+                    </div>
+                </div>
+
+                <div className="border-t border-[#E5E7EB] px-8 pb-7 pt-7">
+                    {error && <p className="mb-4 text-sm text-[#E20E28]">{error}</p>}
+                    <div className="grid grid-cols-1 gap-x-8 gap-y-6 md:grid-cols-2">
+                        <div>
+                            <label htmlFor="listing-bloodline" className="mb-2 block text-sm font-semibold text-[#111827]">
+                                Bloodline Category
+                            </label>
+                            <input id="listing-bloodline" type="text" readOnly value={gamefowl.title} className={`${fieldClass} bg-[#F9FAFB]`} />
+                        </div>
+                        <div>
+                            <label htmlFor="listing-composition" className="mb-2 block text-sm font-semibold text-[#111827]">
+                                Bloodline Composition
+                            </label>
+                            <input id="listing-composition" type="text" readOnly value={gamefowl.composition} className={`${fieldClass} bg-[#F9FAFB]`} />
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <label htmlFor="listing-price" className="mb-2 block text-sm font-semibold text-[#111827]">
+                                    Price
+                                </label>
+                                <input
+                                    id="listing-price"
+                                    type="text"
+                                    inputMode="decimal"
+                                    disabled={!editing}
+                                    value={price}
+                                    onChange={(event) => setPrice(event.target.value.replace(/[^\d.]/g, ''))}
+                                    placeholder="400.00"
+                                    className={fieldClass}
+                                />
+                            </div>
+                            <div>
+                                <label htmlFor="listing-unit" className="mb-2 block text-sm font-semibold text-[#111827]">
+                                    Selling Unit
+                                </label>
+                                <div className="relative">
+                                    <select
+                                        id="listing-unit"
+                                        disabled={!editing}
+                                        value={sellingUnit}
+                                        onChange={(event) => setSellingUnit(event.target.value)}
+                                        className={selectClass(sellingUnit)}
+                                    >
+                                        <option value="">Select Selling Unit</option>
+                                        <option value="per head">per head</option>
+                                        <option value="per pair">per pair</option>
+                                        <option value="per trio">per trio</option>
+                                    </select>
+                                    <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#9CA3AF]" />
+                                </div>
+                            </div>
+                        </div>
+                        <div>
+                            <label htmlFor="listing-stock" className="mb-2 block text-sm font-semibold text-[#111827]">
+                                Stock Quantity
+                            </label>
+                            <input
+                                id="listing-stock"
+                                type="text"
+                                inputMode="numeric"
+                                disabled={!editing}
+                                value={stock}
+                                onChange={(event) => setStock(event.target.value.replace(/\D/g, ''))}
+                                placeholder="50"
+                                className={fieldClass}
+                            />
+                        </div>
+                        <div>
+                            <label htmlFor="listing-release-option" className="mb-2 block text-sm font-semibold text-[#111827]">
+                                Stock Release Options
+                            </label>
+                            <div className="relative">
+                                <select
+                                    id="listing-release-option"
+                                    disabled={!editing}
+                                    value={releaseOption}
+                                    onChange={(event) => setReleaseOption(event.target.value)}
+                                    className={selectClass(releaseOption)}
+                                >
+                                    <option value="">Select Stock Release Options</option>
+                                    <option value="Release Immediately">Release Immediately</option>
+                                    <option value="Set Release Date">Set Release Date</option>
+                                </select>
+                                <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#9CA3AF]" />
+                            </div>
+                        </div>
+                        <div>
+                            <label htmlFor="listing-release-date" className="mb-2 block text-sm font-semibold text-[#111827]">
+                                Stock Release Schedule
+                            </label>
+                            <div className="relative">
+                                <input
+                                    id="listing-release-date"
+                                    type="date"
+                                    disabled={!editing}
+                                    value={releaseDate}
+                                    onChange={(event) => setReleaseDate(event.target.value)}
+                                    className={`${fieldClass} pr-10 [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:right-3 [&::-webkit-calendar-picker-indicator]:h-5 [&::-webkit-calendar-picker-indicator]:w-5 [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:opacity-0 ${
+                                        releaseDate ? '' : 'text-transparent'
+                                    }`}
+                                />
+                                {!releaseDate && (
+                                    <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm text-[#9CA3AF]">
+                                    </span>
+                                )}
+                                <Calendar className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#9CA3AF]" />
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="mt-8 flex items-center justify-between border-t border-[#E5E7EB] pt-6">
+                        <button
+                            type="button"
+                            onClick={onClose}
+                            className="rounded-lg border border-[#244693] bg-white px-5 py-2.5 text-sm font-semibold text-[#244693] transition-colors hover:bg-[#F4F7FF]"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            type="button"
+                            onClick={handleSave}
+                            disabled={!editing || saving}
+                            className="rounded-lg bg-[#102059] px-6 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#244693] disabled:opacity-50"
+                        >
+                            {saving ? 'Saving...' : 'Save'}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    )
+}
+
+function PublishGamefowlListingModal({ catalog = [], listings = [], onClose }) {
+    const [query, setQuery] = useState('')
+    const [detailsItem, setDetailsItem] = useState(null)
+
+    const cards = useMemo(() => {
+        const needle = query.trim().toLowerCase()
+        return catalog.map(catalogCard).filter((item) => {
+            if (!needle) return true
+            return [item.title, item.composition, item.age, item.sex].join(' ').toLowerCase().includes(needle)
+        })
+    }, [catalog, query])
+
+    useEffect(() => {
+        const onKey = (event) => {
+            if (event.key !== 'Escape' || detailsItem) return
+            onClose()
+        }
+        window.addEventListener('keydown', onKey)
+        return () => window.removeEventListener('keydown', onKey)
+    }, [onClose, detailsItem])
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4" onClick={onClose}>
+            <div
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="publish-gamefowl-title"
+                className="flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white shadow-xl"
+                onClick={(event) => event.stopPropagation()}
+            >
+                <div className="flex items-start justify-between gap-4 px-6 pb-4 pt-6">
+                    <div>
+                        <h2 id="publish-gamefowl-title" className="text-lg font-bold text-[#111827]">
+                            Publish Gamefowl Listing
+                        </h2>
+                        <p className="mt-1 text-sm text-[#6B7280]">Make this gamefowl offering available for buyer inquiries.</p>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={onClose}
+                        className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-[#9CA3AF] transition-colors hover:bg-[#F3F4F6] hover:text-[#111827]"
+                        aria-label="Close"
+                    >
+                        <X className="h-4 w-4" />
+                    </button>
+                </div>
+
+                <div className="overflow-y-auto border-t border-[#E5E7EB] px-6 py-5">
+                    <h3 className="mb-3 text-sm font-semibold text-[#111827]">Select a gamefowl</h3>
+                    <div className="relative mb-4">
+                        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#9CA3AF]" />
+                        <input
+                            type="text"
+                            value={query}
+                            onChange={(event) => setQuery(event.target.value)}
+                            placeholder="Search"
+                            className="w-full rounded-lg border border-[#E5E7EB] bg-white py-2.5 pl-10 pr-3 text-sm text-[#111827] placeholder:text-[#9CA3AF] focus:border-[#244693] focus:outline-none"
+                        />
+                    </div>
+
+                    {cards.length === 0 ? (
+                        <div className="flex min-h-[220px] items-center justify-center text-center">
+                            <p className="text-sm text-[#9CA3AF]">
+                                {catalog.length === 0
+                                    ? 'No approved gamefowl are available to list yet.'
+                                    : 'No gamefowl match your search.'}
+                            </p>
+                        </div>
+                    ) : (
+                        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+                            {cards.map((item) => {
+                                const listed = isCatalogListed(item, listings)
+                                const selected = !listed && detailsItem && String(detailsItem.id) === String(item.id)
+                                return (
+                                    <button
+                                        key={item.id}
+                                        type="button"
+                                        disabled={listed}
+                                        onClick={() => setDetailsItem(item)}
+                                        className={`overflow-hidden rounded-lg border bg-white text-left ${
+                                            selected ? 'border-[#244693]' : 'border-[#E5E7EB]'
+                                        } ${listed ? 'cursor-default disabled:opacity-100' : 'cursor-pointer'}`}
+                                    >
+                                        <div className="relative aspect-[5/6] bg-[#E5E7EB]">
+                                            {item.image ? <img src={item.image} alt="" className="h-full w-full object-cover" /> : null}
+                                            <span
+                                                className={`absolute top-2 right-2 flex h-4 w-4 items-center justify-center rounded-[3px] border ${
+                                                    selected ? 'border-[#244693] bg-[#244693]' : 'border-[#D1D5DB] bg-white'
+                                                }`}
+                                            >
+                                                {selected ? <Check className="h-3 w-3 text-white" strokeWidth={3} /> : null}
+                                            </span>
+                                        </div>
+                                        <div className="px-3 pb-3 pt-2.5">
+                                            <p className="truncate text-sm font-bold text-[#111827]">{item.title}</p>
+                                            <p className="mt-0.5 truncate text-[11px] text-[#9CA3AF]">
+                                                {item.composition} | {item.age} | {item.sex}
+                                            </p>
+                                            {listed ? (
+                                                <p className="mt-4 text-center text-xs text-[#C5C8CE]">Already listed</p>
+                                            ) : (
+                                                <span className="mt-4 block h-4" />
+                                            )}
+                                        </div>
+                                    </button>
+                                )
+                            })}
+                        </div>
+                    )}
+                </div>
+            </div>
+            {detailsItem && (
+                <GamefowlListingDetailsModal
+                    gamefowl={detailsItem}
+                    onClose={() => setDetailsItem(null)}
+                    onSaved={() => {
+                        setDetailsItem(null)
+                        onClose()
+                    }}
+                />
+            )}
+        </div>
+    )
+}
+
+function CreateGamefowlBundleModal({ catalog = [], listings = [], onClose }) {
+    const [bundleName, setBundleName] = useState('')
+    const [bundleType, setBundleType] = useState('')
+    const [price, setPrice] = useState('')
+    const [stock, setStock] = useState('')
+    const [releaseOption, setReleaseOption] = useState('')
+    const [releaseDate, setReleaseDate] = useState('')
+    const [error, setError] = useState('')
+    const [step, setStep] = useState('details')
+    const [slot, setSlot] = useState('stag')
+    const [query, setQuery] = useState('')
+    const [selected, setSelected] = useState({ stag: [], pullet: [] })
+    const [selectError, setSelectError] = useState('')
+
+    const bundleSelection = {
+        Pair: { stag: 1, pullet: 1, heading: 'Select 1 Stag and 1 Pullet only', requirement: 'Select 1 stag and 1 pullet.' },
+        Trio: { stag: 1, pullet: 2, heading: 'Select 1 Stag and 2 Pullets only', requirement: 'Select 1 stag and 2 pullets.' },
+        Quadruplet: { stag: 1, pullet: 3, heading: 'Select 1 Stag and 3 Pullets only', requirement: 'Select 1 stag and 3 pullets.' },
+    }[bundleType] || { stag: 1, pullet: 1, heading: 'Select 1 Stag and 1 Pullet only', requirement: 'Select 1 stag and 1 pullet.' }
+
+    const pairCards = useMemo(() => {
+        const needle = query.trim().toLowerCase()
+        return catalog.map(catalogCard).filter((item) => {
+            if (pairSlot(item) !== slot) return false
+            if (!needle) return true
+            return [item.title, item.composition, item.age, item.sex].join(' ').toLowerCase().includes(needle)
+        })
+    }, [catalog, query, slot])
+
+    useEffect(() => {
+        const onKey = (event) => {
+            if (event.key === 'Escape') onClose()
+        }
+        window.addEventListener('keydown', onKey)
+        return () => window.removeEventListener('keydown', onKey)
+    }, [onClose])
+
+    const fieldClass =
+        'w-full rounded-lg border border-[#E5E7EB] bg-white px-4 py-2.5 text-sm text-[#111827] placeholder:text-[#9CA3AF] focus:border-[#244693] focus:outline-none'
+    const selectClass = (value) =>
+        `${fieldClass} appearance-none pr-10 ${value ? 'text-[#111827]' : 'text-[#9CA3AF]'}`
+
+    const handleNext = () => {
+        const missing = []
+        if (!bundleName.trim()) missing.push('Bundle Name')
+        if (!bundleType) missing.push('Bundle Type')
+        if (!price.trim()) missing.push('Price')
+        if (!stock.trim()) missing.push('Stock Quantity')
+        if (!releaseOption) missing.push('Stock Release Options')
+        if (releaseOption === 'Set Release Date' && !releaseDate) missing.push('Stock Release Schedule')
+        if (missing.length) {
+            setError(`Please fill in: ${missing.join(', ')}.`)
+            return
+        }
+        setError('')
+        if (bundleType === 'Pair' || bundleType === 'Trio' || bundleType === 'Quadruplet') {
+            setSlot('stag')
+            setQuery('')
+            setSelected({ stag: [], pullet: [] })
+            setSelectError('')
+            setStep('select')
+        }
+    }
+
+    const togglePairCard = (item) => {
+        if (isCatalogListed(item, listings)) return
+        setSelectError('')
+        setSelected((current) => {
+            const items = current[slot]
+            const exists = items.some((entry) => String(entry.id) === String(item.id))
+            if (exists) {
+                return { ...current, [slot]: items.filter((entry) => String(entry.id) !== String(item.id)) }
+            }
+            const limit = bundleSelection[slot]
+            if (items.length >= limit) {
+                return limit === 1 ? { ...current, [slot]: [item] } : current
+            }
+            return { ...current, [slot]: [...items, item] }
+        })
+    }
+
+    if (step === 'select' && (bundleType === 'Pair' || bundleType === 'Trio' || bundleType === 'Quadruplet')) {
+        return (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4" onClick={onClose}>
+                <div
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="add-gamefowl-to-store-title"
+                    className="flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white shadow-xl"
+                    onClick={(event) => event.stopPropagation()}
+                >
+                    <div className="flex items-start justify-between gap-4 px-6 pb-4 pt-6">
+                        <div>
+                            <h2 id="add-gamefowl-to-store-title" className="text-lg font-bold text-[#111827]">
+                                Add Gamefowl to Store
+                            </h2>
+                            <p className="mt-1 text-sm text-[#6B7280]">Choose from registered gamefowl and set listing details</p>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={onClose}
+                            className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-[#9CA3AF] transition-colors hover:bg-[#F3F4F6] hover:text-[#111827]"
+                            aria-label="Close"
+                        >
+                            <X className="h-4 w-4" />
+                        </button>
+                    </div>
+
+                    <div className="overflow-y-auto border-t border-[#E5E7EB] px-6 py-5">
+                        <h3 className="text-sm font-semibold text-[#111827]">{bundleSelection.heading}</h3>
+                        {selectError && <p className="mt-2 text-sm text-[#E20E28]">{selectError}</p>}
+                        <div className="mt-4 grid grid-cols-2 gap-3">
+                            {[
+                                ['stag', `Stag (${bundleSelection.stag})`],
+                                ['pullet', `Pullet (${bundleSelection.pullet})`],
+                            ].map(([id, label]) => (
+                                <button
+                                    key={id}
+                                    type="button"
+                                    onClick={() => {
+                                        setSlot(id)
+                                        setQuery('')
+                                    }}
+                                    className={`rounded-lg px-4 py-2.5 text-sm font-semibold ${
+                                        slot === id
+                                            ? 'bg-[#244693] text-white'
+                                            : 'border border-[#E5E7EB] bg-white text-[#6B7280]'
+                                    }`}
+                                >
+                                    {label}
+                                </button>
+                            ))}
+                        </div>
+                        <div className="relative mt-4">
+                            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#9CA3AF]" />
+                            <input
+                                type="text"
+                                value={query}
+                                onChange={(event) => setQuery(event.target.value)}
+                                placeholder="Search Gamefowl"
+                                className="w-full rounded-lg border border-[#E5E7EB] bg-white py-2.5 pl-10 pr-3 text-sm text-[#111827] placeholder:text-[#9CA3AF] focus:border-[#244693] focus:outline-none"
+                            />
+                        </div>
+
+                        {pairCards.length === 0 ? (
+                            <div className="flex min-h-[220px] items-center justify-center text-center">
+                                <p className="text-sm text-[#9CA3AF]">
+                                    {catalog.length === 0
+                                        ? 'No approved gamefowl are available yet.'
+                                        : `No ${slot === 'stag' ? 'stags' : 'pullets'} match your search.`}
+                                </p>
+                            </div>
+                        ) : (
+                            <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+                                {pairCards.map((item) => {
+                                    const listed = isCatalogListed(item, listings)
+                                    const picked = selected[slot].some((entry) => String(entry.id) === String(item.id))
+                                    return (
+                                        <button
+                                            key={item.id}
+                                            type="button"
+                                            disabled={listed}
+                                            onClick={() => togglePairCard(item)}
+                                            className={`overflow-hidden rounded-lg border bg-white text-left ${
+                                                picked ? 'border-[#244693]' : 'border-[#E5E7EB]'
+                                            } ${listed ? 'cursor-default disabled:opacity-100' : 'cursor-pointer'}`}
+                                        >
+                                            <div className="relative aspect-[5/6] bg-[#E5E7EB]">
+                                                {item.image ? <img src={item.image} alt="" className="h-full w-full object-cover" /> : null}
+                                                <span
+                                                    className={`absolute top-2 right-2 flex h-4 w-4 items-center justify-center rounded-[3px] border ${
+                                                        picked ? 'border-[#244693] bg-[#244693]' : 'border-[#D1D5DB] bg-white'
+                                                    }`}
+                                                >
+                                                    {picked ? <Check className="h-3 w-3 text-white" strokeWidth={3} /> : null}
+                                                </span>
+                                            </div>
+                                            <div className="px-3 pb-3 pt-2.5">
+                                                <p className="truncate text-sm font-bold text-[#111827]">{item.title}</p>
+                                                <p className="mt-0.5 truncate text-[11px] text-[#9CA3AF]">
+                                                    {item.composition} | {item.age} | {item.sex}
+                                                </p>
+                                                {listed ? (
+                                                    <p className="mt-4 text-center text-xs text-[#C5C8CE]">Already listed</p>
+                                                ) : (
+                                                    <span className="mt-4 block h-4" />
+                                                )}
+                                            </div>
+                                        </button>
+                                    )
+                                })}
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="flex items-center justify-between border-t border-[#E5E7EB] px-6 py-4">
+                        <button
+                            type="button"
+                            onClick={() => setStep('details')}
+                            className="rounded-lg border border-[#244693] bg-white px-5 py-2.5 text-sm font-semibold text-[#244693] transition-colors hover:bg-[#F4F7FF]"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => {
+                                if (selected.stag.length !== bundleSelection.stag || selected.pullet.length !== bundleSelection.pullet) {
+                                    setSelectError(bundleSelection.requirement)
+                                    return
+                                }
+                                setSelectError('')
+                            }}
+                            className="rounded-lg bg-[#102059] px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#244693]"
+                        >
+                            Create Bundle
+                        </button>
+                    </div>
+                </div>
+            </div>
+        )
+    }
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4" onClick={onClose}>
+            <div
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="create-gamefowl-bundle-title"
+                className="w-full max-w-4xl rounded-2xl bg-white shadow-xl"
+                onClick={(event) => event.stopPropagation()}
+            >
+                <div className="flex items-start justify-between gap-4 px-8 pb-5 pt-7">
+                    <div>
+                        <h2 id="create-gamefowl-bundle-title" className="text-xl font-bold text-[#111827]">
+                            Create Gamefowl Bundle
+                        </h2>
+                        <p className="mt-1 text-sm text-[#6B7280]">Choose from registered gamefowl and set listing details</p>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={onClose}
+                        className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-[#9CA3AF] transition-colors hover:bg-[#F3F4F6] hover:text-[#111827]"
+                        aria-label="Close"
+                    >
+                        <X className="h-4 w-4" />
+                    </button>
+                </div>
+
+                <div className="border-t border-[#E5E7EB] px-8 pb-7 pt-7">
+                    {error && <p className="mb-4 text-sm text-[#E20E28]">{error}</p>}
+                    <div className="grid grid-cols-1 gap-x-10 gap-y-6 md:grid-cols-2">
+                        <div>
+                            <label htmlFor="bundle-name" className="mb-2 block text-sm font-semibold text-[#111827]">
+                                Bundle Name
+                            </label>
+                            <input
+                                id="bundle-name"
+                                type="text"
+                                value={bundleName}
+                                onChange={(event) => setBundleName(event.target.value)}
+                                placeholder="Broodstag Pair"
+                                className={fieldClass}
+                            />
+                        </div>
+                        <div>
+                            <label htmlFor="bundle-type" className="mb-2 block text-sm font-semibold text-[#111827]">
+                                Bundle Type
+                            </label>
+                            <div className="relative">
+                                <select
+                                    id="bundle-type"
+                                    value={bundleType}
+                                    onChange={(event) => setBundleType(event.target.value)}
+                                    className={selectClass(bundleType)}
+                                >
+                                    <option value="">Select Bundle Type</option>
+                                    <option value="Pair">Pair</option>
+                                    <option value="Trio">Trio</option>
+                                    <option value="Quadruplet">Quadruplet</option>
+                                </select>
+                                <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#9CA3AF]" />
+                            </div>
+                        </div>
+                        <div>
+                            <label htmlFor="bundle-price" className="mb-2 block text-sm font-semibold text-[#111827]">
+                                Price
+                            </label>
+                            <input
+                                id="bundle-price"
+                                type="text"
+                                inputMode="decimal"
+                                value={price}
+                                onChange={(event) => setPrice(event.target.value.replace(/[^\d.]/g, ''))}
+                                placeholder="400.00"
+                                className={fieldClass}
+                            />
+                        </div>
+                        <div>
+                            <label htmlFor="bundle-stock" className="mb-2 block text-sm font-semibold text-[#111827]">
+                                Stock Quantity
+                            </label>
+                            <input
+                                id="bundle-stock"
+                                type="text"
+                                inputMode="numeric"
+                                value={stock}
+                                onChange={(event) => setStock(event.target.value.replace(/\D/g, ''))}
+                                placeholder="500"
+                                className={fieldClass}
+                            />
+                        </div>
+                        <div>
+                            <label htmlFor="bundle-release-option" className="mb-2 block text-sm font-semibold text-[#111827]">
+                                Stock Release Options
+                            </label>
+                            <div className="relative">
+                                <select
+                                    id="bundle-release-option"
+                                    value={releaseOption}
+                                    onChange={(event) => setReleaseOption(event.target.value)}
+                                    className={selectClass(releaseOption)}
+                                >
+                                    <option value="">Select Stock Release Options</option>
+                                    <option value="Set Release Date">Set Release Date</option>
+                                    <option value="Release Immediately">Release Immediately</option>
+                                </select>
+                                <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#9CA3AF]" />
+                            </div>
+                        </div>
+                        <div>
+                            <label htmlFor="bundle-release-date" className="mb-2 block text-sm font-semibold text-[#111827]">
+                                Stock Release Schedule
+                            </label>
+                            <div className="relative">
+                                <input
+                                    id="bundle-release-date"
+                                    type="date"
+                                    value={releaseDate}
+                                    onChange={(event) => setReleaseDate(event.target.value)}
+                                    className={`${fieldClass} pr-10 [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:right-3 [&::-webkit-calendar-picker-indicator]:h-5 [&::-webkit-calendar-picker-indicator]:w-5 [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:opacity-0 ${
+                                        releaseDate ? '' : 'text-transparent'
+                                    }`}
+                                />
+                                {!releaseDate && (
+                                    <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm text-[#9CA3AF]">
+                                    </span>
+                                )}
+                                <Calendar className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#9CA3AF]" />
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="mt-8 flex items-center justify-between">
+                        <button
+                            type="button"
+                            onClick={onClose}
+                            className="rounded-lg border border-[#244693] bg-white px-5 py-2.5 text-sm font-semibold text-[#244693] transition-colors hover:bg-[#F4F7FF]"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            type="button"
+                            onClick={handleNext}
+                            className="rounded-lg bg-[#102059] px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#244693]"
+                        >
+                            Next: Select Gamefowl
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    )
+}
+
+function GamefowlCatalogPanel({ listings = [], catalog = [] }) {
+    const [searchQuery, setSearchQuery] = useState('')
+    const [categoryFilter, setCategoryFilter] = useState('')
+    const [statusFilter, setStatusFilter] = useState('')
+    const [sortBy, setSortBy] = useState('')
+    const [showPublishModal, setShowPublishModal] = useState(false)
+    const [showBundleModal, setShowBundleModal] = useState(false)
+    const [selectedListing, setSelectedListing] = useState(null)
+    const [updatingListingId, setUpdatingListingId] = useState(null)
+
+    const rows = useMemo(() => listings.map(normalizeListing), [listings])
+
+    const categories = useMemo(() => {
+        return Array.from(new Set(rows.map((item) => item.category).filter((name) => name && name !== 'Uncategorized'))).sort()
+    }, [rows])
+
+    const visible = useMemo(() => {
+        const query = searchQuery.trim().toLowerCase()
+        const filtered = rows.filter((item) => {
+            const haystack = [item.title, item.composition, item.age, item.sex, item.category].join(' ').toLowerCase()
+            const matchesSearch = !query || haystack.includes(query)
+            const matchesCategory = !categoryFilter || item.category === categoryFilter
+            const matchesStatus = !statusFilter || item.status === statusFilter
+            return matchesSearch && matchesCategory && matchesStatus
+        })
+
+        const sorted = [...filtered]
+        sorted.sort((a, b) => {
+            if (sortBy === 'name') return a.title.localeCompare(b.title)
+            if (sortBy === 'price-asc') return Number(a.price) - Number(b.price)
+            if (sortBy === 'price-desc') return Number(b.price) - Number(a.price)
+            if (sortBy === 'popularity') return Number(b.popularity) - Number(a.popularity)
+            return 0
+        })
+        return sorted
+    }, [rows, searchQuery, categoryFilter, statusFilter, sortBy])
+
+    const selectClass = (value) =>
+        `w-full appearance-none rounded-lg border border-[#E5E7EB] bg-white py-2.5 pl-3 pr-9 text-sm focus:border-[#244693] focus:outline-none ${
+            value ? 'text-[#102059]' : 'text-[#9CA3AF]'
+        }`
+
+    return (
+        <section className="rounded-xl border border-[#E5E7EB] bg-white p-6 sm:p-8">
+            <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                <div>
+                    <h2 className="text-xl font-semibold text-[#102059]">Gamefowl Listings</h2>
+                    <p className="mt-1 text-sm text-[#9CA3AF]">Manage the gamefowl listed for sale on this farm.</p>
+                </div>
+                <div className="flex flex-wrap items-center gap-3">
+                    <button
+                        type="button"
+                        onClick={() => setShowPublishModal(true)}
+                        className="inline-flex items-center gap-2 rounded-lg bg-[#244693] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#1a3570]"
+                    >
+                        <CirclePlus className="h-4 w-4" />
+                        Add Listing
+                    </button>
+                    <Link
+                        href="/dashboard/owner-manager/farm/gamefowls/request"
+                        className="inline-flex items-center gap-2 rounded-lg border border-[#244693] bg-white px-4 py-2 text-sm font-semibold text-[#244693] transition-colors hover:bg-[#F4F7FF]"
+                    >
+                        <Bird className="h-4 w-4" />
+                        Register Gamefowl
+                    </Link>
+                    <button
+                        type="button"
+                        onClick={() => setShowBundleModal(true)}
+                        className="inline-flex items-center gap-2 rounded-lg border border-[#244693] bg-white px-4 py-2 text-sm font-semibold text-[#244693] transition-colors hover:bg-[#F4F7FF]"
+                    >
+                        <Box className="h-4 w-4" />
+                        Create Bundle
+                    </button>
+                </div>
+            </div>
+
+            <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                <div className="relative">
+                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#9CA3AF]" />
+                    <input
+                        type="text"
+                        value={searchQuery}
+                        onChange={(event) => setSearchQuery(event.target.value)}
+                        placeholder="Search"
+                        className="w-full rounded-lg border border-[#E5E7EB] bg-white py-2.5 pl-10 pr-3 text-sm text-[#102059] placeholder:text-[#9CA3AF] focus:border-[#244693] focus:outline-none"
+                    />
+                </div>
+                <div className="relative">
+                    <select
+                        value={categoryFilter}
+                        onChange={(event) => setCategoryFilter(event.target.value)}
+                        className={selectClass(categoryFilter)}
+                        aria-label="Category"
+                    >
+                        <option value="">Category</option>
+                        {categories.map((name) => (
+                            <option key={name} value={name}>
+                                {name}
+                            </option>
+                        ))}
+                    </select>
+                    <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#9CA3AF]" />
+                </div>
+                <div className="relative">
+                    <select
+                        value={statusFilter}
+                        onChange={(event) => setStatusFilter(event.target.value)}
+                        className={selectClass(statusFilter)}
+                        aria-label="Status"
+                    >
+                        <option value="">Status</option>
+                        <option value="active">Active</option>
+                        <option value="inactive">Inactive</option>
+                    </select>
+                    <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#9CA3AF]" />
+                </div>
+                <div className="relative">
+                    <select
+                        value={sortBy}
+                        onChange={(event) => setSortBy(event.target.value)}
+                        className={selectClass(sortBy)}
+                        aria-label="Filter"
+                    >
+                        <option value="">Filter</option>
+                        <option value="name">Name A–Z</option>
+                        <option value="price-asc">Price: Low to High</option>
+                        <option value="price-desc">Price: High to Low</option>
+                        <option value="popularity">Popularity</option>
+                    </select>
+                    <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#9CA3AF]" />
+                </div>
+            </div>
+
+            {visible.length === 0 ? (
+                <div className="flex min-h-[280px] items-center justify-center text-center">
+                    <div>
+                        <h3 className="text-lg font-semibold text-[#102059]">
+                            {rows.length === 0 ? 'No Gamefowl Listed Yet' : 'No Matching Gamefowl'}
+                        </h3>
+                        <p className="mt-1 text-sm text-[#9CA3AF]">
+                            {rows.length === 0
+                                ? 'Gamefowl you list for sale will appear here.'
+                                : 'Try a different search or filter.'}
+                        </p>
+                    </div>
+                </div>
+            ) : (
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+                    {visible.map((listing) => {
+                        const isActive = listing.status !== 'inactive'
+                        return (
+                            <article
+                                key={listing.id}
+                                onClick={() => setSelectedListing(listing)}
+                                className="cursor-pointer overflow-hidden rounded-lg border border-[#E5E7EB] bg-white text-left transition-shadow hover:shadow-sm"
+                            >
+                                <div className="aspect-[5/6] bg-[#E5E7EB]">
+                                    {listing.image ? (
+                                        <img src={listing.image} alt="" className="h-full w-full object-cover" />
+                                    ) : null}
+                                </div>
+                                <div className="p-3">
+                                    <h3 className="truncate text-sm font-bold text-[#102059]">{listing.title}</h3>
+                                    <p className="mt-0.5 truncate text-[11px] text-[#9CA3AF]">
+                                        {listing.composition} | {listing.age} | {listing.sex}
+                                    </p>
+                                    <div className="mt-2 flex flex-wrap items-start justify-between gap-x-2 gap-y-1">
+                                        <p className="text-xs font-bold leading-4 text-[#102059]">
+                                            {formatPeso(listing.price, listing.unit)}
+                                        </p>
+                                        <div className="grid shrink-0 grid-cols-[auto_auto] gap-x-2 gap-y-0.5 text-[10px] leading-4">
+                                            <span className="text-[#9CA3AF]">Stocks:</span>
+                                            <span className="font-medium text-[#102059]">{listing.stocks}</span>
+                                            <span className="text-[#9CA3AF]">Release Date:</span>
+                                            <span className="font-medium text-[#102059]">{listing.releaseDate}</span>
+                                            <span className="text-[#9CA3AF]">Popularity:</span>
+                                            <span className="font-medium text-[#102059]">{listing.popularity}</span>
+                                        </div>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        disabled={updatingListingId === listing.id}
+                                        onClick={(event) => {
+                                            event.stopPropagation()
+                                            const nextStatus = isActive ? 'inactive' : 'active'
+                                            if (!window.confirm(`${isActive ? 'Deactivate' : 'Activate'} this gamefowl listing?`)) return
+                                            setUpdatingListingId(listing.id)
+                                            router.patch(
+                                                `/dashboard/owner-manager/farm/gamefowls/listings/${listing.id}/status`,
+                                                { status: nextStatus },
+                                                {
+                                                    preserveScroll: true,
+                                                    onFinish: () => setUpdatingListingId(null),
+                                                },
+                                            )
+                                        }}
+                                        className="mt-3 w-full rounded-lg bg-[#F3F4F6] py-2 text-xs font-semibold text-[#9CA3AF] transition-colors hover:bg-[#E5E7EB] hover:text-[#6B7280] disabled:opacity-60"
+                                    >
+                                        {isActive ? 'Deactivate' : 'Activate'}
+                                    </button>
+                                </div>
+                            </article>
+                        )
+                    })}
+                </div>
+            )}
+            {showPublishModal && (
+                <PublishGamefowlListingModal
+                    catalog={catalog}
+                    listings={listings}
+                    onClose={() => setShowPublishModal(false)}
+                />
+            )}
+            {showBundleModal && (
+                <CreateGamefowlBundleModal
+                    catalog={catalog}
+                    listings={listings}
+                    onClose={() => setShowBundleModal(false)}
+                />
+            )}
+            {selectedListing && (
+                <GamefowlListingDetailsModal
+                    gamefowl={selectedListing}
+                    listing={selectedListing}
+                    onClose={() => setSelectedListing(null)}
+                    onSaved={() => setSelectedListing(null)}
+                />
+            )}
+        </section>
+    )
+}
+
+export default function OwnerManagerFarm({ auth, farm, listings = [], catalog = [] }) {
+    const page = usePage()
+    const { flash } = page.props
     const coverInputRef = useRef(null)
     const leftColumnRef = useRef(null)
-    const [activeTab, setActiveTab] = useState('about')
+    const [activeTab, setActiveTab] = useState(() => initialFarmTab(page.url))
     const [starFilter, setStarFilter] = useState(null)
     const [leftColumnHeight, setLeftColumnHeight] = useState(0)
     const [showEditModal, setShowEditModal] = useState(false)
     const [showEditConfirm, setShowEditConfirm] = useState(false)
     const [showStatusConfirm, setShowStatusConfirm] = useState(false)
+    const [showFlash, setShowFlash] = useState(Boolean(flash?.success))
     const [formError, setFormError] = useState('')
     const [operatingDays, setOperatingDays] = useState(() => parseDays(farm?.operating_days))
 
@@ -108,6 +1170,13 @@ export default function OwnerManagerFarm({ auth, farm }) {
         observer.observe(leftColumnRef.current)
         return () => observer.disconnect()
     }, [activeTab, farm])
+
+    useEffect(() => {
+        if (!flash?.success) return undefined
+        setShowFlash(true)
+        const timer = window.setTimeout(() => setShowFlash(false), 5000)
+        return () => window.clearTimeout(timer)
+    }, [flash?.success])
 
     const openEditModal = () => {
         const nextHours = parseHours(farm?.operating_hours)
@@ -200,14 +1269,6 @@ export default function OwnerManagerFarm({ auth, farm }) {
     return (
         <OwnerManagerKlasmeytLayout auth={auth} title={farm?.name || 'My Farm'} mainClassName="w-full p-0">
             <div className="min-h-screen bg-[#F0F2F5]">
-                {flash?.success && (
-                    <div className="mx-auto max-w-[1110px] px-6 pt-4">
-                        <div className="rounded-lg border border-[#BBF7D0] bg-[#F0FDF4] px-4 py-3 text-sm text-[#166534]">
-                            {flash.success}
-                        </div>
-                    </div>
-                )}
-
                 <div className="bg-white">
                     <div className="relative">
                         <div className="h-56 overflow-hidden bg-[#E5E7EB] sm:h-64">
@@ -233,6 +1294,19 @@ export default function OwnerManagerFarm({ auth, farm }) {
                     </div>
 
                     <div className="mx-auto max-w-[1110px] px-6 pb-0 pt-6">
+                        {showFlash && flash?.success && (
+                            <div className="mb-4 flex items-center justify-between gap-3 rounded-lg border border-[#BBF7D0] bg-[#F0FDF4] px-4 py-3 text-sm text-[#166534]">
+                                <p>{flash.success}</p>
+                                <button
+                                    type="button"
+                                    onClick={() => setShowFlash(false)}
+                                    className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full text-[#166534] hover:bg-[#DCFCE7]"
+                                    aria-label="Dismiss notification"
+                                >
+                                    <X className="h-4 w-4" />
+                                </button>
+                            </div>
+                        )}
                         <div className="flex items-start justify-between gap-4">
                             <div>
                                 <h1 className="mb-1 text-[32px] font-bold leading-tight text-[#102059]">{farm?.name}</h1>
@@ -453,15 +1527,7 @@ export default function OwnerManagerFarm({ auth, farm }) {
                         </div>
                     )}
 
-                    {activeTab === 'gamefowl' && (
-                        <div className="flex min-h-[420px] items-center justify-center rounded-lg border border-[#E5E7EB] bg-white p-8">
-                            <div className="text-center">
-                                <Package className="mx-auto mb-4 h-16 w-16 text-[#E5E7EB]" />
-                                <h2 className="mb-2 text-xl font-bold text-[#102059]">No Gamefowl Listed Yet</h2>
-                                <p className="text-sm text-[#6B7280]">Gamefowl you list for sale will appear here.</p>
-                            </div>
-                        </div>
-                    )}
+                    {activeTab === 'gamefowl' && <GamefowlCatalogPanel listings={listings} catalog={catalog} />}
 
                     {activeTab === 'insights' && (
                         <div className="space-y-4">

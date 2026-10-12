@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
 use Illuminate\Support\Facades\Schema;
 use Inertia\Inertia;
 use App\Http\Controllers\Concerns\CreatesProductCatalogEntry;
@@ -12,6 +13,8 @@ use App\Http\Controllers\Concerns\ManagesShopOrders;
 use App\Models\ActivityLog;
 use App\Models\Category;
 use App\Models\Farm;
+use App\Models\FarmGamefowlListing;
+use App\Models\GamefowlCatalog;
 use App\Models\ProductCatalog;
 use App\Models\SubCategory;
 use App\Http\Controllers\SupportTicketController;
@@ -319,7 +322,103 @@ class DashboardController extends Controller
 
         return Inertia::render('Dashboard/OwnerManagerFarm', [
             'farm' => $this->ownerManagerFarmPagePayload($farm),
+            'catalog' => $this->ownerManagerGamefowlCatalog(),
+            'listings' => $this->ownerManagerGamefowlListings($farm),
         ]);
+    }
+
+    public function ownerManagerStoreGamefowlListing(Request $request)
+    {
+        $farm = $this->managedFarmOrRedirect();
+        if ($farm instanceof \Illuminate\Http\RedirectResponse) {
+            return $farm;
+        }
+
+        $validated = $request->validate([
+            'gamefowl_catalog_id' => [
+                'required',
+                'integer',
+                Rule::exists('gamefowl_catalog', 'id')->where('status', GamefowlCatalog::STATUS_ACTIVE),
+                Rule::unique('farm_gamefowl_listings', 'gamefowl_catalog_id')->where('farm_id', $farm->id),
+            ],
+            'price' => 'required|numeric|min:0',
+            'selling_unit' => 'required|string|in:per head,per pair,per trio',
+            'stock' => 'required|integer|min:0',
+            'release_option' => 'required|string|in:Set Release Date,Available Now',
+            'release_date' => 'nullable|required_if:release_option,Set Release Date|date',
+        ]);
+
+        $listing = FarmGamefowlListing::create([
+            'farm_id' => $farm->id,
+            'gamefowl_catalog_id' => $validated['gamefowl_catalog_id'],
+            'price' => $validated['price'],
+            'selling_unit' => $validated['selling_unit'],
+            'stock' => $validated['stock'],
+            'release_option' => $validated['release_option'],
+            'release_date' => $validated['release_option'] === 'Set Release Date' ? $validated['release_date'] : null,
+            'popularity' => 0,
+            'status' => 'active',
+        ]);
+
+        ActivityLog::log('created', "Gamefowl listing added to {$farm->name}", $listing, null, $listing->toArray());
+
+        return redirect('/dashboard/owner-manager/farm?tab=gamefowl')
+            ->with('success', 'Gamefowl added to your farm list.');
+    }
+
+    public function ownerManagerUpdateGamefowlListing(Request $request, $id)
+    {
+        $farm = $this->managedFarmOrRedirect();
+        if ($farm instanceof \Illuminate\Http\RedirectResponse) {
+            return $farm;
+        }
+
+        $listing = FarmGamefowlListing::query()
+            ->where('farm_id', $farm->id)
+            ->findOrFail($id);
+
+        $validated = $request->validate([
+            'price' => 'required|numeric|min:0',
+            'selling_unit' => 'required|string|in:per head,per pair,per trio',
+            'stock' => 'required|integer|min:0',
+            'release_option' => 'required|string|in:Set Release Date,Available Now',
+            'release_date' => 'nullable|required_if:release_option,Set Release Date|date',
+        ]);
+
+        $oldValues = $listing->toArray();
+        $listing->update([
+            'price' => $validated['price'],
+            'selling_unit' => $validated['selling_unit'],
+            'stock' => $validated['stock'],
+            'release_option' => $validated['release_option'],
+            'release_date' => $validated['release_option'] === 'Set Release Date' ? $validated['release_date'] : null,
+        ]);
+
+        ActivityLog::log('updated', "Gamefowl listing updated for {$farm->name}", $listing, $oldValues, $listing->fresh()->toArray());
+
+        return redirect('/dashboard/owner-manager/farm?tab=gamefowl')
+            ->with('success', 'Gamefowl listing updated.');
+    }
+
+    public function ownerManagerUpdateGamefowlListingStatus(Request $request, $id)
+    {
+        $farm = $this->managedFarmOrRedirect();
+        if ($farm instanceof \Illuminate\Http\RedirectResponse) {
+            return $farm;
+        }
+
+        $validated = $request->validate([
+            'status' => 'required|string|in:active,inactive',
+        ]);
+
+        $listing = FarmGamefowlListing::query()
+            ->where('farm_id', $farm->id)
+            ->findOrFail($id);
+
+        $listing->update(['status' => $validated['status']]);
+
+        return redirect('/dashboard/owner-manager/farm?tab=gamefowl')
+            ->with('success', $validated['status'] === 'active' ? 'Gamefowl listing activated.' : 'Gamefowl listing deactivated.');
     }
 
     public function ownerManagerUpdateFarm(Request $request)
@@ -448,6 +547,70 @@ class DashboardController extends Controller
             'account_number' => $farm->account_number,
             'status' => $farm->status,
         ];
+    }
+
+    /**
+     * Approved catalog entries a farm can publish as a listing.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function ownerManagerGamefowlCatalog(): array
+    {
+        return GamefowlCatalog::query()
+            ->where('status', GamefowlCatalog::STATUS_ACTIVE)
+            ->with(['bloodline', 'ageType'])
+            ->latest()
+            ->get()
+            ->map(function (GamefowlCatalog $gamefowl) {
+                $images = $gamefowl->images ?? [];
+                $image = $images[$gamefowl->primary_image_index ?? 0] ?? ($images[0] ?? null);
+
+                return [
+                    'id' => $gamefowl->id,
+                    'title' => $gamefowl->bloodline?->name ?: $gamefowl->name,
+                    'composition' => $gamefowl->name,
+                    'age' => $gamefowl->ageType?->name,
+                    'sex' => $gamefowl->sex,
+                    'image' => $image,
+                ];
+            })
+            ->all();
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private function ownerManagerGamefowlListings(Farm $farm): array
+    {
+        return FarmGamefowlListing::query()
+            ->where('farm_id', $farm->id)
+            ->with(['gamefowl.bloodline', 'gamefowl.ageType'])
+            ->latest()
+            ->get()
+            ->map(function (FarmGamefowlListing $listing) {
+                $gamefowl = $listing->gamefowl;
+                $images = $gamefowl?->images ?? [];
+                $image = $images[$gamefowl?->primary_image_index ?? 0] ?? ($images[0] ?? null);
+
+                return [
+                    'id' => $listing->id,
+                    'catalog_id' => $listing->gamefowl_catalog_id,
+                    'title' => $gamefowl?->bloodline?->name ?: $gamefowl?->name,
+                    'composition' => $gamefowl?->name,
+                    'age' => $gamefowl?->ageType?->name,
+                    'sex' => $gamefowl?->sex,
+                    'category' => $gamefowl?->bloodline?->name ?: 'Uncategorized',
+                    'price' => $listing->price,
+                    'selling_unit' => $listing->selling_unit,
+                    'stocks' => $listing->stock,
+                    'release_option' => $listing->release_option,
+                    'release_date' => $listing->release_date?->format('Y-m-d'),
+                    'popularity' => $listing->popularity,
+                    'status' => $listing->status,
+                    'image' => $image,
+                ];
+            })
+            ->all();
     }
 
     public function ownerManagerStores()

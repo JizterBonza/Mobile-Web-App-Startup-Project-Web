@@ -59,14 +59,23 @@ Route::get('/storage/{path}', [PublicStorageController::class, 'show'])
     ->where('path', '.*')
     ->name('storage.public');
 
-Route::middleware(['auth', 'session.valid', 'user.type:super_admin|admin'])->prefix('klasrum')->name('klasrum.')->group(function () {
+Route::middleware(['auth', 'session.valid', 'user.type:super_admin|admin|owner_manager'])->prefix('klasrum')->name('klasrum.')->group(function () {
     Route::get('/', [KlasrumContentController::class, 'index'])->name('index');
+    Route::get('/posts/new', [KlasrumContentController::class, 'createPost'])->name('posts.create');
+    Route::post('/posts', [KlasrumContentController::class, 'storePost'])->name('posts.store');
+    Route::post('/media', [KlasrumContentController::class, 'uploadMedia'])->name('media.upload');
+    Route::get('/articles/{content}', [KlasrumContentController::class, 'showArticle'])->whereNumber('content')->name('articles.show');
+    Route::get('/posts/{post}', [KlasrumContentController::class, 'showPost'])->whereNumber('post')->name('posts.show');
+});
+
+Route::middleware(['auth', 'session.valid', 'user.type:super_admin|admin'])->prefix('klasrum')->name('klasrum.')->group(function () {
     Route::get('/new', [KlasrumContentController::class, 'create'])->name('create');
+    Route::get('/posts/{post}/edit', [KlasrumContentController::class, 'editPost'])->whereNumber('post')->name('posts.edit');
+    Route::post('/posts/{post}', [KlasrumContentController::class, 'updatePost'])->whereNumber('post')->name('posts.update');
     Route::post('/', [KlasrumContentController::class, 'store'])->name('store');
     Route::post('/categories', [KlasrumCategoryController::class, 'store'])->name('categories.store');
     Route::put('/categories/{category}', [KlasrumCategoryController::class, 'update'])->whereNumber('category')->name('categories.update');
     Route::delete('/categories/{category}', [KlasrumCategoryController::class, 'destroy'])->name('categories.destroy')->whereNumber('category');
-    Route::post('/media', [KlasrumContentController::class, 'uploadMedia'])->name('media.upload');
     Route::get('/{content}/edit', [KlasrumContentController::class, 'edit'])->name('edit')->whereNumber('content');
     Route::post('/{content}', [KlasrumContentController::class, 'update'])->name('update')->whereNumber('content');
     Route::delete('/{content}', [KlasrumContentController::class, 'destroy'])->name('destroy')->whereNumber('content');
@@ -322,6 +331,11 @@ Route::middleware(['auth', 'session.valid', 'user.type:super_admin'])->prefix('d
 Route::middleware(['auth', 'session.valid', 'user.type:owner_manager'])->prefix('dashboard/owner-manager')->name('dashboard.owner-manager.')->group(function () {
     Route::get('/', [DashboardController::class, 'ownerManager'])->name('index');
     Route::get('/farm', [DashboardController::class, 'ownerManagerFarm'])->name('farm');
+    Route::get('/farm/gamefowls/request', [GamefowlCatalogController::class, 'ownerRequestForm'])->name('farm.gamefowls.request');
+    Route::post('/farm/gamefowls/request', [GamefowlCatalogController::class, 'ownerRequestStore'])->name('farm.gamefowls.request.store');
+    Route::post('/farm/gamefowls/listings', [DashboardController::class, 'ownerManagerStoreGamefowlListing'])->name('farm.gamefowls.listings.store');
+    Route::put('/farm/gamefowls/listings/{id}', [DashboardController::class, 'ownerManagerUpdateGamefowlListing'])->name('farm.gamefowls.listings.update');
+    Route::patch('/farm/gamefowls/listings/{id}/status', [DashboardController::class, 'ownerManagerUpdateGamefowlListingStatus'])->name('farm.gamefowls.listings.status');
     Route::put('/farm', [DashboardController::class, 'ownerManagerUpdateFarm'])->name('farm.update');
     Route::patch('/farm/status', [DashboardController::class, 'ownerManagerUpdateFarmStatus'])->name('farm.status');
     Route::post('/farm/cover', [DashboardController::class, 'ownerManagerUpdateFarmCover'])->name('farm.cover');

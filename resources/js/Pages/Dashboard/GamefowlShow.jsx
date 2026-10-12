@@ -6,6 +6,13 @@ function gamefowlBase(userType) {
     return userType === 'admin' ? '/dashboard/admin/gamefowls' : '/dashboard/super-admin/gamefowls'
 }
 
+function formatHatchDate(value) {
+    if (!value) return 'N/A'
+    const [year, month, day] = String(value).split('-')
+    if (!year || !month || !day) return 'N/A'
+    return `${month}/${day}/${year}`
+}
+
 export default function GamefowlShow({ auth, gamefowl, flash }) {
     const base = gamefowlBase(auth?.user?.user_type)
     const photos = gamefowl.images ?? []
@@ -46,8 +53,10 @@ export default function GamefowlShow({ auth, gamefowl, flash }) {
                         </div>
                         <dl className="space-y-3 text-sm">
                             {[
-                                ['Bloodline', gamefowl.bloodline_name],
+                                ['Bloodline Category', gamefowl.bloodline_name],
                                 ['Age Type', gamefowl.age_type_name],
+                                ['Sex', gamefowl.sex],
+                                ['Hatch Date', formatHatchDate(gamefowl.hatch_date)],
                                 ['Class', gamefowl.class_name],
                                 ['Status', gamefowl.status === 'active' ? 'Active' : gamefowl.status],
                                 ['Added by', gamefowl.created_by_name],

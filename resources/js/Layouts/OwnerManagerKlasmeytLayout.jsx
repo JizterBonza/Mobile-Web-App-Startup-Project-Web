@@ -7,6 +7,7 @@ export const OWNER_MANAGER_NAV = [
     { label: 'Dashboard', id: 'dashboard', href: '/dashboard/owner-manager' },
     { label: 'Stores', id: 'stores', href: '/dashboard/owner-manager/stores' },
     { label: 'Orders', id: 'orders', href: '/dashboard/owner-manager/orders' },
+    { label: 'Klasrum', id: 'klasrum', href: '/klasrum' },
 ]
 
 export function OwnerManagerNoAgrivetAlert() {
