@@ -448,15 +448,18 @@ export default function ApkManagement({ auth, releases, stats, filters, uploadLi
                             </div>
                         </div>
 
-                        <label className="mt-4 flex cursor-pointer items-center gap-3 text-sm font-medium text-[#374151]">
+                        <div className="mt-6 flex items-center gap-4">
                             <input
+                                id="force-update"
                                 type="checkbox"
                                 checked={form.data.is_force_update}
                                 onChange={(event) => updateField('is_force_update', event.target.checked)}
-                                className="h-4 w-4 rounded border-[#9CA3AF] text-[#244693] focus:ring-[#244693]"
+                                className="m-0 h-4 w-4 shrink-0 cursor-pointer rounded border-[#9CA3AF] accent-[#244693] focus:ring-[#244693]"
                             />
-                            <span>Force update (users on older builds must update)</span>
-                        </label>
+                            <label htmlFor="force-update" className="mb-0! min-w-0 cursor-pointer text-sm font-medium! leading-5 text-[#374151]">
+                                Force update (users on older builds must update)
+                            </label>
+                        </div>
 
                         <button
                             type="submit"
