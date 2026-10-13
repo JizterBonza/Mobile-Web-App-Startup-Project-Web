@@ -516,7 +516,7 @@ function PublishGamefowlListingModal({ catalog = [], listings = [], onClose }) {
     )
 }
 
-function CreateGamefowlBundleModal({ catalog = [], listings = [], onClose }) {
+function CreateGamefowlBundleModal({ catalog = [], onClose }) {
     const [bundleName, setBundleName] = useState('')
     const [bundleType, setBundleType] = useState('')
     const [price, setPrice] = useState('')
@@ -581,7 +581,6 @@ function CreateGamefowlBundleModal({ catalog = [], listings = [], onClose }) {
     }
 
     const togglePairCard = (item) => {
-        if (isCatalogListed(item, listings)) return
         setSelectError('')
         setSelected((current) => {
             const items = current[slot]
@@ -673,17 +672,15 @@ function CreateGamefowlBundleModal({ catalog = [], listings = [], onClose }) {
                         ) : (
                             <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
                                 {pairCards.map((item) => {
-                                    const listed = isCatalogListed(item, listings)
                                     const picked = selected[slot].some((entry) => String(entry.id) === String(item.id))
                                     return (
                                         <button
                                             key={item.id}
                                             type="button"
-                                            disabled={listed}
                                             onClick={() => togglePairCard(item)}
-                                            className={`overflow-hidden rounded-lg border bg-white text-left ${
+                                            className={`cursor-pointer overflow-hidden rounded-lg border bg-white text-left ${
                                                 picked ? 'border-[#244693]' : 'border-[#E5E7EB]'
-                                            } ${listed ? 'cursor-default disabled:opacity-100' : 'cursor-pointer'}`}
+                                            }`}
                                         >
                                             <div className="relative aspect-[5/6] bg-[#E5E7EB]">
                                                 {item.image ? <img src={item.image} alt="" className="h-full w-full object-cover" /> : null}
@@ -700,11 +697,6 @@ function CreateGamefowlBundleModal({ catalog = [], listings = [], onClose }) {
                                                 <p className="mt-0.5 truncate text-[11px] text-[#9CA3AF]">
                                                     {item.composition} | {item.age} | {item.sex}
                                                 </p>
-                                                {listed ? (
-                                                    <p className="mt-4 text-center text-xs text-[#C5C8CE]">Already listed</p>
-                                                ) : (
-                                                    <span className="mt-4 block h-4" />
-                                                )}
                                             </div>
                                         </button>
                                     )
@@ -1114,7 +1106,6 @@ function GamefowlCatalogPanel({ listings = [], catalog = [] }) {
             {showBundleModal && (
                 <CreateGamefowlBundleModal
                     catalog={catalog}
-                    listings={listings}
                     onClose={() => setShowBundleModal(false)}
                 />
             )}
