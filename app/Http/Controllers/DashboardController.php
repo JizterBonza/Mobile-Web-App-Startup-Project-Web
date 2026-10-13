@@ -344,7 +344,7 @@ class DashboardController extends Controller
             'price' => 'required|numeric|min:0',
             'selling_unit' => 'required|string|in:per head,per pair,per trio',
             'stock' => 'required|integer|min:0',
-            'release_option' => 'required|string|in:Set Release Date,Available Now',
+            'release_option' => 'required|string|in:Set Release Date,Release Immediately',
             'release_date' => 'nullable|required_if:release_option,Set Release Date|date',
         ]);
 
@@ -381,7 +381,7 @@ class DashboardController extends Controller
             'price' => 'required|numeric|min:0',
             'selling_unit' => 'required|string|in:per head,per pair,per trio',
             'stock' => 'required|integer|min:0',
-            'release_option' => 'required|string|in:Set Release Date,Available Now',
+            'release_option' => 'required|string|in:Set Release Date,Release Immediately',
             'release_date' => 'nullable|required_if:release_option,Set Release Date|date',
         ]);
 

@@ -68,7 +68,7 @@ export default function GamefowlShow({ auth, gamefowl, flash }) {
                             ))}
                         </dl>
                         <div>
-                            <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-[#9CA3AF]">Description</p>
+                            <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-[#9CA3AF]">Gamefowl Description</p>
                             <p className="text-sm text-[#102059]">{gamefowl.description || '—'}</p>
                         </div>
                     </div>

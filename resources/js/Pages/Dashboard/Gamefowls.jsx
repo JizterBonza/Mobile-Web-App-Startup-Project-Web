@@ -208,9 +208,9 @@ export default function Gamefowls({ auth, gamefowls = [], flash, pendingCount = 
                                             </div>
                                             <div className="grid flex-1 grid-cols-1 gap-4 md:grid-cols-[1fr_140px_120px_120px_120px]">
                                                 <div className="min-w-0">
-                                                    <p className="truncate text-sm font-bold text-[#102059]">{gamefowl.name}</p>
+                                                    <p className="truncate text-sm font-bold text-[#102059]">{gamefowl.bloodline}</p>
                                                     <p className="truncate text-xs text-[#6B7280]">
-                                                        {[gamefowl.bloodline, gamefowl.ageType, gamefowl.gamefowlClass].filter(Boolean).join(' • ') || '—'}
+                                                        {[gamefowl.name, gamefowl.ageType, gamefowl.gamefowlClass].filter(Boolean).join(' • ') || '—'}
                                                     </p>
                                                 </div>
                                                 <div className="flex items-center">

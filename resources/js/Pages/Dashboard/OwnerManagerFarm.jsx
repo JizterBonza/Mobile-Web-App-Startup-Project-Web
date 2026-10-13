@@ -78,6 +78,11 @@ function toIsoDate(value) {
     return ''
 }
 
+function normalizeReleaseOption(value) {
+    const option = value || ''
+    return option === 'Available Now' ? 'Release Immediately' : option
+}
+
 function normalizeListing(item) {
     const composition = item.composition || item.bloodline_name || '—'
     const age = item.age || item.age_type_name || '—'
@@ -94,9 +99,12 @@ function normalizeListing(item) {
         price: item.price ?? 0,
         unit: item.selling_unit || item.unit || 'per head',
         stocks: item.stocks ?? item.stock ?? 0,
-        releaseOption: item.release_option || item.releaseOption || '',
+        releaseOption: normalizeReleaseOption(item.release_option || item.releaseOption || ''),
         releaseDateIso: toIsoDate(item.release_date || item.releaseDate),
-        releaseDate: formatReleaseDate(item.release_date || item.releaseDate),
+        releaseDate:
+            normalizeReleaseOption(item.release_option || item.releaseOption || '') === 'Release Immediately'
+                ? 'Immediate'
+                : formatReleaseDate(item.release_date || item.releaseDate),
         popularity: item.popularity ?? 0,
         status: String(item.status || 'active').toLowerCase(),
         image: storageUrl(item.image || item.image_url || null),
@@ -320,7 +328,11 @@ function GamefowlListingDetailsModal({ gamefowl, listing = null, onClose, onSave
                                     id="listing-release-option"
                                     disabled={!editing}
                                     value={releaseOption}
-                                    onChange={(event) => setReleaseOption(event.target.value)}
+                                    onChange={(event) => {
+                                        const next = event.target.value
+                                        setReleaseOption(next)
+                                        if (next !== 'Set Release Date') setReleaseDate('')
+                                    }}
                                     className={selectClass(releaseOption)}
                                 >
                                     <option value="">Select Stock Release Options</option>
@@ -330,6 +342,7 @@ function GamefowlListingDetailsModal({ gamefowl, listing = null, onClose, onSave
                                 <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#9CA3AF]" />
                             </div>
                         </div>
+                        {releaseOption === 'Set Release Date' && (
                         <div>
                             <label htmlFor="listing-release-date" className="mb-2 block text-sm font-semibold text-[#111827]">
                                 Stock Release Schedule
@@ -352,6 +365,7 @@ function GamefowlListingDetailsModal({ gamefowl, listing = null, onClose, onSave
                                 <Calendar className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#9CA3AF]" />
                             </div>
                         </div>
+                        )}
                     </div>
 
                     <div className="mt-8 flex items-center justify-between border-t border-[#E5E7EB] pt-6">
@@ -502,7 +516,7 @@ function PublishGamefowlListingModal({ catalog = [], listings = [], onClose }) {
     )
 }
 
-function CreateGamefowlBundleModal({ catalog = [], listings = [], onClose }) {
+function CreateGamefowlBundleModal({ catalog = [], onClose }) {
     const [bundleName, setBundleName] = useState('')
     const [bundleType, setBundleType] = useState('')
     const [price, setPrice] = useState('')
@@ -567,7 +581,6 @@ function CreateGamefowlBundleModal({ catalog = [], listings = [], onClose }) {
     }
 
     const togglePairCard = (item) => {
-        if (isCatalogListed(item, listings)) return
         setSelectError('')
         setSelected((current) => {
             const items = current[slot]
@@ -659,17 +672,15 @@ function CreateGamefowlBundleModal({ catalog = [], listings = [], onClose }) {
                         ) : (
                             <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
                                 {pairCards.map((item) => {
-                                    const listed = isCatalogListed(item, listings)
                                     const picked = selected[slot].some((entry) => String(entry.id) === String(item.id))
                                     return (
                                         <button
                                             key={item.id}
                                             type="button"
-                                            disabled={listed}
                                             onClick={() => togglePairCard(item)}
-                                            className={`overflow-hidden rounded-lg border bg-white text-left ${
+                                            className={`cursor-pointer overflow-hidden rounded-lg border bg-white text-left ${
                                                 picked ? 'border-[#244693]' : 'border-[#E5E7EB]'
-                                            } ${listed ? 'cursor-default disabled:opacity-100' : 'cursor-pointer'}`}
+                                            }`}
                                         >
                                             <div className="relative aspect-[5/6] bg-[#E5E7EB]">
                                                 {item.image ? <img src={item.image} alt="" className="h-full w-full object-cover" /> : null}
@@ -686,11 +697,6 @@ function CreateGamefowlBundleModal({ catalog = [], listings = [], onClose }) {
                                                 <p className="mt-0.5 truncate text-[11px] text-[#9CA3AF]">
                                                     {item.composition} | {item.age} | {item.sex}
                                                 </p>
-                                                {listed ? (
-                                                    <p className="mt-4 text-center text-xs text-[#C5C8CE]">Already listed</p>
-                                                ) : (
-                                                    <span className="mt-4 block h-4" />
-                                                )}
                                             </div>
                                         </button>
                                     )
@@ -823,7 +829,11 @@ function CreateGamefowlBundleModal({ catalog = [], listings = [], onClose }) {
                                 <select
                                     id="bundle-release-option"
                                     value={releaseOption}
-                                    onChange={(event) => setReleaseOption(event.target.value)}
+                                    onChange={(event) => {
+                                        const next = event.target.value
+                                        setReleaseOption(next)
+                                        if (next !== 'Set Release Date') setReleaseDate('')
+                                    }}
                                     className={selectClass(releaseOption)}
                                 >
                                     <option value="">Select Stock Release Options</option>
@@ -833,6 +843,7 @@ function CreateGamefowlBundleModal({ catalog = [], listings = [], onClose }) {
                                 <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#9CA3AF]" />
                             </div>
                         </div>
+                        {releaseOption === 'Set Release Date' && (
                         <div>
                             <label htmlFor="bundle-release-date" className="mb-2 block text-sm font-semibold text-[#111827]">
                                 Stock Release Schedule
@@ -854,6 +865,7 @@ function CreateGamefowlBundleModal({ catalog = [], listings = [], onClose }) {
                                 <Calendar className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#9CA3AF]" />
                             </div>
                         </div>
+                        )}
                     </div>
 
                     <div className="mt-8 flex items-center justify-between">
@@ -1094,7 +1106,6 @@ function GamefowlCatalogPanel({ listings = [], catalog = [] }) {
             {showBundleModal && (
                 <CreateGamefowlBundleModal
                     catalog={catalog}
-                    listings={listings}
                     onClose={() => setShowBundleModal(false)}
                 />
             )}

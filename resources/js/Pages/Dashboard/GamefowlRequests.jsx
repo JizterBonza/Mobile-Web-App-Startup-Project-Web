@@ -100,9 +100,10 @@ export default function GamefowlRequests({ auth, requests = [], flash }) {
                                                     </div>
                                                 ))}
                                             </dl>
-                                            {request.description ? (
-                                                <p className="mb-6 text-sm text-[#102059]">{request.description}</p>
-                                            ) : null}
+                                            <div className="mb-6">
+                                                <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-[#9CA3AF]">Gamefowl Description</p>
+                                                <p className="whitespace-pre-wrap text-sm text-[#102059]">{request.description || '—'}</p>
+                                            </div>
                                             {Array.isArray(request.images) && request.images.length > 0 && (
                                                 <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-5">
                                                     {request.images.map((src, index) => (

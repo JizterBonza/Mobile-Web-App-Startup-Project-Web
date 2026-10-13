@@ -290,6 +290,17 @@ export default function RegisterGamefowl({ auth, bloodlines = [], ageTypes = [],
                                     </select>
                                     {form.errors.class_id && <p className="mt-1 text-xs text-[#E20E28]">{form.errors.class_id}</p>}
                                 </div>
+                                <div className="md:col-span-2">
+                                    <label className={labelClass}>Gamefowl Description</label>
+                                    <textarea
+                                        className={`${inputClass} min-h-[120px] resize-y`}
+                                        rows={4}
+                                        value={form.data.description}
+                                        onChange={(event) => form.setData('description', event.target.value)}
+                                        maxLength={2000}
+                                    />
+                                    {form.errors.description && <p className="mt-1 text-xs text-[#E20E28]">{form.errors.description}</p>}
+                                </div>
                             </div>
 
                             <div className="mt-10 flex items-center justify-between">
@@ -383,8 +394,8 @@ export default function RegisterGamefowl({ auth, bloodlines = [], ageTypes = [],
                                     </div>
                                 ))}
                                 <div className="px-5 py-3.5">
-                                    <p className="text-sm text-[#6B7280]">Description</p>
-                                    {form.data.description ? <p className="mt-1 text-sm text-[#111827]">{form.data.description}</p> : null}
+                                    <p className="text-sm text-[#6B7280]">Gamefowl Description</p>
+                                    <p className="mt-1 whitespace-pre-wrap text-sm text-[#111827]">{form.data.description || '—'}</p>
                                 </div>
                             </div>
 
