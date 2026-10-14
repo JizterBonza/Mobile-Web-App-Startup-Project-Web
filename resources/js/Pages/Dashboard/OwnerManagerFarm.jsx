@@ -486,8 +486,8 @@ function PublishGamefowlListingModal({ catalog = [], listings = [], onClose }) {
                                             </span>
                                         </div>
                                         <div className="px-3 pb-3 pt-2.5">
-                                            <p className="truncate text-sm font-bold text-[#111827]">{item.title}</p>
-                                            <p className="mt-0.5 truncate text-[11px] text-[#9CA3AF]">
+                                            <p className="break-words text-sm font-bold leading-snug text-[#111827]">{item.title}</p>
+                                            <p className="mt-0.5 break-words text-[11px] leading-snug text-[#9CA3AF]">
                                                 {item.composition} | {item.age} | {item.sex}
                                             </p>
                                             {listed ? (
@@ -694,8 +694,8 @@ function CreateGamefowlBundleModal({ catalog = [], onClose }) {
                                                 </span>
                                             </div>
                                             <div className="px-3 pb-3 pt-2.5">
-                                                <p className="truncate text-sm font-bold text-[#111827]">{item.title}</p>
-                                                <p className="mt-0.5 truncate text-[11px] text-[#9CA3AF]">
+                                                <p className="break-words text-sm font-bold leading-snug text-[#111827]">{item.title}</p>
+                                                <p className="mt-0.5 break-words text-[11px] leading-snug text-[#9CA3AF]">
                                                     {item.composition} | {item.age} | {item.sex}
                                                 </p>
                                             </div>
@@ -1082,8 +1082,8 @@ function GamefowlCatalogPanel({ listings = [], catalog = [] }) {
                                     ) : null}
                                 </div>
                                 <div className="p-3">
-                                    <h3 className="truncate text-sm font-bold text-[#102059]">{listing.title}</h3>
-                                    <p className="mt-0.5 truncate text-[11px] text-[#9CA3AF]">
+                                    <h3 className="break-words text-sm font-bold leading-snug text-[#102059]">{listing.title}</h3>
+                                    <p className="mt-0.5 break-words text-[11px] leading-snug text-[#9CA3AF]">
                                         {listing.composition} | {listing.age} | {listing.sex}
                                     </p>
                                     <div className="mt-2 flex flex-wrap items-start justify-between gap-x-2 gap-y-1">
