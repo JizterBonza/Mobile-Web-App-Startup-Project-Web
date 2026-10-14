@@ -259,7 +259,7 @@ function GamefowlListingDetailsModal({ gamefowl, listing = null, onClose, onSave
                     <div className="grid grid-cols-1 gap-x-8 gap-y-6 md:grid-cols-2">
                         <div>
                             <label htmlFor="listing-bloodline" className="mb-2 block text-sm font-semibold text-[#111827]">
-                                {isBundle ? 'Bundle Name' : 'Bloodline Category'}
+                                {isBundle ? 'Bundle Description' : 'Bloodline Category'}
                             </label>
                             <input id="listing-bloodline" type="text" readOnly value={gamefowl.title} className={`${fieldClass} bg-[#F9FAFB]`} />
                         </div>
@@ -564,7 +564,7 @@ function CreateGamefowlBundleModal({ catalog = [], onClose }) {
 
     const handleNext = () => {
         const missing = []
-        if (!bundleName.trim()) missing.push('Bundle Name')
+        if (!bundleName.trim()) missing.push('Bundle Description')
         if (!bundleType) missing.push('Bundle Type')
         if (!price.trim()) missing.push('Price')
         if (!stock.trim()) missing.push('Stock Quantity')
@@ -795,7 +795,7 @@ function CreateGamefowlBundleModal({ catalog = [], onClose }) {
                     <div className="grid grid-cols-1 gap-x-10 gap-y-6 md:grid-cols-2">
                         <div>
                             <label htmlFor="bundle-name" className="mb-2 block text-sm font-semibold text-[#111827]">
-                                Bundle Name
+                                Bundle Description
                             </label>
                             <input
                                 id="bundle-name"
