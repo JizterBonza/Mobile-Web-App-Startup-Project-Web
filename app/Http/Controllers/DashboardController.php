@@ -339,7 +339,9 @@ class DashboardController extends Controller
                 'required',
                 'integer',
                 Rule::exists('gamefowl_catalog', 'id')->where('status', GamefowlCatalog::STATUS_ACTIVE),
-                Rule::unique('farm_gamefowl_listings', 'gamefowl_catalog_id')->where('farm_id', $farm->id),
+                Rule::unique('farm_gamefowl_listings', 'gamefowl_catalog_id')->where(
+                    fn ($query) => $query->where('farm_id', $farm->id)->where('is_bundle', false)
+                ),
             ],
             'price' => 'required|numeric|min:0',
             'selling_unit' => 'required|string|in:per head,per pair,per trio',
@@ -366,6 +368,104 @@ class DashboardController extends Controller
             ->with('success', 'Gamefowl added to your farm list.');
     }
 
+    public function ownerManagerStoreGamefowlBundle(Request $request)
+    {
+        $farm = $this->managedFarmOrRedirect();
+        if ($farm instanceof \Illuminate\Http\RedirectResponse) {
+            return $farm;
+        }
+
+        $validated = $request->validate([
+            'bundle_name' => 'required|string|max:150',
+            'bundle_type' => 'required|string|in:Pair,Trio,Quadruplet',
+            'price' => 'required|numeric|min:0',
+            'stock' => 'required|integer|min:0',
+            'release_option' => 'required|string|in:Set Release Date,Release Immediately',
+            'release_date' => 'nullable|required_if:release_option,Set Release Date|date',
+            'stag_ids' => 'required|array',
+            'stag_ids.*' => 'integer',
+            'pullet_ids' => 'required|array',
+            'pullet_ids.*' => 'integer',
+        ]);
+
+        $expected = [
+            'Pair' => ['stag' => 1, 'pullet' => 1, 'unit' => 'per pair'],
+            'Trio' => ['stag' => 1, 'pullet' => 2, 'unit' => 'per trio'],
+            'Quadruplet' => ['stag' => 1, 'pullet' => 3, 'unit' => 'per quadruplet'],
+        ][$validated['bundle_type']];
+
+        $stagIds = array_map('intval', $validated['stag_ids']);
+        $pulletIds = array_map('intval', $validated['pullet_ids']);
+
+        if (count($stagIds) !== count(array_unique($stagIds)) || count($pulletIds) !== count(array_unique($pulletIds))) {
+            return back()->withErrors(['bundle' => 'Each gamefowl can only be selected once.']);
+        }
+
+        if (count($stagIds) !== $expected['stag'] || count($pulletIds) !== $expected['pullet']) {
+            $pulletLabel = $expected['pullet'] === 1 ? 'pullet' : 'pullets';
+
+            return back()->withErrors(['bundle' => "Select {$expected['stag']} stag and {$expected['pullet']} {$pulletLabel}."]);
+        }
+
+        if (array_intersect($stagIds, $pulletIds) !== []) {
+            return back()->withErrors(['bundle' => 'A gamefowl cannot be both the stag and a pullet.']);
+        }
+
+        $duplicateName = FarmGamefowlListing::query()
+            ->where('farm_id', $farm->id)
+            ->where('is_bundle', true)
+            ->where('bundle_name', $validated['bundle_name'])
+            ->exists();
+
+        if ($duplicateName) {
+            return back()->withErrors(['bundle_name' => 'A bundle with this name already exists.']);
+        }
+
+        $ids = array_merge($stagIds, $pulletIds);
+        $birds = GamefowlCatalog::query()
+            ->where('status', GamefowlCatalog::STATUS_ACTIVE)
+            ->whereIn('id', $ids)
+            ->get()
+            ->keyBy(fn (GamefowlCatalog $gamefowl) => (int) $gamefowl->id);
+
+        if ($birds->count() !== count($ids)) {
+            return back()->withErrors(['bundle' => 'One or more selected gamefowl are no longer available.']);
+        }
+
+        foreach ($stagIds as $id) {
+            if (! $this->gamefowlMatchesSex($birds->get($id), 'male')) {
+                return back()->withErrors(['bundle' => 'The stag selection must be a male gamefowl.']);
+            }
+        }
+
+        foreach ($pulletIds as $id) {
+            if (! $this->gamefowlMatchesSex($birds->get($id), 'female')) {
+                return back()->withErrors(['bundle' => 'Each pullet selection must be a female gamefowl.']);
+            }
+        }
+
+        $listing = FarmGamefowlListing::create([
+            'farm_id' => $farm->id,
+            'gamefowl_catalog_id' => $stagIds[0],
+            'is_bundle' => true,
+            'bundle_name' => $validated['bundle_name'],
+            'bundle_type' => $validated['bundle_type'],
+            'bundle_catalog_ids' => $ids,
+            'price' => $validated['price'],
+            'selling_unit' => $expected['unit'],
+            'stock' => $validated['stock'],
+            'release_option' => $validated['release_option'],
+            'release_date' => $validated['release_option'] === 'Set Release Date' ? $validated['release_date'] : null,
+            'popularity' => 0,
+            'status' => 'active',
+        ]);
+
+        ActivityLog::log('created', "Gamefowl bundle added to {$farm->name}", $listing, null, $listing->toArray());
+
+        return redirect('/dashboard/owner-manager/farm?tab=gamefowl')
+            ->with('success', 'Gamefowl bundle created.');
+    }
+
     public function ownerManagerUpdateGamefowlListing(Request $request, $id)
     {
         $farm = $this->managedFarmOrRedirect();
@@ -379,7 +479,7 @@ class DashboardController extends Controller
 
         $validated = $request->validate([
             'price' => 'required|numeric|min:0',
-            'selling_unit' => 'required|string|in:per head,per pair,per trio',
+            'selling_unit' => 'required|string|in:per head,per pair,per trio,per quadruplet',
             'stock' => 'required|integer|min:0',
             'release_option' => 'required|string|in:Set Release Date,Release Immediately',
             'release_date' => 'nullable|required_if:release_option,Set Release Date|date',
@@ -582,19 +682,34 @@ class DashboardController extends Controller
      */
     private function ownerManagerGamefowlListings(Farm $farm): array
     {
-        return FarmGamefowlListing::query()
+        $listings = FarmGamefowlListing::query()
             ->where('farm_id', $farm->id)
             ->with(['gamefowl.bloodline', 'gamefowl.ageType'])
             ->latest()
-            ->get()
-            ->map(function (FarmGamefowlListing $listing) {
-                $gamefowl = $listing->gamefowl;
-                $images = $gamefowl?->images ?? [];
-                $image = $images[$gamefowl?->primary_image_index ?? 0] ?? ($images[0] ?? null);
+            ->get();
 
-                return [
+        $bundleIds = $listings
+            ->filter(fn (FarmGamefowlListing $listing) => $listing->is_bundle)
+            ->flatMap(fn (FarmGamefowlListing $listing) => $listing->bundle_catalog_ids ?? [])
+            ->map(fn ($id) => (int) $id)
+            ->unique()
+            ->values();
+
+        $bundleBirds = $bundleIds->isEmpty()
+            ? collect()
+            : GamefowlCatalog::query()
+                ->with(['bloodline', 'ageType'])
+                ->whereIn('id', $bundleIds->all())
+                ->get()
+                ->keyBy(fn (GamefowlCatalog $gamefowl) => (int) $gamefowl->id);
+
+        return $listings
+            ->map(function (FarmGamefowlListing $listing) use ($bundleBirds) {
+                $gamefowl = $listing->gamefowl;
+                $payload = [
                     'id' => $listing->id,
-                    'catalog_id' => $listing->gamefowl_catalog_id,
+                    'catalog_id' => $listing->is_bundle ? null : $listing->gamefowl_catalog_id,
+                    'is_bundle' => (bool) $listing->is_bundle,
                     'title' => $gamefowl?->bloodline?->name ?: $gamefowl?->name,
                     'composition' => $gamefowl?->name,
                     'age' => $gamefowl?->ageType?->name,
@@ -607,10 +722,46 @@ class DashboardController extends Controller
                     'release_date' => $listing->release_date?->format('Y-m-d'),
                     'popularity' => $listing->popularity,
                     'status' => $listing->status,
-                    'image' => $image,
+                    'image' => $this->gamefowlPrimaryImage($gamefowl),
                 ];
+
+                if (! $listing->is_bundle) {
+                    return $payload;
+                }
+
+                $members = collect($listing->bundle_catalog_ids ?? [])
+                    ->map(fn ($id) => $bundleBirds->get((int) $id))
+                    ->filter();
+                $names = $members
+                    ->map(fn (GamefowlCatalog $bird) => $bird->bloodline?->name ?: $bird->name)
+                    ->filter()
+                    ->values();
+
+                $payload['title'] = $listing->bundle_name ?: 'Gamefowl Bundle';
+                $payload['composition'] = $names->isNotEmpty() ? $names->join(', ') : ($listing->bundle_type ?: 'Bundle');
+                $payload['age'] = $listing->bundle_type;
+                $payload['sex'] = 'Bundle';
+                $payload['category'] = $listing->bundle_type ?: 'Bundle';
+
+                return $payload;
             })
             ->all();
+    }
+
+    private function gamefowlPrimaryImage(?GamefowlCatalog $gamefowl): ?string
+    {
+        $images = $gamefowl?->images ?? [];
+
+        return $images[$gamefowl?->primary_image_index ?? 0] ?? ($images[0] ?? null);
+    }
+
+    private function gamefowlMatchesSex(?GamefowlCatalog $gamefowl, string $sex): bool
+    {
+        $value = strtolower(trim((string) ($gamefowl?->sex ?? '')));
+
+        return $sex === 'male'
+            ? in_array($value, ['male', 'm'], true)
+            : in_array($value, ['female', 'f'], true);
     }
 
     public function ownerManagerStores()

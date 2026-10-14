@@ -108,6 +108,7 @@ function normalizeListing(item) {
         popularity: item.popularity ?? 0,
         status: String(item.status || 'active').toLowerCase(),
         image: storageUrl(item.image || item.image_url || null),
+        isBundle: Boolean(item.is_bundle || item.isBundle),
     }
 }
 
@@ -149,6 +150,7 @@ function GamefowlListingDetailsModal({ gamefowl, listing = null, onClose, onSave
     const [releaseOption, setReleaseOption] = useState(() => (isEdit ? listing.releaseOption || '' : ''))
     const [releaseDate, setReleaseDate] = useState(() => (isEdit ? listing.releaseDateIso || '' : ''))
     const [error, setError] = useState('')
+    const isBundle = Boolean(listing?.isBundle || gamefowl?.isBundle)
 
     useEffect(() => {
         const onKey = (event) => {
@@ -257,13 +259,13 @@ function GamefowlListingDetailsModal({ gamefowl, listing = null, onClose, onSave
                     <div className="grid grid-cols-1 gap-x-8 gap-y-6 md:grid-cols-2">
                         <div>
                             <label htmlFor="listing-bloodline" className="mb-2 block text-sm font-semibold text-[#111827]">
-                                Bloodline Category
+                                {isBundle ? 'Bundle Name' : 'Bloodline Category'}
                             </label>
                             <input id="listing-bloodline" type="text" readOnly value={gamefowl.title} className={`${fieldClass} bg-[#F9FAFB]`} />
                         </div>
                         <div>
                             <label htmlFor="listing-composition" className="mb-2 block text-sm font-semibold text-[#111827]">
-                                Bloodline Composition
+                                {isBundle ? 'Included Gamefowl' : 'Bloodline Composition'}
                             </label>
                             <input id="listing-composition" type="text" readOnly value={gamefowl.composition} className={`${fieldClass} bg-[#F9FAFB]`} />
                         </div>
@@ -299,6 +301,7 @@ function GamefowlListingDetailsModal({ gamefowl, listing = null, onClose, onSave
                                         <option value="per head">per head</option>
                                         <option value="per pair">per pair</option>
                                         <option value="per trio">per trio</option>
+                                        {isBundle && <option value="per quadruplet">per quadruplet</option>}
                                     </select>
                                     <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#9CA3AF]" />
                                 </div>
@@ -529,6 +532,7 @@ function CreateGamefowlBundleModal({ catalog = [], onClose }) {
     const [query, setQuery] = useState('')
     const [selected, setSelected] = useState({ stag: [], pullet: [] })
     const [selectError, setSelectError] = useState('')
+    const [saving, setSaving] = useState(false)
 
     const bundleSelection = {
         Pair: { stag: 1, pullet: 1, heading: 'Select 1 Stag and 1 Pullet only', requirement: 'Select 1 stag and 1 pullet.' },
@@ -625,7 +629,6 @@ function CreateGamefowlBundleModal({ catalog = [], onClose }) {
 
                     <div className="overflow-y-auto border-t border-[#E5E7EB] px-6 py-5">
                         <h3 className="text-sm font-semibold text-[#111827]">{bundleSelection.heading}</h3>
-                        {selectError && <p className="mt-2 text-sm text-[#E20E28]">{selectError}</p>}
                         <div className="mt-4 grid grid-cols-2 gap-3">
                             {[
                                 ['stag', `Stag (${bundleSelection.stag})`],
@@ -705,7 +708,10 @@ function CreateGamefowlBundleModal({ catalog = [], onClose }) {
                         )}
                     </div>
 
-                    <div className="flex items-center justify-between border-t border-[#E5E7EB] px-6 py-4">
+                    {selectError && (
+                        <p className="border-t border-[#E5E7EB] px-6 pt-4 text-sm text-[#E20E28]">{selectError}</p>
+                    )}
+                    <div className={`flex items-center justify-between px-6 py-4 ${selectError ? '' : 'border-t border-[#E5E7EB]'}`}>
                         <button
                             type="button"
                             onClick={() => setStep('details')}
@@ -715,16 +721,42 @@ function CreateGamefowlBundleModal({ catalog = [], onClose }) {
                         </button>
                         <button
                             type="button"
+                            disabled={saving}
                             onClick={() => {
                                 if (selected.stag.length !== bundleSelection.stag || selected.pullet.length !== bundleSelection.pullet) {
                                     setSelectError(bundleSelection.requirement)
                                     return
                                 }
                                 setSelectError('')
+                                setSaving(true)
+                                router.post(
+                                    '/dashboard/owner-manager/farm/gamefowls/bundles',
+                                    {
+                                        bundle_name: bundleName.trim(),
+                                        bundle_type: bundleType,
+                                        price,
+                                        stock,
+                                        release_option: releaseOption,
+                                        release_date: releaseOption === 'Set Release Date' ? releaseDate : null,
+                                        stag_ids: selected.stag.map((item) => item.id),
+                                        pullet_ids: selected.pullet.map((item) => item.id),
+                                    },
+                                    {
+                                        preserveScroll: true,
+                                        preserveState: true,
+                                        onSuccess: () => onClose(),
+                                        onError: (errors) => {
+                                            const first = Object.values(errors)[0]
+                                            const message = Array.isArray(first) ? first[0] : first
+                                            setSelectError(typeof message === 'string' ? message : 'Could not create this bundle.')
+                                        },
+                                        onFinish: () => setSaving(false),
+                                    },
+                                )
                             }}
-                            className="rounded-lg bg-[#102059] px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#244693]"
+                            className="rounded-lg bg-[#102059] px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#244693] disabled:opacity-50"
                         >
-                            Create Bundle
+                            {saving ? 'Creating...' : 'Create Bundle'}
                         </button>
                     </div>
                 </div>

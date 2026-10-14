@@ -9,6 +9,10 @@ class FarmGamefowlListing extends Model
     protected $fillable = [
         'farm_id',
         'gamefowl_catalog_id',
+        'is_bundle',
+        'bundle_name',
+        'bundle_type',
+        'bundle_catalog_ids',
         'price',
         'selling_unit',
         'stock',
@@ -21,6 +25,8 @@ class FarmGamefowlListing extends Model
     protected function casts(): array
     {
         return [
+            'is_bundle' => 'boolean',
+            'bundle_catalog_ids' => 'array',
             'price' => 'float',
             'stock' => 'integer',
             'popularity' => 'integer',

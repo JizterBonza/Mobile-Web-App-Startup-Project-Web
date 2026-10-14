@@ -442,10 +442,13 @@ class ShopMessagingService
 
         $term = trim((string) $search);
         if ($term !== '') {
-            $query->whereHas('gamefowl', function ($gamefowl) use ($term) {
-                $gamefowl->where('name', 'like', '%'.$term.'%')
-                    ->orWhereHas('bloodline', function ($bloodline) use ($term) {
-                        $bloodline->where('name', 'like', '%'.$term.'%');
+            $query->where(function ($inner) use ($term) {
+                $inner->where('bundle_name', 'like', '%'.$term.'%')
+                    ->orWhereHas('gamefowl', function ($gamefowl) use ($term) {
+                        $gamefowl->where('name', 'like', '%'.$term.'%')
+                            ->orWhereHas('bloodline', function ($bloodline) use ($term) {
+                                $bloodline->where('name', 'like', '%'.$term.'%');
+                            });
                     });
             });
         }
@@ -500,7 +503,9 @@ class ShopMessagingService
         $gamefowl = $listing->gamefowl;
         $images = $gamefowl?->images ?? [];
         $image = $images[$gamefowl?->primary_image_index ?? 0] ?? ($images[0] ?? null);
-        $name = $gamefowl?->bloodline?->name ?: $gamefowl?->name ?: 'Gamefowl';
+        $name = ($listing->is_bundle && filled($listing->bundle_name))
+            ? $listing->bundle_name
+            : ($gamefowl?->bloodline?->name ?: $gamefowl?->name ?: 'Gamefowl');
         $price = round((float) $listing->price, 2);
 
         return [
