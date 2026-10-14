@@ -49,11 +49,11 @@ class Order extends Model
     ];
 
     /**
-     * Attributes to append for API (resolved from order_shops).
+     * Attributes to append for API (resolved from related order data).
      *
      * @var array<int, string>
      */
-    protected $appends = ['order_status', 'rider_id'];
+    protected $appends = ['order_status', 'delivery_method_id', 'rider_id'];
 
     /**
      * Get the attributes that should be cast.
@@ -131,6 +131,18 @@ class Order extends Model
             return $this->orderShops->first()->order_status;
         }
         return $value;
+    }
+
+    /**
+     * Expose the delivery method from the order detail on the order itself.
+     */
+    public function getDeliveryMethodIdAttribute(): ?int
+    {
+        if (! $this->relationLoaded('orderDetail')) {
+            return null;
+        }
+
+        return $this->orderDetail?->delivery_method_id;
     }
 
     /**

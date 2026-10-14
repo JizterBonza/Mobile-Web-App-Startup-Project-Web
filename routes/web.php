@@ -29,12 +29,17 @@ use App\Http\Controllers\KlasrumCategoryController;
 use App\Http\Controllers\KlasrumContentController;
 use App\Http\Controllers\KlasrumPostEngagementController;
 use App\Http\Controllers\PublicStorageController;
+use App\Http\Controllers\PublicAppDownloadController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
 Route::get('/', function () {
     return Inertia::render('Welcome');
 });
+
+Route::get('/download/android', [PublicAppDownloadController::class, 'android'])
+    ->middleware('throttle:20,1')
+    ->name('download.android');
 
 Route::post('/contact', [ContactMessageController::class, 'publicStore'])
     ->middleware('throttle:5,1')
