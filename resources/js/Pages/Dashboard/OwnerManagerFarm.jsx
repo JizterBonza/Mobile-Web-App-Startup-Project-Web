@@ -299,9 +299,7 @@ function GamefowlListingDetailsModal({ gamefowl, listing = null, onClose, onSave
                                     >
                                         <option value="">Select Selling Unit</option>
                                         <option value="per head">per head</option>
-                                        <option value="per pair">per pair</option>
-                                        <option value="per trio">per trio</option>
-                                        {isBundle && <option value="per quadruplet">per quadruplet</option>}
+                                        <option value="per dozen">per dozen</option>
                                     </select>
                                     <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#9CA3AF]" />
                                 </div>
