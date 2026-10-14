@@ -436,9 +436,6 @@ export default function RegisterGamefowl({ auth, bloodlines = [], ageTypes = [],
                                     ))}
                                 </div>
                                 <p className="mt-3 text-xs text-[#6B7280]">Primary thumbnail: Photo {primaryPhotoIndex + 1}</p>
-                                <div className="mt-4 border-t border-[#EEF0F4] pt-3">
-                                    <p className="text-sm text-[#6B7280]">Description</p>
-                                </div>
                             </div>
 
                             <div className="mt-6 rounded-lg border border-[#BFDBFE] bg-[#EFF6FF] px-4 py-3 text-sm text-[#1E3A8A]">
