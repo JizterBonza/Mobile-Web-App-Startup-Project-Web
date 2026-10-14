@@ -91,9 +91,17 @@ export default function RegisterGamefowl({ auth, bloodlines = [], ageTypes = [],
             next[index] = { preview, file }
             return next
         })
+
+        if (!uploadedPhotos[primaryPhotoIndex]) {
+            setPrimaryPhotoIndex(index)
+            form.setData('primary_image_index', index)
+        }
     }
 
-    const handlePrimaryChange = (index) => {
+    const handlePrimaryChange = (index, event) => {
+        event.preventDefault()
+        event.stopPropagation()
+        if (!uploadedPhotos[index]) return
         setPrimaryPhotoIndex(index)
         form.setData('primary_image_index', index)
     }
@@ -349,22 +357,34 @@ export default function RegisterGamefowl({ auth, bloodlines = [], ageTypes = [],
                                         {uploadedPhotos[index] && (
                                             <button
                                                 type="button"
-                                                onClick={() => handlePrimaryChange(index)}
+                                                onClick={(event) => handlePrimaryChange(index, event)}
                                                 title="Set as primary thumbnail"
-                                                className={`absolute top-2 right-2 rounded-full p-1.5 shadow-md ${
-                                                    primaryPhotoIndex === index ? 'bg-[#D3A218]' : 'bg-[#6B7280]/80 hover:bg-[#6B7280]'
+                                                aria-pressed={primaryPhotoIndex === index}
+                                                className={`absolute -top-2 -right-2 z-10 rounded-full p-1 shadow-md transition-all ${
+                                                    primaryPhotoIndex === index ? 'bg-[#D3A218]' : 'bg-[#6B7280] opacity-60 hover:opacity-100'
                                                 }`}
                                             >
-                                                <Star className="h-3.5 w-3.5 text-white" fill={primaryPhotoIndex === index ? 'white' : 'none'} />
+                                                <Star
+                                                    className="h-3.5 w-3.5 text-white"
+                                                    fill={primaryPhotoIndex === index ? 'white' : 'none'}
+                                                />
                                             </button>
                                         )}
+                                        <div className="mt-2 text-center">
+                                            <span className="text-xs font-semibold text-[#6B7280]">
+                                                {uploadedPhotos[index] && primaryPhotoIndex === index
+                                                    ? <span className="text-[#D3A218]">Primary</span>
+                                                    : `Photo ${index + 1}`
+                                                }
+                                            </span>
+                                        </div>
                                     </div>
                                 ))}
                             </div>
                             {form.errors.images && <p className="mt-3 text-xs text-[#E20E28]">{form.errors.images}</p>}
 
                             <div className="mt-6 rounded-lg border border-[#BFDBFE] bg-[#EFF6FF] px-4 py-3 text-sm text-[#1E3A8A]">
-                                <span className="font-semibold">Tip:</span> The primary thumbnail (marked with a gold star) will be displayed as the main image in product listings. Click the star icon on any photo to set it as primary.
+                                <span className="font-semibold">Tip:</span> The primary thumbnail (marked with a gold star) will be displayed as the main image in gamefowl listings. Click the star icon on any photo to set it as primary.
                             </div>
 
                             <div className="mt-8 flex items-center justify-between">
@@ -403,16 +423,19 @@ export default function RegisterGamefowl({ auth, bloodlines = [], ageTypes = [],
                             <div className="rounded-lg border border-[#EEF0F4] bg-[#F8FAFC] p-4">
                                 <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
                                     {uploadedPhotos.map((photo, index) => (
-                                        <div key={index} className="relative aspect-[3/4] overflow-hidden rounded-lg bg-[#E5E7EB]">
-                                            {photo && <img src={photo.preview} alt={`Gamefowl ${index + 1}`} className="h-full w-full object-cover" />}
+                                        <div key={index} className="relative">
+                                            <div className="aspect-[3/4] overflow-hidden rounded-lg bg-[#E5E7EB]">
+                                                {photo && <img src={photo.preview} alt={`Gamefowl ${index + 1}`} className="h-full w-full object-cover" />}
+                                            </div>
                                             {photo && primaryPhotoIndex === index && (
-                                                <div className="absolute top-2 right-2 rounded-full bg-[#D3A218] p-1.5">
-                                                    <Star className="h-3.5 w-3.5 text-white" fill="white" />
+                                                <div className="absolute -top-1 -right-1 rounded-full bg-[#D3A218] p-0.5">
+                                                    <Star className="h-3 w-3 text-white" fill="white" />
                                                 </div>
                                             )}
                                         </div>
                                     ))}
                                 </div>
+                                <p className="mt-3 text-xs text-[#6B7280]">Primary thumbnail: Photo {primaryPhotoIndex + 1}</p>
                                 <div className="mt-4 border-t border-[#EEF0F4] pt-3">
                                     <p className="text-sm text-[#6B7280]">Description</p>
                                 </div>
