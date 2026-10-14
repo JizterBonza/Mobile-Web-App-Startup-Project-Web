@@ -13,17 +13,22 @@ return new class extends Migration
             return;
         }
 
+        $this->dropShopForeignKeys();
+
         Schema::table('shop_conversations', function (Blueprint $table) {
-            $table->dropForeign(['shop_id']);
-            $table->dropUnique('shop_conv_shop_customer_unique');
+            $table->unsignedBigInteger('shop_id')->nullable()->change();
         });
 
-        DB::statement('ALTER TABLE shop_conversations MODIFY shop_id BIGINT UNSIGNED NULL');
+        $hasShopCustomerUnique = Schema::hasIndex('shop_conversations', 'shop_conv_shop_customer_unique');
 
-        Schema::table('shop_conversations', function (Blueprint $table) {
+        Schema::table('shop_conversations', function (Blueprint $table) use ($hasShopCustomerUnique) {
             $table->foreignId('farm_id')->nullable()->after('shop_id')->constrained('farms')->cascadeOnDelete();
             $table->foreign('shop_id')->references('id')->on('shops')->cascadeOnDelete();
-            $table->unique(['shop_id', 'customer_user_id'], 'shop_conv_shop_customer_unique');
+
+            if (! $hasShopCustomerUnique) {
+                $table->unique(['shop_id', 'customer_user_id'], 'shop_conv_shop_customer_unique');
+            }
+
             $table->unique(['farm_id', 'customer_user_id'], 'shop_conv_farm_customer_unique');
             $table->index(['farm_id', 'last_message_at'], 'shop_conv_farm_last_msg_idx');
         });
@@ -37,19 +42,30 @@ return new class extends Migration
 
         DB::table('shop_conversations')->whereNull('shop_id')->delete();
 
+        $this->dropShopForeignKeys();
+
         Schema::table('shop_conversations', function (Blueprint $table) {
             $table->dropIndex('shop_conv_farm_last_msg_idx');
             $table->dropUnique('shop_conv_farm_customer_unique');
-            $table->dropUnique('shop_conv_shop_customer_unique');
-            $table->dropForeign(['shop_id']);
             $table->dropConstrainedForeignId('farm_id');
         });
 
-        DB::statement('ALTER TABLE shop_conversations MODIFY shop_id BIGINT UNSIGNED NOT NULL');
-
         Schema::table('shop_conversations', function (Blueprint $table) {
+            $table->unsignedBigInteger('shop_id')->nullable(false)->change();
             $table->foreign('shop_id')->references('id')->on('shops')->cascadeOnDelete();
-            $table->unique(['shop_id', 'customer_user_id'], 'shop_conv_shop_customer_unique');
         });
+    }
+
+    private function dropShopForeignKeys(): void
+    {
+        foreach (Schema::getForeignKeys('shop_conversations') as $foreignKey) {
+            if ($foreignKey['columns'] !== ['shop_id']) {
+                continue;
+            }
+
+            Schema::table('shop_conversations', function (Blueprint $table) use ($foreignKey) {
+                $table->dropForeign($foreignKey['name'] ?? $foreignKey['columns']);
+            });
+        }
     }
 };
