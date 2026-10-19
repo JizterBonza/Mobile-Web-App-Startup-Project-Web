@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\CreatesProductCatalogEntry;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
@@ -12,6 +13,8 @@ use App\Models\SubCategory;
 
 class SuperAdminProductController extends Controller
 {
+    use CreatesProductCatalogEntry;
+
     /**
      * List all product catalog entries.
      */
@@ -81,24 +84,9 @@ class SuperAdminProductController extends Controller
      */
     public function store(Request $request)
     {
-        $request->validate([
-            'brand'               => 'nullable|string|max:150',
-            'product_name'        => 'required|string|max:150',
-            'category_id'         => 'nullable|exists:category,id',
-            'sub_category_id'     => 'nullable|exists:sub_categories,id',
-            'weight'              => 'nullable|numeric|min:0',
-            'unit'                => 'nullable|string|max:50',
-            'description'         => 'nullable|string|max:320',
-            'images'              => 'required|array|min:5|max:5',
-            'images.*'            => 'required|image|mimes:jpeg,png,jpg,gif,webp|max:5120',
-            'primary_image_index' => 'required|integer|min:0|max:4',
-        ]);
+        $request->validate($this->productCatalogValidationRules());
 
-        $imagePaths = [];
-        foreach ($request->file('images') as $image) {
-            $path = $image->store('product-catalog', 'public');
-            $imagePaths[] = '/storage/' . $path;
-        }
+        $stored = $this->catalogImagesFromRequest($request);
 
         $catalog = ProductCatalog::create([
             'brand'               => $request->brand,
@@ -108,8 +96,8 @@ class SuperAdminProductController extends Controller
             'weight'              => $request->weight,
             'unit'                => $request->unit,
             'description'         => $request->description,
-            'images'              => $imagePaths,
-            'primary_image_index' => $request->primary_image_index ?? 0,
+            'images'              => $stored['images'],
+            'primary_image_index' => $stored['primary_image_index'],
             'status'              => ProductCatalog::STATUS_ACTIVE,
             'created_by'          => auth()->id(),
             'reviewed_by'         => auth()->id(),
@@ -199,11 +187,21 @@ class SuperAdminProductController extends Controller
             }
         }
 
-        if (count($imagePaths) < 5) {
+        if (count($imagePaths) < 1) {
             return back()
                 ->withInput()
-                ->withErrors(['images' => 'Please keep or replace all 5 product images.']);
+                ->withErrors(['images' => 'Please keep at least 1 product image. You can upload up to 5.']);
         }
+
+        ksort($imagePaths);
+        $orderedImages = [];
+        $storedIndexBySlot = [];
+        foreach ($imagePaths as $slot => $path) {
+            $storedIndexBySlot[(int) $slot] = count($orderedImages);
+            $orderedImages[] = $path;
+        }
+
+        $primarySlot = (int) ($request->primary_image_index ?? 0);
 
         $catalog->update([
             'brand'               => $request->brand,
@@ -213,8 +211,8 @@ class SuperAdminProductController extends Controller
             'weight'              => $request->weight,
             'unit'                => $request->unit,
             'description'         => $request->description,
-            'images'              => array_values($imagePaths),
-            'primary_image_index' => $request->primary_image_index ?? 0,
+            'images'              => $orderedImages,
+            'primary_image_index' => $storedIndexBySlot[$primarySlot] ?? 0,
             'status'              => $request->status,
         ]);
 

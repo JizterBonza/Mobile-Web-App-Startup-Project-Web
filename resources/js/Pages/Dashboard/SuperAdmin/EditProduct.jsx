@@ -84,10 +84,15 @@ export default function SuperAdminEditProduct({
 
         if (currentStep === 2) {
             const uploadedCount = uploadedPhotos.filter(p => p !== null).length
-            if (uploadedCount < 5) {
-                setErrorMessage(`Please keep or replace all 5 product images. You currently have ${uploadedCount} out of 5.`)
+            if (uploadedCount < 1) {
+                setErrorMessage('Please keep at least 1 product image. You can upload up to 5.')
                 window.scrollTo({ top: 0, behavior: 'smooth' })
                 return
+            }
+            if (!uploadedPhotos[primaryPhotoIndex]) {
+                const firstFilled = uploadedPhotos.findIndex(p => p !== null)
+                setPrimaryPhotoIndex(firstFilled)
+                form.setData('primary_image_index', firstFilled)
             }
         }
 
@@ -355,7 +360,8 @@ export default function SuperAdminEditProduct({
 
                         <div className="space-y-6">
                             <p className="text-sm text-[#6B7280]">
-                                Keep the existing photos or replace any slot, then select the primary thumbnail.{' '}
+                                Keep or replace photos, then select the primary thumbnail.
+                                At least 1 image is required, and 5 is the maximum.{' '}
                                 <span className="text-[#E20E28]">*</span>
                             </p>
 
@@ -473,14 +479,12 @@ export default function SuperAdminEditProduct({
                                 </h3>
                                 <div className="rounded-lg bg-[#F9FAFB] p-4">
                                     <div className="grid grid-cols-5 gap-3">
-                                        {uploadedPhotos.map((photo, index) => (
+                                        {uploadedPhotos.map((photo, index) => photo && (
                                             <div key={index} className="relative">
                                                 <div className="aspect-square overflow-hidden rounded-lg border-2 border-[#E5E7EB]">
-                                                    {photo && (
-                                                        <img src={photo.preview} alt={`Product ${index + 1}`} className="h-full w-full object-cover" />
-                                                    )}
+                                                    <img src={photo.preview} alt={`Product ${index + 1}`} className="h-full w-full object-cover" />
                                                 </div>
-                                                {primaryPhotoIndex === index && photo && (
+                                                {primaryPhotoIndex === index && (
                                                     <div className="absolute -top-1 -right-1 rounded-full bg-[#D3A218] p-0.5">
                                                         <Star className="h-3 w-3 text-white" fill="white" />
                                                     </div>

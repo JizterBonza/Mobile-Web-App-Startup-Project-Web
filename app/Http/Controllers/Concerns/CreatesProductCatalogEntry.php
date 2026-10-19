@@ -20,9 +20,40 @@ trait CreatesProductCatalogEntry
             'weight'              => 'nullable|numeric|min:0',
             'unit'                => 'nullable|string|max:50',
             'description'         => 'nullable|string|max:320',
-            'images'              => 'required|array|min:5|max:5',
+            'images'              => 'required|array|min:1|max:5',
             'images.*'            => 'required|image|mimes:jpeg,png,jpg,gif,webp|max:5120',
             'primary_image_index' => 'required|integer|min:0|max:4',
+        ];
+    }
+
+    /**
+     * Store uploaded slots in order and map the chosen slot to the saved image list.
+     *
+     * @return array{images: array<int, string>, primary_image_index: int}
+     */
+    protected function catalogImagesFromRequest(Request $request): array
+    {
+        $files = $request->file('images') ?? [];
+        ksort($files);
+
+        $imagePaths = [];
+        $storedIndexBySlot = [];
+
+        foreach ($files as $slot => $image) {
+            if (! $image) {
+                continue;
+            }
+
+            $path = $image->store('product-catalog', 'public');
+            $storedIndexBySlot[(int) $slot] = count($imagePaths);
+            $imagePaths[] = '/storage/' . $path;
+        }
+
+        $primarySlot = (int) $request->input('primary_image_index', 0);
+
+        return [
+            'images' => $imagePaths,
+            'primary_image_index' => $storedIndexBySlot[$primarySlot] ?? 0,
         ];
     }
 
@@ -30,11 +61,7 @@ trait CreatesProductCatalogEntry
     {
         $request->validate($this->productCatalogValidationRules());
 
-        $imagePaths = [];
-        foreach ($request->file('images') as $image) {
-            $path = $image->store('product-catalog', 'public');
-            $imagePaths[] = '/storage/' . $path;
-        }
+        $stored = $this->catalogImagesFromRequest($request);
 
         return ProductCatalog::create([
             'brand'               => $request->brand,
@@ -44,8 +71,8 @@ trait CreatesProductCatalogEntry
             'weight'              => $request->weight,
             'unit'                => $request->unit,
             'description'         => $request->description,
-            'images'              => $imagePaths,
-            'primary_image_index' => $request->primary_image_index ?? 0,
+            'images'              => $stored['images'],
+            'primary_image_index' => $stored['primary_image_index'],
             'status'              => $status,
             'created_by'          => auth()->id(),
         ]);
