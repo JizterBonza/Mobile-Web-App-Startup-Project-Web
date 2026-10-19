@@ -101,25 +101,28 @@ export default function RegisterProduct({
         e.preventDefault()
         if (currentStep !== 3) return
 
-        const fd = new FormData()
-        fd.append('brand',               form.data.brand)
-        fd.append('product_name',        form.data.product_name)
-        fd.append('category_id',         form.data.category_id)
-        fd.append('sub_category_id',     form.data.sub_category_id)
-        fd.append('weight',              form.data.weight)
-        fd.append('unit',                form.data.unit)
-        fd.append('description',         form.data.description)
-        fd.append('primary_image_index', primaryPhotoIndex)
+        form.transform((data) => {
+            const images = {}
+            uploadedPhotos.forEach((slot, index) => {
+                if (slot?.file) images[index] = slot.file
+            })
 
-        uploadedPhotos.forEach((slot, i) => {
-            if (slot?.file) fd.append(`images[${i}]`, slot.file)
+            return {
+                ...data,
+                images,
+                primary_image_index: primaryPhotoIndex,
+            }
         })
 
         form.post(submitUrl, {
-            data: fd,
             preserveScroll: true,
             forceFormData: true,
             onSuccess: () => setShowSuccessModal(true),
+            onError: (errors) => {
+                const first = Object.values(errors)[0]
+                setErrorMessage(typeof first === 'string' ? first : 'Please fix the highlighted fields and try again.')
+                window.scrollTo({ top: 0, behavior: 'smooth' })
+            },
         })
     }
 

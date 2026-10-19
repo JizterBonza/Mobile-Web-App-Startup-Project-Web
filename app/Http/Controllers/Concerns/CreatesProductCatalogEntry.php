@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Concerns;
 
 use App\Models\ProductCatalog;
 use Illuminate\Http\Request;
+use Symfony\Component\HttpFoundation\File\UploadedFile;
 
 trait CreatesProductCatalogEntry
 {
@@ -24,6 +25,28 @@ trait CreatesProductCatalogEntry
             'images.*'            => 'required|image|mimes:jpeg,png,jpg,gif,webp|max:5120',
             'primary_image_index' => 'required|integer|min:0|max:4',
         ];
+    }
+
+    /**
+     * Drop blank image slots so unused upload boxes are not validated as images.
+     */
+    protected function keepOnlyUploadedCatalogImages(Request $request): void
+    {
+        $images = $request->files->get('images');
+        $uploaded = [];
+
+        if (is_array($images)) {
+            foreach ($images as $slot => $file) {
+                if ($file instanceof UploadedFile && $file->isValid()) {
+                    $uploaded[$slot] = $file;
+                }
+            }
+        }
+
+        // Blank slots are posted as empty strings. Remove them so validation
+        // only sees the photos that were actually uploaded.
+        $request->request->remove('images');
+        $request->files->set('images', $uploaded);
     }
 
     /**
@@ -59,6 +82,7 @@ trait CreatesProductCatalogEntry
 
     protected function createProductCatalogFromRequest(Request $request, string $status): ProductCatalog
     {
+        $this->keepOnlyUploadedCatalogImages($request);
         $request->validate($this->productCatalogValidationRules());
 
         $stored = $this->catalogImagesFromRequest($request);
