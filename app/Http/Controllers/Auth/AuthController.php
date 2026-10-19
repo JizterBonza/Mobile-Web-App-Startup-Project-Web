@@ -54,6 +54,11 @@ class AuthController extends Controller
      */
     public function showLogin()
     {
+        $dashboard = Auth::user()?->getWebDashboardUrl();
+        if ($dashboard) {
+            return redirect($dashboard);
+        }
+
         return Inertia::render('Auth/Login', [
             'googleClientId' => config('services.google.client_id'),
         ]);

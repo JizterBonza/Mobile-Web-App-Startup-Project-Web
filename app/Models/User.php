@@ -129,6 +129,21 @@ class User extends Authenticatable
     }
 
     /**
+     * Dashboard path for roles that use this web app, or null when this account has no web dashboard.
+     */
+    public function getWebDashboardUrl(): ?string
+    {
+        return match ($this->user_type) {
+            self::TYPE_SUPER_ADMIN,
+            self::TYPE_ADMIN,
+            self::TYPE_VENDOR,
+            self::TYPE_OWNER_MANAGER,
+            self::TYPE_VETERINARIAN => $this->getDashboardUrl(),
+            default => null,
+        };
+    }
+
+    /**
      * Agrivet this owner/manager account manages (stores under this business).
      */
     public function managedAgrivet()

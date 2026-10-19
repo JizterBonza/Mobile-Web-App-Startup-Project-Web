@@ -34,6 +34,12 @@ use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
 Route::get('/', function () {
+    $dashboard = auth()->user()?->getWebDashboardUrl();
+
+    if ($dashboard) {
+        return redirect($dashboard);
+    }
+
     return Inertia::render('Welcome');
 });
 
@@ -92,7 +98,11 @@ Route::middleware(['auth', 'session.valid', 'user.type:super_admin|admin'])->pre
     Route::post('/{content}/toggle-publish', [KlasrumContentController::class, 'togglePublish'])->name('toggle-publish')->whereNumber('content');
 });
 
-Route::redirect('/admin', '/login');
+Route::get('/admin', function () {
+    $dashboard = auth()->user()?->getWebDashboardUrl();
+
+    return redirect($dashboard ?? '/login');
+});
 Route::redirect('/register', '/login');
 Route::redirect('/register-store', '/login');
 
