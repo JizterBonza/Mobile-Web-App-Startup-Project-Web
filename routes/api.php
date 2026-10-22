@@ -7,6 +7,7 @@ use App\Http\Controllers\AppReleaseApiController;
 use App\Http\Controllers\CartController;
 use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\CustomerShopMessageController;
+use App\Http\Controllers\FarmApiController;
 use App\Http\Controllers\FavoriteController;
 use App\Http\Controllers\ItemController;
 use App\Http\Controllers\KlasrumApiController;
@@ -81,6 +82,15 @@ Route::get('shops/agrivet/{agrivetId}', [ShopController::class, 'getByAgrivetId'
 Route::get('shops/{id}/items', [ShopController::class, 'getShopWithItems']);
 Route::get('shops/{id}/reviews', [ShopController::class, 'getShopWithReviews']);
 Route::get('shops/{id}', [ShopController::class, 'show']);
+
+// Mobile farm discovery and individual / bundle listings
+Route::get('farms/search', [FarmApiController::class, 'search']);
+Route::get('farms/nearby', [FarmApiController::class, 'nearby']);
+Route::get('farms', [FarmApiController::class, 'index']);
+Route::get('farms/{id}/listings', [FarmApiController::class, 'farmListings'])->whereNumber('id');
+Route::get('farms/{id}', [FarmApiController::class, 'show'])->whereNumber('id');
+Route::get('farm-gamefowl-listings', [FarmApiController::class, 'listings']);
+Route::get('farm-gamefowl-listings/{id}', [FarmApiController::class, 'listing'])->whereNumber('id');
 
 // Reference data
 Route::get('delivery-methods', [MobileController::class, 'getDeliveryMethods']);
