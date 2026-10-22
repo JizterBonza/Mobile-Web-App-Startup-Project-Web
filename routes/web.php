@@ -5,6 +5,7 @@ use App\Http\Controllers\Auth\GoogleAuthController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\AgrivetController;
 use App\Http\Controllers\AppReleaseController;
+use App\Http\Controllers\BreederController;
 use App\Http\Controllers\FarmController;
 use App\Http\Controllers\GamefowlCatalogController;
 use App\Http\Controllers\GamefowlLookupController;
@@ -209,6 +210,8 @@ Route::middleware(['auth', 'session.valid', 'user.type:super_admin'])->prefix('d
     Route::get('/vendor-registration', [UserController::class, 'vendorRegistration'])->name('vendor-registration');
     Route::get('/veterinarian-registration', [UserController::class, 'veterinarianRegistration'])->name('veterinarian-registration');
     Route::get('/rider-registration', [UserController::class, 'riderRegistration'])->name('rider-registration');
+    Route::get('/breeder-registration', [BreederController::class, 'create'])->name('breeder-registration');
+    Route::post('/breeder-registration', [BreederController::class, 'store'])->name('breeder-registration.store');
     Route::post('/clear-all-data', [UserController::class, 'clearAllPlatformData'])->name('clear-all-data');
     Route::post('/', [UserController::class, 'store'])->name('store');
     Route::put('/{id}', [UserController::class, 'update'])->name('update');
@@ -455,6 +458,8 @@ Route::middleware(['auth', 'session.valid', 'user.type:admin'])->prefix('dashboa
     Route::get('/vendor-registration', [UserController::class, 'vendorRegistration'])->name('vendor-registration');
     Route::get('/veterinarian-registration', [UserController::class, 'veterinarianRegistration'])->name('veterinarian-registration');
     Route::get('/rider-registration', [UserController::class, 'riderRegistration'])->name('rider-registration');
+    Route::get('/breeder-registration', [BreederController::class, 'create'])->name('breeder-registration');
+    Route::post('/breeder-registration', [BreederController::class, 'store'])->name('breeder-registration.store');
     Route::post('/', [UserController::class, 'store'])->name('store');
     Route::put('/{id}', [UserController::class, 'update'])->name('update');
     Route::delete('/{id}', [UserController::class, 'deactivate'])->name('deactivate');

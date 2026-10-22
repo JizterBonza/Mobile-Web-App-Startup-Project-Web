@@ -24,6 +24,7 @@ class User extends Authenticatable
     const TYPE_VENDOR = 'vendor';
     const TYPE_VETERINARIAN = 'veterinarian';
     const TYPE_CUSTOMER = 'customer';
+    const TYPE_BREEDER = 'breeder';
     const TYPE_RIDER = 'rider';
     const TYPE_OWNER_MANAGER = 'owner_manager';
 
@@ -157,6 +158,14 @@ class User extends Authenticatable
     public function managedFarm()
     {
         return $this->belongsTo(Farm::class, 'farm_id');
+    }
+
+    /**
+     * Gamefarm registered with this breeder account.
+     */
+    public function gamefarm()
+    {
+        return $this->hasOne(Gamefarm::class);
     }
 
     /**

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Head, useForm, router } from '@inertiajs/react'
 import {
     Bike,
+    Bird,
     Building2,
     Tractor,
     Database,
@@ -22,13 +23,14 @@ import SuperAdminKlasmeytLayout from '../../Layouts/SuperAdminKlasmeytLayout'
 import { useDashboardSession } from '../../hooks/useDashboardSession'
 import PasswordInput from '../../Components/PasswordInput'
 
-const ROLE_ORDER = ['super_admin', 'admin', 'vendor', 'veterinarian', 'customer', 'rider']
+const ROLE_ORDER = ['super_admin', 'admin', 'vendor', 'veterinarian', 'breeder', 'customer', 'rider']
 
 const ROLE_META = {
     super_admin: { label: 'Super Admin', Icon: Shield, iconBg: 'bg-[#244693]' },
     admin: { label: 'Admin', Icon: UserCog, iconBg: 'bg-[#102059]' },
     vendor: { label: 'Vendor', Icon: Store, iconBg: 'bg-[#D3A218]' },
     veterinarian: { label: 'Veterinarian', Icon: Stethoscope, iconBg: 'bg-[#102059]' },
+    breeder: { label: 'Breeder', Icon: Bird, iconBg: 'bg-[#D3A218]' },
     customer: { label: 'Customer', Icon: UsersRound, iconBg: 'bg-[#6B7280]' },
     rider: { label: 'Rider', Icon: Bike, iconBg: 'bg-[#244693]' },
     other: { label: 'Other', Icon: Users, iconBg: 'bg-[#9CA3AF]' },
@@ -41,6 +43,7 @@ const CREATE_ROLE_DESCRIPTIONS = {
     vendor: 'Product vendor or store owner',
     owner_manager: 'Manages an Agrivet business and its stores (dashboard login)',
     veterinarian: 'Licensed veterinary professional',
+    breeder: 'Register a breeder and its farm',
     customer: 'End customer account',
     rider: 'Delivery and logistics personnel',
 }
@@ -52,6 +55,7 @@ const ROLE_PICKER_ICON_CLASS = {
     vendor: 'text-[#D3A218]',
     owner_manager: 'text-[#102059]',
     veterinarian: 'text-[#102059]',
+    breeder: 'text-[#D3A218]',
     customer: 'text-[#6B7280]',
     rider: 'text-[#244693]',
 }
@@ -175,6 +179,7 @@ export default function Accounts({ auth, users = [], flash }) {
             return [
                 { value: 'vendor', label: 'Vendor' },
                 { value: 'veterinarian', label: 'Veterinarian' },
+                { value: 'breeder', label: 'Breeder' },
                 { value: 'rider', label: 'Rider' },
             ]
         }
@@ -183,6 +188,7 @@ export default function Accounts({ auth, users = [], flash }) {
             { value: 'admin', label: 'Admin' },
             { value: 'vendor', label: 'Vendor' },
             { value: 'veterinarian', label: 'Veterinarian' },
+            { value: 'breeder', label: 'Breeder' },
             { value: 'customer', label: 'Customer' },
             { value: 'rider', label: 'Rider' },
         ]
@@ -238,6 +244,11 @@ export default function Accounts({ auth, users = [], flash }) {
         if (userTypeValue === 'rider') {
             const prefix = auth?.user?.user_type === 'admin' ? '/dashboard/admin' : '/dashboard/super-admin'
             router.visit(`${prefix}/users/rider-registration`)
+            return
+        }
+        if (userTypeValue === 'breeder') {
+            const prefix = auth?.user?.user_type === 'admin' ? '/dashboard/admin' : '/dashboard/super-admin'
+            router.visit(`${prefix}/users/breeder-registration`)
             return
         }
         addForm.setData('user_type', userTypeValue)
@@ -1066,6 +1077,12 @@ export default function Accounts({ auth, users = [], flash }) {
                                                     if (v === 'super_admin' && auth?.user?.user_type === 'super_admin') {
                                                         closeAddModal()
                                                         router.visit('/dashboard/super-admin/users/add-super-admin')
+                                                        return
+                                                    }
+                                                    if (v === 'breeder') {
+                                                        const prefix = auth?.user?.user_type === 'admin' ? '/dashboard/admin' : '/dashboard/super-admin'
+                                                        closeAddModal()
+                                                        router.visit(`${prefix}/users/breeder-registration`)
                                                         return
                                                     }
                                                     addForm.setData('user_type', v)
