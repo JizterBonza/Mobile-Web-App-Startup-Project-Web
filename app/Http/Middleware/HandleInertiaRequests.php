@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use App\Models\User;
+use App\Services\ShopMessagingService;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
 
@@ -67,6 +68,15 @@ class HandleInertiaRequests extends Middleware
                 'error' => $request->session()->get('error'),
                 'message' => $request->session()->get('message'),
             ],
+            'messaging' => function () use ($user) {
+                if (! $user || ! in_array($user->user_type, [User::TYPE_VENDOR, User::TYPE_OWNER_MANAGER], true)) {
+                    return ['unread_count' => 0];
+                }
+
+                return [
+                    'unread_count' => app(ShopMessagingService::class)->unreadCountForDashboard($user),
+                ];
+            },
         ];
     }
 }

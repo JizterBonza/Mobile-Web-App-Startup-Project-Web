@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { applyConversationListUpdate } from '../messaging/shopMessaging'
+import { applyConversationListUpdate, clearConversationUnread } from '../messaging/shopMessaging'
 
 /**
  * Keep a shop's conversation list in sync with Reverb broadcasts.
@@ -26,6 +26,11 @@ export function useShopConversationsList(shopId, initialConversations = [], user
                 )
                 return next
             })
+        })
+
+        channel.listen('.shop.conversation.read', (payload) => {
+            if (Number(payload?.reader_user_id) !== Number(user?.id)) return
+            setConversations((current) => clearConversationUnread(current, payload.conversation_id))
         })
 
         return () => {

@@ -204,6 +204,21 @@ class CustomerShopMessageController extends Controller
     }
 
     /**
+     * Mark the conversation read and tell the other participants.
+     */
+    public function markRead(Request $request, int $conversationId)
+    {
+        $user = $this->customerOrAbort($request);
+        $conversation = $this->ownedConversation($user, $conversationId);
+        $this->messaging->markRead($conversation, $user);
+
+        return response()->json([
+            'ok' => true,
+            'unread_count' => $this->messaging->unreadCountForCustomer($user),
+        ]);
+    }
+
+    /**
      * @return array<string, mixed>
      */
     private function messageRules(): array

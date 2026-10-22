@@ -16,31 +16,50 @@ class ShopMessageSent implements ShouldBroadcastNow
 
     /**
      * @param  array<string, mixed>  $payload
+     * @param  array<int, int>  $recipientUserIds
      */
     public function __construct(
         public ShopConversation $conversation,
         public ShopConversationMessage $message,
         public array $payload,
+        public array $recipientUserIds = [],
     ) {}
+
+    /**
+     * Conversation, shop, farm, and each participant's user channel.
+     *
+     * @param  array<int, int>  $recipientUserIds
+     * @return array<int, \Illuminate\Broadcasting\PrivateChannel>
+     */
+    public static function channelsFor(ShopConversation $conversation, array $recipientUserIds): array
+    {
+        $channels = [
+            new PrivateChannel('shop-conversation.'.$conversation->id),
+        ];
+
+        foreach (array_unique($recipientUserIds) as $userId) {
+            if ($userId) {
+                $channels[] = new PrivateChannel('App.Models.User.'.$userId);
+            }
+        }
+
+        if ($conversation->shop_id) {
+            $channels[] = new PrivateChannel('shop.'.$conversation->shop_id);
+        }
+
+        if ($conversation->farm_id) {
+            $channels[] = new PrivateChannel('farm.'.$conversation->farm_id);
+        }
+
+        return $channels;
+    }
 
     /**
      * @return array<int, \Illuminate\Broadcasting\PrivateChannel>
      */
     public function broadcastOn(): array
     {
-        $channels = [
-            new PrivateChannel('shop-conversation.'.$this->conversation->id),
-        ];
-
-        if ($this->conversation->shop_id) {
-            $channels[] = new PrivateChannel('shop.'.$this->conversation->shop_id);
-        }
-
-        if ($this->conversation->farm_id) {
-            $channels[] = new PrivateChannel('farm.'.$this->conversation->farm_id);
-        }
-
-        return $channels;
+        return self::channelsFor($this->conversation, $this->recipientUserIds);
     }
 
     public function broadcastAs(): string

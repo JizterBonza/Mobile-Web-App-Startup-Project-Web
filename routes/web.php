@@ -382,10 +382,18 @@ Route::middleware(['auth', 'session.valid', 'user.type:owner_manager'])->prefix(
     Route::get('/messages', [ShopMessageController::class, 'ownerManagerIndex'])->name('messages');
     Route::get('/messages/products', [ShopMessageController::class, 'farmProducts'])->name('messages.inbox.products');
     Route::post('/messages/{conversationId}', [ShopMessageController::class, 'farmSend'])->name('messages.inbox.send');
+    Route::post('/messages/{conversationId}/read', [ShopMessageController::class, 'farmMarkRead'])
+        ->whereNumber('conversationId')
+        ->name('messages.inbox.read');
     Route::get('/messages/{shopId}', [ShopMessageController::class, 'ownerManagerBranch'])->name('messages.branch');
     Route::get('/messages/{shopId}/products', [ShopMessageController::class, 'ownerManagerProducts'])->name('messages.products');
     Route::get('/messages/{shopId}/{conversationId}', [ShopMessageController::class, 'ownerManagerConversation'])->name('messages.conversation');
-    Route::post('/messages/{shopId}/{conversationId}', [ShopMessageController::class, 'ownerManagerSend'])->name('messages.send');
+    Route::post('/messages/{shopId}/{conversationId}', [ShopMessageController::class, 'ownerManagerSend'])
+        ->whereNumber(['shopId', 'conversationId'])
+        ->name('messages.send');
+    Route::post('/messages/{shopId}/{conversationId}/read', [ShopMessageController::class, 'ownerManagerMarkRead'])
+        ->whereNumber(['shopId', 'conversationId'])
+        ->name('messages.read');
     Route::get('/payout-records', [PayoutRecordController::class, 'index'])->name('payout-records');
     Route::get('/support', [DashboardController::class, 'ownerManagerSupport'])->name('support');
     Route::post('/support/tickets', [SupportTicketController::class, 'store'])->name('support.tickets.store');
@@ -615,6 +623,9 @@ Route::middleware(['auth', 'session.valid', 'user.type:vendor'])->prefix('dashbo
     Route::get('/messages/products', [ShopMessageController::class, 'vendorProducts'])->name('messages.products');
     Route::get('/messages/{conversationId}', [ShopMessageController::class, 'vendorConversation'])->name('messages.conversation');
     Route::post('/messages/{conversationId}', [ShopMessageController::class, 'vendorSend'])->name('messages.send');
+    Route::post('/messages/{conversationId}/read', [ShopMessageController::class, 'vendorMarkRead'])
+        ->whereNumber('conversationId')
+        ->name('messages.read');
     Route::get('/support', [VendorController::class, 'support'])->name('support');
     Route::post('/support/tickets', [SupportTicketController::class, 'store'])->name('support.tickets.store');
     Route::post('/support/tickets/{id}/reply', [SupportTicketController::class, 'vendorReply'])->name('support.tickets.reply');
