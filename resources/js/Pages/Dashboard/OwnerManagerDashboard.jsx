@@ -26,6 +26,13 @@ const TIME_PERIODS = [
     { value: 'year', label: 'This Year' },
 ]
 
+function formatPeso(value) {
+    const amount = Number(value)
+    const safeAmount = Number.isFinite(amount) ? amount : 0
+
+    return `₱${safeAmount.toLocaleString(undefined, { maximumFractionDigits: 2 })}`
+}
+
 function formatTrendPercent(value) {
     if (value == null || value === '') return null
     const n = Number(value)
@@ -160,7 +167,7 @@ export default function OwnerManagerDashboard({
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                     {shops.map((shop, index) => {
                                         const storeStat =
-                                            storeStats.find((s) => s.id === shop.id) ?? {}
+                                            storeStats.find((s) => Number(s.id) === Number(shop.id)) ?? {}
                                         const storeRevenue = storeStat.revenue ?? 0
                                         const storeOrders = storeStat.orders ?? 0
                                         const storeWallet = storeStat.wallet ?? shop.wallet_balance ?? 0
@@ -214,7 +221,7 @@ export default function OwnerManagerDashboard({
                                                             Revenue
                                                         </p>
                                                         <p className="text-base font-bold text-[#102059]">
-                                                            ₱{Number(storeRevenue).toLocaleString()}
+                                                            {formatPeso(storeRevenue)}
                                                         </p>
                                                     </div>
                                                     <div>
@@ -230,7 +237,7 @@ export default function OwnerManagerDashboard({
                                                             Wallet
                                                         </p>
                                                         <p className="text-base font-bold text-[#102059]">
-                                                            ₱{Number(storeWallet).toLocaleString()}
+                                                            {formatPeso(storeWallet)}
                                                         </p>
                                                     </div>
                                                 </div>
@@ -322,7 +329,7 @@ export default function OwnerManagerDashboard({
                                         </h3>
                                     </div>
                                     <p className="text-2xl font-bold text-[#102059] mb-2">
-                                        ₱{Number(totalRevenue).toLocaleString()}
+                                        {formatPeso(totalRevenue)}
                                     </p>
                                     <MetricTrend value={trends.total_revenue} label={comparisonLabel} />
                                 </div>
@@ -476,7 +483,7 @@ export default function OwnerManagerDashboard({
                                                 </div>
                                                 <div className="text-right">
                                                     <p className="text-sm font-bold text-[#00C950]">
-                                                        ₱{Number(product.revenue).toLocaleString()}
+                                                        {formatPeso(product.revenue)}
                                                     </p>
                                                 </div>
                                             </div>
@@ -528,7 +535,7 @@ export default function OwnerManagerDashboard({
                                                             {item.category}
                                                         </span>
                                                         <span className="text-sm font-bold text-[#102059]">
-                                                            ₱{Number(item.revenue).toLocaleString()}
+                                                            {formatPeso(item.revenue)}
                                                         </span>
                                                     </div>
                                                     <div className="w-full bg-[#F9FAFB] rounded-full h-3 border border-[#E5E7EB]">
@@ -591,7 +598,7 @@ export default function OwnerManagerDashboard({
                                             </div>
                                             <div className="text-right">
                                                 <p className="text-sm font-bold text-[#00C950]">
-                                                    ₱{Number(buyer.total_spent).toLocaleString()}
+                                                    {formatPeso(buyer.total_spent)}
                                                 </p>
                                                 <p className="text-xs text-[#6B7280]">Total spent</p>
                                             </div>

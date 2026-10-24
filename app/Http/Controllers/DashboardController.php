@@ -190,13 +190,14 @@ class DashboardController extends Controller
 
         $avgRating = $shops->avg('average_rating') ?? 0;
 
-        $currentStoreMetrics = $this->ownerManagerShopMetricMap($shopIds, $deliveredItemStatusId, $start, $end);
-        $previousStoreMetrics = $this->ownerManagerShopMetricMap($shopIds, $deliveredItemStatusId, $prevStart, $prevEnd);
+        $currentStoreMetrics = $this->ownerManagerShopMetricMap($shopIds, $start, $end);
+        $previousStoreMetrics = $this->ownerManagerShopMetricMap($shopIds, $prevStart, $prevEnd);
 
         $storeStats = $shops->map(function ($shop) use ($currentStoreMetrics, $previousStoreMetrics) {
-            $orders = (int) ($currentStoreMetrics['orders'][$shop->id] ?? 0);
-            $revenue = (float) ($currentStoreMetrics['revenue'][$shop->id] ?? 0);
-            $previousRevenue = (float) ($previousStoreMetrics['revenue'][$shop->id] ?? 0);
+            $shopId = (int) $shop->id;
+            $orders = (int) ($currentStoreMetrics['orders'][$shopId] ?? 0);
+            $revenue = (float) ($currentStoreMetrics['revenue'][$shopId] ?? 0);
+            $previousRevenue = (float) ($previousStoreMetrics['revenue'][$shopId] ?? 0);
 
             return [
                 'id'             => $shop->id,
@@ -210,11 +211,8 @@ class DashboardController extends Controller
             ];
         })->values()->toArray();
 
-        $topProducts = DB::table('order_items')
+        $topProducts = $this->ownerManagerSalesItemsQuery($shopIds, $start, $end)
             ->join('items', 'order_items.item_id', '=', 'items.id')
-            ->whereIn('order_items.shop_id', $shopIds)
-            ->where('order_items.item_status', $deliveredItemStatusId)
-            ->whereBetween('order_items.created_at', [$start, $end])
             ->select(
                 'items.item_name as name',
                 DB::raw('COALESCE(SUM(order_items.quantity), 0) as quantity'),
@@ -266,12 +264,9 @@ class DashboardController extends Controller
             ])
             ->toArray();
 
-        $revenueByCategory = DB::table('order_items')
+        $revenueByCategory = $this->ownerManagerSalesItemsQuery($shopIds, $start, $end)
             ->join('items', 'order_items.item_id', '=', 'items.id')
             ->leftJoin('category', 'items.category', '=', 'category.id')
-            ->whereIn('order_items.shop_id', $shopIds)
-            ->where('order_items.item_status', $deliveredItemStatusId)
-            ->whereBetween('order_items.created_at', [$start, $end])
             ->select(
                 DB::raw("COALESCE(category.category_name, 'Uncategorized') as category"),
                 DB::raw('COALESCE(SUM(order_items.quantity * order_items.price_at_purchase), 0) as revenue'),
@@ -1513,6 +1508,54 @@ class DashboardController extends Controller
     }
 
     /**
+     * Paid sales, including lines already marked delivered, excluding cancellations.
+     *
+     * @param  array<int>  $shopIds
+     */
+    private function ownerManagerSalesItemsQuery(array $shopIds, Carbon $start, Carbon $end)
+    {
+        $cancelledItemStatusId = (int) (DB::table('order_item_status')->where('stat_description', 'Cancelled')->value('id') ?? 0);
+        $deliveredItemStatusId = $this->deliveredItemStatusId();
+        $deliveredOrderStatusId = (int) (DB::table('order_status')->where('stat_description', 'Delivered')->value('id') ?? 0);
+
+        $query = DB::table('order_items')
+            ->join('orders', 'order_items.order_id', '=', 'orders.id')
+            ->leftJoin('order_details', 'orders.order_detail_id', '=', 'order_details.id')
+            ->whereIn('order_items.shop_id', $shopIds)
+            ->whereBetween(
+                DB::raw('COALESCE(orders.ordered_at, order_items.created_at)'),
+                [$start->format('Y-m-d H:i:s'), $end->format('Y-m-d H:i:s')],
+            );
+
+        if ($cancelledItemStatusId > 0) {
+            $query->where(function ($status) use ($cancelledItemStatusId) {
+                $status->whereNull('order_items.item_status')
+                    ->orWhere('order_items.item_status', '!=', $cancelledItemStatusId);
+            });
+        }
+
+        $query->where(function ($q) use ($deliveredItemStatusId, $deliveredOrderStatusId) {
+            $q->where('order_details.payment_status', 'paid');
+
+            if ($deliveredItemStatusId > 0) {
+                $q->orWhere('order_items.item_status', $deliveredItemStatusId);
+            }
+
+            if ($deliveredOrderStatusId > 0) {
+                $q->orWhereExists(function ($sub) use ($deliveredOrderStatusId) {
+                    $sub->selectRaw('1')
+                        ->from('order_shops')
+                        ->whereColumn('order_shops.order_id', 'order_items.order_id')
+                        ->whereColumn('order_shops.shop_id', 'order_items.shop_id')
+                        ->where('order_shops.order_status', $deliveredOrderStatusId);
+                });
+            }
+        });
+
+        return $query;
+    }
+
+    /**
      * @param  array<int>  $shopIds
      * @return array{orders: int, items_sold: int, revenue: float}
      */
@@ -1530,12 +1573,10 @@ class DashboardController extends Controller
             ->whereBetween('created_at', [$start, $end])
             ->sum('quantity');
 
-        $revenue = (float) DB::table('order_items')
-            ->whereIn('shop_id', $shopIds)
-            ->where('item_status', $deliveredItemStatusId)
-            ->whereBetween('created_at', [$start, $end])
-            ->selectRaw('COALESCE(SUM(quantity * price_at_purchase), 0) as total')
-            ->value('total');
+        $revenueRow = $this->ownerManagerSalesItemsQuery($shopIds, $start, $end)
+            ->selectRaw('COALESCE(SUM(order_items.quantity * order_items.price_at_purchase), 0) as total')
+            ->first();
+        $revenue = (float) ($revenueRow->total ?? 0);
 
         return [
             'orders'     => $orders,
@@ -1548,22 +1589,24 @@ class DashboardController extends Controller
      * @param  array<int>  $shopIds
      * @return array{orders: \Illuminate\Support\Collection<int|string, mixed>, revenue: \Illuminate\Support\Collection<int|string, mixed>}
      */
-    private function ownerManagerShopMetricMap(array $shopIds, int $deliveredItemStatusId, Carbon $start, Carbon $end): array
+    private function ownerManagerShopMetricMap(array $shopIds, Carbon $start, Carbon $end): array
     {
         $orders = DB::table('order_items')
             ->whereIn('shop_id', $shopIds)
             ->whereBetween('created_at', [$start, $end])
             ->select('shop_id', DB::raw('COUNT(DISTINCT order_id) as orders'))
             ->groupBy('shop_id')
-            ->pluck('orders', 'shop_id');
+            ->get()
+            ->mapWithKeys(fn ($row) => [(int) $row->shop_id => (int) $row->orders]);
 
-        $revenue = DB::table('order_items')
-            ->whereIn('shop_id', $shopIds)
-            ->where('item_status', $deliveredItemStatusId)
-            ->whereBetween('created_at', [$start, $end])
-            ->select('shop_id', DB::raw('COALESCE(SUM(quantity * price_at_purchase), 0) as revenue'))
-            ->groupBy('shop_id')
-            ->pluck('revenue', 'shop_id');
+        $revenue = $this->ownerManagerSalesItemsQuery($shopIds, $start, $end)
+            ->select(
+                'order_items.shop_id',
+                DB::raw('COALESCE(SUM(order_items.quantity * order_items.price_at_purchase), 0) as revenue'),
+            )
+            ->groupBy('order_items.shop_id')
+            ->get()
+            ->mapWithKeys(fn ($row) => [(int) $row->shop_id => (float) $row->revenue]);
 
         return [
             'orders'  => $orders,
