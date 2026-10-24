@@ -140,6 +140,10 @@ Route::get('/dashboard/super-admin/products', [SuperAdminProductController::clas
     ->middleware(['auth', 'session.valid', 'user.type:super_admin'])
     ->name('dashboard.super-admin.products');
 
+Route::get('/dashboard/super-admin/products/inactive', [SuperAdminProductController::class, 'inactive'])
+    ->middleware(['auth', 'session.valid', 'user.type:super_admin'])
+    ->name('dashboard.super-admin.products.inactive');
+
 foreach (['super_admin' => 'super-admin', 'admin' => 'admin'] as $gamefowlRole => $gamefowlSegment) {
     Route::middleware(['auth', 'session.valid', "user.type:{$gamefowlRole}"])
         ->prefix("dashboard/{$gamefowlSegment}")
@@ -148,6 +152,7 @@ foreach (['super_admin' => 'super-admin', 'admin' => 'admin'] as $gamefowlRole =
             Route::get('gamefowls/create', [GamefowlCatalogController::class, 'create'])->name('gamefowls.create');
             Route::post('gamefowls', [GamefowlCatalogController::class, 'store'])->name('gamefowls.store');
             Route::get('gamefowls', [GamefowlCatalogController::class, 'index'])->name('gamefowls');
+            Route::get('gamefowls/inactive', [GamefowlCatalogController::class, 'inactive'])->name('gamefowls.inactive');
             Route::get('gamefowls/requests', [GamefowlCatalogController::class, 'requests'])->name('gamefowls.requests');
             Route::post('gamefowls/requests/{id}/approve', [GamefowlCatalogController::class, 'approve'])->name('gamefowls.requests.approve');
             Route::post('gamefowls/requests/{id}/reject', [GamefowlCatalogController::class, 'reject'])->name('gamefowls.requests.reject');
@@ -423,6 +428,10 @@ Route::post('/dashboard/admin/products', [SuperAdminProductController::class, 's
 Route::get('/dashboard/admin/products', [SuperAdminProductController::class, 'index'])
     ->middleware(['auth', 'session.valid', 'user.type:admin'])
     ->name('dashboard.admin.products');
+
+Route::get('/dashboard/admin/products/inactive', [SuperAdminProductController::class, 'inactive'])
+    ->middleware(['auth', 'session.valid', 'user.type:admin'])
+    ->name('dashboard.admin.products.inactive');
 
 Route::get('/dashboard/admin/product-requests', [ProductCatalogRequestController::class, 'index'])
     ->middleware(['auth', 'session.valid', 'user.type:admin'])

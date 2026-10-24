@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, router } from '@inertiajs/react'
-import { Ban, CheckCircle, Clock, Package, Pencil, Plus, Search, Star } from 'lucide-react'
+import { ArrowLeft, Ban, CheckCircle, Clock, Package, Pencil, Plus, Search, Star } from 'lucide-react'
 import SuperAdminOrAdminLayout from '../../../Layouts/SuperAdminOrAdminLayout'
 
 function getProductsBaseRoute(userType) {
@@ -23,14 +23,20 @@ function getProductRequestsRoute(userType) {
     return '/dashboard/super-admin/product-requests'
 }
 
-export default function SuperAdminProducts({ auth, products = [], flash, pendingCount = 0 }) {
+function getInactiveProductsRoute(userType) {
+    if (userType === 'admin') return '/dashboard/admin/products/inactive'
+    return '/dashboard/super-admin/products/inactive'
+}
+
+export default function SuperAdminProducts({ auth, products = [], flash, pendingCount = 0, listing = 'active' }) {
+    const isInactive = listing === 'inactive'
     const productsBase = getProductsBaseRoute(auth?.user?.user_type)
     const categoriesRoute = getCategoriesRoute(auth?.user?.user_type)
     const subCategoriesRoute = getSubCategoriesRoute(auth?.user?.user_type)
+    const inactiveRoute = getInactiveProductsRoute(auth?.user?.user_type)
 
     const [searchQuery, setSearchQuery]           = useState('')
     const [categoryFilter, setCategoryFilter]     = useState('All')
-    const [statusFilter, setStatusFilter]         = useState('All')
     const [sortBy, setSortBy]                     = useState('date')
     const [itemsPerPage, setItemsPerPage]         = useState(10)
     const [currentPage, setCurrentPage]           = useState(1)
@@ -69,10 +75,9 @@ export default function SuperAdminProducts({ auth, products = [], flash, pending
                 p.category.toLowerCase().includes(q) ||
                 String(p.id).includes(q)
             const matchCategory = categoryFilter === 'All' || p.category === categoryFilter
-            const matchStatus   = statusFilter === 'All' || p.status === statusFilter.toLowerCase()
-            return matchSearch && matchCategory && matchStatus
+            return matchSearch && matchCategory
         })
-    }, [normalizedProducts, searchQuery, categoryFilter, statusFilter])
+    }, [normalizedProducts, searchQuery, categoryFilter])
 
     const sorted = useMemo(() => {
         const arr = [...filtered]
@@ -88,7 +93,7 @@ export default function SuperAdminProducts({ auth, products = [], flash, pending
     const startIndex  = (currentPage - 1) * itemsPerPage
     const displayed   = sorted.slice(startIndex, startIndex + itemsPerPage)
 
-    useEffect(() => { setCurrentPage(1) }, [searchQuery, categoryFilter, statusFilter, sortBy, itemsPerPage])
+    useEffect(() => { setCurrentPage(1) }, [searchQuery, categoryFilter, sortBy, itemsPerPage])
 
     const filterClass = 'text-sm border border-[#E5E7EB] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#102059] focus:border-transparent px-4 py-2 bg-white'
 
@@ -124,8 +129,16 @@ export default function SuperAdminProducts({ auth, products = [], flash, pending
     }
 
     return (
-        <SuperAdminOrAdminLayout auth={auth} title="Products">
+        <SuperAdminOrAdminLayout auth={auth} title={isInactive ? 'Inactive Products' : 'Products'}>
             <div>
+                {isInactive && (
+                    <Link
+                        href={productsBase}
+                        className="mb-6 inline-flex items-center gap-2 rounded-lg border border-[#E5E7EB] bg-white px-4 py-2 text-sm font-medium text-[#6B7280] transition-colors hover:bg-[#F9FAFB] hover:text-[#102059]"
+                    >
+                        <ArrowLeft className="h-4 w-4" /> Back to Product Catalog
+                    </Link>
+                )}
                 {/* Flash success */}
                 {flash?.success && showSuccessAlert && (
                     <div className="mb-4 flex items-center justify-between rounded-lg border border-[#00C950]/30 bg-[#00C950]/10 px-4 py-3">
@@ -154,11 +167,15 @@ export default function SuperAdminProducts({ auth, products = [], flash, pending
 
                 {/* Page header */}
                 <div className="mb-6">
-                    <h1 className="mb-1 text-2xl font-semibold text-[#102059]">Product Catalog</h1>
+                    <h1 className="mb-1 text-2xl font-semibold text-[#102059]">
+                        {isInactive ? 'Inactive Products' : 'Product Catalog'}
+                    </h1>
                     <p className="text-sm text-[#6B7280]">
-                        Manage the platform product catalog. Vendors can only add products listed here to their shop inventory.
-                        Disabled products stay in the catalog but cannot be restocked by Agrivets when they run out of stock.
+                        {isInactive
+                            ? 'Products that have been disabled. They stay in the catalog, but Agrivets cannot restock them when they run out. Enable a product to return it to the catalog.'
+                            : 'Manage the platform product catalog. Vendors can only add products listed here to their shop inventory. Disabled products are listed separately and cannot be restocked by Agrivets when they run out of stock.'}
                     </p>
+                    {!isInactive && (
                     <div className="mt-4 flex flex-wrap gap-3">
                         <Link
                             href={`${productsBase}/create`}
@@ -183,6 +200,13 @@ export default function SuperAdminProducts({ auth, products = [], flash, pending
                             Go to Sub-Categories
                         </Link>
                         <Link
+                            href={inactiveRoute}
+                            className="inline-flex items-center justify-center gap-2 rounded-lg border border-[#102059] px-5 py-2 text-sm font-medium text-white transition-colors hover:bg-[#F0F7FF]"
+                            style={{ backgroundColor: '#102059', border: '1px solid #102059' }}
+                        >
+                            Go to Inactive Products
+                        </Link>
+                        <Link
                             href={getProductRequestsRoute(auth?.user?.user_type)}
                             className="inline-flex items-center justify-center gap-2 rounded-lg border-2 border-[#D3A218] px-5 py-2 text-sm font-semibold text-[#D3A218] transition-colors hover:bg-[#FFFBF0]"
                         >
@@ -195,6 +219,7 @@ export default function SuperAdminProducts({ auth, products = [], flash, pending
                             )}
                         </Link>
                     </div>
+                    )}
                 </div>
 
                 {/* Filters */}
@@ -221,11 +246,6 @@ export default function SuperAdminProducts({ auth, products = [], flash, pending
                                 {categories.map(c => (
                                     <option key={c} value={c}>{c === 'All' ? 'All Categories' : c}</option>
                                 ))}
-                            </select>
-                            <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className={filterClass}>
-                                <option value="All">All Status</option>
-                                <option value="active">Active</option>
-                                <option value="inactive">Inactive</option>
                             </select>
                             <select value={itemsPerPage} onChange={e => setItemsPerPage(Number(e.target.value))} className={filterClass}>
                                 <option value={5}>Show 5</option>
@@ -313,17 +333,7 @@ export default function SuperAdminProducts({ auth, products = [], flash, pending
                                     </div>
                                     </Link>
                                     <div className="flex flex-shrink-0 items-center gap-2">
-                                        {product.status === 'active' ? (
-                                            <button
-                                                type="button"
-                                                onClick={() => openStatusModal(product, 'inactive')}
-                                                disabled={updatingStatusId === product.id}
-                                                className="inline-flex items-center gap-1.5 rounded-lg border border-[#E20E28]/30 bg-white px-3 py-2 text-xs font-semibold text-[#E20E28] transition-colors hover:bg-[#FEF2F2] disabled:opacity-50"
-                                            >
-                                                <Ban className="h-3.5 w-3.5" />
-                                                Disable
-                                            </button>
-                                        ) : (
+                                        {isInactive ? (
                                             <button
                                                 type="button"
                                                 onClick={() => openStatusModal(product, 'active')}
@@ -332,6 +342,16 @@ export default function SuperAdminProducts({ auth, products = [], flash, pending
                                             >
                                                 <CheckCircle className="h-3.5 w-3.5" />
                                                 Enable
+                                            </button>
+                                        ) : (
+                                            <button
+                                                type="button"
+                                                onClick={() => openStatusModal(product, 'inactive')}
+                                                disabled={updatingStatusId === product.id}
+                                                className="inline-flex items-center gap-1.5 rounded-lg border border-[#E20E28]/30 bg-white px-3 py-2 text-xs font-semibold text-[#E20E28] transition-colors hover:bg-[#FEF2F2] disabled:opacity-50"
+                                            >
+                                                <Ban className="h-3.5 w-3.5" />
+                                                Disable
                                             </button>
                                         )}
                                         <Link
@@ -347,13 +367,17 @@ export default function SuperAdminProducts({ auth, products = [], flash, pending
                         }) : (
                             <div className="py-16 text-center">
                                 <Package className="mx-auto mb-3 h-10 w-10 text-[#E5E7EB]" />
-                                <p className="text-sm text-[#9CA3AF]">No products found in the catalog.</p>
+                                <p className="text-sm text-[#9CA3AF]">
+                                    {isInactive ? 'No inactive products.' : 'No products found in the catalog.'}
+                                </p>
+                                {!isInactive && (
                                 <Link
                                     href={`${productsBase}/create`}
                                     className="mt-3 inline-flex items-center gap-1.5 text-sm font-medium text-[#102059] hover:underline"
                                 >
                                     <Plus className="h-4 w-4" /> Register the first product
                                 </Link>
+                                )}
                             </div>
                         )}
                     </div>
@@ -367,7 +391,7 @@ export default function SuperAdminProducts({ auth, products = [], flash, pending
                             <span className="font-semibold text-[#102059]">
                                 {sorted.length === 0 ? '0' : `${startIndex + 1}–${Math.min(startIndex + itemsPerPage, sorted.length)}`}
                             </span>{' '}
-                            of <span className="font-semibold text-[#102059]">{sorted.length}</span> products
+                            of <span className="font-semibold text-[#102059]">{sorted.length}</span> {isInactive ? 'inactive products' : 'products'}
                         </p>
                         {totalPages > 1 && (
                             <div className="flex items-center gap-2">

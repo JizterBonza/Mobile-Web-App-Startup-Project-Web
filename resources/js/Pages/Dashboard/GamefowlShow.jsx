@@ -27,9 +27,9 @@ export default function GamefowlShow({ auth, gamefowl, flash }) {
             )}
 
             <div className="mb-5 flex items-center justify-between gap-3">
-                <Link href={base} className="inline-flex items-center gap-2 rounded-lg border border-[#E5E7EB] bg-white px-3 py-2 text-sm text-[#6B7280] hover:bg-[#F9FAFB] hover:text-[#102059]">
+                <Link href={gamefowl.status === 'inactive' ? `${base}/inactive` : base} className="inline-flex items-center gap-2 rounded-lg border border-[#E5E7EB] bg-white px-3 py-2 text-sm text-[#6B7280] hover:bg-[#F9FAFB] hover:text-[#102059]">
                     <ArrowLeft className="h-4 w-4" />
-                    Back to Gamefowl Catalog
+                    {gamefowl.status === 'inactive' ? 'Back to Inactive Gamefowls' : 'Back to Gamefowl Catalog'}
                 </Link>
                 <Link href={`${base}/${gamefowl.id}/edit`} className="inline-flex items-center gap-2 rounded-lg bg-[#102059] px-4 py-2 text-sm font-medium text-white hover:bg-[#244693]">
                     <Pencil className="h-4 w-4" />

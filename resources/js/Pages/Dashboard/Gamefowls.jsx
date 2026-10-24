@@ -1,18 +1,18 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, router } from '@inertiajs/react'
-import { Ban, CheckCircle, Clock, Package, Pencil, Plus, Search } from 'lucide-react'
+import { ArrowLeft, Ban, CheckCircle, Clock, Package, Pencil, Plus, Search } from 'lucide-react'
 import SuperAdminOrAdminLayout from '../../Layouts/SuperAdminOrAdminLayout'
 
 function gamefowlBase(userType) {
     return userType === 'admin' ? '/dashboard/admin/gamefowls' : '/dashboard/super-admin/gamefowls'
 }
 
-export default function Gamefowls({ auth, gamefowls = [], flash, pendingCount = 0 }) {
+export default function Gamefowls({ auth, gamefowls = [], flash, pendingCount = 0, listing = 'active' }) {
+    const isInactive = listing === 'inactive'
     const base = gamefowlBase(auth?.user?.user_type)
 
     const [searchQuery, setSearchQuery] = useState('')
     const [bloodlineFilter, setBloodlineFilter] = useState('All')
-    const [statusFilter, setStatusFilter] = useState('All')
     const [sortBy, setSortBy] = useState('date')
     const [itemsPerPage, setItemsPerPage] = useState(10)
     const [currentPage, setCurrentPage] = useState(1)
@@ -52,10 +52,9 @@ export default function Gamefowls({ auth, gamefowls = [], flash, pendingCount = 
                 item.gamefowlClass.toLowerCase().includes(query) ||
                 String(item.id).includes(query)
             const matchBloodline = bloodlineFilter === 'All' || item.bloodline === bloodlineFilter
-            const matchStatus = statusFilter === 'All' || item.status === statusFilter.toLowerCase()
-            return matchSearch && matchBloodline && matchStatus
+            return matchSearch && matchBloodline
         })
-    }, [normalized, searchQuery, bloodlineFilter, statusFilter])
+    }, [normalized, searchQuery, bloodlineFilter])
 
     const sorted = useMemo(() => {
         const rows = [...filtered]
@@ -72,7 +71,7 @@ export default function Gamefowls({ auth, gamefowls = [], flash, pendingCount = 
 
     useEffect(() => {
         setCurrentPage(1)
-    }, [searchQuery, bloodlineFilter, statusFilter, sortBy, itemsPerPage])
+    }, [searchQuery, bloodlineFilter, sortBy, itemsPerPage])
 
     const filterClass = 'text-sm border border-[#E5E7EB] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#102059] focus:border-transparent px-4 py-2 bg-white'
     const outlineButton = 'inline-flex items-center justify-center gap-2 rounded-lg border border-[#102059] px-5 py-2 text-sm font-medium text-white transition-colors hover:bg-[#F0F7FF]'
@@ -96,8 +95,16 @@ export default function Gamefowls({ auth, gamefowls = [], flash, pendingCount = 
     }
 
     return (
-        <SuperAdminOrAdminLayout auth={auth} title="Gamefowl Catalog">
+        <SuperAdminOrAdminLayout auth={auth} title={isInactive ? 'Inactive Gamefowls' : 'Gamefowl Catalog'}>
             <div>
+                {isInactive && (
+                    <Link
+                        href={base}
+                        className="mb-6 inline-flex items-center gap-2 rounded-lg border border-[#E5E7EB] bg-white px-4 py-2 text-sm font-medium text-[#6B7280] transition-colors hover:bg-[#F9FAFB] hover:text-[#102059]"
+                    >
+                        <ArrowLeft className="h-4 w-4" /> Back to Gamefowl Catalog
+                    </Link>
+                )}
                 {flash?.success && showSuccessAlert && (
                     <div className="mb-4 flex items-center justify-between rounded-lg border border-[#00C950]/30 bg-[#00C950]/10 px-4 py-3">
                         <p className="text-sm font-medium text-[#00C950]">{flash.success}</p>
@@ -116,11 +123,15 @@ export default function Gamefowls({ auth, gamefowls = [], flash, pendingCount = 
                 )}
 
                 <div className="mb-6">
-                    <h1 className="mb-1 text-2xl font-semibold text-[#102059]">Gamefowl Catalog</h1>
+                    <h1 className="mb-1 text-2xl font-semibold text-[#102059]">
+                        {isInactive ? 'Inactive Gamefowls' : 'Gamefowl Catalog'}
+                    </h1>
                     <p className="text-sm text-[#6B7280]">
-                        Manage the platform gamefowl catalog. Farms list gamefowls from the entries registered here.
-                        Disabled gamefowls stay in the catalog but are marked inactive.
+                        {isInactive
+                            ? 'Gamefowls that have been disabled. They stay in the catalog but are marked inactive. Enable a gamefowl to return it to the catalog.'
+                            : 'Manage the platform gamefowl catalog. Farms list gamefowls from the entries registered here. Disabled gamefowls are listed separately and stay marked inactive.'}
                     </p>
+                    {!isInactive && (
                     <div className="mt-4 flex flex-wrap gap-3">
                         <Link
                             href={`${base}/create`}
@@ -139,6 +150,9 @@ export default function Gamefowls({ auth, gamefowls = [], flash, pendingCount = 
                         <Link href={`${base}/classes`} className={outlineButton} style={{ backgroundColor: '#102059', border: '1px solid #102059' }}>
                             Go to Class
                         </Link>
+                        <Link href={`${base}/inactive`} className={outlineButton} style={{ backgroundColor: '#102059', border: '1px solid #102059' }}>
+                            Go to Inactive Gamefowls
+                        </Link>
                         <Link
                             href={`${base}/requests`}
                             className="inline-flex items-center justify-center gap-2 rounded-lg border-2 border-[#D3A218] px-5 py-2 text-sm font-semibold text-[#D3A218] transition-colors hover:bg-[#FFFBF0]"
@@ -152,6 +166,7 @@ export default function Gamefowls({ auth, gamefowls = [], flash, pendingCount = 
                             )}
                         </Link>
                     </div>
+                    )}
                 </div>
 
                 <div className="mb-6">
@@ -175,11 +190,6 @@ export default function Gamefowls({ auth, gamefowls = [], flash, pendingCount = 
                                 {bloodlines.map((name) => (
                                     <option key={name} value={name}>{name === 'All' ? 'All Bloodlines' : name}</option>
                                 ))}
-                            </select>
-                            <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className={filterClass}>
-                                <option value="All">All Status</option>
-                                <option value="active">Active</option>
-                                <option value="inactive">Inactive</option>
                             </select>
                             <select value={itemsPerPage} onChange={(event) => setItemsPerPage(Number(event.target.value))} className={filterClass}>
                                 <option value={5}>Show 5</option>
@@ -242,17 +252,7 @@ export default function Gamefowls({ auth, gamefowls = [], flash, pendingCount = 
                                         </div>
                                     </Link>
                                     <div className="flex flex-shrink-0 items-center gap-2">
-                                        {gamefowl.status === 'active' ? (
-                                            <button
-                                                type="button"
-                                                onClick={() => setStatusModal({ id: gamefowl.id, name: gamefowl.name, status: 'inactive' })}
-                                                disabled={updatingStatusId === gamefowl.id}
-                                                className="inline-flex items-center gap-1.5 rounded-lg border border-[#E20E28]/30 bg-white px-3 py-2 text-xs font-semibold text-[#E20E28] transition-colors hover:bg-[#FEF2F2] disabled:opacity-50"
-                                            >
-                                                <Ban className="h-3.5 w-3.5" />
-                                                Disable
-                                            </button>
-                                        ) : (
+                                        {isInactive ? (
                                             <button
                                                 type="button"
                                                 onClick={() => setStatusModal({ id: gamefowl.id, name: gamefowl.name, status: 'active' })}
@@ -261,6 +261,16 @@ export default function Gamefowls({ auth, gamefowls = [], flash, pendingCount = 
                                             >
                                                 <CheckCircle className="h-3.5 w-3.5" />
                                                 Enable
+                                            </button>
+                                        ) : (
+                                            <button
+                                                type="button"
+                                                onClick={() => setStatusModal({ id: gamefowl.id, name: gamefowl.name, status: 'inactive' })}
+                                                disabled={updatingStatusId === gamefowl.id}
+                                                className="inline-flex items-center gap-1.5 rounded-lg border border-[#E20E28]/30 bg-white px-3 py-2 text-xs font-semibold text-[#E20E28] transition-colors hover:bg-[#FEF2F2] disabled:opacity-50"
+                                            >
+                                                <Ban className="h-3.5 w-3.5" />
+                                                Disable
                                             </button>
                                         )}
                                         <Link
@@ -276,10 +286,14 @@ export default function Gamefowls({ auth, gamefowls = [], flash, pendingCount = 
                         }) : (
                             <div className="py-16 text-center">
                                 <Package className="mx-auto mb-3 h-10 w-10 text-[#E5E7EB]" />
-                                <p className="text-sm text-[#9CA3AF]">No gamefowls found in the catalog.</p>
+                                <p className="text-sm text-[#9CA3AF]">
+                                    {isInactive ? 'No inactive gamefowls.' : 'No gamefowls found in the catalog.'}
+                                </p>
+                                {!isInactive && (
                                 <Link href={`${base}/create`} className="mt-3 inline-flex items-center gap-1.5 text-sm font-medium text-[#102059] hover:underline">
                                     <Plus className="h-4 w-4" /> Register the first gamefowl
                                 </Link>
+                                )}
                             </div>
                         )}
                     </div>
@@ -292,7 +306,7 @@ export default function Gamefowls({ auth, gamefowls = [], flash, pendingCount = 
                             <span className="font-semibold text-[#102059]">
                                 {sorted.length === 0 ? '0' : `${startIndex + 1}–${Math.min(startIndex + itemsPerPage, sorted.length)}`}
                             </span>{' '}
-                            of <span className="font-semibold text-[#102059]">{sorted.length}</span> gamefowls
+                            of <span className="font-semibold text-[#102059]">{sorted.length}</span> {isInactive ? 'inactive gamefowls' : 'gamefowls'}
                         </p>
                         {totalPages > 1 && (
                             <div className="flex items-center gap-2">

@@ -14,16 +14,12 @@ class GamefowlCatalogController extends Controller
 {
     public function index()
     {
-        $gamefowls = GamefowlCatalog::listed()
-            ->with(['bloodline', 'ageType', 'gamefowlClass', 'creator.userDetail'])
-            ->latest()
-            ->get()
-            ->map(fn (GamefowlCatalog $gamefowl) => $this->listPayload($gamefowl));
+        return $this->renderListing(GamefowlCatalog::STATUS_ACTIVE);
+    }
 
-        return Inertia::render('Dashboard/Gamefowls', [
-            'gamefowls' => $gamefowls,
-            'pendingCount' => GamefowlCatalog::pending()->count(),
-        ]);
+    public function inactive()
+    {
+        return $this->renderListing(GamefowlCatalog::STATUS_INACTIVE);
     }
 
     public function create()
@@ -105,7 +101,11 @@ class GamefowlCatalogController extends Controller
 
         ActivityLog::log('updated', "Gamefowl catalog entry updated: {$gamefowl->name}", $gamefowl, $oldValues, $gamefowl->fresh()->toArray());
 
-        return redirect($this->basePath())->with('success', 'Gamefowl updated.');
+        $target = $gamefowl->status === GamefowlCatalog::STATUS_INACTIVE
+            ? $this->basePath().'/inactive'
+            : $this->basePath();
+
+        return redirect($target)->with('success', 'Gamefowl updated.');
     }
 
     public function updateStatus(Request $request, $id)
@@ -292,6 +292,22 @@ class GamefowlCatalogController extends Controller
                 'name' => $lookup->name,
             ])
             ->all();
+    }
+
+    private function renderListing(string $status)
+    {
+        $gamefowls = GamefowlCatalog::listed()
+            ->where('status', $status)
+            ->with(['bloodline', 'ageType', 'gamefowlClass', 'creator.userDetail'])
+            ->latest()
+            ->get()
+            ->map(fn (GamefowlCatalog $gamefowl) => $this->listPayload($gamefowl));
+
+        return Inertia::render('Dashboard/Gamefowls', [
+            'gamefowls' => $gamefowls,
+            'pendingCount' => GamefowlCatalog::pending()->count(),
+            'listing' => $status,
+        ]);
     }
 
     /**

@@ -16,33 +16,19 @@ class SuperAdminProductController extends Controller
     use CreatesProductCatalogEntry;
 
     /**
-     * List all product catalog entries.
+     * List active product catalog entries.
      */
     public function index()
     {
-        $products = ProductCatalog::listedInCatalog()
-            ->with('category', 'subCategory', 'creator')
-            ->latest()
-            ->get()
-            ->map(fn($p) => [
-                'id'                  => $p->id,
-                'brand'               => $p->brand,
-                'product_name'        => $p->product_name,
-                'category_name'       => optional($p->category)->category_name,
-                'sub_category_name'   => optional($p->subCategory)->sub_category_name,
-                'weight'              => $p->weight,
-                'unit'                => $p->unit,
-                'images'              => $p->images ?? [],
-                'primary_image_index' => $p->primary_image_index ?? 0,
-                'status'              => $p->status,
-                'created_by_name'     => optional($p->creator)->name,
-                'created_at'          => $p->created_at,
-            ]);
+        return $this->renderListing(ProductCatalog::STATUS_ACTIVE);
+    }
 
-        return Inertia::render('Dashboard/SuperAdmin/Products', [
-            'products'       => $products,
-            'pendingCount'   => ProductCatalog::pending()->count(),
-        ]);
+    /**
+     * List disabled product catalog entries.
+     */
+    public function inactive()
+    {
+        return $this->renderListing(ProductCatalog::STATUS_INACTIVE);
     }
 
     /**
@@ -225,7 +211,11 @@ class SuperAdminProductController extends Controller
             $catalog->fresh()->toArray()
         );
 
-        return redirect()->route($this->productsIndexRoute())
+        $indexRoute = $request->status === ProductCatalog::STATUS_INACTIVE
+            ? $this->productsInactiveRoute()
+            : $this->productsIndexRoute();
+
+        return redirect()->route($indexRoute)
             ->with('success', 'Product updated successfully.');
     }
 
@@ -302,6 +292,42 @@ class SuperAdminProductController extends Controller
         return auth()->user()->user_type === 'admin'
             ? 'dashboard.admin.products'
             : 'dashboard.super-admin.products';
+    }
+
+    private function productsInactiveRoute(): string
+    {
+        return auth()->user()->user_type === 'admin'
+            ? 'dashboard.admin.products.inactive'
+            : 'dashboard.super-admin.products.inactive';
+    }
+
+    private function renderListing(string $status)
+    {
+        $products = ProductCatalog::listedInCatalog()
+            ->where('status', $status)
+            ->with('category', 'subCategory', 'creator')
+            ->latest()
+            ->get()
+            ->map(fn ($p) => [
+                'id'                  => $p->id,
+                'brand'               => $p->brand,
+                'product_name'        => $p->product_name,
+                'category_name'       => optional($p->category)->category_name,
+                'sub_category_name'   => optional($p->subCategory)->sub_category_name,
+                'weight'              => $p->weight,
+                'unit'                => $p->unit,
+                'images'              => $p->images ?? [],
+                'primary_image_index' => $p->primary_image_index ?? 0,
+                'status'              => $p->status,
+                'created_by_name'     => optional($p->creator)->name,
+                'created_at'          => $p->created_at,
+            ]);
+
+        return Inertia::render('Dashboard/SuperAdmin/Products', [
+            'products'     => $products,
+            'pendingCount' => ProductCatalog::pending()->count(),
+            'listing'      => $status,
+        ]);
     }
 
     private function deleteCatalogImageIfUnused(?string $url, int $exceptId): void

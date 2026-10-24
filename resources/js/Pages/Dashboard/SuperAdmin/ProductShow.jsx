@@ -71,11 +71,11 @@ export default function ProductShow({ auth, product, flash }) {
             {/* Back button */}
             <div className="mb-5">
                 <Link
-                    href={productsBase}
+                    href={product.status === 'inactive' ? `${productsBase}/inactive` : productsBase}
                     className="inline-flex items-center gap-2 rounded-lg border border-[#E5E7EB] bg-white px-3 py-2 text-sm text-[#6B7280] transition-colors hover:bg-[#F9FAFB] hover:text-[#102059]"
                 >
                     <ArrowLeft className="h-4 w-4" />
-                    Back to Products
+                    {product.status === 'inactive' ? 'Back to Inactive Products' : 'Back to Products'}
                 </Link>
             </div>
 

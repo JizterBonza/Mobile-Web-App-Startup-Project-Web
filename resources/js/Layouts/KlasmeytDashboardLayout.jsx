@@ -1,4 +1,4 @@
-import { Head, Link, useForm } from '@inertiajs/react'
+import { Head, Link, useForm, usePage } from '@inertiajs/react'
 import { useEffect, useRef, useState } from 'react'
 import { Menu, X } from 'lucide-react'
 import primaryLogo from '../../../Logo/Primary Logo.png'
@@ -43,7 +43,7 @@ function SubNavLink({ href, children }) {
     )
 }
 
-function SuperAdminNav({ productOpen, setProductOpen }) {
+function SuperAdminNav({ productOpen, setProductOpen, gamefowlOpen, setGamefowlOpen }) {
     return (
         <>
             <NavLink href="/dashboard/super-admin" iconClass="fas fa-tachometer-alt">
@@ -70,11 +70,24 @@ function SuperAdminNav({ productOpen, setProductOpen }) {
                     <SubNavLink href="/dashboard/super-admin/product-requests">Product Requests</SubNavLink>
                     <SubNavLink href="/dashboard/super-admin/categories">Categories</SubNavLink>
                     <SubNavLink href="/dashboard/super-admin/sub-categories">Sub-Categories</SubNavLink>
+                    <SubNavLink href="/dashboard/super-admin/products/inactive">Inactive Products</SubNavLink>
                 </div>
             )}
-            <NavLink href="/dashboard/super-admin/gamefowls" iconClass="fas fa-feather-alt">
-                Gamefowls
-            </NavLink>
+            <button
+                type="button"
+                onClick={() => setGamefowlOpen((o) => !o)}
+                className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium text-white/90 transition-colors hover:bg-white/10"
+            >
+                <i className="fas fa-feather-alt w-5 text-center text-white/70" />
+                <span className="flex-1">Gamefowls</span>
+                <i className={`fas fa-chevron-${gamefowlOpen ? 'up' : 'down'} text-xs text-white/50`} />
+            </button>
+            {gamefowlOpen && (
+                <div className="mt-1 space-y-0.5 border-l border-white/10 ml-4 pl-2">
+                    <SubNavLink href="/dashboard/super-admin/gamefowls">All Gamefowls</SubNavLink>
+                    <SubNavLink href="/dashboard/super-admin/gamefowls/inactive">Inactive Gamefowls</SubNavLink>
+                </div>
+            )}
             <NavLink href="/klasrum" iconClass="fas fa-book-open">
                 Klasrum
             </NavLink>
@@ -82,7 +95,7 @@ function SuperAdminNav({ productOpen, setProductOpen }) {
     )
 }
 
-function AdminNav({ productOpen, setProductOpen }) {
+function AdminNav({ productOpen, setProductOpen, gamefowlOpen, setGamefowlOpen }) {
     return (
         <>
             <NavLink href="/dashboard/admin" iconClass="fas fa-tachometer-alt">
@@ -109,11 +122,24 @@ function AdminNav({ productOpen, setProductOpen }) {
                     <SubNavLink href="/dashboard/admin/product-requests">Product Requests</SubNavLink>
                     <SubNavLink href="/dashboard/admin/categories">Categories</SubNavLink>
                     <SubNavLink href="/dashboard/admin/sub-categories">Sub-Categories</SubNavLink>
+                    <SubNavLink href="/dashboard/admin/products/inactive">Inactive Products</SubNavLink>
                 </div>
             )}
-            <NavLink href="/dashboard/admin/gamefowls" iconClass="fas fa-feather-alt">
-                Gamefowls
-            </NavLink>
+            <button
+                type="button"
+                onClick={() => setGamefowlOpen((o) => !o)}
+                className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium text-white/90 transition-colors hover:bg-white/10"
+            >
+                <i className="fas fa-feather-alt w-5 text-center text-white/70" />
+                <span className="flex-1">Gamefowls</span>
+                <i className={`fas fa-chevron-${gamefowlOpen ? 'up' : 'down'} text-xs text-white/50`} />
+            </button>
+            {gamefowlOpen && (
+                <div className="mt-1 space-y-0.5 border-l border-white/10 ml-4 pl-2">
+                    <SubNavLink href="/dashboard/admin/gamefowls">All Gamefowls</SubNavLink>
+                    <SubNavLink href="/dashboard/admin/gamefowls/inactive">Inactive Gamefowls</SubNavLink>
+                </div>
+            )}
             <NavLink href="/klasrum" iconClass="fas fa-book-open">
                 Klasrum
             </NavLink>
@@ -171,13 +197,21 @@ export default function KlasmeytDashboardLayout({
     mainClassName = '',
 }) {
     const { post } = useForm()
+    const page = usePage()
     const [sidebarOpen, setSidebarOpen] = useState(false)
     const [isLarge, setIsLarge] = useState(false)
     const [productOpen, setProductOpen] = useState(true)
+    const [gamefowlOpen, setGamefowlOpen] = useState(false)
     const [accountOpen, setAccountOpen] = useState(false)
     const accountRef = useRef(null)
 
     const home = dashboardHomePath(auth?.user?.user_type)
+
+    useEffect(() => {
+        if (page.url?.includes('/gamefowls')) {
+            setGamefowlOpen(true)
+        }
+    }, [page.url])
 
     useEffect(() => {
         const mq = window.matchMedia('(min-width: 1024px)')
@@ -259,10 +293,20 @@ export default function KlasmeytDashboardLayout({
                         </p>
                         <nav className="flex flex-col gap-0.5">
                             {userType === 'super_admin' && (
-                                <SuperAdminNav productOpen={productOpen} setProductOpen={setProductOpen} />
+                                <SuperAdminNav
+                                    productOpen={productOpen}
+                                    setProductOpen={setProductOpen}
+                                    gamefowlOpen={gamefowlOpen}
+                                    setGamefowlOpen={setGamefowlOpen}
+                                />
                             )}
                             {userType === 'admin' && (
-                                <AdminNav productOpen={productOpen} setProductOpen={setProductOpen} />
+                                <AdminNav
+                                    productOpen={productOpen}
+                                    setProductOpen={setProductOpen}
+                                    gamefowlOpen={gamefowlOpen}
+                                    setGamefowlOpen={setGamefowlOpen}
+                                />
                             )}
                             {userType === 'vendor' && <VendorNav />}
                             {userType === 'veterinarian' && <VeterinarianNav />}
