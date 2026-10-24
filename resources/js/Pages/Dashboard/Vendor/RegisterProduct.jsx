@@ -296,14 +296,12 @@ export default function RegisterProduct({
                                     Product Description <span className="text-[#E20E28]">*</span>
                                 </label>
                                 <textarea
-                                    className={`${inputClass} resize-none ${form.errors.description ? 'border-[#E20E28]' : ''}`}
+                                    className={`${inputClass} resize-y ${form.errors.description ? 'border-[#E20E28]' : ''}`}
                                     value={form.data.description}
                                     onChange={e => form.setData('description', e.target.value)}
                                     rows={4}
-                                    maxLength={320}
-                                    placeholder="Enter product description (max 320 characters)"
+                                    placeholder="Enter product description"
                                 />
-                                <p className="mt-1 text-right text-xs text-[#6B7280]">{form.data.description.length}/320 characters</p>
                                 {form.errors.description && <p className="mt-1 text-xs text-[#E20E28]">{form.errors.description}</p>}
                             </div>
 

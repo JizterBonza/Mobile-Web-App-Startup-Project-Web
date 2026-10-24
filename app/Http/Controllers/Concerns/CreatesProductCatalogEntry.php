@@ -20,7 +20,7 @@ trait CreatesProductCatalogEntry
             'sub_category_id'     => 'nullable|exists:sub_categories,id',
             'weight'              => 'nullable|numeric|min:0',
             'unit'                => 'nullable|string|max:50',
-            'description'         => 'nullable|string|max:320',
+            'description'         => 'nullable|string',
             'images'              => 'required|array|min:1|max:5',
             'images.*'            => 'required|image|mimes:jpeg,png,jpg,gif,webp|max:5120',
             'primary_image_index' => 'required|integer|min:0|max:4',

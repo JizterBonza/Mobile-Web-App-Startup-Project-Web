@@ -92,7 +92,7 @@ class KlasrumContentController extends Controller
             'posts' => $posts,
             'categories' => KlasrumCategory::options(),
             'canManage' => $canManage,
-            'canCreatePost' => $canManage || Auth::user()?->user_type === 'owner_manager',
+            'canCreatePost' => $canManage,
         ]);
     }
 
