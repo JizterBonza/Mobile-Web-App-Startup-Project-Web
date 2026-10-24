@@ -2,17 +2,18 @@ import { Head } from '@inertiajs/react'
 import { ContactSupportFab } from '../Components/Dashboard/ContactSupportFab'
 import { DashboardHeader, VENDOR_DROPDOWN_NAV } from '../Components/Dashboard/DashboardHeader'
 import { useDashboardSession } from '../hooks/useDashboardSession'
+import { useMessagingUnread } from '../hooks/useMessagingUnread'
 
 export default function VendorKlasmeytLayout({
     auth,
     title,
     children,
     notificationCount = 0,
-    messageCount = 0,
     mainClassName = 'w-full px-6 py-8',
     showContactSupport = true,
 }) {
     useDashboardSession()
+    const messageCount = useMessagingUnread()
 
     return (
         <>

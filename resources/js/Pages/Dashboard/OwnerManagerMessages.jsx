@@ -151,7 +151,7 @@ function FarmOwnerInbox({ auth, farm, conversations = [] }) {
 }
 
 function AgrivetBranchList({ auth, agrivet, branches = [] }) {
-    useShopBranchUnread(branches)
+    useShopBranchUnread(branches, auth?.user)
 
     const openBranchChat = (branchId) => {
         router.visit(`/dashboard/owner-manager/messages/${branchId}`)

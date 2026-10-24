@@ -216,6 +216,8 @@ Route::middleware(['auth:sanctum', 'account.active'])->group(function () {
     Route::post('farms/{farmId}/messages', [CustomerShopMessageController::class, 'startFarm']);
     Route::get('messages/{conversationId}', [CustomerShopMessageController::class, 'show']);
     Route::post('messages/{conversationId}', [CustomerShopMessageController::class, 'send']);
+    Route::post('messages/{conversationId}/read', [CustomerShopMessageController::class, 'markRead'])
+        ->whereNumber('conversationId');
 
     // Activity logs (admin audit trail)
     Route::get('activity-logs', [ActivityLogController::class, 'index']);

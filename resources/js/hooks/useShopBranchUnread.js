@@ -1,10 +1,10 @@
 import { useEffect } from 'react'
-import { router } from '@inertiajs/react'
+import { scheduleMessagingReload } from '../messaging/scheduleMessagingReload'
 
 /**
  * Refresh owner/manager branch unread badges when customer messages arrive.
  */
-export function useShopBranchUnread(branches = []) {
+export function useShopBranchUnread(branches = [], user = null) {
     const shopIdsKey = branches.map((branch) => branch.id).filter(Boolean).join(',')
 
     useEffect(() => {
@@ -12,34 +12,27 @@ export function useShopBranchUnread(branches = []) {
 
         const shopIds = shopIdsKey.split(',')
         const channelNames = shopIds.map((shopId) => `shop.${shopId}`)
-        let reloadTimer = null
-
-        const scheduleReload = () => {
-            if (reloadTimer) return
-            reloadTimer = window.setTimeout(() => {
-                reloadTimer = null
-                router.reload({ only: ['branches'], preserveScroll: true })
-            }, 400)
-        }
 
         channelNames.forEach((channelName) => {
-            window.Echo.private(channelName).listen('.shop.message.sent', (payload) => {
+            const channel = window.Echo.private(channelName)
+            channel.listen('.shop.message.sent', (payload) => {
                 if (
                     payload?.message?.sender_role === 'customer' &&
                     payload?.message?.type !== 'order_update'
                 ) {
-                    scheduleReload()
+                    scheduleMessagingReload(['branches'])
                 }
+            })
+            channel.listen('.shop.conversation.read', (payload) => {
+                if (user?.id && Number(payload?.reader_user_id) !== Number(user.id)) return
+                scheduleMessagingReload(['branches'])
             })
         })
 
         return () => {
-            if (reloadTimer) {
-                window.clearTimeout(reloadTimer)
-            }
             channelNames.forEach((channelName) => {
                 window.Echo.leave(channelName)
             })
         }
-    }, [shopIdsKey])
+    }, [shopIdsKey, user?.id])
 }

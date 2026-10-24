@@ -2,6 +2,7 @@ import { Head, usePage } from '@inertiajs/react'
 import { ContactSupportFab } from '../Components/Dashboard/ContactSupportFab'
 import { DashboardHeader, OWNER_MANAGER_DROPDOWN_NAV } from '../Components/Dashboard/DashboardHeader'
 import { useDashboardSession } from '../hooks/useDashboardSession'
+import { useMessagingUnread } from '../hooks/useMessagingUnread'
 
 export const OWNER_MANAGER_NAV = [
     { label: 'Dashboard', id: 'dashboard', href: '/dashboard/owner-manager' },
@@ -45,11 +46,11 @@ export default function OwnerManagerKlasmeytLayout({
     title,
     children,
     notificationCount = 0,
-    messageCount = 0,
     mainClassName = 'w-full px-6 py-8',
     showContactSupport = true,
 }) {
     useDashboardSession()
+    const messageCount = useMessagingUnread()
 
     const managesFarm = Boolean(auth?.user?.manages_farm)
     const navigationItems = managesFarm

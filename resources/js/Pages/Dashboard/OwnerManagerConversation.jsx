@@ -32,7 +32,11 @@ function MessageMeta({ message }) {
                 <span>
                     {message.time} • Sent by {message.sent_by || 'Staff'}
                 </span>
-                <CheckCheck className="h-3.5 w-3.5 text-[#22C55E]" strokeWidth={2.5} />
+                <CheckCheck
+                    className={`h-3.5 w-3.5 ${message.status === 'read' ? 'text-[#22C55E]' : 'text-[#9CA3AF]'}`}
+                    strokeWidth={2.5}
+                    title={message.status === 'read' ? 'Read' : 'Sent'}
+                />
             </div>
         )
     }
@@ -184,6 +188,7 @@ export default function OwnerManagerConversation({
     conversation,
     messages = [],
     sendUrl,
+    readUrl,
     productsUrl,
     listUrl,
 }) {
@@ -197,10 +202,11 @@ export default function OwnerManagerConversation({
     const fileInputRef = useRef(null)
     const threadRef = useRef(null)
     const pendingAttachmentsRef = useRef([])
-    const liveMessages = useShopConversationMessages(
+    const { messages: liveMessages, lastSeen } = useShopConversationMessages(
         conversation?.id,
         messages,
         auth?.user,
+        { initialLastSeen: conversation?.last_seen || '', readUrl },
     )
 
     useEffect(() => {
@@ -379,7 +385,7 @@ export default function OwnerManagerConversation({
                                 {conversation.name}
                             </p>
                             <p className="truncate text-xs text-[#9CA3AF]">
-                                {conversation.last_seen}
+                                {lastSeen}
                             </p>
                         </div>
                     </div>

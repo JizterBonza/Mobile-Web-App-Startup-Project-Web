@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Events\ShopConversationRead as ShopConversationReadEvent;
 use App\Events\ShopMessageSent;
 use App\Models\Farm;
 use App\Models\FarmGamefowlListing;
@@ -188,7 +189,11 @@ class ShopMessagingService
                 'avatar_url' => $this->avatarUrl($conversation->customer),
                 'last_seen' => $this->lastSeenLabel($conversation),
             ],
-            'messages' => $this->formatMessages($conversation->messages, $viewer),
+            'messages' => $this->formatMessages(
+                $conversation->messages,
+                $viewer,
+                $this->counterpartReadAt($conversation, $viewer),
+            ),
         ];
     }
 
@@ -261,7 +266,7 @@ class ShopMessagingService
                 'last_message_preview' => $preview,
             ]);
 
-            $this->markRead($conversation, $sender);
+            $this->markRead($conversation, $sender, false);
 
             return $message->fresh(['attachments', 'sender.userDetail']);
         });
@@ -327,7 +332,7 @@ class ShopMessagingService
                 'last_message_preview' => $preview,
             ]);
 
-            $this->markRead($conversation, $sender);
+            $this->markRead($conversation, $sender, false);
 
             return $message->fresh(['attachments', 'sender.userDetail']);
         });
@@ -381,7 +386,7 @@ class ShopMessagingService
                 'last_message_preview' => $preview,
             ]);
 
-            $this->markRead($conversation, $sender);
+            $this->markRead($conversation, $sender, false);
 
             return $message->fresh(['attachments', 'sender.userDetail']);
         });
@@ -686,6 +691,8 @@ class ShopMessagingService
             'conversation_id' => (int) $conversation->id,
             'shop_id' => $conversation->shop_id ? (int) $conversation->shop_id : null,
             'farm_id' => $conversation->farm_id ? (int) $conversation->farm_id : null,
+            'last_seen' => $this->lastSeenLabel($conversation),
+            'read_cursors' => $this->readCursors($conversation),
             'message' => $formatted,
             'preview' => [
                 'name' => $this->displayName($conversation->customer),
@@ -701,11 +708,14 @@ class ShopMessagingService
         ShopConversation $conversation,
         ShopConversationMessage $message
     ): void {
+        $recipients = $this->recipientUserIds($conversation);
+
         try {
             $pending = broadcast(new ShopMessageSent(
                 $conversation,
                 $message,
                 $this->formatBroadcastPayload($conversation, $message),
+                $recipients,
             ));
             unset($pending);
         } catch (\Throwable $e) {
@@ -715,19 +725,201 @@ class ShopMessagingService
                 'error' => $e->getMessage(),
             ]);
         }
+
+        $sender = $message->sender;
+        if ($sender instanceof User) {
+            $this->broadcastRead($conversation, $sender, now(), $recipients);
+        }
     }
 
-    public function markRead(ShopConversation $conversation, User $user): void
+    public function markRead(ShopConversation $conversation, User $user, bool $broadcast = true): void
     {
+        $readAt = now();
+
         ShopConversationRead::updateOrCreate(
             [
                 'shop_conversation_id' => $conversation->id,
                 'user_id' => $user->id,
             ],
             [
-                'last_read_at' => now(),
+                'last_read_at' => $readAt,
             ]
         );
+
+        if ($broadcast) {
+            $this->broadcastRead($conversation, $user, $readAt);
+        }
+    }
+
+    /**
+     * Users who should receive this conversation on their private user channel.
+     *
+     * @return array<int, int>
+     */
+    public function recipientUserIds(ShopConversation $conversation): array
+    {
+        $ids = [(int) $conversation->customer_user_id];
+
+        if ($conversation->shop_id) {
+            $conversation->loadMissing('shop:id,agrivet_id');
+            $shop = $conversation->shop;
+
+            if ($shop) {
+                $vendorIds = User::query()
+                    ->where('status', User::STATUS_ACTIVE)
+                    ->where('user_type', User::TYPE_VENDOR)
+                    ->whereHas('shops', function ($query) use ($shop) {
+                        $query->where('shops.id', $shop->id);
+                    })
+                    ->pluck('id');
+
+                foreach ($vendorIds as $id) {
+                    $ids[] = (int) $id;
+                }
+
+                if ($shop->agrivet_id) {
+                    $ownerIds = User::query()
+                        ->where('status', User::STATUS_ACTIVE)
+                        ->where('user_type', User::TYPE_OWNER_MANAGER)
+                        ->where('agrivet_id', $shop->agrivet_id)
+                        ->pluck('id');
+
+                    foreach ($ownerIds as $id) {
+                        $ids[] = (int) $id;
+                    }
+                }
+            }
+        }
+
+        if ($conversation->farm_id) {
+            $farmOwnerIds = User::query()
+                ->where('status', User::STATUS_ACTIVE)
+                ->where('user_type', User::TYPE_OWNER_MANAGER)
+                ->where('farm_id', $conversation->farm_id)
+                ->pluck('id');
+
+            foreach ($farmOwnerIds as $id) {
+                $ids[] = (int) $id;
+            }
+        }
+
+        return array_values(array_unique(array_filter($ids)));
+    }
+
+    /**
+     * Unread conversations for the web dashboard badge.
+     */
+    public function unreadCountForDashboard(User $user): int
+    {
+        if ($user->user_type === User::TYPE_VENDOR) {
+            $shop = $user->shops()->first();
+            if (! $shop) {
+                return 0;
+            }
+
+            $counts = $this->unreadConversationCountsByShop([(int) $shop->id], $user->id);
+
+            return (int) ($counts[(int) $shop->id] ?? $counts[$shop->id] ?? 0);
+        }
+
+        if ($user->user_type !== User::TYPE_OWNER_MANAGER) {
+            return 0;
+        }
+
+        if ($user->farm_id && ! $user->agrivet_id) {
+            $conversations = ShopConversation::query()
+                ->where('farm_id', $user->farm_id)
+                ->get(['id', 'shop_id']);
+
+            return $this->countUnreadFlags(
+                $this->unreadFlagsForConversations($conversations, $user->id)
+            );
+        }
+
+        if (! $user->agrivet_id) {
+            return 0;
+        }
+
+        $shopIds = Shop::query()
+            ->where('agrivet_id', $user->agrivet_id)
+            ->pluck('id')
+            ->map(fn ($id) => (int) $id)
+            ->all();
+
+        if ($shopIds === []) {
+            return 0;
+        }
+
+        return (int) array_sum($this->unreadConversationCountsByShop($shopIds, $user->id));
+    }
+
+    /**
+     * @param  array<int, int>|null  $recipientUserIds
+     */
+    private function broadcastRead(
+        ShopConversation $conversation,
+        User $reader,
+        Carbon $readAt,
+        ?array $recipientUserIds = null,
+    ): void {
+        try {
+            $readerRole = $this->readBroadcastRole($reader);
+            $pending = broadcast(new ShopConversationReadEvent(
+                $conversation,
+                (int) $reader->id,
+                $readerRole,
+                $readAt->toIso8601String(),
+                $recipientUserIds ?? $this->recipientUserIds($conversation),
+                $readerRole === ShopConversationMessage::ROLE_CUSTOMER
+                    ? 'Active now'
+                    : $this->lastSeenLabel($conversation),
+            ));
+            unset($pending);
+        } catch (\Throwable $e) {
+            Log::warning('Failed to broadcast shop conversation read.', [
+                'conversation_id' => $conversation->id,
+                'reader_user_id' => $reader->id,
+                'error' => $e->getMessage(),
+            ]);
+        }
+    }
+
+    /**
+     * @return array{customer_last_read_at: ?string, staff_last_read_at: ?string}
+     */
+    private function readCursors(ShopConversation $conversation): array
+    {
+        $reads = ShopConversationRead::query()
+            ->where('shop_conversation_id', $conversation->id)
+            ->get(['user_id', 'last_read_at']);
+
+        $customerAt = $reads->first(
+            fn (ShopConversationRead $read) => (int) $read->user_id === (int) $conversation->customer_user_id
+        )?->last_read_at;
+
+        $staffAt = $reads
+            ->filter(
+                fn (ShopConversationRead $read) => (int) $read->user_id !== (int) $conversation->customer_user_id
+                    && $read->last_read_at
+            )
+            ->sortByDesc(fn (ShopConversationRead $read) => $read->last_read_at->getTimestamp())
+            ->first()
+            ?->last_read_at;
+
+        return [
+            'customer_last_read_at' => $customerAt?->toIso8601String(),
+            'staff_last_read_at' => $staffAt?->toIso8601String(),
+        ];
+    }
+
+    private function counterpartReadAt(ShopConversation $conversation, User $viewer): ?Carbon
+    {
+        $cursors = $this->readCursors($conversation);
+        $iso = in_array($viewer->user_type, [User::TYPE_VENDOR, User::TYPE_OWNER_MANAGER], true)
+            ? $cursors['customer_last_read_at']
+            : $cursors['staff_last_read_at'];
+
+        return $iso ? Carbon::parse($iso) : null;
     }
 
     public function assertOwnerManagerShopAccess(User $user, int $shopId): Shop
@@ -768,7 +960,7 @@ class ShopMessagingService
      * @param  Collection<int, ShopConversationMessage>  $messages
      * @return list<array<string, mixed>>
      */
-    private function formatMessages(Collection $messages, User $viewer): array
+    private function formatMessages(Collection $messages, User $viewer, ?Carbon $counterpartReadAt = null): array
     {
         $formatted = [];
         $lastDateKey = null;
@@ -786,7 +978,7 @@ class ShopMessagingService
                 $lastDateKey = $dateKey;
             }
 
-            $formatted[] = $this->formatSingleMessage($message, $viewer);
+            $formatted[] = $this->formatSingleMessage($message, $viewer, $counterpartReadAt);
         }
 
         return $formatted;
@@ -795,8 +987,11 @@ class ShopMessagingService
     /**
      * @return array<string, mixed>
      */
-    private function formatSingleMessage(ShopConversationMessage $message, User $viewer): array
-    {
+    private function formatSingleMessage(
+        ShopConversationMessage $message,
+        User $viewer,
+        ?Carbon $counterpartReadAt = null,
+    ): array {
         // Staff shared inbox: customer = incoming, shop/staff messages = outgoing.
         if (in_array($viewer->user_type, [User::TYPE_VENDOR, User::TYPE_OWNER_MANAGER], true)) {
             $isOutgoing = $message->isShopOriginated();
@@ -809,13 +1004,16 @@ class ShopMessagingService
             'type' => $message->type,
             'side' => $isOutgoing ? 'outgoing' : 'incoming',
             'time' => $this->formatClockTime($message->created_at),
+            'created_at' => $message->created_at?->toIso8601String(),
         ];
 
         if ($isOutgoing) {
             $base['sent_by'] = $message->isStaffMessage()
                 ? $this->displayName($message->sender)
                 : 'Staff';
-            $base['status'] = 'read';
+            $base['status'] = ($counterpartReadAt && $message->created_at && $counterpartReadAt->greaterThanOrEqualTo($message->created_at))
+                ? 'read'
+                : 'sent';
         }
 
         $attachments = $message->attachments ?? collect();
@@ -1063,6 +1261,23 @@ class ShopMessagingService
     }
 
     /**
+     * Read receipts treat only customer accounts as the customer side.
+     * Riders and other staff must not flip shop messages to "read".
+     */
+    private function readBroadcastRole(User $user): string
+    {
+        if ($user->user_type === User::TYPE_CUSTOMER) {
+            return ShopConversationMessage::ROLE_CUSTOMER;
+        }
+
+        $role = $this->senderRole($user);
+
+        return $role === ShopConversationMessage::ROLE_CUSTOMER
+            ? ShopConversationMessage::ROLE_OWNER_MANAGER
+            : $role;
+    }
+
+    /**
      * @param  array<int, UploadedFile>  $files
      */
     private function resolveMessageType(array $files, string $body): string
@@ -1299,12 +1514,20 @@ class ShopMessagingService
 
     private function lastSeenLabel(ShopConversation $conversation): string
     {
-        $lastCustomerMessage = $conversation->messages
-            ->where('sender_role', ShopConversationMessage::ROLE_CUSTOMER)
-            ->where('type', '!=', ShopConversationMessage::TYPE_ORDER_UPDATE)
-            ->last();
-
-        $at = $lastCustomerMessage?->created_at ?? $conversation->last_message_at;
+        if ($conversation->relationLoaded('messages')) {
+            $lastCustomerMessage = $conversation->messages
+                ->where('sender_role', ShopConversationMessage::ROLE_CUSTOMER)
+                ->where('type', '!=', ShopConversationMessage::TYPE_ORDER_UPDATE)
+                ->last();
+            $at = $lastCustomerMessage?->created_at ?? $conversation->last_message_at;
+        } else {
+            $latest = ShopConversationMessage::query()
+                ->where('shop_conversation_id', $conversation->id)
+                ->where('sender_role', ShopConversationMessage::ROLE_CUSTOMER)
+                ->where('type', '!=', ShopConversationMessage::TYPE_ORDER_UPDATE)
+                ->max('created_at');
+            $at = $latest ? Carbon::parse($latest) : $conversation->last_message_at;
+        }
         if (! $at) {
             return 'No activity yet';
         }

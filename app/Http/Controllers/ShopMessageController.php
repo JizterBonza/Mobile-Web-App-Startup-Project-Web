@@ -167,6 +167,10 @@ class ShopMessageController extends Controller
                 'shopId' => $shop->id,
                 'conversationId' => $conversation->id,
             ]),
+            'readUrl' => route('dashboard.owner-manager.messages.read', [
+                'shopId' => $shop->id,
+                'conversationId' => $conversation->id,
+            ]),
             'productsUrl' => route('dashboard.owner-manager.messages.products', [
                 'shopId' => $shop->id,
             ]),
@@ -250,6 +254,9 @@ class ShopMessageController extends Controller
             'sendUrl' => route('dashboard.vendor.messages.send', [
                 'conversationId' => $conversation->id,
             ]),
+            'readUrl' => route('dashboard.vendor.messages.read', [
+                'conversationId' => $conversation->id,
+            ]),
             'productsUrl' => route('dashboard.vendor.messages.products'),
         ]);
     }
@@ -286,6 +293,45 @@ class ShopMessageController extends Controller
         $conversation = $this->messaging->findConversationForShop($shop, $conversationId);
 
         return $this->storeMessage($request, $conversation, $user);
+    }
+
+    public function farmMarkRead(int $conversationId)
+    {
+        $user = auth()->user();
+        abort_unless($this->isFarmOwner($user), 404);
+
+        $farm = $user->managedFarm;
+        abort_unless($farm, 404);
+
+        $conversation = $this->messaging->findConversationForFarm($farm, $conversationId);
+        $this->messaging->markRead($conversation, $user);
+
+        return response()->noContent();
+    }
+
+    public function ownerManagerMarkRead(int $shopId, int $conversationId)
+    {
+        $user = auth()->user();
+        abort_if($this->isFarmOwner($user), 404);
+
+        $shop = $this->messaging->assertOwnerManagerShopAccess($user, $shopId);
+        $conversation = $this->messaging->findConversationForShop($shop, $conversationId);
+        $this->messaging->markRead($conversation, $user);
+
+        return response()->noContent();
+    }
+
+    public function vendorMarkRead(int $conversationId)
+    {
+        $user = auth()->user();
+        $shop = $this->resolveVendorShop($user);
+        abort_unless($shop, 404);
+
+        $this->messaging->assertVendorShopAccess($user, $shop);
+        $conversation = $this->messaging->findConversationForShop($shop, $conversationId);
+        $this->messaging->markRead($conversation, $user);
+
+        return response()->noContent();
     }
 
     private function storeMessage(Request $request, $conversation, User $user)
@@ -349,6 +395,9 @@ class ShopMessageController extends Controller
             'conversation' => $thread['conversation'],
             'messages' => $thread['messages'],
             'sendUrl' => route('dashboard.owner-manager.messages.inbox.send', [
+                'conversationId' => $conversation->id,
+            ]),
+            'readUrl' => route('dashboard.owner-manager.messages.inbox.read', [
                 'conversationId' => $conversation->id,
             ]),
             'productsUrl' => route('dashboard.owner-manager.messages.inbox.products'),

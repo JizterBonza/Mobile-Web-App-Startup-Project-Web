@@ -13,7 +13,20 @@ export function isCustomerOriginatedMessage(payloadMessage) {
     return payloadMessage?.sender_role === 'customer' && payloadMessage?.type !== 'order_update'
 }
 
-export function toUiMessage(payloadMessage, user) {
+function outgoingReadCursor(readCursors, user) {
+    if (!readCursors) return null
+    return isStaffUser(user) ? readCursors.customer_last_read_at : readCursors.staff_last_read_at
+}
+
+function deliveryStatus(createdAt, cursor) {
+    if (!createdAt || !cursor) return 'sent'
+    const created = Date.parse(createdAt)
+    const read = Date.parse(cursor)
+    if (Number.isNaN(created) || Number.isNaN(read)) return 'sent'
+    return read >= created ? 'read' : 'sent'
+}
+
+export function toUiMessage(payloadMessage, user, readCursors = null) {
     const isOutgoing = isStaffUser(user)
         ? isShopOriginatedMessage(payloadMessage)
         : Number(payloadMessage.sender_user_id) === Number(user?.id)
@@ -23,13 +36,17 @@ export function toUiMessage(payloadMessage, user) {
         type: payloadMessage.type,
         side: isOutgoing ? 'outgoing' : 'incoming',
         time: payloadMessage.time || '',
+        created_at: payloadMessage.created_at || null,
     }
 
     if (isOutgoing) {
         message.sent_by = STAFF_ROLES.has(payloadMessage.sender_role)
             ? payloadMessage.sent_by || 'Staff'
             : 'Staff'
-        message.status = 'read'
+        message.status = deliveryStatus(
+            payloadMessage.created_at,
+            outgoingReadCursor(readCursors, user),
+        )
     }
 
     if (payloadMessage.type === 'images') {
@@ -71,8 +88,38 @@ export function appendLiveMessage(messages, payload, user) {
         })
     }
 
-    next.push(toUiMessage(incoming, user))
+    next.push(toUiMessage(incoming, user, payload.read_cursors))
     return next
+}
+
+export function applyReadReceipt(messages, payload, user) {
+    if (!payload?.last_read_at || !payload?.reader_role) return messages
+
+    const readerIsCustomer = payload.reader_role === 'customer'
+    const marksOutgoingRead = isStaffUser(user) ? readerIsCustomer : !readerIsCustomer
+    if (!marksOutgoingRead) return messages
+
+    const readAt = Date.parse(payload.last_read_at)
+    if (Number.isNaN(readAt)) return messages
+
+    return messages.map((message) => {
+        if (message.side !== 'outgoing' || message.type === 'date' || message.status === 'read') {
+            return message
+        }
+
+        const created = Date.parse(message.created_at || '')
+        if (!Number.isNaN(created) && created > readAt) return message
+
+        return { ...message, status: 'read' }
+    })
+}
+
+export function clearConversationUnread(conversations, conversationId) {
+    return conversations.map((conversation) =>
+        Number(conversation.id) === Number(conversationId)
+            ? { ...conversation, unread: false }
+            : conversation,
+    )
 }
 
 export function applyConversationListUpdate(conversations, payload, user) {
