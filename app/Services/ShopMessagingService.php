@@ -142,6 +142,7 @@ class ShopMessagingService
                 'shop_id' => $conversation->shop_id,
                 'farm_id' => $conversation->farm_id,
                 'shop_name' => $conversation->shop?->shop_name ?? $conversation->farm?->name,
+                'avatar_url' => PublicStorage::url($conversation->shop?->logo_url ?? $conversation->farm?->logo_url),
                 'last_message' => $conversation->last_message_preview,
                 'last_message_at' => $conversation->last_message_at?->toIso8601String(),
                 'last_sender' => $this->formatLastSender($lastMessages->get($conversation->id)),
