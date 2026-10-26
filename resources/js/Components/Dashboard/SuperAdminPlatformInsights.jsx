@@ -7,6 +7,7 @@ import {
     ShoppingCart,
     Star,
     Store,
+    TrendingDown,
     TrendingUp,
     UserCog,
     Users,
@@ -22,13 +23,34 @@ const defaultUserStats = {
 const defaultOrderMetrics = {
     storesTotal: 0,
     storesActive: 0,
-    storesTrend: '+12%',
-    ordersTotal: '8,247',
-    ordersMonth: '1,853',
-    ordersTrend: '+24%',
-    itemsSold: '42,589',
-    itemsTrend: '+18%',
-    avgItemsPerOrder: '5.2',
+    storesTrend: null,
+    ordersTotal: '0',
+    ordersMonth: '0',
+    ordersTrend: null,
+    itemsSold: '0',
+    itemsTrend: null,
+    avgItemsPerOrder: '0.0',
+}
+
+function MetricTrend({ value }) {
+    if (value == null || value === '') return null
+
+    const numeric = Number(String(value).replace('%', '').replace('+', ''))
+    if (!Number.isFinite(numeric)) return null
+
+    if (numeric === 0) {
+        return <span className="text-xs font-semibold text-[#9CA3AF]">0%</span>
+    }
+
+    const positive = numeric > 0
+    const Icon = positive ? TrendingUp : TrendingDown
+
+    return (
+        <div className={`flex items-center gap-1 ${positive ? 'text-[#00C950]' : 'text-[#E20E28]'}`}>
+            <Icon className="h-4 w-4" />
+            <span className="text-xs font-semibold">{value}</span>
+        </div>
+    )
 }
 
 function StatDot({ active }) {
@@ -166,10 +188,7 @@ export function SuperAdminPlatformInsights({
                         <div className="rounded-lg bg-[#FFEBEE] p-3">
                             <Store className="h-6 w-6 text-[#E20E28]" />
                         </div>
-                        <div className="flex items-center gap-1 text-[#00C950]">
-                            <TrendingUp className="h-4 w-4" />
-                            <span className="text-xs font-semibold">{orderMetrics.storesTrend}</span>
-                        </div>
+                        <MetricTrend value={orderMetrics.storesTrend} />
                     </div>
                     <h3 className="mb-1 text-sm font-semibold text-[#6B7280]">Total Stores</h3>
                     <p className="mb-2 text-3xl font-bold text-[#102059]">{orderMetrics.storesTotal}</p>
@@ -181,10 +200,7 @@ export function SuperAdminPlatformInsights({
                         <div className="rounded-lg bg-[#FFF4E6] p-3">
                             <ShoppingCart className="h-6 w-6 text-[#D3A218]" />
                         </div>
-                        <div className="flex items-center gap-1 text-[#00C950]">
-                            <TrendingUp className="h-4 w-4" />
-                            <span className="text-xs font-semibold">{orderMetrics.ordersTrend}</span>
-                        </div>
+                        <MetricTrend value={orderMetrics.ordersTrend} />
                     </div>
                     <h3 className="mb-1 text-sm font-semibold text-[#6B7280]">Total Orders</h3>
                     <p className="mb-2 text-3xl font-bold text-[#102059]">{orderMetrics.ordersTotal}</p>
@@ -196,10 +212,7 @@ export function SuperAdminPlatformInsights({
                         <div className="rounded-lg bg-[#EEF2FF] p-3">
                             <Package className="h-6 w-6 text-[#244693]" />
                         </div>
-                        <div className="flex items-center gap-1 text-[#00C950]">
-                            <TrendingUp className="h-4 w-4" />
-                            <span className="text-xs font-semibold">{orderMetrics.itemsTrend}</span>
-                        </div>
+                        <MetricTrend value={orderMetrics.itemsTrend} />
                     </div>
                     <h3 className="mb-1 text-sm font-semibold text-[#6B7280]">Total Items Sold</h3>
                     <p className="mb-2 text-3xl font-bold text-[#102059]">{orderMetrics.itemsSold}</p>
@@ -281,10 +294,14 @@ export function SuperAdminPlatformInsights({
                                     <div className="flex-1">
                                         <p className="mb-1 text-sm font-bold text-[#102059]">{rider.name}</p>
                                         <div className="flex items-center gap-3 text-xs text-[#6B7280]">
-                                            <div className="flex items-center gap-1">
-                                                <Star className="h-3 w-3 fill-[#D3A218] text-[#D3A218]" />
-                                                <span>{rider.rating}</span>
-                                            </div>
+                                            {rider.rating != null && rider.rating !== '' ? (
+                                                <div className="flex items-center gap-1">
+                                                    <Star className="h-3 w-3 fill-[#D3A218] text-[#D3A218]" />
+                                                    <span>{rider.rating}</span>
+                                                </div>
+                                            ) : (
+                                                <span>No rating</span>
+                                            )}
                                             <span>•</span>
                                             <span>{rider.successRate}% success</span>
                                         </div>

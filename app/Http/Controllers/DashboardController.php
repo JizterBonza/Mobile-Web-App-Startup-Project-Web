@@ -2,12 +2,6 @@
 
 namespace App\Http\Controllers;
 
-use Carbon\Carbon;
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Validation\Rule;
-use Illuminate\Support\Facades\Schema;
-use Inertia\Inertia;
 use App\Http\Controllers\Concerns\CreatesProductCatalogEntry;
 use App\Http\Controllers\Concerns\ManagesShopOrders;
 use App\Models\ActivityLog;
@@ -17,137 +11,23 @@ use App\Models\FarmGamefowlListing;
 use App\Models\GamefowlCatalog;
 use App\Models\ProductCatalog;
 use App\Models\SubCategory;
-use App\Http\Controllers\SupportTicketController;
 use App\Models\Zone;
+use Carbon\Carbon;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
+use Illuminate\Validation\Rule;
+use Inertia\Inertia;
 
 class DashboardController extends Controller
 {
     use CreatesProductCatalogEntry;
     use ManagesShopOrders;
+
     public function superAdmin()
     {
-        // User counts grouped by type and status
-        $userRows = DB::table('users')
-            ->select('user_type', 'status', DB::raw('count(*) as count'))
-            ->whereIn('user_type', ['super_admin', 'admin', 'vendor', 'veterinarian', 'rider'])
-            ->groupBy('user_type', 'status')
-            ->get()
-            ->groupBy('user_type');
-
-        $roleStat = function (string $type) use ($userRows): array {
-            $rows = $userRows->get($type, collect());
-            $total = $rows->sum('count');
-            $active = $rows->firstWhere('status', 'active')?->count ?? 0;
-            return ['total' => (int) $total, 'active' => (int) $active, 'inactive' => (int) ($total - $active)];
-        };
-
-        // Agrivet counts
-        $agrivetRows = DB::table('agrivets')
-            ->select('status', DB::raw('count(*) as count'))
-            ->groupBy('status')
-            ->get();
-        $agrivetTotal = (int) $agrivetRows->sum('count');
-        $agrivetActive = (int) ($agrivetRows->firstWhere('status', 'active')?->count ?? 0);
-
-        // Store metrics
-        $storesTotal = (int) DB::table('shops')->count();
-        $storesActive = (int) DB::table('shops')->where('shop_status', 'active')->count();
-
-        // Order metrics
-        $ordersTotal = (int) DB::table('orders')->count();
-        $ordersMonth = (int) DB::table('orders')
-            ->whereMonth('ordered_at', now()->month)
-            ->whereYear('ordered_at', now()->year)
-            ->count();
-
-        $deliveredItemStatusId = $this->deliveredItemStatusId();
-
-        $itemsSold = (int) DB::table('order_items')
-            ->where('item_status', $deliveredItemStatusId)
-            ->sum('quantity');
-
-        $avgItemsPerOrder = $ordersTotal > 0 ? round($itemsSold / $ordersTotal, 1) : 0;
-
-        // Top 5 stores by delivered order revenue
-        $topStores = DB::table('shops')
-            ->join('agrivets', 'shops.agrivet_id', '=', 'agrivets.id')
-            ->leftJoin('order_items', function ($join) use ($deliveredItemStatusId) {
-                $join->on('order_items.shop_id', '=', 'shops.id')
-                     ->where('order_items.item_status', '=', $deliveredItemStatusId);
-            })
-            ->leftJoin('items', 'items.shop_id', '=', 'shops.id')
-            ->select(
-                'shops.id',
-                'shops.shop_name as name',
-                'agrivets.name as agrivetName',
-                DB::raw('coalesce(count(distinct order_items.order_id), 0) as orders'),
-                DB::raw('count(distinct items.id) as products'),
-                DB::raw('coalesce(sum(order_items.quantity * order_items.price_at_purchase), 0) as revenue')
-            )
-            ->groupBy('shops.id', 'shops.shop_name', 'agrivets.name')
-            ->orderByDesc('orders')
-            ->limit(5)
-            ->get()
-            ->filter(fn($s) => $s->orders > 0)
-            ->map(fn($s) => [
-                'id'          => $s->id,
-                'name'        => $s->name,
-                'agrivetName' => $s->agrivetName,
-                'orders'      => (int) $s->orders,
-                'products'    => (int) $s->products,
-                'revenue'     => '$' . number_format($s->revenue, 2),
-            ])
-            ->values();
-
-        // Top 5 riders by completed deliveries
-        $topRiders = DB::table('users')
-            ->join('user_details', 'users.user_detail_id', '=', 'user_details.id')
-            ->leftJoin('order_shops', 'order_shops.rider_id', '=', 'users.id')
-            ->where('users.user_type', 'rider')
-            ->select(
-                'users.id',
-                DB::raw("concat(user_details.first_name, ' ', user_details.last_name) as name"),
-                DB::raw('count(order_shops.id) as deliveries')
-            )
-            ->groupBy('users.id', 'user_details.first_name', 'user_details.last_name')
-            ->orderByDesc('deliveries')
-            ->limit(5)
-            ->get()
-            ->filter(fn($r) => $r->deliveries > 0)
-            ->map(fn($r) => [
-                'id'          => $r->id,
-                'name'        => $r->name,
-                'deliveries'  => (int) $r->deliveries,
-                'rating'      => 'N/A',
-                'successRate' => 100,
-            ])
-            ->values();
-
         return Inertia::render('Dashboard/SuperAdminDashboard', [
-            'insights' => [
-                'userStats' => [
-                    'superAdmins'   => $roleStat('super_admin'),
-                    'admins'        => $roleStat('admin'),
-                    'agrivets'      => ['total' => $agrivetTotal, 'active' => $agrivetActive, 'inactive' => $agrivetTotal - $agrivetActive],
-                    'vendors'       => $roleStat('vendor'),
-                    'veterinarians' => $roleStat('veterinarian'),
-                    'riders'        => $roleStat('rider'),
-                ],
-                'orderMetrics' => [
-                    'storesTotal'       => $storesTotal,
-                    'storesActive'      => $storesActive,
-                    'storesTrend'       => '',
-                    'ordersTotal'       => number_format($ordersTotal),
-                    'ordersMonth'       => number_format($ordersMonth),
-                    'ordersTrend'       => '',
-                    'itemsSold'         => number_format($itemsSold),
-                    'itemsTrend'        => '',
-                    'avgItemsPerOrder'  => (string) $avgItemsPerOrder,
-                ],
-                'topStores'         => $topStores,
-                'topRiders'         => $topRiders,
-                'notificationCount' => 0,
-            ],
+            'insights' => $this->platformInsights(includeSuperAdmins: true),
         ]);
     }
 
@@ -158,13 +38,13 @@ class DashboardController extends Controller
         $farm = $this->ownerManagerFarmPayload($user);
         $period = $this->ownerManagerPeriod($request);
 
-        if (!$agrivet) {
+        if (! $agrivet) {
             return Inertia::render('Dashboard/OwnerManagerDashboard', [
                 'agrivet' => null,
-                'farm'    => $farm,
-                'shops'   => [],
-                'stats'   => $this->emptyOwnerManagerStats($period),
-                'period'  => $period,
+                'farm' => $farm,
+                'shops' => [],
+                'stats' => $this->emptyOwnerManagerStats($period),
+                'period' => $period,
             ]);
         }
 
@@ -174,10 +54,10 @@ class DashboardController extends Controller
         if (empty($shopIds)) {
             return Inertia::render('Dashboard/OwnerManagerDashboard', [
                 'agrivet' => $agrivet,
-                'farm'    => null,
-                'shops'   => [],
-                'stats'   => $this->emptyOwnerManagerStats($period),
-                'period'  => $period,
+                'farm' => null,
+                'shops' => [],
+                'stats' => $this->emptyOwnerManagerStats($period),
+                'period' => $period,
             ]);
         }
 
@@ -200,14 +80,14 @@ class DashboardController extends Controller
             $previousRevenue = (float) ($previousStoreMetrics['revenue'][$shopId] ?? 0);
 
             return [
-                'id'             => $shop->id,
-                'shop_name'      => $shop->shop_name,
-                'shop_status'    => $shop->shop_status,
+                'id' => $shop->id,
+                'shop_name' => $shop->shop_name,
+                'shop_status' => $shop->shop_status,
                 'average_rating' => $shop->average_rating,
-                'orders'         => $orders,
-                'revenue'        => $revenue,
-                'wallet'         => (float) ($shop->wallet_balance ?? 0),
-                'growth'         => $this->percentageChange($revenue, $previousRevenue),
+                'orders' => $orders,
+                'revenue' => $revenue,
+                'wallet' => (float) ($shop->wallet_balance ?? 0),
+                'growth' => $this->percentageChange($revenue, $previousRevenue),
             ];
         })->values()->toArray();
 
@@ -222,10 +102,10 @@ class DashboardController extends Controller
             ->orderByDesc('quantity')
             ->limit(10)
             ->get()
-            ->map(fn($p) => [
-                'name'     => $p->name,
+            ->map(fn ($p) => [
+                'name' => $p->name,
                 'quantity' => (int) $p->quantity,
-                'revenue'  => (float) $p->revenue,
+                'revenue' => (float) $p->revenue,
             ])
             ->toArray();
 
@@ -238,7 +118,7 @@ class DashboardController extends Controller
             ->get();
 
         $totalCustomers = $customerRows->count();
-        $returningCustomers = $customerRows->filter(fn($c) => $c->order_count > 1)->count();
+        $returningCustomers = $customerRows->filter(fn ($c) => $c->order_count > 1)->count();
         $newCustomers = $totalCustomers - $returningCustomers;
 
         $topBuyers = DB::table('orders')
@@ -257,10 +137,10 @@ class DashboardController extends Controller
             ->orderByDesc('total_spent')
             ->limit(10)
             ->get()
-            ->map(fn($b) => [
-                'name'         => $b->name,
+            ->map(fn ($b) => [
+                'name' => $b->name,
                 'total_orders' => (int) $b->total_orders,
-                'total_spent'  => (float) $b->total_spent,
+                'total_spent' => (float) $b->total_spent,
             ])
             ->toArray();
 
@@ -275,33 +155,33 @@ class DashboardController extends Controller
             ->orderByDesc('revenue')
             ->limit(5)
             ->get()
-            ->map(fn($row) => [
+            ->map(fn ($row) => [
                 'category' => $row->category,
-                'revenue'  => (float) $row->revenue,
+                'revenue' => (float) $row->revenue,
             ])
             ->toArray();
 
         return Inertia::render('Dashboard/OwnerManagerDashboard', [
             'agrivet' => $agrivet,
-            'farm'    => null,
-            'shops'   => $shops,
-            'period'  => $period,
-            'stats'   => [
-                'total_orders'        => $currentMetrics['orders'],
-                'items_sold'          => $currentMetrics['items_sold'],
-                'total_revenue'       => $currentMetrics['revenue'],
-                'average_rating'      => round((float) $avgRating, 1),
-                'store_stats'         => $storeStats,
-                'top_products'        => $topProducts,
-                'new_customers'       => $newCustomers,
+            'farm' => null,
+            'shops' => $shops,
+            'period' => $period,
+            'stats' => [
+                'total_orders' => $currentMetrics['orders'],
+                'items_sold' => $currentMetrics['items_sold'],
+                'total_revenue' => $currentMetrics['revenue'],
+                'average_rating' => round((float) $avgRating, 1),
+                'store_stats' => $storeStats,
+                'top_products' => $topProducts,
+                'new_customers' => $newCustomers,
                 'returning_customers' => $returningCustomers,
-                'total_customers'     => $totalCustomers,
-                'top_buyers'          => $topBuyers,
+                'total_customers' => $totalCustomers,
+                'top_buyers' => $topBuyers,
                 'revenue_by_category' => $revenueByCategory,
-                'comparison_label'    => $this->ownerManagerComparisonLabel($period),
-                'trends'              => [
-                    'total_orders'  => $this->percentageChange($currentMetrics['orders'], $previousMetrics['orders']),
-                    'items_sold'    => $this->percentageChange($currentMetrics['items_sold'], $previousMetrics['items_sold']),
+                'comparison_label' => $this->ownerManagerComparisonLabel($period),
+                'trends' => [
+                    'total_orders' => $this->percentageChange($currentMetrics['orders'], $previousMetrics['orders']),
+                    'items_sold' => $this->percentageChange($currentMetrics['items_sold'], $previousMetrics['items_sold']),
                     'total_revenue' => $this->percentageChange($currentMetrics['revenue'], $previousMetrics['revenue']),
                 ],
             ],
@@ -772,8 +652,8 @@ class DashboardController extends Controller
 
         return Inertia::render('Dashboard/OwnerManagerStores', [
             'agrivet' => $agrivet,
-            'shops'   => $agrivet ? $agrivet->shops : [],
-            'zones'   => $zones->map(fn ($z) => ['id' => $z->id, 'name' => $z->name, 'boundary' => $z->boundary]),
+            'shops' => $agrivet ? $agrivet->shops : [],
+            'zones' => $zones->map(fn ($z) => ['id' => $z->id, 'name' => $z->name, 'boundary' => $z->boundary]),
         ]);
     }
 
@@ -1003,7 +883,7 @@ class DashboardController extends Controller
         );
 
         return redirect()
-            ->to(route('dashboard.owner-manager.stores.store-information', $shopId) . '?tab=products')
+            ->to(route('dashboard.owner-manager.stores.store-information', $shopId).'?tab=products')
             ->with('success', 'Your product registration request has been submitted and is pending approval.');
     }
 
@@ -1055,9 +935,9 @@ class DashboardController extends Controller
         }
 
         return Inertia::render('Dashboard/OwnerManagerOrders', [
-            'agrivet'               => $agrivet,
-            'orders'                => $orders,
-            'deliveryMethods'       => $deliveryMethods,
+            'agrivet' => $agrivet,
+            'orders' => $orders,
+            'deliveryMethods' => $deliveryMethods,
             'preparingItemStatusId' => $preparingItemStatusId ?: null,
         ]);
     }
@@ -1233,7 +1113,7 @@ class DashboardController extends Controller
         );
 
         return redirect()->route('dashboard.owner-manager.orders')
-            ->with('success', 'Order marked as ' . $readyStatus['label'] . '.');
+            ->with('success', 'Order marked as '.$readyStatus['label'].'.');
     }
 
     public function ownerManagerDonePreparingItem(int $orderId, int $orderItemId)
@@ -1268,7 +1148,7 @@ class DashboardController extends Controller
             ->where('id', $orderItemId)
             ->update([
                 'item_status' => $readyStatus['order_item_status_id'],
-                'updated_at'  => now(),
+                'updated_at' => now(),
             ]);
 
         return redirect()->route('dashboard.owner-manager.orders')
@@ -1277,121 +1157,8 @@ class DashboardController extends Controller
 
     public function admin()
     {
-        $userRows = DB::table('users')
-            ->select('user_type', 'status', DB::raw('count(*) as count'))
-            ->whereIn('user_type', ['admin', 'vendor', 'veterinarian', 'rider'])
-            ->groupBy('user_type', 'status')
-            ->get()
-            ->groupBy('user_type');
-
-        $roleStat = function (string $type) use ($userRows): array {
-            $rows = $userRows->get($type, collect());
-            $total = $rows->sum('count');
-            $active = $rows->firstWhere('status', 'active')?->count ?? 0;
-            return ['total' => (int) $total, 'active' => (int) $active, 'inactive' => (int) ($total - $active)];
-        };
-
-        $agrivetRows = DB::table('agrivets')
-            ->select('status', DB::raw('count(*) as count'))
-            ->groupBy('status')
-            ->get();
-        $agrivetTotal = (int) $agrivetRows->sum('count');
-        $agrivetActive = (int) ($agrivetRows->firstWhere('status', 'active')?->count ?? 0);
-
-        $storesTotal = (int) DB::table('shops')->count();
-        $storesActive = (int) DB::table('shops')->where('shop_status', 'active')->count();
-
-        $ordersTotal = (int) DB::table('orders')->count();
-        $ordersMonth = (int) DB::table('orders')
-            ->whereMonth('ordered_at', now()->month)
-            ->whereYear('ordered_at', now()->year)
-            ->count();
-
-        $deliveredItemStatusId = $this->deliveredItemStatusId();
-
-        $itemsSold = (int) DB::table('order_items')
-            ->where('item_status', $deliveredItemStatusId)
-            ->sum('quantity');
-
-        $avgItemsPerOrder = $ordersTotal > 0 ? round($itemsSold / $ordersTotal, 1) : 0;
-
-        $topStores = DB::table('shops')
-            ->join('agrivets', 'shops.agrivet_id', '=', 'agrivets.id')
-            ->leftJoin('order_items', function ($join) use ($deliveredItemStatusId) {
-                $join->on('order_items.shop_id', '=', 'shops.id')
-                     ->where('order_items.item_status', '=', $deliveredItemStatusId);
-            })
-            ->leftJoin('items', 'items.shop_id', '=', 'shops.id')
-            ->select(
-                'shops.id',
-                'shops.shop_name as name',
-                'agrivets.name as agrivetName',
-                DB::raw('coalesce(count(distinct order_items.order_id), 0) as orders'),
-                DB::raw('count(distinct items.id) as products'),
-                DB::raw('coalesce(sum(order_items.quantity * order_items.price_at_purchase), 0) as revenue')
-            )
-            ->groupBy('shops.id', 'shops.shop_name', 'agrivets.name')
-            ->orderByDesc('orders')
-            ->limit(5)
-            ->get()
-            ->filter(fn($s) => $s->orders > 0)
-            ->map(fn($s) => [
-                'id'          => $s->id,
-                'name'        => $s->name,
-                'agrivetName' => $s->agrivetName,
-                'orders'      => (int) $s->orders,
-                'products'    => (int) $s->products,
-                'revenue'     => '$' . number_format($s->revenue, 2),
-            ])
-            ->values();
-
-        $topRiders = DB::table('users')
-            ->join('user_details', 'users.user_detail_id', '=', 'user_details.id')
-            ->leftJoin('order_shops', 'order_shops.rider_id', '=', 'users.id')
-            ->where('users.user_type', 'rider')
-            ->select(
-                'users.id',
-                DB::raw("concat(user_details.first_name, ' ', user_details.last_name) as name"),
-                DB::raw('count(order_shops.id) as deliveries')
-            )
-            ->groupBy('users.id', 'user_details.first_name', 'user_details.last_name')
-            ->orderByDesc('deliveries')
-            ->limit(5)
-            ->get()
-            ->filter(fn($r) => $r->deliveries > 0)
-            ->map(fn($r) => [
-                'id'          => $r->id,
-                'name'        => $r->name,
-                'deliveries'  => (int) $r->deliveries,
-                'rating'      => 'N/A',
-                'successRate' => 100,
-            ])
-            ->values();
-
         return Inertia::render('Dashboard/AdminDashboard', [
-            'insights' => [
-                'userStats' => [
-                    'admins'        => $roleStat('admin'),
-                    'agrivets'      => ['total' => $agrivetTotal, 'active' => $agrivetActive, 'inactive' => $agrivetTotal - $agrivetActive],
-                    'vendors'       => $roleStat('vendor'),
-                    'veterinarians' => $roleStat('veterinarian'),
-                    'riders'        => $roleStat('rider'),
-                ],
-                'orderMetrics' => [
-                    'storesTotal'      => $storesTotal,
-                    'storesActive'     => $storesActive,
-                    'storesTrend'      => '',
-                    'ordersTotal'      => number_format($ordersTotal),
-                    'ordersMonth'      => number_format($ordersMonth),
-                    'ordersTrend'      => '',
-                    'itemsSold'        => number_format($itemsSold),
-                    'itemsTrend'       => '',
-                    'avgItemsPerOrder' => (string) $avgItemsPerOrder,
-                ],
-                'topStores'         => $topStores,
-                'topRiders'         => $topRiders,
-                'notificationCount' => 0,
-            ],
+            'insights' => $this->platformInsights(includeSuperAdmins: false),
         ]);
     }
 
@@ -1487,21 +1254,21 @@ class DashboardController extends Controller
     private function emptyOwnerManagerStats(string $period): array
     {
         return [
-            'total_orders'        => 0,
-            'items_sold'          => 0,
-            'total_revenue'       => 0,
-            'average_rating'      => 0,
-            'store_stats'         => [],
-            'top_products'        => [],
-            'new_customers'       => 0,
+            'total_orders' => 0,
+            'items_sold' => 0,
+            'total_revenue' => 0,
+            'average_rating' => 0,
+            'store_stats' => [],
+            'top_products' => [],
+            'new_customers' => 0,
             'returning_customers' => 0,
-            'total_customers'     => 0,
-            'top_buyers'          => [],
+            'total_customers' => 0,
+            'top_buyers' => [],
             'revenue_by_category' => [],
-            'comparison_label'    => $this->ownerManagerComparisonLabel($period),
-            'trends'              => [
-                'total_orders'  => null,
-                'items_sold'    => null,
+            'comparison_label' => $this->ownerManagerComparisonLabel($period),
+            'trends' => [
+                'total_orders' => null,
+                'items_sold' => null,
                 'total_revenue' => null,
             ],
         ];
@@ -1579,9 +1346,9 @@ class DashboardController extends Controller
         $revenue = (float) ($revenueRow->total ?? 0);
 
         return [
-            'orders'     => $orders,
+            'orders' => $orders,
             'items_sold' => $itemsSold,
-            'revenue'    => $revenue,
+            'revenue' => $revenue,
         ];
     }
 
@@ -1609,9 +1376,283 @@ class DashboardController extends Controller
             ->mapWithKeys(fn ($row) => [(int) $row->shop_id => (float) $row->revenue]);
 
         return [
-            'orders'  => $orders,
+            'orders' => $orders,
             'revenue' => $revenue,
         ];
+    }
+
+    /**
+     * Shared Super Admin and Admin dashboard figures.
+     *
+     * Orders and item totals count paid lines that were not cancelled.
+     * Store revenue is the merchandise total for those lines.
+     *
+     * @return array<string, mixed>
+     */
+    private function platformInsights(bool $includeSuperAdmins): array
+    {
+        $userTypes = ['admin', 'vendor', 'veterinarian', 'rider'];
+        if ($includeSuperAdmins) {
+            $userTypes[] = 'super_admin';
+        }
+
+        $userRows = DB::table('users')
+            ->select('user_type', 'status', DB::raw('count(*) as count'))
+            ->whereIn('user_type', $userTypes)
+            ->groupBy('user_type', 'status')
+            ->get()
+            ->groupBy('user_type');
+
+        $roleStat = function (string $type) use ($userRows): array {
+            $rows = $userRows->get($type, collect());
+            $total = (int) $rows->sum('count');
+            $active = (int) $rows
+                ->filter(fn ($row) => strtolower((string) $row->status) === 'active')
+                ->sum('count');
+
+            return [
+                'total' => $total,
+                'active' => $active,
+                'inactive' => max(0, $total - $active),
+            ];
+        };
+
+        $agrivetRows = DB::table('agrivets')
+            ->select('status', DB::raw('count(*) as count'))
+            ->groupBy('status')
+            ->get();
+        $agrivetTotal = (int) $agrivetRows->sum('count');
+        $agrivetActive = (int) $agrivetRows
+            ->filter(fn ($row) => strtolower((string) $row->status) === 'active')
+            ->sum('count');
+
+        $monthStart = now()->copy()->startOfMonth();
+        $monthEnd = now()->copy()->endOfMonth();
+        $previousMonthStart = now()->copy()->subMonthNoOverflow()->startOfMonth();
+        $previousMonthEnd = now()->copy()->subMonthNoOverflow()->endOfMonth();
+
+        $storesTotal = (int) DB::table('shops')->count();
+        $storesActive = (int) DB::table('shops')
+            ->whereRaw('lower(shop_status) = ?', ['active'])
+            ->count();
+        $storesBeforeThisMonth = (int) DB::table('shops')
+            ->where(function ($query) use ($monthStart) {
+                $query->where('created_at', '<', $monthStart)
+                    ->orWhereNull('created_at');
+            })
+            ->count();
+
+        $ordersTotal = $this->platformOrderCount();
+        $ordersMonth = $this->platformOrderCount($monthStart, $monthEnd);
+        $ordersPreviousMonth = $this->platformOrderCount($previousMonthStart, $previousMonthEnd);
+
+        $itemsSold = $this->platformItemsSold();
+        $itemsMonth = $this->platformItemsSold($monthStart, $monthEnd);
+        $itemsPreviousMonth = $this->platformItemsSold($previousMonthStart, $previousMonthEnd);
+
+        $avgItemsPerOrder = $ordersTotal > 0 ? round($itemsSold / $ordersTotal, 1) : 0;
+
+        $userStats = [
+            'admins' => $roleStat('admin'),
+            'agrivets' => [
+                'total' => $agrivetTotal,
+                'active' => $agrivetActive,
+                'inactive' => max(0, $agrivetTotal - $agrivetActive),
+            ],
+            'vendors' => $roleStat('vendor'),
+            'veterinarians' => $roleStat('veterinarian'),
+            'riders' => $roleStat('rider'),
+        ];
+
+        if ($includeSuperAdmins) {
+            $userStats = ['superAdmins' => $roleStat('super_admin')] + $userStats;
+        }
+
+        return [
+            'userStats' => $userStats,
+            'orderMetrics' => [
+                'storesTotal' => $storesTotal,
+                'storesActive' => $storesActive,
+                'storesTrend' => $this->formatTrend($this->percentageChange($storesTotal, $storesBeforeThisMonth)),
+                'ordersTotal' => number_format($ordersTotal),
+                'ordersMonth' => number_format($ordersMonth),
+                'ordersTrend' => $this->formatTrend($this->percentageChange($ordersMonth, $ordersPreviousMonth)),
+                'itemsSold' => number_format($itemsSold),
+                'itemsTrend' => $this->formatTrend($this->percentageChange($itemsMonth, $itemsPreviousMonth)),
+                'avgItemsPerOrder' => number_format($avgItemsPerOrder, 1),
+            ],
+            'topStores' => $this->platformTopStores(),
+            'topRiders' => $this->platformTopRiders(),
+            'notificationCount' => 0,
+        ];
+    }
+
+    /**
+     * Paid order lines that still count as a sale.
+     */
+    private function platformSalesItemsQuery()
+    {
+        $cancelledItemStatusId = $this->lookupStatusId('order_item_status', 'Cancelled');
+
+        $query = DB::table('order_items')
+            ->join('orders', 'order_items.order_id', '=', 'orders.id')
+            ->join('order_details', 'orders.order_detail_id', '=', 'order_details.id')
+            ->where('order_details.payment_status', 'paid');
+
+        if ($cancelledItemStatusId > 0) {
+            $query->where(function ($status) use ($cancelledItemStatusId) {
+                $status->whereNull('order_items.item_status')
+                    ->orWhere('order_items.item_status', '!=', $cancelledItemStatusId);
+            });
+        }
+
+        return $query;
+    }
+
+    private function platformOrderCount(?Carbon $start = null, ?Carbon $end = null): int
+    {
+        $query = $this->platformSalesItemsQuery();
+        $this->constrainOrderedAt($query, $start, $end);
+
+        return (int) $query->distinct()->count('order_items.order_id');
+    }
+
+    private function platformItemsSold(?Carbon $start = null, ?Carbon $end = null): int
+    {
+        $query = $this->platformSalesItemsQuery();
+        $this->constrainOrderedAt($query, $start, $end);
+
+        return (int) $query->sum('order_items.quantity');
+    }
+
+    private function constrainOrderedAt($query, ?Carbon $start, ?Carbon $end): void
+    {
+        if ($start === null || $end === null) {
+            return;
+        }
+
+        $query->whereBetween('orders.ordered_at', [$start, $end]);
+    }
+
+    /**
+     * @return \Illuminate\Support\Collection<int, array<string, mixed>>
+     */
+    private function platformTopStores()
+    {
+        $orderStats = $this->platformSalesItemsQuery()
+            ->select(
+                'order_items.shop_id',
+                DB::raw('COUNT(DISTINCT order_items.order_id) as orders'),
+                DB::raw('COALESCE(SUM(order_items.quantity * order_items.price_at_purchase), 0) as revenue'),
+            )
+            ->groupBy('order_items.shop_id');
+
+        $productStats = DB::table('items')
+            ->select('shop_id', DB::raw('COUNT(*) as products'))
+            ->groupBy('shop_id');
+
+        return DB::table('shops')
+            ->join('agrivets', 'shops.agrivet_id', '=', 'agrivets.id')
+            ->leftJoinSub($orderStats, 'order_stats', 'order_stats.shop_id', '=', 'shops.id')
+            ->leftJoinSub($productStats, 'product_stats', 'product_stats.shop_id', '=', 'shops.id')
+            ->select(
+                'shops.id',
+                'shops.shop_name as name',
+                'agrivets.name as agrivetName',
+                DB::raw('COALESCE(order_stats.orders, 0) as orders'),
+                DB::raw('COALESCE(product_stats.products, 0) as products'),
+                DB::raw('COALESCE(order_stats.revenue, 0) as revenue'),
+            )
+            ->orderByDesc('orders')
+            ->orderByDesc('revenue')
+            ->limit(5)
+            ->get()
+            ->filter(fn ($shop) => (int) $shop->orders > 0)
+            ->map(fn ($shop) => [
+                'id' => $shop->id,
+                'name' => $shop->name,
+                'agrivetName' => $shop->agrivetName,
+                'orders' => (int) $shop->orders,
+                'products' => (int) $shop->products,
+                'revenue' => '₱'.number_format((float) $shop->revenue, 2),
+            ])
+            ->values();
+    }
+
+    /**
+     * @return \Illuminate\Support\Collection<int, array<string, mixed>>
+     */
+    private function platformTopRiders()
+    {
+        $deliveredStatusId = $this->lookupStatusId('order_status', 'Delivered');
+        $cancelledStatusId = $this->lookupStatusId('order_status', 'Cancelled');
+
+        if ($deliveredStatusId <= 0) {
+            return collect();
+        }
+
+        $rows = DB::table('users')
+            ->join('user_details', 'users.user_detail_id', '=', 'user_details.id')
+            ->leftJoin('order_shops', 'order_shops.rider_id', '=', 'users.id')
+            ->where('users.user_type', 'rider')
+            ->select(
+                'users.id',
+                DB::raw("trim(concat(coalesce(user_details.first_name, ''), ' ', coalesce(user_details.last_name, ''))) as name"),
+                DB::raw('sum(case when order_shops.order_status = '.$deliveredStatusId.' then 1 else 0 end) as deliveries'),
+                DB::raw('sum(case when order_shops.order_status = '.$cancelledStatusId.' then 1 else 0 end) as cancelled'),
+            )
+            ->groupBy('users.id', 'user_details.first_name', 'user_details.last_name')
+            ->get();
+
+        $failedByRider = collect();
+        if (Schema::hasTable('proof_of_delivery') && Schema::hasColumn('proof_of_delivery', 'rider_id')) {
+            $failedByRider = DB::table('proof_of_delivery')
+                ->where('status', 'failed')
+                ->whereNotNull('rider_id')
+                ->select('rider_id', DB::raw('count(*) as failed'))
+                ->groupBy('rider_id')
+                ->pluck('failed', 'rider_id');
+        }
+
+        return $rows
+            ->map(function ($rider) use ($failedByRider) {
+                $deliveries = (int) $rider->deliveries;
+                $cancelled = (int) $rider->cancelled;
+                $failed = (int) ($failedByRider[$rider->id] ?? 0);
+                $attempts = $deliveries + $cancelled + $failed;
+
+                return [
+                    'id' => $rider->id,
+                    'name' => $rider->name !== '' ? $rider->name : 'Rider',
+                    'deliveries' => $deliveries,
+                    'rating' => null,
+                    'successRate' => $attempts > 0 ? (int) round(($deliveries / $attempts) * 100) : 0,
+                ];
+            })
+            ->filter(fn ($rider) => $rider['deliveries'] > 0)
+            ->sortByDesc('deliveries')
+            ->take(5)
+            ->values();
+    }
+
+    private function lookupStatusId(string $table, string $description): int
+    {
+        if (! Schema::hasTable($table)) {
+            return 0;
+        }
+
+        return (int) (DB::table($table)->where('stat_description', $description)->value('id') ?? 0);
+    }
+
+    private function formatTrend(?float $change): ?string
+    {
+        if ($change === null) {
+            return null;
+        }
+
+        $prefix = $change > 0 ? '+' : '';
+
+        return $prefix.$change.'%';
     }
 
     private function percentageChange(float|int $current, float|int $previous): ?float
