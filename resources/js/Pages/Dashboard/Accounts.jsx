@@ -23,12 +23,13 @@ import SuperAdminKlasmeytLayout from '../../Layouts/SuperAdminKlasmeytLayout'
 import { useDashboardSession } from '../../hooks/useDashboardSession'
 import PasswordInput from '../../Components/PasswordInput'
 
-const ROLE_ORDER = ['super_admin', 'admin', 'vendor', 'veterinarian', 'breeder', 'customer', 'rider']
+const ROLE_ORDER = ['super_admin', 'admin', 'vendor', 'owner_manager', 'veterinarian', 'breeder', 'customer', 'rider']
 
 const ROLE_META = {
     super_admin: { label: 'Super Admin', Icon: Shield, iconBg: 'bg-[#244693]' },
     admin: { label: 'Admin', Icon: UserCog, iconBg: 'bg-[#102059]' },
     vendor: { label: 'Vendor', Icon: Store, iconBg: 'bg-[#D3A218]' },
+    owner_manager: { label: 'Owner Manager', Icon: Building2, iconBg: 'bg-[#102059]' },
     veterinarian: { label: 'Veterinarian', Icon: Stethoscope, iconBg: 'bg-[#102059]' },
     breeder: { label: 'Breeder', Icon: Bird, iconBg: 'bg-[#D3A218]' },
     customer: { label: 'Customer', Icon: UsersRound, iconBg: 'bg-[#6B7280]' },
@@ -178,6 +179,7 @@ export default function Accounts({ auth, users = [], flash }) {
         if (auth?.user?.user_type === 'admin') {
             return [
                 { value: 'vendor', label: 'Vendor' },
+                { value: 'owner_manager', label: 'Owner Manager' },
                 { value: 'veterinarian', label: 'Veterinarian' },
                 { value: 'breeder', label: 'Breeder' },
                 { value: 'rider', label: 'Rider' },
@@ -187,6 +189,7 @@ export default function Accounts({ auth, users = [], flash }) {
             { value: 'super_admin', label: 'Super Admin' },
             { value: 'admin', label: 'Admin' },
             { value: 'vendor', label: 'Vendor' },
+            { value: 'owner_manager', label: 'Owner Manager' },
             { value: 'veterinarian', label: 'Veterinarian' },
             { value: 'breeder', label: 'Breeder' },
             { value: 'customer', label: 'Customer' },
@@ -919,7 +922,7 @@ export default function Accounts({ auth, users = [], flash }) {
                                 </button>
                             )}
                             {userTypes
-                                .filter(({ value }) => value !== 'customer')
+                                .filter(({ value }) => value !== 'customer' && value !== 'owner_manager')
                                 .map(({ value, label }) => {
                                 const meta = ROLE_META[value] || ROLE_META.other
                                 const Icon = meta.Icon

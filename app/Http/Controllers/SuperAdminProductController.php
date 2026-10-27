@@ -71,7 +71,7 @@ class SuperAdminProductController extends Controller
     public function store(Request $request)
     {
         $this->keepOnlyUploadedCatalogImages($request);
-        $request->validate($this->productCatalogValidationRules());
+        $request->validate($this->productCatalogValidationRules(), $this->productCatalogValidationMessages());
 
         $stored = $this->catalogImagesFromRequest($request);
 

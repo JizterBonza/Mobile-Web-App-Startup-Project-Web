@@ -44,21 +44,39 @@ export default function RegisterProduct({
 
     const handlePhotoUpload = (index, e) => {
         const file = e.target.files?.[0]
+        e.target.value = ''
         if (!file) return
 
-        const reader = new FileReader()
-        reader.onloadend = () => {
-            const newPhotos = [...uploadedPhotos]
-            newPhotos[index] = { preview: reader.result, file }
-            setUploadedPhotos(newPhotos)
+        const preview = URL.createObjectURL(file)
+        setUploadedPhotos((current) => {
+            const next = [...current]
+            if (next[index]?.preview?.startsWith('blob:')) URL.revokeObjectURL(next[index].preview)
+            next[index] = { preview, file }
+            return next
+        })
+        setErrorMessage(null)
 
-            const files = newPhotos.map(p => p?.file ?? null)
-            form.setData('images', files)
+        if (!uploadedPhotos[primaryPhotoIndex]) {
+            setPrimaryPhotoIndex(index)
+            form.setData('primary_image_index', index)
         }
-        reader.readAsDataURL(file)
+    }
+
+    const handlePhotoRemove = (index) => {
+        const next = [...uploadedPhotos]
+        if (next[index]?.preview?.startsWith('blob:')) URL.revokeObjectURL(next[index].preview)
+        next[index] = null
+        setUploadedPhotos(next)
+        if (primaryPhotoIndex === index || !next[primaryPhotoIndex]) {
+            const firstFilled = next.findIndex(Boolean)
+            const nextPrimary = firstFilled === -1 ? 0 : firstFilled
+            setPrimaryPhotoIndex(nextPrimary)
+            form.setData('primary_image_index', nextPrimary)
+        }
     }
 
     const handlePrimaryChange = (index) => {
+        if (!uploadedPhotos[index]) return
         setPrimaryPhotoIndex(index)
         form.setData('primary_image_index', index)
     }
@@ -75,14 +93,19 @@ export default function RegisterProduct({
         }
 
         if (currentStep === 2) {
-            const uploadedCount = uploadedPhotos.filter(p => p !== null).length
+            const uploadedCount = uploadedPhotos.filter(Boolean).length
             if (uploadedCount < 1) {
                 setErrorMessage('Please upload at least 1 product image. You can upload up to 5.')
                 window.scrollTo({ top: 0, behavior: 'smooth' })
                 return
             }
+            if (uploadedCount > 5) {
+                setErrorMessage('You can upload a maximum of 5 product images.')
+                window.scrollTo({ top: 0, behavior: 'smooth' })
+                return
+            }
             if (!uploadedPhotos[primaryPhotoIndex]) {
-                const firstFilled = uploadedPhotos.findIndex(p => p !== null)
+                const firstFilled = uploadedPhotos.findIndex(Boolean)
                 setPrimaryPhotoIndex(firstFilled)
                 form.setData('primary_image_index', firstFilled)
             }
@@ -330,9 +353,12 @@ export default function RegisterProduct({
 
                         <div className="space-y-6">
                             <p className="text-sm text-[#6B7280]">
-                                Upload 1 to 5 images of your product and select one to be the primary thumbnail.
-                                At least 1 image is required.{' '}
+                                Upload at least 1 image of your product (maximum 5). Extra slots are optional.
+                                Select one photo as the primary thumbnail.{' '}
                                 <span className="text-[#E20E28]">*</span>
+                            </p>
+                            <p className="text-xs font-semibold text-[#102059]">
+                                {uploadedPhotos.filter(Boolean).length} of 5 images uploaded (minimum 1)
                             </p>
 
                             <div className="grid grid-cols-5 gap-4">
@@ -356,7 +382,7 @@ export default function RegisterProduct({
                                                 <div className="flex h-full flex-col items-center justify-center">
                                                     <Upload className="mb-1 h-6 w-6 text-[#6B7280]" />
                                                     <span className="px-1 text-center text-[10px] text-[#6B7280]">
-                                                        Upload<br />Photo {index + 1}
+                                                        Add photo<br />{index === 0 ? 'Min. 1 required' : 'Optional'}
                                                     </span>
                                                 </div>
                                             )}
@@ -370,19 +396,29 @@ export default function RegisterProduct({
                                         </label>
 
                                         {uploadedPhotos[index] && (
-                                            <button
-                                                type="button"
-                                                onClick={() => handlePrimaryChange(index)}
-                                                title="Set as primary thumbnail"
-                                                className={`absolute -top-2 -right-2 rounded-full p-1 shadow-md transition-all ${
-                                                    primaryPhotoIndex === index ? 'bg-[#D3A218]' : 'bg-[#6B7280] opacity-60 hover:opacity-100'
-                                                }`}
-                                            >
-                                                <Star
-                                                    className="h-3.5 w-3.5 text-white"
-                                                    fill={primaryPhotoIndex === index ? 'white' : 'none'}
-                                                />
-                                            </button>
+                                            <>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handlePrimaryChange(index)}
+                                                    title="Set as primary thumbnail"
+                                                    className={`absolute -top-2 -right-2 rounded-full p-1 shadow-md transition-all ${
+                                                        primaryPhotoIndex === index ? 'bg-[#D3A218]' : 'bg-[#6B7280] opacity-60 hover:opacity-100'
+                                                    }`}
+                                                >
+                                                    <Star
+                                                        className="h-3.5 w-3.5 text-white"
+                                                        fill={primaryPhotoIndex === index ? 'white' : 'none'}
+                                                    />
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handlePhotoRemove(index)}
+                                                    title="Remove photo"
+                                                    className="absolute -top-2 -left-2 rounded-full bg-[#E20E28] p-1 shadow-md"
+                                                >
+                                                    <X className="h-3.5 w-3.5 text-white" />
+                                                </button>
+                                            </>
                                         )}
 
                                         <div className="mt-2 text-center">

@@ -54,16 +54,22 @@ export default function SuperAdminEditProduct({
 
     const handlePhotoUpload = (index, e) => {
         const file = e.target.files?.[0]
+        e.target.value = ''
         if (!file) return
 
-        const reader = new FileReader()
-        reader.onloadend = () => {
-            const newPhotos = [...uploadedPhotos]
-            newPhotos[index] = { preview: reader.result, file }
-            setUploadedPhotos(newPhotos)
+        const preview = URL.createObjectURL(file)
+        setUploadedPhotos((current) => {
+            const next = [...current]
+            if (next[index]?.preview?.startsWith('blob:')) URL.revokeObjectURL(next[index].preview)
+            next[index] = { preview, file }
+            return next
+        })
+        setErrorMessage(null)
+
+        if (!uploadedPhotos[primaryPhotoIndex]) {
+            setPrimaryPhotoIndex(index)
+            form.setData('primary_image_index', index)
         }
-        reader.readAsDataURL(file)
-        e.target.value = ''
     }
 
     const handlePrimaryChange = (index) => {
@@ -83,7 +89,7 @@ export default function SuperAdminEditProduct({
         }
 
         if (currentStep === 2) {
-            const uploadedCount = uploadedPhotos.filter(p => p !== null).length
+            const uploadedCount = uploadedPhotos.filter(Boolean).length
             if (uploadedCount < 1) {
                 setErrorMessage('Please keep at least 1 product image. You can upload up to 5.')
                 window.scrollTo({ top: 0, behavior: 'smooth' })
