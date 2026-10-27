@@ -389,9 +389,9 @@ export default function OwnerManagerStores({ auth, agrivet, shops = [], zones = 
                                                     type="button"
                                                     disabled={!agrivet}
                                                     onClick={() => openRemoveStore(shop)}
-                                                    className="flex-1 px-3 py-2 text-xs font-semibold text-[#1F2937] bg-white border border-[#E5E7EB] rounded-lg hover:bg-[#F8F9FB] transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+                                                    className="flex-1 px-3 py-2 text-xs font-semibold text-white bg-[#E20E28] rounded-lg hover:bg-[#C10D23] transition-colors disabled:cursor-not-allowed disabled:opacity-50"
                                                 >
-                                                    Delete Store
+                                                    Disable Store
                                                 </button>
                                             ) : (
                                                 <button
@@ -461,7 +461,7 @@ export default function OwnerManagerStores({ auth, agrivet, shops = [], zones = 
                         onClick={(e) => e.stopPropagation()}
                     >
                         <div className="px-6 py-4 border-b border-[#E5E7EB] flex items-center justify-between">
-                            <h3 className="text-lg font-bold text-[#102059]">Delete Store</h3>
+                            <h3 className="text-lg font-bold text-[#102059]">Disable Store</h3>
                             <button
                                 type="button"
                                 className="w-8 h-8 bg-[#F0F2F5] hover:bg-[#E5E7EB] rounded-full flex items-center justify-center text-[#65676B] transition-colors disabled:opacity-50"
@@ -497,7 +497,7 @@ export default function OwnerManagerStores({ auth, agrivet, shops = [], zones = 
                                 onClick={confirmRemoveShop}
                                 disabled={isDeleting}
                             >
-                                {isDeleting ? 'Deleting...' : 'Delete Store'}
+                                {isDeleting ? 'Disabling...' : 'Disable Store'}
                             </button>
                         </div>
                     </div>

@@ -463,7 +463,7 @@ export default function AgrivetShops({ auth, agrivet, zones = [], shops = [], fl
 
                     <div className="p-5">
                       <div className="mb-3 flex items-start justify-between gap-2">
-                        <h3 className="flex-1 text-sm font-bold text-[#102059]">{shop.shop_name}</h3>
+                        <h3 className="flex-1 truncate text-sm font-bold text-[#102059]">{shop.shop_name}</h3>
                         <div className="flex shrink-0 items-center gap-0.5">
                           {/* <button
                             type="button"
@@ -493,10 +493,11 @@ export default function AgrivetShops({ auth, agrivet, zones = [], shops = [], fl
                             <button
                               type="button"
                               onClick={(e) => openRemoveStore(e, shop)}
-                              className="rounded-lg p-1.5 text-[#E20E28] transition-colors hover:bg-[#FEE2E2]"
-                              title="Remove store"
+                              className="inline-flex items-center gap-1 rounded-lg bg-[#E20E28] px-2.5 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-[#C10D23]"
+                              title="Disable store"
                             >
-                              <Trash2 className="h-4 w-4" />
+                              <Trash2 className="h-3.5 w-3.5" />
+                              Disable Store
                             </button>
                           ) : (
                             <button
