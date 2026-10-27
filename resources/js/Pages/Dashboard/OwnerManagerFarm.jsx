@@ -1739,8 +1739,9 @@ export default function OwnerManagerFarm({ auth, farm, listings = [], catalog = 
                                         <input
                                             id="account_number"
                                             type="text"
+                                            inputMode="numeric"
                                             value={form.data.account_number}
-                                            onChange={(e) => form.setData('account_number', e.target.value)}
+                                            onChange={(e) => form.setData('account_number', e.target.value.replace(/\D/g, ''))}
                                             className={inputClass}
                                         />
                                     </div>

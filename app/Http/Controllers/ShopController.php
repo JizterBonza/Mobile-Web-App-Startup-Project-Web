@@ -199,7 +199,7 @@ class ShopController extends Controller
             'shop_status' => 'nullable|string|max:50',
             'bank_name' => 'nullable|string|max:150',
             'account_name' => 'nullable|string|max:150',
-            'account_number' => 'nullable|string|max:50',
+            'account_number' => 'nullable|string|max:50|regex:/^[0-9]+$/',
         ]);
 
         if ($validator->fails()) {
@@ -280,7 +280,7 @@ class ShopController extends Controller
             'shop_status' => 'nullable|string|max:50',
             'bank_name' => 'nullable|string|max:150',
             'account_name' => 'nullable|string|max:150',
-            'account_number' => 'nullable|string|max:50',
+            'account_number' => 'nullable|string|max:50|regex:/^[0-9]+$/',
         ]);
 
         if ($validator->fails()) {

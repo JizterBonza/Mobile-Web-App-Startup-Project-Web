@@ -499,7 +499,7 @@ class AgrivetController extends Controller
             'permit_image' => 'required|file|mimes:jpeg,jpg,png,webp,pdf|max:10240',
             'bank_name' => 'nullable|string|max:150',
             'account_name' => 'nullable|string|max:150',
-            'account_number' => 'nullable|string|max:50',
+            'account_number' => 'nullable|string|max:50|regex:/^[0-9]+$/',
         ]);
 
         // If shop has coordinates, set zone_id to the zone whose boundary contains this point
@@ -585,7 +585,7 @@ class AgrivetController extends Controller
             'operating_hours' => 'nullable|string|max:100',
             'bank_name' => 'nullable|string|max:150',
             'account_name' => 'nullable|string|max:150',
-            'account_number' => 'nullable|string|max:50',
+            'account_number' => 'nullable|string|max:50|regex:/^[0-9]+$/',
         ]);
 
         // If shop has coordinates, set zone_id to the zone whose boundary contains this point

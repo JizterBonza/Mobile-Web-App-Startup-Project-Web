@@ -854,9 +854,10 @@ export default function OwnerManagerStores({ auth, agrivet, shops = [], zones = 
                                             <label className="block text-xs text-[#65676B] mb-1">Account Number</label>
                                             <input
                                                 type="text"
+                                                inputMode="numeric"
                                                 className={inputClass}
                                                 value={addForm.data.account_number}
-                                                onChange={(e) => addForm.setData('account_number', e.target.value)}
+                                                onChange={(e) => addForm.setData('account_number', e.target.value.replace(/\D/g, ''))}
                                                 placeholder="Account number"
                                             />
                                             <FieldError message={addForm.errors.account_number} />

@@ -913,9 +913,10 @@ export default function AgrivetShops({ auth, agrivet, zones = [], shops = [], fl
                           <label>Account Number</label>
                           <input
                             type="text"
+                            inputMode="numeric"
                             className={`form-control ${addForm.errors.account_number ? 'is-invalid' : ''}`}
                             value={addForm.data.account_number}
-                            onChange={(e) => addForm.setData('account_number', e.target.value)}
+                            onChange={(e) => addForm.setData('account_number', e.target.value.replace(/\D/g, ''))}
                             placeholder="Account number"
                           />
                           {addForm.errors.account_number && (
@@ -1276,9 +1277,10 @@ export default function AgrivetShops({ auth, agrivet, zones = [], shops = [], fl
                           <label>Account Number</label>
                           <input
                             type="text"
+                            inputMode="numeric"
                             className={`form-control ${editForm.errors.account_number ? 'is-invalid' : ''}`}
                             value={editForm.data.account_number}
-                            onChange={(e) => editForm.setData('account_number', e.target.value)}
+                            onChange={(e) => editForm.setData('account_number', e.target.value.replace(/\D/g, ''))}
                             placeholder="Account number"
                           />
                           {editForm.errors.account_number && (

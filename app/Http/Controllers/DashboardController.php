@@ -414,7 +414,7 @@ class DashboardController extends Controller
             'longitude' => 'nullable|numeric',
             'bank_name' => 'nullable|string|max:150',
             'account_name' => 'nullable|string|max:150',
-            'account_number' => 'nullable|string|max:50',
+            'account_number' => 'nullable|string|max:50|regex:/^[0-9]+$/',
             'operating_days' => 'required|string|max:500',
             'opening_time' => 'required|string|max:10',
             'closing_time' => 'required|string|max:10',

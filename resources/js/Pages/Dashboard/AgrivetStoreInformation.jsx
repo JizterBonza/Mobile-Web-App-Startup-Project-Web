@@ -2565,8 +2565,9 @@ export default function AgrivetStoreInformation({
                       <label className="block text-xs text-[#65676B] mb-1">Account Number</label>
                       <input
                         type="text"
+                        inputMode="numeric"
                         value={editStoreData.accountNumber}
-                        onChange={(e) => setEditStoreData({ ...editStoreData, accountNumber: e.target.value })}
+                        onChange={(e) => setEditStoreData({ ...editStoreData, accountNumber: e.target.value.replace(/\D/g, '') })}
                         className="w-full px-4 py-2.5 border border-[#E5E7EB] rounded-lg text-sm text-[#102059] focus:outline-none focus:border-[#244693]"
                         placeholder="Account number"
                       />
