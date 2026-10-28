@@ -441,6 +441,79 @@ trait ManagesShopOrders
     }
 
     /**
+     * Mark a Ready for Pickup order as collected when the customer chose Pickup from Store.
+     *
+     * @param  array<int>  $shopIds
+     * @return string|null Error message, or null when the pickup was completed.
+     */
+    protected function completePickupFromStore(int $orderId, array $shopIds, string $notes, string $source): ?string
+    {
+        if (! $this->orderUsesPickupFromStore($orderId)) {
+            return 'Only Pickup from Store orders can be marked as picked up.';
+        }
+
+        $readyStatusId = (int) DB::table('order_status')->where('stat_description', 'Ready for Pickup')->value('id');
+        $deliveredStatusId = (int) DB::table('order_status')->where('stat_description', 'Delivered')->value('id');
+
+        if (! $readyStatusId || ! $deliveredStatusId) {
+            return 'Order status configuration is missing.';
+        }
+
+        $orderShops = DB::table('order_shops')
+            ->where('order_id', $orderId)
+            ->whereIn('shop_id', $shopIds)
+            ->get();
+
+        if ($orderShops->isEmpty()) {
+            abort(404);
+        }
+
+        if ($orderShops->contains(fn ($row) => (int) $row->order_status !== $readyStatusId)) {
+            return 'Only orders that are ready for pickup can be marked as picked up.';
+        }
+
+        $this->transitionShopOrderRows(
+            $orderShops,
+            $deliveredStatusId,
+            $notes,
+            $source,
+        );
+
+        $deliveredItemStatusId = $this->deliveredItemStatusId();
+        if ($deliveredItemStatusId) {
+            DB::table('order_items')
+                ->where('order_id', $orderId)
+                ->whereIn('shop_id', $shopIds)
+                ->update([
+                    'item_status' => $deliveredItemStatusId,
+                    'updated_at'  => now(),
+                ]);
+        }
+
+        return null;
+    }
+
+    protected function orderUsesPickupFromStore(int $orderId): bool
+    {
+        $row = DB::table('orders')
+            ->join('order_details', 'orders.order_detail_id', '=', 'order_details.id')
+            ->leftJoin('delivery_method', 'order_details.delivery_method_id', '=', 'delivery_method.id')
+            ->where('orders.id', $orderId)
+            ->first([
+                'order_details.delivery_method_id',
+                'delivery_method.description',
+            ]);
+
+        if (! $row) {
+            return false;
+        }
+
+        $description = strtolower(trim((string) ($row->description ?? '')));
+
+        return (int) $row->delivery_method_id === 3 || $description === 'pickup from store';
+    }
+
+    /**
      * Send a shop-chat update to the customer for the given order status.
      *
      * @param  array<int, int>  $shopIds

@@ -1155,6 +1155,27 @@ class DashboardController extends Controller
             ->with('success', 'Item marked as done preparing.');
     }
 
+    public function ownerManagerDoneStorePickup(int $orderId)
+    {
+        $shopIds = $this->ownerManagerShopIdsOrAbort();
+        $this->assertShopOrderAccess($orderId, $shopIds);
+
+        $error = $this->completePickupFromStore(
+            $orderId,
+            $shopIds,
+            'Customer picked up the order from the store.',
+            'owner_manager_dashboard',
+        );
+
+        if ($error) {
+            return redirect()->route('dashboard.owner-manager.orders')
+                ->with('error', $error);
+        }
+
+        return redirect()->route('dashboard.owner-manager.orders')
+            ->with('success', 'Order marked as picked up from the store.');
+    }
+
     public function admin()
     {
         return Inertia::render('Dashboard/AdminDashboard', [
