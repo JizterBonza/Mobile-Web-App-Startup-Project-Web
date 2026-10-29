@@ -19,6 +19,7 @@ use Illuminate\Support\Facades\Schema;
 use Inertia\Inertia;
 use App\Http\Controllers\Concerns\ManagesShopOrders;
 use App\Http\Controllers\Concerns\PreventsDisabledCatalogRestock;
+use App\Services\StoreInsightsService;
 use App\Services\UserWelcomeEmailService;
 use App\Support\PublicStorage;
 
@@ -499,7 +500,7 @@ class AgrivetController extends Controller
             'permit_image' => 'required|file|mimes:jpeg,jpg,png,webp,pdf|max:10240',
             'bank_name' => 'nullable|string|max:150',
             'account_name' => 'nullable|string|max:150',
-            'account_number' => 'nullable|string|max:50',
+            'account_number' => 'nullable|string|max:50|regex:/^[0-9]+$/',
         ]);
 
         // If shop has coordinates, set zone_id to the zone whose boundary contains this point
@@ -585,7 +586,7 @@ class AgrivetController extends Controller
             'operating_hours' => 'nullable|string|max:100',
             'bank_name' => 'nullable|string|max:150',
             'account_name' => 'nullable|string|max:150',
-            'account_number' => 'nullable|string|max:50',
+            'account_number' => 'nullable|string|max:50|regex:/^[0-9]+$/',
         ]);
 
         // If shop has coordinates, set zone_id to the zone whose boundary contains this point
@@ -963,6 +964,9 @@ class AgrivetController extends Controller
             'orders' => $orders,
             'deliveryMethods' => $deliveryMethods,
             'preparingItemStatusId' => $preparingItemStatusId,
+            'storeInsights' => $user->user_type === 'vendor'
+                ? null
+                : app(StoreInsightsService::class)->forShop((int) $shop->id),
             'zones' => $zones->map(fn ($z) => ['id' => $z->id, 'name' => $z->name, 'boundary' => $z->boundary]),
             'mapShops' => $mapShops,
         ]);

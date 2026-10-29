@@ -1590,4 +1590,24 @@ class VendorController extends Controller
         return $this->redirectToVendorStoreOrdersTab()
             ->with('success', 'Item marked as done preparing.');
     }
+
+    public function storeOrderDoneStorePickup(int $shopId, int $orderId)
+    {
+        $shopIds = $this->vendorOwnedShopIdsOrAbort($shopId);
+        $this->assertShopOrderAccess($orderId, $shopIds);
+
+        $error = $this->completePickupFromStore(
+            $orderId,
+            $shopIds,
+            'Customer picked up the order from the store.',
+            'vendor_dashboard',
+        );
+
+        if ($error) {
+            return $this->redirectToVendorStoreOrdersTab()->with('error', $error);
+        }
+
+        return $this->redirectToVendorStoreOrdersTab()
+            ->with('success', 'Order marked as picked up from the store.');
+    }
 }

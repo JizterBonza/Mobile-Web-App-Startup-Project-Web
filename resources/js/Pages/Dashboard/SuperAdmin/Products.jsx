@@ -453,8 +453,8 @@ export default function SuperAdminProducts({ auth, products = [], flash, pending
                                 disabled={Boolean(updatingStatusId)}
                                 className={`rounded-lg px-4 py-2 text-sm font-medium text-white transition-colors disabled:opacity-50 ${
                                     statusModal.status === 'inactive'
-                                        ? 'bg-[#E20E28] hover:bg-[#B8000F]'
-                                        : 'bg-[#102059] hover:bg-[#244693]'
+                                        ? 'bg-[#E20E28] hover:bg-[#C10D23]'
+                                        : 'bg-[#00C950] hover:bg-[#00B548]'
                                 }`}
                             >
                                 {updatingStatusId

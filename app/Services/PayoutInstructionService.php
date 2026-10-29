@@ -74,12 +74,7 @@ class PayoutInstructionService
         return DB::transaction(function () use ($shopIds) {
             $this->wallets->syncUncreditedSales($shopIds);
 
-            $query = Shop::query()
-                ->where('wallet_balance', '>=', 1)
-                ->whereNotNull('account_number')
-                ->where('account_number', '!=', '')
-                ->whereNotNull('account_name')
-                ->where('account_name', '!=', '');
+            $query = Shop::query()->where('wallet_balance', '>=', 1);
 
             if ($shopIds !== null) {
                 $query->whereIn('id', $shopIds);
@@ -91,6 +86,17 @@ class PayoutInstructionService
             foreach ($query->orderBy('id')->lockForUpdate()->get() as $shop) {
                 $amount = round((float) $shop->wallet_balance, 2);
                 if ($amount < 1) {
+                    continue;
+                }
+
+                if ($this->payoutAccountIsIncomplete($shop)) {
+                    $skipped[] = [
+                        'shop_id' => $shop->id,
+                        'shop_name' => $shop->shop_name,
+                        'amount' => $amount,
+                        'bank_name' => $shop->bank_name,
+                        'reason' => 'Add the shop bank name, account name, and account number before paying out.',
+                    ];
                     continue;
                 }
 
@@ -126,6 +132,7 @@ class PayoutInstructionService
                     'status' => Payout::STATUS_PENDING,
                 ]);
 
+                $this->wallets->coverSalesForPayout($shop, $payout);
                 $this->wallets->debitForPayout($shop, $amount, $payout);
                 $payloads[] = $payload;
             }
@@ -207,6 +214,13 @@ class PayoutInstructionService
             'bic' => strtoupper($bic),
             'bank_name' => $bankName ?? ($institution['name'] ?? ''),
         ];
+    }
+
+    private function payoutAccountIsIncomplete(Shop $shop): bool
+    {
+        return $this->firstNonEmpty([$shop->account_number]) === null
+            || $this->firstNonEmpty([$shop->account_name]) === null
+            || $this->firstNonEmpty([$shop->bank_name]) === null;
     }
 
     /**

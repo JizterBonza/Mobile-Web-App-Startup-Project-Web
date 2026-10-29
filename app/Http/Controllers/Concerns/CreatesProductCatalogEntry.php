@@ -22,8 +22,20 @@ trait CreatesProductCatalogEntry
             'unit'                => 'nullable|string|max:50',
             'description'         => 'nullable|string',
             'images'              => 'required|array|min:1|max:5',
-            'images.*'            => 'required|image|mimes:jpeg,png,jpg,gif,webp|max:5120',
+            'images.*'            => 'nullable|image|mimes:jpeg,png,jpg,gif,webp|max:5120',
             'primary_image_index' => 'required|integer|min:0|max:4',
+        ];
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    protected function productCatalogValidationMessages(): array
+    {
+        return [
+            'images.required' => 'Please upload at least 1 product image. You can upload up to 5.',
+            'images.min'      => 'Please upload at least 1 product image. You can upload up to 5.',
+            'images.max'      => 'You can upload a maximum of 5 product images.',
         ];
     }
 
@@ -32,8 +44,12 @@ trait CreatesProductCatalogEntry
      */
     protected function keepOnlyUploadedCatalogImages(Request $request): void
     {
-        $images = $request->files->get('images');
+        $images = $request->allFiles()['images'] ?? $request->file('images');
         $uploaded = [];
+
+        if ($images instanceof UploadedFile) {
+            $images = [0 => $images];
+        }
 
         if (is_array($images)) {
             foreach ($images as $slot => $file) {
@@ -57,6 +73,12 @@ trait CreatesProductCatalogEntry
     protected function catalogImagesFromRequest(Request $request): array
     {
         $files = $request->file('images') ?? [];
+        if ($files instanceof UploadedFile) {
+            $files = [0 => $files];
+        }
+        if (! is_array($files)) {
+            $files = [];
+        }
         ksort($files);
 
         $imagePaths = [];
@@ -83,7 +105,7 @@ trait CreatesProductCatalogEntry
     protected function createProductCatalogFromRequest(Request $request, string $status): ProductCatalog
     {
         $this->keepOnlyUploadedCatalogImages($request);
-        $request->validate($this->productCatalogValidationRules());
+        $request->validate($this->productCatalogValidationRules(), $this->productCatalogValidationMessages());
 
         $stored = $this->catalogImagesFromRequest($request);
 

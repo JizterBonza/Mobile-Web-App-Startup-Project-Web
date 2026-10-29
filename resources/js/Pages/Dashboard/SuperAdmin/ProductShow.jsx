@@ -261,7 +261,7 @@ export default function ProductShow({ auth, product, flash }) {
                                 onClick={confirmStatusChange}
                                 disabled={updatingStatus}
                                 className={`rounded-lg px-4 py-2 text-sm font-medium text-white transition-colors disabled:opacity-50 ${
-                                    isActive ? 'bg-[#E20E28] hover:bg-[#B8000F]' : 'bg-[#102059] hover:bg-[#244693]'
+                                    isActive ? 'bg-[#E20E28] hover:bg-[#C10D23]' : 'bg-[#00C950] hover:bg-[#00B548]'
                                 }`}
                             >
                                 {updatingStatus ? 'Saving...' : isActive ? 'Disable Product' : 'Enable Product'}

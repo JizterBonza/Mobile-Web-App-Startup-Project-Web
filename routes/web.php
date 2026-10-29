@@ -288,6 +288,12 @@ Route::middleware(['auth', 'session.valid', 'user.type:super_admin'])->prefix('d
 Route::get('/dashboard/super-admin/payout-records', [PayoutRecordController::class, 'index'])
     ->middleware(['auth', 'session.valid', 'user.type:super_admin'])
     ->name('dashboard.super-admin.payout-records');
+Route::post('/dashboard/super-admin/payout-records/run', [PayoutRecordController::class, 'run'])
+    ->middleware(['auth', 'session.valid', 'user.type:super_admin'])
+    ->name('dashboard.super-admin.payout-records.run');
+Route::post('/dashboard/super-admin/payout-records/done', [PayoutRecordController::class, 'markDone'])
+    ->middleware(['auth', 'session.valid', 'user.type:super_admin'])
+    ->name('dashboard.super-admin.payout-records.done');
 
 // Super Admin Payment Methods
 Route::middleware(['auth', 'session.valid', 'user.type:super_admin'])->prefix('dashboard/super-admin/payment-methods')->name('dashboard.super-admin.payment-methods.')->group(function () {
@@ -411,6 +417,7 @@ Route::middleware(['auth', 'session.valid', 'user.type:owner_manager'])->prefix(
     Route::patch('/orders/{orderId}/accept', [DashboardController::class, 'ownerManagerAcceptOrder'])->name('orders.accept');
     Route::patch('/orders/{orderId}/decline', [DashboardController::class, 'ownerManagerDeclineOrder'])->name('orders.decline');
     Route::patch('/orders/{orderId}/ready', [DashboardController::class, 'ownerManagerMarkOrderReady'])->name('orders.ready');
+    Route::patch('/orders/{orderId}/done-store-pickup', [DashboardController::class, 'ownerManagerDoneStorePickup'])->name('orders.done-store-pickup');
     Route::patch('/orders/{orderId}/items/{orderItemId}/done-preparing', [DashboardController::class, 'ownerManagerDonePreparingItem'])->name('orders.items.done-preparing');
 });
 
@@ -539,6 +546,12 @@ Route::middleware(['auth', 'session.valid', 'user.type:admin'])->prefix('dashboa
 Route::get('/dashboard/admin/payout-records', [PayoutRecordController::class, 'index'])
     ->middleware(['auth', 'session.valid', 'user.type:admin'])
     ->name('dashboard.admin.payout-records');
+Route::post('/dashboard/admin/payout-records/run', [PayoutRecordController::class, 'run'])
+    ->middleware(['auth', 'session.valid', 'user.type:admin'])
+    ->name('dashboard.admin.payout-records.run');
+Route::post('/dashboard/admin/payout-records/done', [PayoutRecordController::class, 'markDone'])
+    ->middleware(['auth', 'session.valid', 'user.type:admin'])
+    ->name('dashboard.admin.payout-records.done');
 
 // Admin Payment Methods
 Route::middleware(['auth', 'session.valid', 'user.type:admin'])->prefix('dashboard/admin/payment-methods')->name('dashboard.admin.payment-methods.')->group(function () {
@@ -652,6 +665,7 @@ Route::middleware(['auth', 'session.valid', 'user.type:vendor'])->prefix('dashbo
     Route::patch('/stores/{shopId}/orders/{orderId}/accept', [VendorController::class, 'storeOrderAccept'])->name('stores.orders.accept');
     Route::patch('/stores/{shopId}/orders/{orderId}/decline', [VendorController::class, 'storeOrderDecline'])->name('stores.orders.decline');
     Route::patch('/stores/{shopId}/orders/{orderId}/ready', [VendorController::class, 'storeOrderReady'])->name('stores.orders.ready');
+    Route::patch('/stores/{shopId}/orders/{orderId}/done-store-pickup', [VendorController::class, 'storeOrderDoneStorePickup'])->name('stores.orders.done-store-pickup');
     Route::patch('/stores/{shopId}/orders/{orderId}/items/{orderItemId}/done-preparing', [VendorController::class, 'storeOrderDonePreparingItem'])->name('stores.orders.items.done-preparing');
     
     // Payouts

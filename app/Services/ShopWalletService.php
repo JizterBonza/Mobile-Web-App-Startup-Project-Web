@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\OrderItem;
 use App\Models\Payout;
+use App\Models\PayoutSale;
 use App\Models\Shop;
 use App\Models\ShopWalletTransaction;
 use Illuminate\Support\Facades\DB;
@@ -142,6 +143,55 @@ class ShopWalletService
             if ($transaction->orderItem) {
                 $this->creditFromOrderItem($transaction->orderItem);
             }
+        }
+    }
+
+    /**
+     * Attach wallet sale credits that are not already on a pending or successful payout.
+     */
+    public function coverSalesForPayout(Shop $shop, Payout $payout): void
+    {
+        $sales = ShopWalletTransaction::query()
+            ->where('shop_id', $shop->id)
+            ->where('reason', ShopWalletTransaction::REASON_SALE)
+            ->whereNotNull('order_item_id')
+            ->orderBy('id')
+            ->lockForUpdate()
+            ->get();
+
+        if ($sales->isEmpty()) {
+            return;
+        }
+
+        $blockedIds = DB::table('payout_sales')
+            ->join('payouts', 'payouts.id', '=', 'payout_sales.payout_id')
+            ->whereIn('payout_sales.shop_wallet_transaction_id', $sales->pluck('id'))
+            ->whereIn('payouts.status', [Payout::STATUS_PENDING, Payout::STATUS_SUCCESS])
+            ->pluck('payout_sales.shop_wallet_transaction_id');
+
+        $available = $sales->reject(fn (ShopWalletTransaction $sale) => $blockedIds->contains($sale->id));
+        if ($available->isEmpty()) {
+            return;
+        }
+
+        $orderIds = OrderItem::query()
+            ->whereIn('id', $available->pluck('order_item_id')->filter()->unique()->all())
+            ->get(['id', 'order_id'])
+            ->mapWithKeys(fn (OrderItem $item) => [(int) $item->id => $item->order_id]);
+
+        foreach ($available as $sale) {
+            $orderItemId = (int) $sale->order_item_id;
+            if (! $orderIds->has($orderItemId)) {
+                continue;
+            }
+
+            PayoutSale::create([
+                'payout_id' => $payout->id,
+                'shop_wallet_transaction_id' => $sale->id,
+                'order_item_id' => $orderItemId,
+                'order_id' => $orderIds[$orderItemId],
+                'amount' => $sale->amount,
+            ]);
         }
     }
 

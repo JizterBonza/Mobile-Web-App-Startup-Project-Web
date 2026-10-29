@@ -57,9 +57,15 @@ function initialFarmTab(url) {
     return ['about', 'gamefowl', 'insights'].includes(tab) ? tab : 'about'
 }
 
-function formatPeso(value, unit = 'per head') {
+function gamefowlSellingUnit(unit) {
+    const value = String(unit || '').trim()
+    if (!value || value.toLowerCase() === 'per head') return 'per bird'
+    return value
+}
+
+function formatPeso(value, unit = 'per bird') {
     const amount = Number(value)
-    return `₱${Number.isFinite(amount) ? amount.toFixed(2) : '0.00'}/${unit || 'per head'}`
+    return `₱${Number.isFinite(amount) ? amount.toFixed(2) : '0.00'}/${gamefowlSellingUnit(unit)}`
 }
 
 function formatReleaseDate(value) {
@@ -97,7 +103,7 @@ function normalizeListing(item) {
         sex,
         category,
         price: item.price ?? 0,
-        unit: item.selling_unit || item.unit || 'per head',
+        unit: gamefowlSellingUnit(item.selling_unit || item.unit),
         stocks: item.stocks ?? item.stock ?? 0,
         releaseOption: normalizeReleaseOption(item.release_option || item.releaseOption || ''),
         releaseDateIso: toIsoDate(item.release_date || item.releaseDate),
@@ -298,7 +304,7 @@ function GamefowlListingDetailsModal({ gamefowl, listing = null, onClose, onSave
                                         className={selectClass(sellingUnit)}
                                     >
                                         <option value="">Select Selling Unit</option>
-                                        <option value="per head">per head</option>
+                                        <option value="per bird">per bird</option>
                                         <option value="per dozen">per dozen</option>
                                     </select>
                                     <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#9CA3AF]" />
@@ -1105,7 +1111,7 @@ function GamefowlCatalogPanel({ listings = [], catalog = [] }) {
                                         onClick={(event) => {
                                             event.stopPropagation()
                                             const nextStatus = isActive ? 'inactive' : 'active'
-                                            if (!window.confirm(`${isActive ? 'Deactivate' : 'Activate'} this gamefowl listing?`)) return
+                                            if (!window.confirm(`${isActive ? 'Deactivate' : 'Reactivate'} this gamefowl listing?`)) return
                                             setUpdatingListingId(listing.id)
                                             router.patch(
                                                 `/dashboard/owner-manager/farm/gamefowls/listings/${listing.id}/status`,
@@ -1116,9 +1122,13 @@ function GamefowlCatalogPanel({ listings = [], catalog = [] }) {
                                                 },
                                             )
                                         }}
-                                        className="mt-3 w-full rounded-lg bg-[#F3F4F6] py-2 text-xs font-semibold text-[#9CA3AF] transition-colors hover:bg-[#E5E7EB] hover:text-[#6B7280] disabled:opacity-60"
+                                        className={`mt-3 w-full rounded-lg py-2 text-xs font-semibold text-white transition-colors disabled:opacity-60 ${
+                                            isActive
+                                                ? 'bg-[#E20E28] hover:bg-[#C10D23]'
+                                                : 'bg-[#00C950] hover:bg-[#00B548]'
+                                        }`}
                                     >
-                                        {isActive ? 'Deactivate' : 'Activate'}
+                                        {isActive ? 'Deactivate' : 'Reactivate'}
                                     </button>
                                 </div>
                             </article>
@@ -1739,8 +1749,9 @@ export default function OwnerManagerFarm({ auth, farm, listings = [], catalog = 
                                         <input
                                             id="account_number"
                                             type="text"
+                                            inputMode="numeric"
                                             value={form.data.account_number}
-                                            onChange={(e) => form.setData('account_number', e.target.value)}
+                                            onChange={(e) => form.setData('account_number', e.target.value.replace(/\D/g, ''))}
                                             className={inputClass}
                                         />
                                     </div>
@@ -1856,7 +1867,7 @@ export default function OwnerManagerFarm({ auth, farm, listings = [], catalog = 
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
                     <div className="w-full max-w-md rounded-xl bg-white p-6">
                         <h3 className="mb-4 text-xl font-bold text-[#102059]">
-                            {isActive ? 'Deactivate Farm' : 'Activate Farm'}
+                            {isActive ? 'Deactivate Farm' : 'Reactivate Farm'}
                         </h3>
                         <p className="text-sm leading-relaxed text-[#65676B]">
                             {isActive
@@ -1874,9 +1885,13 @@ export default function OwnerManagerFarm({ auth, farm, listings = [], catalog = 
                             <button
                                 type="button"
                                 onClick={confirmStatusChange}
-                                className="rounded-lg bg-[#244693] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#1a3570]"
+                                className={`rounded-lg px-4 py-2.5 text-sm font-semibold text-white ${
+                                    isActive
+                                        ? 'bg-[#E20E28] hover:bg-[#C10D23]'
+                                        : 'bg-[#00C950] hover:bg-[#00B548]'
+                                }`}
                             >
-                                Confirm
+                                {isActive ? 'Deactivate Farm' : 'Reactivate Farm'}
                             </button>
                         </div>
                     </div>

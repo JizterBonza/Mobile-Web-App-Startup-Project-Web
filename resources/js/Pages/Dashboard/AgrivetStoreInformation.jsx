@@ -143,6 +143,11 @@ function getPeriodInsights(storeInsights, period) {
   return storeInsights?.[period] ?? EMPTY_PERIOD_INSIGHTS
 }
 
+function initialInsightsPeriod(storeInsights) {
+  const periods = ['weekly', 'monthly', 'yearly']
+  return periods.find((period) => Number(storeInsights?.[period]?.orderCount) > 0) ?? 'weekly'
+}
+
 function formatInsightNumber(value) {
   if (value == null) return '0'
   return Number(value).toLocaleString()
@@ -453,7 +458,7 @@ export default function AgrivetStoreInformation({
     return 'about'
   })
   const [direction, setDirection] = useState(1)
-  const [insightsPeriod, setInsightsPeriod] = useState('weekly')
+  const [insightsPeriod, setInsightsPeriod] = useState(() => initialInsightsPeriod(storeInsights))
 
   const periodInsights = useMemo(
     () => getPeriodInsights(storeInsights, insightsPeriod),
@@ -2011,13 +2016,13 @@ export default function AgrivetStoreInformation({
                                   e.stopPropagation()
                                   handleProductStatusToggle(listing)
                                 }}
-                                className={`w-full text-xs font-semibold py-1.5 rounded-lg transition-colors ${
+                                className={`w-full text-xs font-semibold py-1.5 rounded-lg text-white transition-colors ${
                                   (listing.manualStatus || 'Active') === 'Active'
-                                    ? 'bg-[#F9FAFB] text-[#6B7280] hover:bg-[#E5E7EB]'
-                                    : 'bg-[#102059] text-white hover:bg-[#244693]'
+                                    ? 'bg-[#E20E28] hover:bg-[#C10D23]'
+                                    : 'bg-[#00C950] hover:bg-[#00B548]'
                                 }`}
                               >
-                                {(listing.manualStatus || 'Active') === 'Active' ? 'Deactivate' : 'Activate'}
+                                {(listing.manualStatus || 'Active') === 'Active' ? 'Deactivate' : 'Reactivate'}
                               </button>
                             )}
                           </div>
@@ -2565,8 +2570,9 @@ export default function AgrivetStoreInformation({
                       <label className="block text-xs text-[#65676B] mb-1">Account Number</label>
                       <input
                         type="text"
+                        inputMode="numeric"
                         value={editStoreData.accountNumber}
-                        onChange={(e) => setEditStoreData({ ...editStoreData, accountNumber: e.target.value })}
+                        onChange={(e) => setEditStoreData({ ...editStoreData, accountNumber: e.target.value.replace(/\D/g, '') })}
                         className="w-full px-4 py-2.5 border border-[#E5E7EB] rounded-lg text-sm text-[#102059] focus:outline-none focus:border-[#244693]"
                         placeholder="Account number"
                       />

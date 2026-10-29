@@ -219,7 +219,7 @@ class DashboardController extends Controller
                 ),
             ],
             'price' => 'required|numeric|min:0',
-            'selling_unit' => 'required|string|in:per head,per dozen,per pair,per trio',
+            'selling_unit' => 'required|string|in:per bird,per head,per dozen,per pair,per trio',
             'stock' => 'required|integer|min:0',
             'release_option' => 'required|string|in:Set Release Date,Release Immediately',
             'release_date' => 'nullable|required_if:release_option,Set Release Date|date',
@@ -354,7 +354,7 @@ class DashboardController extends Controller
 
         $validated = $request->validate([
             'price' => 'required|numeric|min:0',
-            'selling_unit' => 'required|string|in:per head,per dozen,per pair,per trio,per quadruplet',
+            'selling_unit' => 'required|string|in:per bird,per head,per dozen,per pair,per trio,per quadruplet',
             'stock' => 'required|integer|min:0',
             'release_option' => 'required|string|in:Set Release Date,Release Immediately',
             'release_date' => 'nullable|required_if:release_option,Set Release Date|date',
@@ -424,7 +424,7 @@ class DashboardController extends Controller
             'longitude' => 'nullable|numeric',
             'bank_name' => 'nullable|string|max:150',
             'account_name' => 'nullable|string|max:150',
-            'account_number' => 'nullable|string|max:50',
+            'account_number' => 'nullable|string|max:50|regex:/^[0-9]+$/',
             'operating_days' => 'required|string|max:500',
             'opening_time' => 'required|string|max:10',
             'closing_time' => 'required|string|max:10',
@@ -1163,6 +1163,27 @@ class DashboardController extends Controller
 
         return redirect()->route('dashboard.owner-manager.orders')
             ->with('success', 'Item marked as done preparing.');
+    }
+
+    public function ownerManagerDoneStorePickup(int $orderId)
+    {
+        $shopIds = $this->ownerManagerShopIdsOrAbort();
+        $this->assertShopOrderAccess($orderId, $shopIds);
+
+        $error = $this->completePickupFromStore(
+            $orderId,
+            $shopIds,
+            'Customer picked up the order from the store.',
+            'owner_manager_dashboard',
+        );
+
+        if ($error) {
+            return redirect()->route('dashboard.owner-manager.orders')
+                ->with('error', $error);
+        }
+
+        return redirect()->route('dashboard.owner-manager.orders')
+            ->with('success', 'Order marked as picked up from the store.');
     }
 
     public function admin()

@@ -229,6 +229,27 @@ export default function OwnerManagerOrdersPanel({
     });
   };
 
+  const isPickupFromStore = (order, deliveryMethod) => {
+    const methodId = Number(deliveryMethod?.id ?? order?.deliveryMethodId);
+    if (methodId === 3) {
+      return true;
+    }
+    const name = (deliveryMethod?.name || order?.deliveryMethodName || "").trim().toLowerCase();
+    return name === "pickup from store";
+  };
+
+  const handleDoneStorePickup = (order) => {
+    if (!order?.id || processingOrderId) {
+      return;
+    }
+
+    setProcessingOrderId(order.id);
+    router.patch(`${ordersApiBasePath}/${order.id}/done-store-pickup`, {}, {
+      preserveScroll: true,
+      onFinish: () => setProcessingOrderId(null),
+    });
+  };
+
   const orderStatusBadgeClass = (order) => {
     const status = (order.statusDescription || order.status || "").toLowerCase();
     if (status.includes("pending") || status === "new") {
@@ -760,6 +781,23 @@ export default function OwnerManagerOrdersPanel({
                     Complete all items with &quot;Done Preparing&quot; to enable this button.
                   </p>
                 )}
+              </div>
+            )}
+
+            {/* Store pickup complete (For Pick-up tab, Pickup from Store only) */}
+            {canPerformOrderActions &&
+              order.status === "for-pickup" &&
+              isPickupFromStore(order, deliveryMethod) && (
+              <div className="pt-3 border-t border-[#E5E7EB]">
+                <button
+                  type="button"
+                  onClick={() => handleDoneStorePickup(order)}
+                  disabled={processingOrderId === order.id}
+                  className="w-full px-4 py-2.5 bg-[#00C950] text-white rounded-lg font-semibold text-sm hover:bg-[#00B048] transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                  style={{ fontFamily: "Inter Condensed, sans-serif" }}
+                >
+                  {processingOrderId === order.id ? "Updating…" : "Done pick up from Store"}
+                </button>
               </div>
             )}
           </div>

@@ -98,6 +98,19 @@ export default function RegisterGamefowl({ auth, bloodlines = [], ageTypes = [],
         }
     }
 
+    const handlePhotoRemove = (index) => {
+        const next = [...uploadedPhotos]
+        if (next[index]?.preview?.startsWith('blob:')) URL.revokeObjectURL(next[index].preview)
+        next[index] = null
+        setUploadedPhotos(next)
+        if (primaryPhotoIndex === index || !next[primaryPhotoIndex]) {
+            const firstFilled = next.findIndex(Boolean)
+            const nextPrimary = firstFilled === -1 ? 0 : firstFilled
+            setPrimaryPhotoIndex(nextPrimary)
+            form.setData('primary_image_index', nextPrimary)
+        }
+    }
+
     const handlePrimaryChange = (index, event) => {
         event.preventDefault()
         event.stopPropagation()
@@ -125,8 +138,13 @@ export default function RegisterGamefowl({ auth, bloodlines = [], ageTypes = [],
 
         if (currentStep === 2) {
             const uploadedCount = uploadedPhotos.filter(Boolean).length
-            if (uploadedCount < 5) {
-                setErrorMessage(`Please upload all 5 gamefowl images. You have uploaded ${uploadedCount} out of 5.`)
+            const minimumPhotos = requestMode ? 3 : 5
+            if (uploadedCount < minimumPhotos || uploadedCount > 5) {
+                setErrorMessage(
+                    requestMode
+                        ? `Please upload 3 to 5 gamefowl images. You have uploaded ${uploadedCount}.`
+                        : `Please upload all 5 gamefowl images. You have uploaded ${uploadedCount} out of 5.`
+                )
                 window.scrollTo({ top: 0, behavior: 'smooth' })
                 return
             }
@@ -325,9 +343,16 @@ export default function RegisterGamefowl({ auth, bloodlines = [], ageTypes = [],
                     {currentStep === 2 && (
                         <div className="rounded-xl border border-[#E5E7EB] bg-white p-8 shadow-sm">
                             <h1 className="text-lg font-semibold text-[#111827]">Gamefowl Images</h1>
-                            <p className="mt-1 mb-8 text-sm text-[#6B7280]">
-                                Upload 5 images of your gamefowl and select one to be the primary thumbnail.
+                            <p className={`mt-1 text-sm text-[#6B7280] ${requestMode ? '' : 'mb-8'}`}>
+                                {requestMode
+                                    ? 'Upload at least 3 images of your gamefowl (maximum 5). Extra slots are optional. Select one photo as the primary thumbnail.'
+                                    : 'Upload 5 images of your gamefowl and select one to be the primary thumbnail.'}
                             </p>
+                            {requestMode && (
+                                <p className="mt-2 mb-8 text-xs font-semibold text-[#102059]">
+                                    {uploadedPhotos.filter(Boolean).length} of 5 images uploaded (minimum 3)
+                                </p>
+                            )}
 
                             <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
                                 {[0, 1, 2, 3, 4].map((index) => (
@@ -355,26 +380,40 @@ export default function RegisterGamefowl({ auth, bloodlines = [], ageTypes = [],
                                             />
                                         </label>
                                         {uploadedPhotos[index] && (
-                                            <button
-                                                type="button"
-                                                onClick={(event) => handlePrimaryChange(index, event)}
-                                                title="Set as primary thumbnail"
-                                                aria-pressed={primaryPhotoIndex === index}
-                                                className={`absolute -top-2 -right-2 z-10 rounded-full p-1 shadow-md transition-all ${
-                                                    primaryPhotoIndex === index ? 'bg-[#D3A218]' : 'bg-[#6B7280] opacity-60 hover:opacity-100'
-                                                }`}
-                                            >
-                                                <Star
-                                                    className="h-3.5 w-3.5 text-white"
-                                                    fill={primaryPhotoIndex === index ? 'white' : 'none'}
-                                                />
-                                            </button>
+                                            <>
+                                                {requestMode && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handlePhotoRemove(index)}
+                                                        title="Remove photo"
+                                                        className="absolute -top-2 -left-2 z-10 rounded-full bg-[#E20E28] p-1 shadow-md"
+                                                    >
+                                                        <X className="h-3.5 w-3.5 text-white" />
+                                                    </button>
+                                                )}
+                                                <button
+                                                    type="button"
+                                                    onClick={(event) => handlePrimaryChange(index, event)}
+                                                    title="Set as primary thumbnail"
+                                                    aria-pressed={primaryPhotoIndex === index}
+                                                    className={`absolute -top-2 -right-2 z-10 rounded-full p-1 shadow-md transition-all ${
+                                                        primaryPhotoIndex === index ? 'bg-[#D3A218]' : 'bg-[#6B7280] opacity-60 hover:opacity-100'
+                                                    }`}
+                                                >
+                                                    <Star
+                                                        className="h-3.5 w-3.5 text-white"
+                                                        fill={primaryPhotoIndex === index ? 'white' : 'none'}
+                                                    />
+                                                </button>
+                                            </>
                                         )}
                                         <div className="mt-2 text-center">
                                             <span className="text-xs font-semibold text-[#6B7280]">
                                                 {uploadedPhotos[index] && primaryPhotoIndex === index
                                                     ? <span className="text-[#D3A218]">Primary</span>
-                                                    : `Photo ${index + 1}`
+                                                    : requestMode && !uploadedPhotos[index]
+                                                        ? `Photo ${index + 1} · ${index < 3 ? 'Required' : 'Optional'}`
+                                                        : `Photo ${index + 1}`
                                                 }
                                             </span>
                                         </div>
@@ -422,12 +461,12 @@ export default function RegisterGamefowl({ auth, bloodlines = [], ageTypes = [],
                             <h2 className="mt-8 mb-3 text-xs font-bold tracking-wide text-[#111827]">GAMEFOWL IMAGES</h2>
                             <div className="rounded-lg border border-[#EEF0F4] bg-[#F8FAFC] p-4">
                                 <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
-                                    {uploadedPhotos.map((photo, index) => (
+                                    {uploadedPhotos.map((photo, index) => photo && (
                                         <div key={index} className="relative">
                                             <div className="aspect-[3/4] overflow-hidden rounded-lg bg-[#E5E7EB]">
-                                                {photo && <img src={photo.preview} alt={`Gamefowl ${index + 1}`} className="h-full w-full object-cover" />}
+                                                <img src={photo.preview} alt={`Gamefowl ${index + 1}`} className="h-full w-full object-cover" />
                                             </div>
-                                            {photo && primaryPhotoIndex === index && (
+                                            {primaryPhotoIndex === index && (
                                                 <div className="absolute -top-1 -right-1 rounded-full bg-[#D3A218] p-0.5">
                                                     <Star className="h-3 w-3 text-white" fill="white" />
                                                 </div>

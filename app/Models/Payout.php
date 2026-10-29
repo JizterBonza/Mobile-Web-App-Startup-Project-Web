@@ -52,6 +52,11 @@ class Payout extends Model
         return $this->belongsTo(Shop::class);
     }
 
+    public function sales()
+    {
+        return $this->hasMany(PayoutSale::class);
+    }
+
     /**
      * Super Admin/Admin: all shops.
      * Owner Manager: shops under their agrivet.
