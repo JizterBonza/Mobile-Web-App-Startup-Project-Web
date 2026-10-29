@@ -1632,6 +1632,8 @@ class OrderController extends Controller
             return $response;
         }
 
+        abort_if($order->isFarmOrder(), 409, 'Use farm order endpoints to update a farm order.');
+
         if ($request->has('order_status')) {
             return response()->json([
                 'success' => false,
@@ -1918,6 +1920,8 @@ class OrderController extends Controller
         if ($response = $this->forbidUnlessOrderAccess($request, $order)) {
             return $response;
         }
+
+        abort_if($order->isFarmOrder(), 409, 'Use the farm order cancellation endpoint.');
 
         // Update all order_shops for this order to Cancelled status
         $cancelledStatusId = OrderStatus::whereIn('stat_description', ['Cancelled', 'cancelled'])->value('id');

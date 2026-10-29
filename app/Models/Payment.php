@@ -10,6 +10,9 @@ class Payment extends Model
     use HasFactory;
 
     protected $fillable = [
+        'purpose',
+        'schedule_version',
+        'attempt_key',
         'order_id',
         'checkout_session_id',
         'payment_intent_id',

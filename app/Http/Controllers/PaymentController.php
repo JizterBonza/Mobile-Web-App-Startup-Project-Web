@@ -264,6 +264,9 @@ class PaymentController extends Controller
                 'event_type' => $eventType,
                 'message' => $e->getMessage(),
             ]);
+
+            // Do not acknowledge a payment that was not safely recorded.
+            return response()->json(['received' => false], 500);
         }
 
         return response()->json(['received' => true]);
@@ -323,8 +326,10 @@ class PaymentController extends Controller
         }
 
         // PayMongo attaches the actual Payment resources to the checkout session.
-        // The first (and typically only) payment holds the method the customer used.
-        $paymongoPayment = $data['attributes']['payments'][0] ?? null;
+        // Earlier attempts may have failed; select the successful payment resource.
+        $paymongoPayment = collect($data['attributes']['payments'] ?? [])
+            ->first(fn ($candidate) => ($candidate['attributes']['status'] ?? null) === 'paid')
+            ?? ($data['attributes']['payments'][0] ?? null);
         $paymentAttrs = $paymongoPayment['attributes'] ?? [];
 
         $paymentMethod = $paymentAttrs['source']['type']
@@ -411,6 +416,12 @@ class PaymentController extends Controller
         ?string $paymongoPaymentId = null,
         ?string $paymentIntentId = null
     ): void {
+        if (app(\App\Services\FarmPaymentService::class)->supports($payment)) {
+            app(\App\Services\FarmPaymentService::class)->failed($payment, $metadata);
+
+            return;
+        }
+
         if (in_array($payment->status, ['paid', 'failed'], true)) {
             return;
         }
@@ -471,11 +482,22 @@ class PaymentController extends Controller
             }
         }
 
+        $attemptKey = $attrs['metadata']['payment_attempt_key'] ?? null;
+        if (is_string($attemptKey) && \Illuminate\Support\Facades\Schema::hasColumn('payments', 'attempt_key')) {
+            $payment = Payment::where('attempt_key', $attemptKey)->first();
+            if ($payment && (! $payment->checkout_session_id || $payment->checkout_session_id === $sessionId)) {
+                return $payment;
+            }
+        }
+
         $orderId = is_numeric($referenceNumber)
             ? (int) $referenceNumber
             : (is_numeric($metadataOrderId) ? (int) $metadataOrderId : null);
 
         if ($orderId) {
+            if (Order::find($orderId)?->isFarmOrder()) {
+                return null; // Never guess a farm payment stage from an order ID.
+            }
             $paid = Payment::with('order.orderDetail')
                 ->where('order_id', $orderId)
                 ->where('status', 'paid')
@@ -512,6 +534,14 @@ class PaymentController extends Controller
         $paymentIntentId = $attrs['payment_intent_id'] ?? null;
         $metadataOrderId = $attrs['metadata']['order_id'] ?? null;
 
+        $attemptKey = $attrs['metadata']['payment_attempt_key'] ?? null;
+        if (is_string($attemptKey) && \Illuminate\Support\Facades\Schema::hasColumn('payments', 'attempt_key')) {
+            $attempt = Payment::where('attempt_key', $attemptKey)->first();
+            if ($attempt) {
+                return $attempt;
+            }
+        }
+
         if ($paymongoPaymentId) {
             $payment = Payment::with('order.orderDetail')
                 ->where('payment_id', $paymongoPaymentId)
@@ -533,6 +563,9 @@ class PaymentController extends Controller
         }
 
         if (is_numeric($metadataOrderId)) {
+            if (Order::find((int) $metadataOrderId)?->isFarmOrder()) {
+                return null;
+            }
             $payment = Payment::with('order.orderDetail')
                 ->where('order_id', (int) $metadataOrderId)
                 ->latest('id')
@@ -573,6 +606,8 @@ class PaymentController extends Controller
         if ($response = $this->forbidUnlessOrderAccess($request, $order)) {
             return $response;
         }
+
+        abort_if($order->isFarmOrder(), 409, 'Use the farm order payment-session endpoint to pay a deposit or balance.');
 
         $orderDetail = $order->orderDetail;
 
@@ -700,6 +735,19 @@ class PaymentController extends Controller
                 'success' => false,
                 'message' => 'Order not found',
             ], 404);
+        }
+
+        if ($order->isFarmOrder()) {
+            $farm = app(\App\Services\FarmOrderService::class)->accessible($request->user(), (int) $orderId);
+            app(\App\Services\FarmPaymentService::class)->reconcileOrder($farm);
+            app(\App\Services\FarmOrderService::class)->check($farm);
+            $data = app(\App\Services\FarmOrderService::class)->summary($farm->refresh());
+
+            return response()->json([
+                'success' => true, 'order_id' => $order->id, 'is_paid' => $data['payment_status'] === 'paid',
+                'payment_status' => $data['payment_status'], 'amount_paid' => $data['amount_paid'],
+                'remaining_balance' => $data['remaining_balance'], 'data' => $data,
+            ]);
         }
 
         if ($response = $this->forbidUnlessOrderAccess($request, $order)) {

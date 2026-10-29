@@ -8,6 +8,7 @@ use App\Http\Controllers\CartController;
 use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\CustomerShopMessageController;
 use App\Http\Controllers\FarmApiController;
+use App\Http\Controllers\FarmCheckoutController;
 use App\Http\Controllers\FavoriteController;
 use App\Http\Controllers\ItemController;
 use App\Http\Controllers\KlasrumApiController;
@@ -110,6 +111,23 @@ Route::post('/payment/webhook', [PaymentController::class, 'handleWebhook']);
 */
 
 Route::middleware(['auth:sanctum', 'account.active'])->group(function () {
+    Route::get('farm-cart', [FarmCheckoutController::class, 'cart']);
+    Route::post('farm-cart/items', [FarmCheckoutController::class, 'addCart']);
+    Route::patch('farm-cart/items/{id}', [FarmCheckoutController::class, 'updateCart'])->whereNumber('id');
+    Route::delete('farm-cart/items/{id}', [FarmCheckoutController::class, 'deleteCart'])->whereNumber('id');
+    Route::post('farm-checkout/quote', [FarmCheckoutController::class, 'quote'])->middleware('throttle:60,1');
+    Route::get('farm-orders', [FarmCheckoutController::class, 'index']);
+    Route::post('farm-orders', [FarmCheckoutController::class, 'store'])->middleware('throttle:30,1');
+    Route::get('farm-orders/{id}', [FarmCheckoutController::class, 'show'])->whereNumber('id');
+    Route::post('farm-orders/{id}/payment-session', [FarmCheckoutController::class, 'paymentSession'])->whereNumber('id')->middleware('throttle:20,1');
+    Route::post('farm-orders/{id}/cancel', [FarmCheckoutController::class, 'cancel'])->whereNumber('id');
+    Route::post('farm-orders/{id}/confirm', [FarmCheckoutController::class, 'confirm'])->whereNumber('id');
+    Route::put('admin/farm-orders/{id}/shipping-partner', [FarmCheckoutController::class, 'assignPartner'])->whereNumber('id');
+    Route::put('admin/farm-orders/{id}/resolve-hold', [FarmCheckoutController::class, 'resolveHold'])->whereNumber('id');
+    Route::get('shipping-partner/farm-orders', [FarmCheckoutController::class, 'partnerIndex']);
+    Route::put('farm-orders/{id}/shipping-confirmation', [FarmCheckoutController::class, 'shippingConfirmation'])->whereNumber('id');
+    Route::put('farm-orders/{id}/pickup-schedule', [FarmCheckoutController::class, 'pickupSchedule'])->whereNumber('id');
+
     // Private channel auth for mobile (Sanctum Bearer token)
     Route::post('broadcasting/auth', [BroadcastController::class, 'authenticate']);
 

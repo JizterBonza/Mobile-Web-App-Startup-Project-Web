@@ -29,6 +29,7 @@ class FarmGamefowlListing extends Model
             'bundle_catalog_ids' => 'array',
             'price' => 'float',
             'stock' => 'integer',
+            'reserved_stock' => 'integer',
             'popularity' => 'integer',
             'release_date' => 'date',
         ];

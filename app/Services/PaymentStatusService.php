@@ -35,6 +35,10 @@ class PaymentStatusService
             return self::RESULT_UNAVAILABLE;
         }
 
+        if (app(FarmPaymentService::class)->supports($payment)) {
+            return app(FarmPaymentService::class)->reconcile($payment);
+        }
+
         $payment->refresh();
         $payment->loadMissing('order.orderDetail');
 
@@ -139,6 +143,10 @@ class PaymentStatusService
         array $metadata,
         ?string $paymentIntentId = null,
     ): bool {
+        if (app(FarmPaymentService::class)->supports($payment)) {
+            return app(FarmPaymentService::class)->markPaid($payment, $paymongoPaymentId, $paymentMethod, $metadata, $paymentIntentId);
+        }
+
         return DB::transaction(function () use (
             $payment,
             $paymongoPaymentId,

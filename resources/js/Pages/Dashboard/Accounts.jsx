@@ -23,7 +23,7 @@ import SuperAdminKlasmeytLayout from '../../Layouts/SuperAdminKlasmeytLayout'
 import { useDashboardSession } from '../../hooks/useDashboardSession'
 import PasswordInput from '../../Components/PasswordInput'
 
-const ROLE_ORDER = ['super_admin', 'admin', 'vendor', 'veterinarian', 'breeder', 'customer', 'rider']
+const ROLE_ORDER = ['super_admin', 'admin', 'vendor', 'veterinarian', 'breeder', 'customer', 'rider', 'shipping_partner']
 
 const ROLE_META = {
     super_admin: { label: 'Super Admin', Icon: Shield, iconBg: 'bg-[#244693]' },
@@ -33,6 +33,7 @@ const ROLE_META = {
     breeder: { label: 'Breeder', Icon: Bird, iconBg: 'bg-[#D3A218]' },
     customer: { label: 'Customer', Icon: UsersRound, iconBg: 'bg-[#6B7280]' },
     rider: { label: 'Rider', Icon: Bike, iconBg: 'bg-[#244693]' },
+    shipping_partner: { label: 'Shipping Partner', Icon: Bike, iconBg: 'bg-[#244693]' },
     other: { label: 'Other', Icon: Users, iconBg: 'bg-[#9CA3AF]' },
 }
 
@@ -46,6 +47,7 @@ const CREATE_ROLE_DESCRIPTIONS = {
     breeder: 'Register a breeder and its farm',
     customer: 'End customer account',
     rider: 'Delivery and logistics personnel',
+    shipping_partner: 'Coordinates farm shipping prices and pickup schedules',
 }
 
 /** Icon colors on role cards (matches SuperAdminDashboard picker styling) */
@@ -58,6 +60,7 @@ const ROLE_PICKER_ICON_CLASS = {
     breeder: 'text-[#D3A218]',
     customer: 'text-[#6B7280]',
     rider: 'text-[#244693]',
+    shipping_partner: 'text-[#244693]',
 }
 
 function StatDot({ active }) {
@@ -181,6 +184,7 @@ export default function Accounts({ auth, users = [], flash }) {
                 { value: 'veterinarian', label: 'Veterinarian' },
                 { value: 'breeder', label: 'Breeder' },
                 { value: 'rider', label: 'Rider' },
+                { value: 'shipping_partner', label: 'Shipping Partner' },
             ]
         }
         return [
@@ -191,6 +195,7 @@ export default function Accounts({ auth, users = [], flash }) {
             { value: 'breeder', label: 'Breeder' },
             { value: 'customer', label: 'Customer' },
             { value: 'rider', label: 'Rider' },
+            { value: 'shipping_partner', label: 'Shipping Partner' },
         ]
     }
 

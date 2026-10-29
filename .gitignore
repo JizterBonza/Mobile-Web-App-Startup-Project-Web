@@ -32,6 +32,7 @@ database/migrations/2026_08_26_000001_seed_completed_test_orders.php
 /tests/*
 !/tests/Feature/
 /tests/Feature/*
+!/tests/Feature/FarmCheckoutTest.php
 !/tests/Feature/ShopConversationFarmMigrationTest.php
 /tests/Feature/FarmApiTest.php
 /mobile_app/docs

@@ -87,6 +87,11 @@ class PaymongoService
         return $response->json();
     }
 
+    public function expireCheckoutSession(string $sessionId): array
+    {
+        return $this->client()->timeout(20)->post($this->baseUrl.'/checkout_sessions/'.rawurlencode($sessionId).'/expire')->json() ?? [];
+    }
+
     public function createCheckoutSession($amount, $description = "Order Payment", array $options = [])
     {
         $attributes = [
