@@ -2011,13 +2011,13 @@ export default function AgrivetStoreInformation({
                                   e.stopPropagation()
                                   handleProductStatusToggle(listing)
                                 }}
-                                className={`w-full text-xs font-semibold py-1.5 rounded-lg transition-colors ${
+                                className={`w-full text-xs font-semibold py-1.5 rounded-lg text-white transition-colors ${
                                   (listing.manualStatus || 'Active') === 'Active'
-                                    ? 'bg-[#F9FAFB] text-[#6B7280] hover:bg-[#E5E7EB]'
-                                    : 'bg-[#102059] text-white hover:bg-[#244693]'
+                                    ? 'bg-[#E20E28] hover:bg-[#C10D23]'
+                                    : 'bg-[#00C950] hover:bg-[#00B548]'
                                 }`}
                               >
-                                {(listing.manualStatus || 'Active') === 'Active' ? 'Deactivate' : 'Activate'}
+                                {(listing.manualStatus || 'Active') === 'Active' ? 'Deactivate' : 'Reactivate'}
                               </button>
                             )}
                           </div>

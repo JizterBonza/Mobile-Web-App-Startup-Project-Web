@@ -503,10 +503,11 @@ export default function AgrivetShops({ auth, agrivet, zones = [], shops = [], fl
                             <button
                               type="button"
                               onClick={(e) => openReactivateStore(e, shop)}
-                              className="rounded-lg p-1.5 text-[#00C950] transition-colors hover:bg-[#E8F5E9]"
+                              className="inline-flex items-center gap-1 rounded-lg bg-[#00C950] px-2.5 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-[#00B548]"
                               title="Reactivate store"
                             >
-                              <RotateCcw className="h-4 w-4" />
+                              <RotateCcw className="h-3.5 w-3.5" />
+                              Reactivate Store
                             </button>
                           )}
                         </div>

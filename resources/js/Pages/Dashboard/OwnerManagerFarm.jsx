@@ -1105,7 +1105,7 @@ function GamefowlCatalogPanel({ listings = [], catalog = [] }) {
                                         onClick={(event) => {
                                             event.stopPropagation()
                                             const nextStatus = isActive ? 'inactive' : 'active'
-                                            if (!window.confirm(`${isActive ? 'Deactivate' : 'Activate'} this gamefowl listing?`)) return
+                                            if (!window.confirm(`${isActive ? 'Deactivate' : 'Reactivate'} this gamefowl listing?`)) return
                                             setUpdatingListingId(listing.id)
                                             router.patch(
                                                 `/dashboard/owner-manager/farm/gamefowls/listings/${listing.id}/status`,
@@ -1116,9 +1116,13 @@ function GamefowlCatalogPanel({ listings = [], catalog = [] }) {
                                                 },
                                             )
                                         }}
-                                        className="mt-3 w-full rounded-lg bg-[#F3F4F6] py-2 text-xs font-semibold text-[#9CA3AF] transition-colors hover:bg-[#E5E7EB] hover:text-[#6B7280] disabled:opacity-60"
+                                        className={`mt-3 w-full rounded-lg py-2 text-xs font-semibold text-white transition-colors disabled:opacity-60 ${
+                                            isActive
+                                                ? 'bg-[#E20E28] hover:bg-[#C10D23]'
+                                                : 'bg-[#00C950] hover:bg-[#00B548]'
+                                        }`}
                                     >
-                                        {isActive ? 'Deactivate' : 'Activate'}
+                                        {isActive ? 'Deactivate' : 'Reactivate'}
                                     </button>
                                 </div>
                             </article>
@@ -1857,7 +1861,7 @@ export default function OwnerManagerFarm({ auth, farm, listings = [], catalog = 
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
                     <div className="w-full max-w-md rounded-xl bg-white p-6">
                         <h3 className="mb-4 text-xl font-bold text-[#102059]">
-                            {isActive ? 'Deactivate Farm' : 'Activate Farm'}
+                            {isActive ? 'Deactivate Farm' : 'Reactivate Farm'}
                         </h3>
                         <p className="text-sm leading-relaxed text-[#65676B]">
                             {isActive
@@ -1875,9 +1879,13 @@ export default function OwnerManagerFarm({ auth, farm, listings = [], catalog = 
                             <button
                                 type="button"
                                 onClick={confirmStatusChange}
-                                className="rounded-lg bg-[#244693] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#1a3570]"
+                                className={`rounded-lg px-4 py-2.5 text-sm font-semibold text-white ${
+                                    isActive
+                                        ? 'bg-[#E20E28] hover:bg-[#C10D23]'
+                                        : 'bg-[#00C950] hover:bg-[#00B548]'
+                                }`}
                             >
-                                Confirm
+                                {isActive ? 'Deactivate Farm' : 'Reactivate Farm'}
                             </button>
                         </div>
                     </div>
