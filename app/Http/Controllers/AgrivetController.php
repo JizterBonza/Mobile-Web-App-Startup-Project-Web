@@ -19,6 +19,7 @@ use Illuminate\Support\Facades\Schema;
 use Inertia\Inertia;
 use App\Http\Controllers\Concerns\ManagesShopOrders;
 use App\Http\Controllers\Concerns\PreventsDisabledCatalogRestock;
+use App\Services\StoreInsightsService;
 use App\Services\UserWelcomeEmailService;
 use App\Support\PublicStorage;
 
@@ -963,6 +964,9 @@ class AgrivetController extends Controller
             'orders' => $orders,
             'deliveryMethods' => $deliveryMethods,
             'preparingItemStatusId' => $preparingItemStatusId,
+            'storeInsights' => $user->user_type === 'vendor'
+                ? null
+                : app(StoreInsightsService::class)->forShop((int) $shop->id),
             'zones' => $zones->map(fn ($z) => ['id' => $z->id, 'name' => $z->name, 'boundary' => $z->boundary]),
             'mapShops' => $mapShops,
         ]);

@@ -143,6 +143,11 @@ function getPeriodInsights(storeInsights, period) {
   return storeInsights?.[period] ?? EMPTY_PERIOD_INSIGHTS
 }
 
+function initialInsightsPeriod(storeInsights) {
+  const periods = ['weekly', 'monthly', 'yearly']
+  return periods.find((period) => Number(storeInsights?.[period]?.orderCount) > 0) ?? 'weekly'
+}
+
 function formatInsightNumber(value) {
   if (value == null) return '0'
   return Number(value).toLocaleString()
@@ -453,7 +458,7 @@ export default function AgrivetStoreInformation({
     return 'about'
   })
   const [direction, setDirection] = useState(1)
-  const [insightsPeriod, setInsightsPeriod] = useState('weekly')
+  const [insightsPeriod, setInsightsPeriod] = useState(() => initialInsightsPeriod(storeInsights))
 
   const periodInsights = useMemo(
     () => getPeriodInsights(storeInsights, insightsPeriod),
