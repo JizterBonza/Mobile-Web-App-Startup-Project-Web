@@ -1,6 +1,5 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { router } from '@inertiajs/react'
-import { Eye } from 'lucide-react'
 import SuperAdminOrAdminLayout from '../../Layouts/SuperAdminOrAdminLayout'
 import OwnerManagerKlasmeytLayout from '../../Layouts/OwnerManagerKlasmeytLayout'
 import VendorKlasmeytLayout from '../../Layouts/VendorKlasmeytLayout'
@@ -23,6 +22,7 @@ function statusBadgeClass(status) {
     case 'completed':
     case 'paid':
     case 'success':
+    case 'delivered':
       return 'bg-[#DCFCE7] text-[#15803D]'
     case 'failed':
     case 'cancelled':
@@ -61,6 +61,15 @@ function formatDateTime(iso) {
   }
 }
 
+function saleReferences(sale) {
+  return [
+    sale.order_id ? { label: 'Order ID', value: String(sale.order_id) } : null,
+    sale.payment_id ? { label: 'Payment ID', value: sale.payment_id } : null,
+    sale.payment_intent_id ? { label: 'Payment intent', value: sale.payment_intent_id } : null,
+    sale.checkout_session_id ? { label: 'Checkout session', value: sale.checkout_session_id } : null,
+  ].filter(Boolean)
+}
+
 function PayoutRecordsLayout({ auth, children }) {
   const type = auth?.user?.user_type
   if (type === 'owner_manager') {
@@ -89,7 +98,9 @@ export default function PayoutRecords({
   payouts,
   shops = [],
   canFilterShops = false,
+  canRunManualPayout = false,
   filters = {},
+  flash,
 }) {
   const [shopId, setShopId] = useState(filters.shop_id ?? '')
   const [status, setStatus] = useState(filters.status ?? '')
@@ -97,8 +108,51 @@ export default function PayoutRecords({
   const [toDate, setToDate] = useState(filters.to_date ?? '')
   const [perPage, setPerPage] = useState(filters.per_page ?? 20)
   const [detail, setDetail] = useState(null)
+  const [confirmRun, setConfirmRun] = useState(false)
+  const [running, setRunning] = useState(false)
+  const [doneTarget, setDoneTarget] = useState(null)
+  const [markingDone, setMarkingDone] = useState(false)
+  const [showSuccess, setShowSuccess] = useState(true)
+  const [showError, setShowError] = useState(true)
 
   const baseRoute = payoutRecordsPath(auth?.user?.user_type)
+  const selectedShop = shops.find((shop) => String(shop.id) === String(shopId))
+
+  useEffect(() => {
+    if (flash?.success) setShowSuccess(true)
+    if (flash?.error) setShowError(true)
+  }, [flash])
+
+  const markPayoutDone = () => {
+    if (!doneTarget?.reference_number) return
+    setMarkingDone(true)
+    router.post(
+      `${baseRoute}/done`,
+      { reference_number: doneTarget.reference_number },
+      {
+        preserveScroll: true,
+        onFinish: () => {
+          setMarkingDone(false)
+          setDoneTarget(null)
+        },
+      },
+    )
+  }
+
+  const runManualPayout = () => {
+    setRunning(true)
+    router.post(
+      `${baseRoute}/run`,
+      { shop_id: shopId || undefined },
+      {
+        preserveScroll: true,
+        onFinish: () => {
+          setRunning(false)
+          setConfirmRun(false)
+        },
+      },
+    )
+  }
 
   const applyFilters = (e) => {
     e?.preventDefault()
@@ -153,7 +207,33 @@ export default function PayoutRecords({
               Disbursements recorded from shop wallets to vendor bank accounts
             </p>
           </div>
+          {canRunManualPayout && (
+            <button
+              type="button"
+              onClick={() => setConfirmRun(true)}
+              className="shrink-0 rounded-lg bg-[#102059] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#244693]"
+            >
+              Manual Payout
+            </button>
+          )}
         </div>
+
+        {flash?.success && showSuccess && (
+          <div className="mb-4 flex items-start justify-between gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900" role="status">
+            <span>{flash.success}</span>
+            <button type="button" className="shrink-0 font-semibold text-emerald-800" onClick={() => setShowSuccess(false)}>
+              Dismiss
+            </button>
+          </div>
+        )}
+        {flash?.error && showError && (
+          <div className="mb-4 flex items-start justify-between gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900" role="alert">
+            <span>{flash.error}</span>
+            <button type="button" className="shrink-0 font-semibold text-red-800" onClick={() => setShowError(false)}>
+              Dismiss
+            </button>
+          </div>
+        )}
 
         <div className="mb-6 rounded-lg border border-[#E5E7EB] bg-white px-6 py-4">
           <form onSubmit={applyFilters}>
@@ -293,14 +373,22 @@ export default function PayoutRecords({
                           </div>
                         </div>
 
-                        <div className="flex items-center justify-end">
+                        <div className="flex flex-wrap items-center justify-end gap-2">
+                          {canRunManualPayout && (record.status || '').toLowerCase() === 'pending' && (
+                            <button
+                              type="button"
+                              onClick={() => setDoneTarget(record)}
+                              className="whitespace-nowrap rounded-lg bg-[#15803D] px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-[#166534]"
+                            >
+                              Done Payout
+                            </button>
+                          )}
                           <button
                             type="button"
                             onClick={() => setDetail(record)}
-                            className="rounded-lg p-1.5 text-[#244693] transition-colors hover:bg-[#F3F4F6]"
-                            title="View details"
+                            className="whitespace-nowrap rounded-lg border border-[#244693] px-3 py-1.5 text-xs font-semibold text-[#244693] transition-colors hover:bg-[#F3F4F6]"
                           >
-                            <Eye className="h-5 w-5" />
+                            Payout Details
                           </button>
                         </div>
                       </div>
@@ -353,6 +441,90 @@ export default function PayoutRecords({
         </div>
       </div>
 
+      {doneTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <button
+            type="button"
+            className="absolute inset-0 cursor-default bg-black/40"
+            aria-label="Cancel done payout"
+            onClick={() => !markingDone && setDoneTarget(null)}
+          />
+          <div className="relative z-10 w-full max-w-md overflow-hidden rounded-xl border border-[#E5E7EB] bg-white shadow-xl">
+            <div className="border-b border-[#E5E7EB] px-5 py-4">
+              <h2 className="text-base font-semibold text-[#102059]">Done payout</h2>
+            </div>
+            <div className="space-y-3 px-5 py-4 text-sm text-[#374151]">
+              <p>
+                Mark <span className="font-semibold text-[#102059]">{doneTarget.reference_number}</span> as success?
+              </p>
+              <p>The pending payout status becomes success.</p>
+            </div>
+            <div className="flex justify-end gap-2 border-t border-[#E5E7EB] px-5 py-3">
+              <button
+                type="button"
+                className="rounded-lg px-4 py-2 text-sm font-semibold text-[#6B7280] hover:bg-[#F3F4F6] disabled:opacity-50"
+                disabled={markingDone}
+                onClick={() => setDoneTarget(null)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="rounded-lg bg-[#15803D] px-4 py-2 text-sm font-semibold text-white hover:bg-[#166534] disabled:opacity-50"
+                disabled={markingDone}
+                onClick={markPayoutDone}
+              >
+                {markingDone ? 'Saving…' : 'Done Payout'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {confirmRun && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <button
+            type="button"
+            className="absolute inset-0 cursor-default bg-black/40"
+            aria-label="Cancel manual payout"
+            onClick={() => !running && setConfirmRun(false)}
+          />
+          <div className="relative z-10 w-full max-w-md overflow-hidden rounded-xl border border-[#E5E7EB] bg-white shadow-xl">
+            <div className="border-b border-[#E5E7EB] px-5 py-4">
+              <h2 className="text-base font-semibold text-[#102059]">Create manual payout</h2>
+            </div>
+            <div className="space-y-3 px-5 py-4 text-sm text-[#374151]">
+              <p>
+                {selectedShop
+                  ? `This runs the payout disbursement for ${selectedShop.shop_name}.`
+                  : 'This runs the payout disbursement for every shop with a payable wallet balance.'}
+              </p>
+              <p>
+                Eligible balances are recorded as pending payouts and cleared from the shop wallet.
+              </p>
+            </div>
+            <div className="flex justify-end gap-2 border-t border-[#E5E7EB] px-5 py-3">
+              <button
+                type="button"
+                className="rounded-lg px-4 py-2 text-sm font-semibold text-[#6B7280] hover:bg-[#F3F4F6] disabled:opacity-50"
+                disabled={running}
+                onClick={() => setConfirmRun(false)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="rounded-lg bg-[#102059] px-4 py-2 text-sm font-semibold text-white hover:bg-[#244693] disabled:opacity-50"
+                disabled={running}
+                onClick={runManualPayout}
+              >
+                {running ? 'Creating…' : 'Create payout'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {detail && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <button
@@ -361,54 +533,86 @@ export default function PayoutRecords({
             aria-label="Close payout details"
             onClick={() => setDetail(null)}
           />
-          <div className="relative z-10 w-full max-w-lg overflow-hidden rounded-xl border border-[#E5E7EB] bg-white shadow-xl">
-              <div className="flex items-center justify-between border-b border-[#E5E7EB] px-5 py-4">
-                <h2 className="text-base font-semibold text-[#102059]">Payout #{detail.id}</h2>
-                <button
-                  type="button"
-                  className="rounded-lg px-2 py-1 text-lg leading-none text-[#6B7280] hover:bg-[#F3F4F6]"
-                  onClick={() => setDetail(null)}
-                >
-                  ×
-                </button>
+          <div className="relative z-10 flex max-h-[85vh] w-full max-w-5xl flex-col overflow-hidden rounded-xl border border-[#E5E7EB] bg-white shadow-xl">
+            <div className="flex items-start justify-between gap-3 border-b border-[#E5E7EB] px-5 py-4">
+              <div>
+                <h2 className="text-base font-semibold text-[#102059]">Payout Details</h2>
+                <p className="mt-1 text-sm text-[#6B7280]">
+                  {detail.shop?.shop_name || 'Shop'} · {detail.reference_number} · {formatAmount(detail.amount, detail.currency)}
+                </p>
               </div>
-              <dl className="grid grid-cols-[7.5rem_1fr] gap-x-4 gap-y-3 px-5 py-4 text-sm">
-                <dt className="text-[#6B7280]">Reference</dt>
-                <dd className="break-all font-medium text-[#102059]">{detail.reference_number}</dd>
-                <dt className="text-[#6B7280]">Shop</dt>
-                <dd className="text-[#102059]">{detail.shop?.shop_name || '—'}</dd>
-                <dt className="text-[#6B7280]">Amount</dt>
-                <dd className="font-semibold text-[#102059]">{formatAmount(detail.amount, detail.currency)}</dd>
-                <dt className="text-[#6B7280]">Status</dt>
-                <dd>
-                  <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold capitalize ${statusBadgeClass(detail.status)}`}>
-                    {detail.status || '—'}
-                  </span>
-                </dd>
-                <dt className="text-[#6B7280]">Provider</dt>
-                <dd className="capitalize text-[#102059]">{detail.provider || '—'}</dd>
-                <dt className="text-[#6B7280]">Account name</dt>
-                <dd className="text-[#102059]">{detail.destination_account_name || '—'}</dd>
-                <dt className="text-[#6B7280]">Account no.</dt>
-                <dd className="text-[#102059]">{detail.destination_account_number || '—'}</dd>
-                <dt className="text-[#6B7280]">BIC</dt>
-                <dd className="text-[#102059]">{detail.destination_account_bic || '—'}</dd>
-                <dt className="text-[#6B7280]">Date</dt>
-                <dd className="text-[#102059]">
-                  {detail.created_at ? new Date(detail.created_at).toLocaleString() : '—'}
-                </dd>
-              </dl>
-              <div className="border-t border-[#E5E7EB] px-5 py-3 text-right">
-                <button
-                  type="button"
-                  className="rounded-lg bg-[#244693] px-4 py-2 text-sm font-semibold text-white hover:bg-[#102059]"
-                  onClick={() => setDetail(null)}
-                >
-                  Close
-                </button>
-              </div>
+              <button
+                type="button"
+                className="rounded-lg px-2 py-1 text-lg leading-none text-[#6B7280] hover:bg-[#F3F4F6]"
+                onClick={() => setDetail(null)}
+              >
+                ×
+              </button>
+            </div>
+            <div className="overflow-y-auto px-5 py-4">
+              <h3 className="mb-3 text-sm font-semibold text-[#102059]">Sales Covered</h3>
+              {(detail.sales ?? []).length > 0 ? (
+                <div className="overflow-x-auto rounded-lg border border-[#E5E7EB]">
+                  <table className="min-w-full text-left text-sm">
+                    <thead className="bg-[#F9FAFB] text-xs font-semibold uppercase tracking-wide text-[#6B7280]">
+                      <tr>
+                        <th className="whitespace-nowrap px-3 py-2">Order No.</th>
+                        <th className="whitespace-nowrap px-3 py-2">Customer</th>
+                        <th className="whitespace-nowrap px-3 py-2">Reference</th>
+                        <th className="whitespace-nowrap px-3 py-2">Order Amount (₱)</th>
+                        <th className="whitespace-nowrap px-3 py-2">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[#E5E7EB]">
+                      {detail.sales.map((sale) => {
+                        const references = saleReferences(sale)
+                        return (
+                          <tr key={sale.order_id || sale.order_no}>
+                            <td className="whitespace-nowrap px-3 py-2 font-medium text-[#102059]">{sale.order_no}</td>
+                            <td className="px-3 py-2 text-[#102059]">{sale.customer}</td>
+                            <td className="min-w-[11rem] max-w-[16rem] px-3 py-2">
+                              {references.length > 0 ? (
+                                <div className="space-y-1">
+                                  {references.map((reference) => (
+                                    <div key={reference.label} className="text-xs leading-4 text-[#102059]">
+                                      <div className="text-[#9CA3AF]">{reference.label}</div>
+                                      <div className="break-all font-medium">{reference.value}</div>
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                <span className="text-[#9CA3AF]">—</span>
+                              )}
+                            </td>
+                            <td className="whitespace-nowrap px-3 py-2 font-semibold text-[#102059]">{formatAmount(sale.amount)}</td>
+                            <td className="px-3 py-2">
+                              <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold capitalize ${statusBadgeClass(sale.status)}`}>
+                                {sale.status}
+                              </span>
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <p className="rounded-lg border border-dashed border-[#E5E7EB] px-4 py-8 text-center text-sm text-[#9CA3AF]">
+                  No sales were recorded for this payout.
+                </p>
+              )}
+            </div>
+            <div className="border-t border-[#E5E7EB] px-5 py-3 text-right">
+              <button
+                type="button"
+                className="rounded-lg bg-[#244693] px-4 py-2 text-sm font-semibold text-white hover:bg-[#102059]"
+                onClick={() => setDetail(null)}
+              >
+                Close
+              </button>
             </div>
           </div>
+        </div>
       )}
     </PayoutRecordsLayout>
   )

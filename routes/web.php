@@ -288,6 +288,12 @@ Route::middleware(['auth', 'session.valid', 'user.type:super_admin'])->prefix('d
 Route::get('/dashboard/super-admin/payout-records', [PayoutRecordController::class, 'index'])
     ->middleware(['auth', 'session.valid', 'user.type:super_admin'])
     ->name('dashboard.super-admin.payout-records');
+Route::post('/dashboard/super-admin/payout-records/run', [PayoutRecordController::class, 'run'])
+    ->middleware(['auth', 'session.valid', 'user.type:super_admin'])
+    ->name('dashboard.super-admin.payout-records.run');
+Route::post('/dashboard/super-admin/payout-records/done', [PayoutRecordController::class, 'markDone'])
+    ->middleware(['auth', 'session.valid', 'user.type:super_admin'])
+    ->name('dashboard.super-admin.payout-records.done');
 
 // Super Admin Payment Methods
 Route::middleware(['auth', 'session.valid', 'user.type:super_admin'])->prefix('dashboard/super-admin/payment-methods')->name('dashboard.super-admin.payment-methods.')->group(function () {
@@ -540,6 +546,12 @@ Route::middleware(['auth', 'session.valid', 'user.type:admin'])->prefix('dashboa
 Route::get('/dashboard/admin/payout-records', [PayoutRecordController::class, 'index'])
     ->middleware(['auth', 'session.valid', 'user.type:admin'])
     ->name('dashboard.admin.payout-records');
+Route::post('/dashboard/admin/payout-records/run', [PayoutRecordController::class, 'run'])
+    ->middleware(['auth', 'session.valid', 'user.type:admin'])
+    ->name('dashboard.admin.payout-records.run');
+Route::post('/dashboard/admin/payout-records/done', [PayoutRecordController::class, 'markDone'])
+    ->middleware(['auth', 'session.valid', 'user.type:admin'])
+    ->name('dashboard.admin.payout-records.done');
 
 // Admin Payment Methods
 Route::middleware(['auth', 'session.valid', 'user.type:admin'])->prefix('dashboard/admin/payment-methods')->name('dashboard.admin.payment-methods.')->group(function () {
