@@ -190,12 +190,14 @@ class GamefowlCatalogController extends Controller
             return $farm;
         }
 
-        $validated = $this->validateEntry($request, true);
+        $validated = $this->validateEntry($request, true, 3);
         $images = $this->resolveImages($request);
 
-        if (count($images) < 5) {
-            return back()->withInput()->withErrors(['images' => 'Please upload all 5 gamefowl images.']);
+        if (count($images) < 3 || count($images) > 5) {
+            return back()->withInput()->withErrors(['images' => 'Please upload 3 to 5 gamefowl images.']);
         }
+
+        [$packedImages, $primaryIndex] = $this->packImages($images, (int) $validated['primary_image_index']);
 
         $gamefowl = GamefowlCatalog::create([
             'name' => $validated['name'],
@@ -205,8 +207,8 @@ class GamefowlCatalogController extends Controller
             'sex' => $validated['sex'],
             'hatch_date' => $validated['hatch_date'] ?? null,
             'description' => $validated['description'] ?? null,
-            'images' => array_values($images),
-            'primary_image_index' => (int) $validated['primary_image_index'],
+            'images' => $packedImages,
+            'primary_image_index' => $primaryIndex,
             'status' => GamefowlCatalog::STATUS_PENDING,
             'created_by' => auth()->id(),
         ]);
@@ -217,7 +219,7 @@ class GamefowlCatalogController extends Controller
             ->with('success', 'Gamefowl registration request submitted. It will be reviewed by an administrator.');
     }
 
-    private function validateEntry(Request $request, bool $creating): array
+    private function validateEntry(Request $request, bool $creating, int $minimumImages = 5): array
     {
         $request->merge([
             'hatch_date' => $request->filled('hatch_date') ? $request->hatch_date : null,
@@ -232,7 +234,7 @@ class GamefowlCatalogController extends Controller
             'sex' => 'required|string|in:Not yet determined,Male,Female',
             'hatch_date' => 'nullable|date',
             'description' => 'nullable|string|max:2000',
-            'images' => $creating ? 'required|array|size:5' : 'nullable|array|max:5',
+            'images' => $creating ? 'required|array|min:'.$minimumImages.'|max:5' : 'nullable|array|max:5',
             'images.*' => 'nullable|image|mimes:jpeg,png,jpg|max:5120',
             'primary_image_index' => 'required|integer|min:0|max:4',
         ]);
@@ -258,6 +260,27 @@ class GamefowlCatalogController extends Controller
         ksort($paths);
 
         return $paths;
+    }
+
+    /**
+     * Drop empty slots and keep the primary photo pointing at the packed list.
+     *
+     * @param  array<int, string>  $images
+     * @return array{0: list<string>, 1: int}
+     */
+    private function packImages(array $images, int $primaryIndex): array
+    {
+        $packed = [];
+        $packedPrimary = 0;
+
+        foreach ($images as $index => $path) {
+            if ((int) $index === $primaryIndex) {
+                $packedPrimary = count($packed);
+            }
+            $packed[] = $path;
+        }
+
+        return [$packed, $packedPrimary];
     }
 
     /**
