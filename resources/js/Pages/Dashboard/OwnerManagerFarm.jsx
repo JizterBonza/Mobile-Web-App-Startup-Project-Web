@@ -57,9 +57,15 @@ function initialFarmTab(url) {
     return ['about', 'gamefowl', 'insights'].includes(tab) ? tab : 'about'
 }
 
-function formatPeso(value, unit = 'per head') {
+function gamefowlSellingUnit(unit) {
+    const value = String(unit || '').trim()
+    if (!value || value.toLowerCase() === 'per head') return 'per bird'
+    return value
+}
+
+function formatPeso(value, unit = 'per bird') {
     const amount = Number(value)
-    return `₱${Number.isFinite(amount) ? amount.toFixed(2) : '0.00'}/${unit || 'per head'}`
+    return `₱${Number.isFinite(amount) ? amount.toFixed(2) : '0.00'}/${gamefowlSellingUnit(unit)}`
 }
 
 function formatReleaseDate(value) {
@@ -97,7 +103,7 @@ function normalizeListing(item) {
         sex,
         category,
         price: item.price ?? 0,
-        unit: item.selling_unit || item.unit || 'per head',
+        unit: gamefowlSellingUnit(item.selling_unit || item.unit),
         stocks: item.stocks ?? item.stock ?? 0,
         releaseOption: normalizeReleaseOption(item.release_option || item.releaseOption || ''),
         releaseDateIso: toIsoDate(item.release_date || item.releaseDate),
@@ -298,7 +304,7 @@ function GamefowlListingDetailsModal({ gamefowl, listing = null, onClose, onSave
                                         className={selectClass(sellingUnit)}
                                     >
                                         <option value="">Select Selling Unit</option>
-                                        <option value="per head">per head</option>
+                                        <option value="per bird">per bird</option>
                                         <option value="per dozen">per dozen</option>
                                     </select>
                                     <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#9CA3AF]" />
