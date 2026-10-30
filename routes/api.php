@@ -100,8 +100,8 @@ Route::get('order-statuses', [MobileController::class, 'getOrderStatuses']);
 Route::get('addresses/types', [AddressController::class, 'getAddressTypes']);
 
 // PayMongo callbacks (signature / redirect — not bearer-auth)
-Route::get('/payment-success', [PaymentController::class, 'paymentSuccess']);
-Route::get('/payment-cancel', [PaymentController::class, 'paymentCancel']);
+Route::get('/payment-success', [PaymentController::class, 'paymentSuccess'])->middleware('throttle:60,1');
+Route::get('/payment-cancel', [PaymentController::class, 'paymentCancel'])->middleware('throttle:60,1');
 Route::post('/payment/webhook', [PaymentController::class, 'handleWebhook']);
 
 /*
@@ -242,11 +242,12 @@ Route::middleware(['auth:sanctum', 'account.active'])->group(function () {
     Route::get('activity-logs/{id}', [ActivityLogController::class, 'show']);
 
     // Payments (order-scoped / intent creation)
-    Route::post('/payment/intent', [PaymentController::class, 'createIntent']);
-    Route::post('/payment/attach', [PaymentController::class, 'attachPayment']);
-    Route::post('/payment/checkout', [PaymentController::class, 'checkout']);
-    Route::get('/payment/checkout-url/{orderId}', [PaymentController::class, 'getCheckoutUrlByOrderId']);
-    Route::get('/payment/status/{orderId}', [PaymentController::class, 'getPaymentStatusByOrderId']);
+    Route::post('/payment/intent', [PaymentController::class, 'createIntent'])->middleware('throttle:20,1');
+    Route::post('/payment/attach', [PaymentController::class, 'attachPayment'])->middleware('throttle:20,1');
+    Route::post('/payment/checkout', [PaymentController::class, 'checkout'])->middleware('throttle:20,1');
+    Route::get('/payment/checkout-url/{orderId}', [PaymentController::class, 'getCheckoutUrlByOrderId'])->middleware('throttle:20,1');
+    Route::post('/orders/{orderId}/payment-session', [PaymentController::class, 'getCheckoutUrlByOrderId'])->whereNumber('orderId')->middleware('throttle:20,1');
+    Route::get('/payment/status/{orderId}', [PaymentController::class, 'getPaymentStatusByOrderId'])->middleware('throttle:60,1');
 });
 
 /*

@@ -7,6 +7,7 @@ use Illuminate\Support\Facades\Http;
 class PaymongoService
 {
     protected $secret;
+
     protected $baseUrl;
 
     public function __construct()
@@ -17,25 +18,26 @@ class PaymongoService
 
     private function client()
     {
-        return Http::withBasicAuth($this->secret, '')
+        return Http::withBasicAuth($this->secret, '')->connectTimeout(5)->timeout(20)
             ->withHeaders([
-                'Content-Type' => 'application/json'
+                'Content-Type' => 'application/json',
             ]);
     }
 
-    public function createPaymentIntent($amount, $methods = ['gcash','card'])
+    public function createPaymentIntent($amount, $methods = ['gcash', 'card'], array $options = [])
     {
         $response = $this->client()->post($this->baseUrl.'/payment_intents', [
             'data' => [
                 'attributes' => [
-                    'amount' => $amount * 100,
+                    'amount' => FarmCheckoutService::cents($amount),
+                    'metadata' => $options['metadata'] ?? [],
                     'payment_method_allowed' => $methods,
-                    'currency' => 'PHP'
-                ]
-            ]
+                    'currency' => 'PHP',
+                ],
+            ],
         ]);
 
-        return $response->json();
+        return array_merge($response->json() ?? [], ['_creation_rejected' => $response->status() >= 400 && $response->status() < 500 && ! in_array($response->status(), [408, 409, 429], true)]);
     }
 
     public function createPaymentMethod($type, $details)
@@ -44,47 +46,47 @@ class PaymongoService
             'data' => [
                 'attributes' => [
                     'type' => $type,
-                    'details' => $details
-                ]
-            ]
+                    'details' => $details,
+                ],
+            ],
         ]);
 
-        return $response->json();
+        return $response->json() ?? [];
     }
 
     public function attachPaymentIntent($paymentIntentId, $paymentMethodId, $returnUrl)
     {
         $response = $this->client()->post(
-            $this->baseUrl."/payment_intents/$paymentIntentId/attach",
+            $this->baseUrl.'/payment_intents/'.rawurlencode($paymentIntentId).'/attach',
             [
                 'data' => [
                     'attributes' => [
                         'payment_method' => $paymentMethodId,
-                        'return_url' => $returnUrl
-                    ]
-                ]
+                        'return_url' => $returnUrl,
+                    ],
+                ],
             ]
         );
 
-        return $response->json();
+        return $response->json() ?? [];
     }
 
     public function retrievePaymentIntent($paymentIntentId)
     {
         $response = $this->client()->get(
-            $this->baseUrl."/payment_intents/$paymentIntentId"
+            $this->baseUrl.'/payment_intents/'.rawurlencode($paymentIntentId)
         );
 
-        return $response->json();
+        return $response->json() ?? [];
     }
 
     public function retrieveCheckoutSession(string $sessionId)
     {
         $response = $this->client()->get(
-            $this->baseUrl.'/checkout_sessions/'.$sessionId
+            $this->baseUrl.'/checkout_sessions/'.rawurlencode($sessionId)
         );
 
-        return $response->json();
+        return $response->json() ?? [];
     }
 
     public function expireCheckoutSession(string $sessionId): array
@@ -92,7 +94,7 @@ class PaymongoService
         return $this->client()->timeout(20)->post($this->baseUrl.'/checkout_sessions/'.rawurlencode($sessionId).'/expire')->json() ?? [];
     }
 
-    public function createCheckoutSession($amount, $description = "Order Payment", array $options = [])
+    public function createCheckoutSession($amount, $description = 'Order Payment', array $options = [])
     {
         $attributes = [
             'send_email_receipt' => false,
@@ -113,7 +115,7 @@ class PaymongoService
                 'gcash',
                 'paymaya',
                 'qrph',
-                //'card',
+                // 'card',
             ],
         ];
 
@@ -131,7 +133,7 @@ class PaymongoService
             ],
         ]);
 
-        return $response->json();
+        return array_merge($response->json() ?? [], ['_creation_rejected' => $response->status() >= 400 && $response->status() < 500 && ! in_array($response->status(), [408, 409, 429], true)]);
     }
 
     public function registerWebhook(string $url, array $events = [
@@ -141,15 +143,15 @@ class PaymongoService
         'payment.failed',
     ])
     {
-        $response = $this->client()->post($this->baseUrl . '/webhooks', [
+        $response = $this->client()->post($this->baseUrl.'/webhooks', [
             'data' => [
                 'attributes' => [
                     'url' => $url,
                     'events' => $events,
-                ]
-            ]
+                ],
+            ],
         ]);
 
-        return $response->json();
+        return $response->json() ?? [];
     }
 }

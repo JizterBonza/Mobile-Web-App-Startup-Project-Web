@@ -70,6 +70,11 @@ class OrderStatusTransitionService
                 return ['changed' => false, 'order_shop' => $leg, 'log' => null];
             }
 
+            if (in_array($this->statusKey($toStatus->stat_description), ['preparing', 'ready for delivery', 'ready for drop off', 'ready for pickup', 'in-transit', 'delivered'], true)
+                && ! app(PaymentSecurityService::class)->canFulfill($leg->order)) {
+                throw ValidationException::withMessages(['payment_status' => 'Verified payment is required before fulfillment.']);
+            }
+
             $force = (bool) ($options['force'] ?? false);
             $reason = trim((string) ($options['reason'] ?? ''));
             if ($force) {

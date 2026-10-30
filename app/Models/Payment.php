@@ -10,6 +10,8 @@ class Payment extends Model
     use HasFactory;
 
     protected $fillable = [
+        'owner_user_id',
+        'last_reconciled_at',
         'purpose',
         'schedule_version',
         'attempt_key',
@@ -31,6 +33,7 @@ class Payment extends Model
         return [
             'metadata' => 'array',
             'amount' => 'decimal:2',
+            'last_reconciled_at' => 'datetime',
         ];
     }
 

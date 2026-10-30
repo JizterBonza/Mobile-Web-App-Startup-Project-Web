@@ -9,6 +9,7 @@ class FarmOrder extends Model
     protected $guarded = [];
 
     protected $casts = [
+        'reservation_expires_at' => 'datetime', 'reservation_expiry_notified_at' => 'datetime',
         'farm_snapshot' => 'array', 'address_snapshot' => 'array',
         'bird_count' => 'integer', 'box_count' => 'integer', 'schedule_version' => 'integer',
         'subtotal_cents' => 'integer', 'deposit_cents' => 'integer',

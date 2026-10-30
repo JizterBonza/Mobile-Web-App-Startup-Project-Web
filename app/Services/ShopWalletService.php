@@ -2,6 +2,8 @@
 
 namespace App\Services;
 
+use App\Models\Order;
+use App\Models\OrderDetail;
 use App\Models\OrderItem;
 use App\Models\Payout;
 use App\Models\PayoutSale;
@@ -26,18 +28,24 @@ class ShopWalletService
             return;
         }
 
-        $expected = self::vendorShare($item);
-        if ($expected < 0.01) {
-            if (! $item->wallet_credited_at) {
-                $item->forceFill(['wallet_credited_at' => now()])->saveQuietly();
+        DB::transaction(function () use ($item) {
+            $order = Order::whereKey($item->order_id)->lockForUpdate()->first();
+            if (! $order) {
+                return;
+            }
+            $order->setRelation('orderDetail', OrderDetail::whereKey($order->order_detail_id)->lockForUpdate()->first());
+            if (! app(PaymentSecurityService::class)->canFulfill($order)) {
+                return;
+            }
+            $fresh = OrderItem::query()->whereKey($item->id)->lockForUpdate()->first();
+            if (! $fresh || ! $this->itemIsDelivered($fresh)) {
+                return;
             }
 
-            return;
-        }
+            $expected = self::vendorShare($fresh);
+            if ($expected < 0.01) {
+                $fresh->forceFill(['wallet_credited_at' => now()])->saveQuietly();
 
-        DB::transaction(function () use ($item, $expected) {
-            $fresh = OrderItem::query()->whereKey($item->id)->lockForUpdate()->first();
-            if (! $fresh) {
                 return;
             }
 
@@ -53,22 +61,15 @@ class ShopWalletService
                 ->first();
 
             if ($existing) {
-                $delta = round($expected - (float) $existing->amount, 2);
-                if ($delta < 0.01) {
-                    if (! $fresh->wallet_credited_at) {
-                        $fresh->forceFill(['wallet_credited_at' => now()])->saveQuietly();
-                    }
+                if (FarmCheckoutService::cents($expected) !== FarmCheckoutService::cents($existing->amount)) {
+                    app(PaymentSecurityService::class)->review('wallet_credit_mismatch', $order->id, shopId: $shop->id,
+                        details: ['transaction_id' => $existing->id]);
 
                     return;
                 }
-
-                $balance = round((float) $shop->wallet_balance + $delta, 2);
-                $shop->forceFill(['wallet_balance' => $balance])->save();
-                $existing->forceFill([
-                    'amount' => $expected,
-                    'balance_after' => round((float) $existing->balance_after + $delta, 2),
-                ])->save();
-                $fresh->forceFill(['wallet_credited_at' => now()])->saveQuietly();
+                if (! $fresh->wallet_credited_at) {
+                    $fresh->forceFill(['wallet_credited_at' => now()])->saveQuietly();
+                }
 
                 return;
             }
@@ -124,7 +125,7 @@ class ShopWalletService
     }
 
     /**
-     * Top up sale credits that were stored as sale minus platform fee.
+     * Recheck historical credits; mismatches are held rather than silently rewritten.
      *
      * @param  array<int, int>|null  $shopIds
      */
@@ -193,6 +194,25 @@ class ShopWalletService
                 'amount' => $sale->amount,
             ]);
         }
+    }
+
+    public function payoutEligible(Shop $shop): bool
+    {
+        $security = app(PaymentSecurityService::class);
+        foreach (ShopWalletTransaction::where('shop_id', $shop->id)->where('reason', ShopWalletTransaction::REASON_SALE)->with('orderItem')->get() as $sale) {
+            $item = $sale->orderItem;
+            if (! $item || ! $this->itemIsDelivered($item) || ! $item->order || ! $security->canFulfill($item->order)
+                || FarmCheckoutService::cents($sale->amount) !== FarmCheckoutService::cents(self::vendorShare($item))) {
+                $security->review('unverified_wallet_sale', $item?->order_id, shopId: $shop->id, details: ['transaction_id' => $sale->id]);
+            }
+        }
+        $credits = ShopWalletTransaction::where('shop_id', $shop->id)->where('type', ShopWalletTransaction::TYPE_CREDIT)->sum('amount');
+        $debits = ShopWalletTransaction::where('shop_id', $shop->id)->where('type', ShopWalletTransaction::TYPE_DEBIT)->sum('amount');
+        if (FarmCheckoutService::cents($shop->wallet_balance) !== FarmCheckoutService::cents($credits) - FarmCheckoutService::cents($debits)) {
+            $security->review('unexplained_wallet_balance', shopId: $shop->id);
+        }
+
+        return ! DB::table('payment_reviews')->where('shop_id', $shop->id)->whereNull('resolved_at')->exists();
     }
 
     public function debitForPayout(Shop $shop, float $amount, Payout $payout): void

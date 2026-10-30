@@ -175,6 +175,8 @@ class FarmCheckoutService
             abort_unless(($quote['customer_id'] ?? null) === $user->id, 403, 'Quote belongs to another customer.');
             abort_if(($quote['expires_at'] ?? 0) <= now()->timestamp, 409, 'Quote expired. Request a new quote.');
             $input = $quote['input'];
+            abort_if(FarmOrder::where('customer_id', $user->id)->where('farm_id', $input['farm_id'])
+                ->whereNull('deposit_paid_at')->whereNull('cancelled_at')->count() >= 3, 409, 'At most three unpaid reservations per farm are allowed.');
             if ($items === null) {
                 throw ValidationException::withMessages(['items' => 'Provide details for every bird in the order.']);
             }
@@ -215,12 +217,13 @@ class FarmCheckoutService
                 'address_id' => $pickup ? null : $input['shipping_address_id'],
                 'shipping_address' => $snapshot['address_snapshot']['full_address'] ?? $snapshot['farm_snapshot']['address'] ?? '',
                 'order_instruction' => $input['order_instruction'] ?? null,
-                'delivery_method_id' => $method, 'payment_method' => null, 'payment_status' => 'pending',
+                'delivery_method_id' => $method, 'payment_method' => null, 'checkout_is_cod' => false, 'payment_status' => 'pending',
             ]);
             $order = Order::create(['user_id' => $user->id, 'order_detail_id' => $detail->id, 'ordered_at' => now()]);
             $farmOrder = FarmOrder::create(array_merge(collect($snapshot)->except('items')->all(), [
                 'order_id' => $order->id, 'customer_id' => $user->id,
                 'idempotency_key' => $key, 'request_hash' => $hash,
+                'reservation_expires_at' => now()->addHours(24),
                 'fulfillment_method' => $input['fulfillment_method'],
                 'shipping_cents' => $pickup ? 0 : null,
                 'total_cents' => $pickup ? $snapshot['subtotal_cents'] : null,
@@ -235,7 +238,7 @@ class FarmCheckoutService
             }
             // A payment request is persisted with the order; provider I/O happens later.
             Payment::create([
-                'order_id' => $order->id, 'purpose' => 'farm_deposit',
+                'order_id' => $order->id, 'owner_user_id' => $user->id, 'purpose' => 'farm_deposit',
                 'amount' => self::money($snapshot['deposit_cents']), 'currency' => 'PHP',
                 'status' => 'awaiting_session', 'provider' => 'paymongo', 'schedule_version' => 0,
                 'metadata' => ['farm_order' => true],

@@ -63,6 +63,7 @@ class FarmOrderService
             'balance_opens_at' => $order->balance_opens_at?->toIso8601String(),
             'balance_due_at' => $order->balance_due_at?->toIso8601String(),
             'schedule_version' => $order->schedule_version,
+            'reservation_expires_at' => $order->reservation_expires_at?->toIso8601String(),
             'held_at' => $order->held_at?->toIso8601String(), 'hold_reason' => $order->hold_reason,
             'release_authorized' => $order->release_authorized_at !== null && $order->held_at === null,
             'tracking' => $order->events->map(fn ($event) => [
@@ -125,33 +126,15 @@ class FarmOrderService
 
     public function schedule(FarmOrder $order, User $actor, string $pickupDate, ?int $perBoxCents): FarmOrder
     {
-        $result = DB::transaction(function () use ($order, $actor, $pickupDate, $perBoxCents) {
+        $order->refresh();
+        [$date, $rate, $shipping] = $this->scheduleValues($order, $actor, $pickupDate, $perBoxCents);
+        if ($order->pickup_date?->toDateString() === $pickupDate && $order->per_box_cents === $rate && ! $order->held_at) {
+            return $order;
+        }
+
+        $result = app(FarmPaymentService::class)->withClosedSessions($order, 'farm_balance', fn () => DB::transaction(function () use ($order, $actor, $pickupDate, $perBoxCents) {
             $order = FarmOrder::lockForUpdate()->findOrFail($order->id);
-            $admin = in_array($actor->user_type, [User::TYPE_ADMIN, User::TYPE_SUPER_ADMIN], true);
-            $allowed = $order->fulfillment_method === 'delivery'
-                ? $actor->user_type === User::TYPE_SHIPPING_PARTNER && (int) $order->shipping_partner_id === (int) $actor->id
-                : $actor->user_type === User::TYPE_OWNER_MANAGER && (int) $actor->farm_id === (int) $order->farm_id;
-            abort_unless($allowed || $admin, 403);
-            abort_unless($order->confirmed_at && $order->deposit_paid_at && ! $order->cancelled_at, 409, 'Farm confirmation and deposit are required.');
-            abort_if($order->fully_paid_at, 409, 'Fully paid orders require a separate adjustment process.');
-            abort_if($order->held_at && ! $admin, 409, 'An administrator must resolve this order hold.');
-            $date = Carbon::createFromFormat('!Y-m-d', $pickupDate, 'Asia/Manila');
-            abort_if($date->lt(Carbon::now('Asia/Manila')->startOfDay()->addDays(2)), 422, 'Pickup must be at least two calendar days ahead.');
-            abort_if($pickupDate < $order->earliest_release_date->toDateString(), 422, 'Pickup cannot precede the listing release date.');
-            $rate = $order->fulfillment_method === 'delivery' ? $perBoxCents : 0;
-            abort_if($rate === null, 422, 'A price per box is required.');
-            $shipping = $rate * $order->box_count;
-            abort_if($shipping + $order->subtotal_cents > 9999999999, 422, 'Final total is too large.');
-            if ($order->pickup_date?->toDateString() === $pickupDate && $order->per_box_cents === $rate && ! $order->held_at) {
-                return $order;
-            }
-            if (! app(FarmPaymentService::class)->closeSessions($order, 'farm_balance')) {
-                return null; // Commit any payment discovered during reconciliation.
-            }
-            $order->refresh();
-            if ($order->fully_paid_at) {
-                return null;
-            }
+            [$date, $rate, $shipping] = $this->scheduleValues($order, $actor, $pickupDate, $perBoxCents);
             $order->update([
                 'per_box_cents' => $rate, 'shipping_cents' => $shipping,
                 'total_cents' => $order->subtotal_cents + $shipping, 'pickup_date' => $pickupDate,
@@ -172,10 +155,31 @@ class FarmOrderService
             $this->checkLocked($order);
 
             return $order->refresh();
-        });
+        }));
         abort_unless($result, 409, 'Payment is paid, processing, or unverified. The schedule was not changed.');
 
         return $result;
+    }
+
+    private function scheduleValues(FarmOrder $order, User $actor, string $pickupDate, ?int $perBoxCents): array
+    {
+        $admin = in_array($actor->user_type, [User::TYPE_ADMIN, User::TYPE_SUPER_ADMIN], true);
+        $allowed = $order->fulfillment_method === 'delivery'
+            ? $actor->user_type === User::TYPE_SHIPPING_PARTNER && (int) $order->shipping_partner_id === (int) $actor->id
+            : $actor->user_type === User::TYPE_OWNER_MANAGER && (int) $actor->farm_id === (int) $order->farm_id;
+        abort_unless($allowed || $admin, 403);
+        abort_unless($order->confirmed_at && $order->deposit_paid_at && ! $order->cancelled_at, 409, 'Farm confirmation and deposit are required.');
+        abort_if($order->fully_paid_at, 409, 'Fully paid orders require a separate adjustment process.');
+        abort_if($order->held_at && ! $admin, 409, 'An administrator must resolve this order hold.');
+        $date = Carbon::createFromFormat('!Y-m-d', $pickupDate, 'Asia/Manila');
+        abort_if($date->lt(Carbon::now('Asia/Manila')->startOfDay()->addDays(2)), 422, 'Pickup must be at least two calendar days ahead.');
+        abort_if($pickupDate < $order->earliest_release_date->toDateString(), 422, 'Pickup cannot precede the listing release date.');
+        $rate = $order->fulfillment_method === 'delivery' ? $perBoxCents : 0;
+        abort_if($rate === null, 422, 'A price per box is required.');
+        $shipping = $rate * $order->box_count;
+        abort_if($shipping + $order->subtotal_cents > 9999999999, 422, 'Final total is too large.');
+
+        return [$date, $rate, $shipping];
     }
 
     public function check(FarmOrder $order): void
@@ -187,7 +191,15 @@ class FarmOrderService
 
     public function resolveHold(FarmOrder $order, User $actor, string $pickupDate, string $reason): FarmOrder
     {
-        $result = DB::transaction(function () use ($order, $actor, $pickupDate, $reason) {
+        $order->refresh();
+        abort_unless(in_array($actor->user_type, [User::TYPE_ADMIN, User::TYPE_SUPER_ADMIN], true), 403);
+        abort_unless($order->held_at && $order->hold_reason === 'balance_deadline_missed'
+            && $order->inventory_state === 'allocated' && $order->confirmed_at, 409, 'This hold requires a separate financial or inventory review.');
+        $date = Carbon::createFromFormat('!Y-m-d', $pickupDate, 'Asia/Manila');
+        abort_if($date->lt(Carbon::now('Asia/Manila')->startOfDay()->addDays(2))
+            || $pickupDate < $order->earliest_release_date->toDateString(), 422, 'Select a future pickup date after the release date, at least two days ahead.');
+
+        $result = app(FarmPaymentService::class)->withClosedSessions($order, 'farm_balance', fn () => DB::transaction(function () use ($order, $actor, $pickupDate, $reason) {
             abort_unless(in_array($actor->user_type, [User::TYPE_ADMIN, User::TYPE_SUPER_ADMIN], true), 403);
             $order = FarmOrder::lockForUpdate()->findOrFail($order->id);
             abort_unless($order->held_at && $order->hold_reason === 'balance_deadline_missed'
@@ -195,9 +207,6 @@ class FarmOrderService
             $date = Carbon::createFromFormat('!Y-m-d', $pickupDate, 'Asia/Manila');
             abort_if($date->lt(Carbon::now('Asia/Manila')->startOfDay()->addDays(2))
                 || $pickupDate < $order->earliest_release_date->toDateString(), 422, 'Select a future pickup date after the release date, at least two days ahead.');
-            if (! app(FarmPaymentService::class)->closeSessions($order, 'farm_balance')) {
-                return null;
-            }
             $order->refresh();
             $order->update([
                 'pickup_date' => $pickupDate, 'balance_opens_at' => $date->copy()->subDays(7)->startOfDay()->utc(),
@@ -212,7 +221,7 @@ class FarmOrderService
             $this->checkLocked($order);
 
             return $order;
-        });
+        }));
         abort_unless($result, 409, 'An existing payment is processing or cannot be verified. Try again after reconciliation.');
 
         return $result;
@@ -221,6 +230,11 @@ class FarmOrderService
     /** Caller holds the farm-order lock, before acquiring any payment locks. */
     public function checkLocked(FarmOrder $order): void
     {
+        if (app(PaymentSecurityService::class)->held($order->order_id)) {
+            $order->update(['held_at' => $order->held_at ?? now(), 'hold_reason' => $order->hold_reason ?? 'payment_review', 'status' => 'on_hold']);
+
+            return;
+        }
         if ($order->cancelled_at || ! $order->balance_due_at || ! $order->deposit_paid_at) {
             return;
         }

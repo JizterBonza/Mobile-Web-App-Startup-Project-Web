@@ -1113,7 +1113,7 @@ class OrderController extends Controller
         $isCod = PaymentMethodType::isCod($paymentMethod);
 
         // Use database transaction to ensure atomicity and prevent race conditions
-        return DB::transaction(function () use ($data, $paymentMethod, $isCod, $user, $address) {
+        $response = DB::transaction(function () use ($data, $paymentMethod, $isCod, $user, $address) {
             $cartIds = array_column($data['items'], 'cart_id');
             $ownedCartCount = Cart::where('user_id', $user->id)
                 ->whereIn('id', $cartIds)
@@ -1255,6 +1255,15 @@ class OrderController extends Controller
             // Create order detail first
             $orderDetailData = [
                 'order_code' => $data['order_code'] ?? '#ORD-'.strtoupper(Str::random(10)),
+                'checkout_is_cod' => $isCod,
+                'payment_snapshot' => [
+                    'subtotal_minor' => \App\Services\FarmCheckoutService::cents($serverSubtotal),
+                    'fees_minor' => \App\Services\FarmCheckoutService::cents($feeResult['delivery_base_fee'])
+                        + \App\Services\FarmCheckoutService::cents($feeResult['delivery_km_fee'])
+                        + \App\Services\FarmCheckoutService::cents($feeResult['heavy_surcharge'])
+                        + \App\Services\FarmCheckoutService::cents($feeResult['multi_store_fee'])
+                        + \App\Services\FarmCheckoutService::cents($feeResult['mov_penalty_fee']),
+                ],
                 'subtotal' => $serverSubtotal,
                 'shipping_fee' => $voucherResult['shipping_fee'],
                 'delivery_base_fee' => $feeResult['delivery_base_fee'],
@@ -1408,58 +1417,10 @@ class OrderController extends Controller
             ];
 
             if (! $isCod) {
-                $finalize = $this->voucherService->finalizeForCheckout(
-                    $orderDetail->fresh(),
-                    (int) $user->id,
-                );
-                $orderDetail->refresh();
-                $order->setRelation('orderDetail', $orderDetail);
-
-                $session = $this->paymongo->createCheckoutSession(
-                    $finalize['total_amount'],
-                    'Order '.$orderDetail->order_code,
-                    [
-                        'reference_number' => (string) $order->id,
-                        'metadata' => [
-                            'order_id' => (string) $order->id,
-                            'order_code' => (string) $orderDetail->order_code,
-                        ],
-                        'success_url' => config('app.url').'/api/payment-success?order_id='.$order->id,
-                        'cancel_url' => config('app.url').'/api/payment-cancel?order_id='.$order->id,
-                    ],
-                );
-
-                // PayMongo returns an `errors` array (not `data`) on failure,
-                // and network/SSL issues can bubble up as an empty/null payload.
-                if (! is_array($session) || ! empty($session['errors'])) {
-                    Log::error('PayMongo checkout session creation failed', [
-                        'order_id' => $order->id,
-                        'response' => $session,
-                    ]);
-                    throw new \RuntimeException('Failed to create payment checkout session. Please try again.');
-                }
-
-                $sessionId = $session['data']['id'] ?? null;
-                $checkoutUrl = $session['data']['attributes']['checkout_url'] ?? null;
-
-                if (! $sessionId || ! $checkoutUrl) {
-                    Log::error('PayMongo checkout session response malformed', [
-                        'order_id' => $order->id,
-                        'response' => $session,
-                    ]);
-                    throw new \RuntimeException('Invalid payment checkout response. Please try again.');
-                }
-
                 Payment::create([
-                    'order_id' => $order->id,
-                    'checkout_session_id' => $sessionId,
-                    'checkout_url' => $checkoutUrl,
-                    'amount' => $finalize['total_amount'],
-                    'status' => 'pending',
-                    'metadata' => [
-                        'order_id' => (string) $order->id,
-                        'order_code' => (string) $orderDetail->order_code,
-                    ],
+                    'order_id' => $order->id, 'owner_user_id' => $user->id, 'purpose' => 'order',
+                    'attempt_key' => (string) Str::uuid(), 'amount' => $expectedTotal,
+                    'currency' => 'PHP', 'status' => 'awaiting_session', 'provider' => 'paymongo',
                 ]);
 
                 Notification::createForUser(
@@ -1483,25 +1444,21 @@ class OrderController extends Controller
                     ->delay(now()->addMinutes(15))
                     ->afterCommit();
 
-                $responseData['checkout_url'] = $checkoutUrl;
-                $responseData['session_id'] = $sessionId;
-                $responseData['total_amount'] = $finalize['total_amount'];
-
-                if (! empty($finalize['stripped'])) {
-                    $responseData['voucher_removed'] = true;
-                    $responseData['message'] = $finalize['message']
-                        ?? 'Voucher expired; total updated.';
-                    $responseData['data'] = $order->fresh([
-                        'user',
-                        'orderDetail',
-                        'orderItems',
-                        'orderShops',
-                    ]);
-                }
             }
 
             return response()->json($responseData, 201);
         });
+        if ($response->getStatusCode() === 201 && ! $isCod) {
+            $body = $response->getData(true);
+            $session = app(\App\Services\RegularPaymentService::class)->session(Order::findOrFail($body['data']['id']));
+            $body['checkout_url'] = $session['checkout_url'];
+            $body['session_id'] = $session['session_id'];
+            $body['total_amount'] = $session['total_amount'];
+            $body['payment_session_status'] = $session['status'];
+            $response->setData($body);
+        }
+
+        return $response;
     }
 
     /**
@@ -1633,6 +1590,27 @@ class OrderController extends Controller
         }
 
         abort_if($order->isFarmOrder(), 409, 'Use farm order endpoints to update a farm order.');
+
+        $protected = ['subtotal', 'shipping_fee', 'total_amount', 'payment_method', 'delivery_method_id',
+            'delivery_base_fee', 'delivery_km_fee', 'heavy_surcharge', 'multi_store_fee', 'mov_penalty_fee',
+            'voucher_id', 'voucher_code', 'voucher_discount_amount', 'checkout_is_cod', 'payment_snapshot'];
+        foreach ($protected as $field) {
+            if (! $request->exists($field)) {
+                continue;
+            }
+            $stored = $order->orderDetail?->getAttribute($field);
+            $incoming = $request->input($field);
+            $unchanged = is_scalar($incoming) && is_scalar($stored)
+                ? (is_numeric($incoming) && is_numeric($stored) ? (string) $incoming == (string) $stored : (string) $incoming === (string) $stored)
+                : $incoming === $stored;
+            if (! $unchanged) {
+                throw \Illuminate\Validation\ValidationException::withMessages([$field => 'This field is managed by checkout and cannot be changed.']);
+            }
+            $request->request->remove($field);
+            if ($request->isJson()) {
+                $request->json()->remove($field);
+            }
+        }
 
         if ($request->has('order_status')) {
             return response()->json([
