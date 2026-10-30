@@ -26,6 +26,7 @@ export default function OwnerManagerOrdersPanel({
   preparingItemStatusId = null,
   ordersApiBasePath = '/dashboard/owner-manager/orders',
   canPerformOrderActions = true,
+  subtitle = "Manage and track all customer orders",
 }) {
   const [activeSection, setActiveSection] = useState('new')
   const [expandedOrders, setExpandedOrders] = useState(() => new Set())
@@ -178,6 +179,18 @@ export default function OwnerManagerOrdersPanel({
 
     setProcessingOrderId(order.id);
     router.patch(`${ordersApiBasePath}/${order.id}/accept`, {}, {
+      preserveScroll: true,
+      onFinish: () => setProcessingOrderId(null),
+    });
+  };
+
+  const handleConfirmFarmOrder = (order) => {
+    if (!order?.id || processingOrderId) {
+      return;
+    }
+
+    setProcessingOrderId(order.id);
+    router.patch(`${ordersApiBasePath}/${order.id}/confirm`, {}, {
       preserveScroll: true,
       onFinish: () => setProcessingOrderId(null),
     });
@@ -372,12 +385,17 @@ export default function OwnerManagerOrdersPanel({
     });
   };
 
+  const formatMoney = (amount) =>
+    `₱${Number(amount || 0).toLocaleString("en-PH", { minimumFractionDigits: 2 })}`;
+
   const renderOrderCard = (order) => {
     const isExpanded = expandedOrders.has(order.orderNumber);
+    const isFarmOrder = order.orderType === "farm";
     const deliveryMethod = resolveDeliveryMethod(order);
-    const orderTotal = calculateOrderTotal(order.products);
+    const lineTotal = calculateOrderTotal(order.products);
     const originalTotal = calculateOriginalTotal(order.products);
-    const hasDiscount = originalTotal > orderTotal;
+    const hasDiscount = originalTotal > lineTotal;
+    const headerTotal = order.displayTotal != null ? Number(order.displayTotal) : lineTotal;
 
     return (
       <div
@@ -406,7 +424,7 @@ export default function OwnerManagerOrdersPanel({
                     {order.isSuccessful ? "Delivered" : "Cancelled"}
                   </span>
                 )}
-                {!canPerformOrderActions && order.status !== "completed" && (
+                {(isFarmOrder || !canPerformOrderActions) && order.status !== "completed" && (
                   <span
                     className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${orderStatusBadgeClass(order)}`}
                   >
@@ -428,7 +446,7 @@ export default function OwnerManagerOrdersPanel({
             <div className="flex items-center gap-3">
               <div className="text-right">
                 <p className="text-sm font-bold text-[#102059]">
-                  ₱{orderTotal.toLocaleString("en-PH", { minimumFractionDigits: 2 })}
+                  {formatMoney(headerTotal)}
                 </p>
                 {hasDiscount && (
                   <p className="text-xs text-[#6B7280] line-through">
@@ -480,7 +498,7 @@ export default function OwnerManagerOrdersPanel({
             {order.shopNames?.length > 0 && (
               <div>
                 <h4 className="text-xs font-bold text-[#102059] uppercase tracking-wider mb-2">
-                  Store
+                  {isFarmOrder ? "Farm" : "Store"}
                 </h4>
                 <div className="flex items-start gap-2 p-3 bg-[#F9FAFB] rounded-lg border border-[#E5E7EB]">
                   <Store className="w-4 h-4 text-[#244693] mt-0.5 flex-shrink-0" />
@@ -546,6 +564,11 @@ export default function OwnerManagerOrdersPanel({
                           <p className="text-xs text-[#6B7280]">
                             ₱{unitPrice.toLocaleString("en-PH", { minimumFractionDigits: 2 })} × {product.quantity}
                           </p>
+                          {product.birdCount ? (
+                            <p className="text-xs text-[#6B7280]">
+                              {product.birdCount} {product.birdCount === 1 ? "bird" : "birds"}
+                            </p>
+                          ) : null}
                           {showItemStatus && product.itemStatus && (
                             <span
                               className={`inline-flex mt-2 items-center px-2 py-0.5 rounded-full text-xs font-semibold ${itemStatusBadgeClass(product)}`}
@@ -573,7 +596,7 @@ export default function OwnerManagerOrdersPanel({
                           )}
                         </div>
 
-                        {showPreparingActions && itemIsPreparing && (
+                        {showPreparingActions && !isFarmOrder && itemIsPreparing && (
                           <button
                             type="button"
                             onClick={() => handleDonePreparingItem(order, product)}
@@ -593,14 +616,14 @@ export default function OwnerManagerOrdersPanel({
               {/* Order Total */}
               <div className="mt-3 pt-3 border-t border-[#E5E7EB]">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm font-bold text-[#102059]">Total Amount</span>
+                  <span className="text-sm font-bold text-[#102059]">{isFarmOrder ? "Chicken Subtotal" : "Total Amount"}</span>
                   <div className="text-right">
                     <p className="text-base font-bold text-[#102059]">
-                      ₱{orderTotal.toLocaleString("en-PH", { minimumFractionDigits: 2 })}
+                      {formatMoney(lineTotal)}
                     </p>
                     {hasDiscount && (
                       <p className="text-xs text-[#00C950]">
-                        Total Discount ₱{(originalTotal - orderTotal).toLocaleString("en-PH", { minimumFractionDigits: 2 })}
+                        Total Discount {formatMoney(originalTotal - lineTotal)}
                       </p>
                     )}
                   </div>
@@ -608,17 +631,82 @@ export default function OwnerManagerOrdersPanel({
               </div>
             </div>
 
+            {isFarmOrder && order.farmSummary && (
+              <div>
+                <h4 className="text-xs font-bold text-[#102059] uppercase tracking-wider mb-2">
+                  Farm Order
+                </h4>
+                <div className="grid grid-cols-2 gap-3 p-3 bg-[#F9FAFB] rounded-lg border border-[#E5E7EB] text-sm">
+                  <div>
+                    <label className="text-xs text-[#6B7280]">Birds / boxes</label>
+                    <p className="text-[#102059] font-medium">
+                      {order.farmSummary.birdCount} birds · {order.farmSummary.boxCount} boxes
+                    </p>
+                  </div>
+                  <div>
+                    <label className="text-xs text-[#6B7280]">Payment</label>
+                    <p className="text-[#102059] font-medium capitalize">
+                      {String(order.farmSummary.paymentStatus || "").replaceAll("_", " ")}
+                    </p>
+                  </div>
+                  <div>
+                    <label className="text-xs text-[#6B7280]">Deposit</label>
+                    <p className="text-[#102059] font-medium">{formatMoney(order.farmSummary.deposit)}</p>
+                  </div>
+                  <div>
+                    <label className="text-xs text-[#6B7280]">Amount paid</label>
+                    <p className="text-[#102059] font-medium">{formatMoney(order.farmSummary.amountPaid)}</p>
+                  </div>
+                  <div>
+                    <label className="text-xs text-[#6B7280]">Shipping</label>
+                    <p className="text-[#102059] font-medium">
+                      {order.farmSummary.shippingFee == null ? "Not set" : formatMoney(order.farmSummary.shippingFee)}
+                    </p>
+                  </div>
+                  <div>
+                    <label className="text-xs text-[#6B7280]">Remaining balance</label>
+                    <p className="text-[#102059] font-medium">
+                      {order.farmSummary.remainingBalance == null ? "Pending schedule" : formatMoney(order.farmSummary.remainingBalance)}
+                    </p>
+                  </div>
+                  <div>
+                    <label className="text-xs text-[#6B7280]">Earliest release</label>
+                    <p className="text-[#102059] font-medium">{order.farmSummary.earliestReleaseDate || "—"}</p>
+                  </div>
+                  <div>
+                    <label className="text-xs text-[#6B7280]">Pickup date</label>
+                    <p className="text-[#102059] font-medium">{order.farmSummary.pickupDate || "Not scheduled"}</p>
+                  </div>
+                </div>
+                {order.farmSummary.finalTotal != null && (
+                  <p className="mt-2 text-sm font-semibold text-[#102059]">
+                    Final total {formatMoney(order.farmSummary.finalTotal)}
+                  </p>
+                )}
+                {order.farmSummary.orderInstruction && (
+                  <p className="mt-2 text-sm text-[#6B7280]">{order.farmSummary.orderInstruction}</p>
+                )}
+                {order.farmSummary.holdReason && (
+                  <p className="mt-2 text-sm text-[#991B1B]">
+                    Hold: {String(order.farmSummary.holdReason).replaceAll("_", " ")}
+                  </p>
+                )}
+              </div>
+            )}
+
             {/* Delivery Address */}
             <div>
-              <h4 className="text-xs font-bold text-[#102059] uppercase tracking-wider mb-2">
-                Delivery Address
-              </h4>
+                <h4 className="text-xs font-bold text-[#102059] uppercase tracking-wider mb-2">
+                  {isFarmOrder && deliveryMethod?.name === "Farm Pickup" ? "Pickup Location" : "Delivery Address"}
+                </h4>
               <div className="flex items-start gap-2 p-3 bg-[#F9FAFB] rounded-lg border border-[#E5E7EB]">
                 <MapPin className="w-4 h-4 text-[#E20E28] mt-0.5 flex-shrink-0" />
                 <div className="text-sm text-[#102059]">
-                  <p>{order.deliveryAddress.street}</p>
-                  <p>{order.deliveryAddress.barangay}, {order.deliveryAddress.city}</p>
-                  <p>{order.deliveryAddress.province}</p>
+                  {order.deliveryAddress.street ? <p>{order.deliveryAddress.street}</p> : null}
+                  {(order.deliveryAddress.barangay || order.deliveryAddress.city) ? (
+                    <p>{[order.deliveryAddress.barangay, order.deliveryAddress.city].filter(Boolean).join(", ")}</p>
+                  ) : null}
+                  {order.deliveryAddress.province ? <p>{order.deliveryAddress.province}</p> : null}
                 </div>
               </div>
             </div>
@@ -733,7 +821,20 @@ export default function OwnerManagerOrdersPanel({
             )}
 
             {/* Action Buttons (for new orders only — vendors only) */}
-            {canPerformOrderActions && order.status === "new" && (
+            {canPerformOrderActions && isFarmOrder && order.status === "new" && order.farmSummary?.canConfirm && (
+              <div className="pt-3 border-t border-[#E5E7EB]">
+                <button
+                  onClick={() => handleConfirmFarmOrder(order)}
+                  disabled={processingOrderId === order.id}
+                  className="w-full px-4 py-2.5 bg-[#00C950] text-white rounded-lg font-semibold text-sm hover:bg-[#00B048] transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                  style={{ fontFamily: "Inter Condensed, sans-serif" }}
+                >
+                  {processingOrderId === order.id ? "Confirming…" : "Confirm Order"}
+                </button>
+              </div>
+            )}
+
+            {canPerformOrderActions && !isFarmOrder && order.status === "new" && (
               <div className="flex items-center gap-3 pt-3 border-t border-[#E5E7EB]">
                 <button
                   onClick={() => handleAcceptOrder(order)}
@@ -755,7 +856,7 @@ export default function OwnerManagerOrdersPanel({
             )}
 
             {/* Mark ready (for preparing orders — vendors only) */}
-            {canPerformOrderActions && order.status === "preparing" && (
+            {canPerformOrderActions && !isFarmOrder && order.status === "preparing" && (
               <div className="pt-3 border-t border-[#E5E7EB] space-y-2">
                 <button
                   type="button"
@@ -786,6 +887,7 @@ export default function OwnerManagerOrdersPanel({
 
             {/* Store pickup complete (For Pick-up tab, Pickup from Store only) */}
             {canPerformOrderActions &&
+              !isFarmOrder &&
               order.status === "for-pickup" &&
               isPickupFromStore(order, deliveryMethod) && (
               <div className="pt-3 border-t border-[#E5E7EB]">
@@ -814,7 +916,7 @@ export default function OwnerManagerOrdersPanel({
           Order Management
         </h1>
         <p className="text-sm text-[#6B7280]">
-          Manage and track all customer orders
+          {subtitle}
         </p>
       </div>
 

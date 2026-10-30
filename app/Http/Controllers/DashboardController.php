@@ -8,7 +8,9 @@ use App\Models\ActivityLog;
 use App\Models\Category;
 use App\Models\Farm;
 use App\Models\FarmGamefowlListing;
+use App\Models\FarmOrder;
 use App\Models\GamefowlCatalog;
+use App\Services\FarmOrderService;
 use App\Models\ProductCatalog;
 use App\Models\SubCategory;
 use App\Models\Zone;
@@ -18,6 +20,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
+use Symfony\Component\HttpKernel\Exception\HttpException;
 
 class DashboardController extends Controller
 {
@@ -940,7 +943,16 @@ class DashboardController extends Controller
             }
         }
 
-        if ($agrivet || $user->managedFarm) {
+        $farm = $user->managedFarm;
+        if ($farm) {
+            $orders = collect($orders)
+                ->merge(app(FarmOrderService::class)->ownerManagerCards((int) $farm->id))
+                ->sortByDesc(fn (array $order) => $order['dateOfOrder'] ?? '')
+                ->values()
+                ->all();
+        }
+
+        if ($agrivet || $farm) {
             $deliveryMethods = $this->activeDeliveryMethods();
         }
 
@@ -973,6 +985,31 @@ class DashboardController extends Controller
         return Inertia::render('Dashboard/AdminSupport', [
             'tickets' => SupportTicketController::ticketsForAdmin(),
         ]);
+    }
+
+    public function ownerManagerConfirmFarmOrder(int $orderId)
+    {
+        $user = auth()->user();
+        $farm = $user->managedFarm;
+        abort_unless($farm, 404);
+
+        $farmOrder = FarmOrder::query()
+            ->where('order_id', $orderId)
+            ->where('farm_id', $farm->id)
+            ->whereNotNull('deposit_paid_at')
+            ->firstOrFail();
+
+        try {
+            app(FarmOrderService::class)->confirm($farmOrder, $user);
+        } catch (HttpException $exception) {
+            return redirect()
+                ->route('dashboard.owner-manager.orders')
+                ->with('error', $exception->getMessage() ?: 'This farm order cannot be confirmed.');
+        }
+
+        return redirect()
+            ->route('dashboard.owner-manager.orders')
+            ->with('success', 'Farm order confirmed.');
     }
 
     public function ownerManagerAcceptOrder(int $orderId)

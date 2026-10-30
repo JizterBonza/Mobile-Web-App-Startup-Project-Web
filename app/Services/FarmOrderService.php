@@ -7,8 +7,11 @@ use App\Models\FarmOrderEvent;
 use App\Models\Notification;
 use App\Models\Order;
 use App\Models\User;
+use App\Support\DisplayDateTime;
+use App\Support\PublicStorage;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 class FarmOrderService
 {
@@ -25,6 +28,130 @@ class FarmOrderService
         abort_unless($allowed, 404);
 
         return $order;
+    }
+
+    /**
+     * Paid farm orders for the owner/manager order screen.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function ownerManagerCards(int $farmId): array
+    {
+        if (! Schema::hasTable('farm_orders')) {
+            return [];
+        }
+
+        $relations = ['items', 'order.orderDetail', 'payments'];
+        if (Schema::hasTable('user_details') && Schema::hasColumn('users', 'user_detail_id')) {
+            $relations[] = 'order.user.userDetail';
+        }
+
+        return FarmOrder::query()
+            ->with($relations)
+            ->where('farm_id', $farmId)
+            ->whereNotNull('deposit_paid_at')
+            ->orderByDesc('id')
+            ->get()
+            ->map(fn (FarmOrder $order) => $this->ownerManagerCard($order))
+            ->all();
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function ownerManagerCard(FarmOrder $order): array
+    {
+        $order->loadMissing(['items', 'order.orderDetail', 'payments']);
+        $detail = $order->order?->orderDetail;
+        $address = is_array($order->address_snapshot) ? $order->address_snapshot : [];
+        $farm = is_array($order->farm_snapshot) ? $order->farm_snapshot : [];
+        $pickup = $order->fulfillment_method === 'pickup';
+        $section = $this->ownerManagerSection($order);
+        $paidCents = $this->loadedPaidCents($order);
+        $customer = $this->ownerManagerCustomer($order, $address);
+        $subtotal = (float) FarmCheckoutService::money($order->subtotal_cents);
+        $finalTotal = $order->total_cents === null ? $subtotal : (float) FarmCheckoutService::money($order->total_cents);
+
+        $products = $order->items->map(function ($item) {
+            $snapshot = is_array($item->snapshot) ? $item->snapshot : [];
+            $price = (float) FarmCheckoutService::money($item->unit_price_cents);
+
+            return [
+                'id' => (int) $item->id,
+                'name' => $snapshot['name'] ?? 'Gamefowl',
+                'quantity' => (int) $item->quantity,
+                'price' => $price,
+                'originalPrice' => $price,
+                'discount' => 0,
+                'thumbnail' => $this->catalogThumbnail($snapshot),
+                'itemStatusId' => null,
+                'itemStatus' => null,
+                'birdCount' => (int) $item->bird_count,
+            ];
+        })->values()->all();
+
+        $payload = [
+            'id' => (int) $order->order_id,
+            'orderType' => 'farm',
+            'orderNumber' => $detail?->order_code ?: 'FARM-'.$order->order_id,
+            'shopIds' => [],
+            'shopNames' => array_values(array_filter([$farm['name'] ?? null])),
+            'customerId' => (int) $order->customer_id,
+            'customerName' => $customer['name'],
+            'customerPhone' => $customer['phone'],
+            'customerProfilePicture' => $customer['photo'],
+            'dateOfOrder' => DisplayDateTime::toIso($order->order?->ordered_at ?? $order->created_at),
+            'products' => $products,
+            'displayTotal' => $finalTotal,
+            'deliveryAddress' => $pickup ? [
+                'street' => $farm['address'] ?? '',
+                'barangay' => '',
+                'city' => $farm['city'] ?? '',
+                'province' => $farm['province'] ?? '',
+            ] : [
+                'street' => $address['street_address'] ?? ($address['full_address'] ?? ''),
+                'barangay' => $address['barangay'] ?? '',
+                'city' => $address['city_municipality'] ?? '',
+                'province' => $address['province'] ?? '',
+            ],
+            'status' => $section['status'],
+            'statusDescription' => $section['statusDescription'],
+            'deliveryMethodId' => null,
+            'deliveryMethodName' => $pickup ? 'Farm Pickup' : 'Delivery',
+            'deliveryMethod' => [
+                'name' => $pickup ? 'Farm Pickup' : 'Delivery',
+                'info' => $pickup
+                    ? 'Customer picks up from the farm.'
+                    : 'Shipped after the farm confirms and a partner schedules pickup.',
+            ],
+            'readyButtonLabel' => null,
+            'allItemsDonePreparing' => false,
+            'farmSummary' => [
+                'birdCount' => (int) $order->bird_count,
+                'boxCount' => (int) $order->box_count,
+                'deposit' => (float) FarmCheckoutService::money($order->deposit_cents),
+                'amountPaid' => (float) FarmCheckoutService::money($paidCents),
+                'remainingBalance' => $order->total_cents === null
+                    ? null
+                    : (float) FarmCheckoutService::money(max(0, $order->total_cents - $paidCents)),
+                'chickenSubtotal' => $subtotal,
+                'shippingFee' => $order->shipping_cents === null ? null : (float) FarmCheckoutService::money($order->shipping_cents),
+                'finalTotal' => $order->total_cents === null ? null : $finalTotal,
+                'pickupDate' => $order->pickup_date?->toDateString(),
+                'earliestReleaseDate' => $order->earliest_release_date?->toDateString(),
+                'paymentStatus' => $order->fully_paid_at ? 'paid' : ($paidCents > 0 ? 'partially_paid' : 'pending'),
+                'holdReason' => $order->hold_reason,
+                'orderInstruction' => $detail?->order_instruction,
+                'canConfirm' => $section['status'] === 'new',
+            ],
+        ];
+
+        if ($section['status'] === 'completed') {
+            $payload['isSuccessful'] = $section['isSuccessful'];
+            $payload['completionDate'] = DisplayDateTime::toIso($order->cancelled_at ?? $order->updated_at);
+        }
+
+        return $payload;
     }
 
     public function summary(FarmOrder $order): array
@@ -76,6 +203,90 @@ class FarmOrderService
     public function paidCents(FarmOrder $order): int
     {
         return FarmCheckoutService::cents($order->payments()->whereIn('purpose', ['farm_deposit', 'farm_balance'])->where('status', 'paid')->sum('amount'));
+    }
+
+    private function loadedPaidCents(FarmOrder $order): int
+    {
+        if (! $order->relationLoaded('payments')) {
+            return $this->paidCents($order);
+        }
+
+        return FarmCheckoutService::cents(
+            $order->payments
+                ->whereIn('purpose', ['farm_deposit', 'farm_balance'])
+                ->where('status', 'paid')
+                ->sum('amount')
+        );
+    }
+
+    /**
+     * @return array{status: string, isSuccessful: bool|null, statusDescription: string}
+     */
+    private function ownerManagerSection(FarmOrder $order): array
+    {
+        if ($order->cancelled_at || $order->status === 'cancelled') {
+            return ['status' => 'completed', 'isSuccessful' => false, 'statusDescription' => 'Cancelled'];
+        }
+
+        return match ($order->status) {
+            'release_authorized' => ['status' => 'for-pickup', 'isSuccessful' => null, 'statusDescription' => 'Release Authorized'],
+            'scheduled' => ['status' => 'preparing', 'isSuccessful' => null, 'statusDescription' => 'Scheduled'],
+            'awaiting_schedule' => ['status' => 'preparing', 'isSuccessful' => null, 'statusDescription' => 'Awaiting Schedule'],
+            'on_hold' => ['status' => 'preparing', 'isSuccessful' => null, 'statusDescription' => 'On Hold'],
+            default => ['status' => 'new', 'isSuccessful' => null, 'statusDescription' => 'Awaiting Confirmation'],
+        };
+    }
+
+    /**
+     * @param  array<string, mixed>  $address
+     * @return array{name: string, phone: string, photo: string|null}
+     */
+    private function ownerManagerCustomer(FarmOrder $order, array $address): array
+    {
+        $detail = null;
+        if (Schema::hasTable('user_details') && Schema::hasColumn('users', 'user_detail_id')) {
+            $detail = $order->order?->user?->userDetail;
+        }
+
+        $name = trim((string) (($detail->first_name ?? '').' '.($detail->last_name ?? '')));
+        if ($name === '') {
+            $name = trim((string) ($address['recipient_name'] ?? ''));
+        }
+
+        $photo = $detail?->profile_image_url ?: $detail?->avatar;
+
+        return [
+            'name' => $name !== '' ? $name : 'Customer',
+            'phone' => (string) ($address['contact_number'] ?? $detail?->mobile_number ?? ''),
+            'photo' => PublicStorage::url(is_string($photo) ? $photo : null),
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $snapshot
+     */
+    private function catalogThumbnail(array $snapshot): ?string
+    {
+        $catalog = $snapshot['catalog'] ?? [];
+        if (! is_array($catalog)) {
+            return null;
+        }
+
+        foreach ($catalog as $entry) {
+            $images = is_array($entry) ? ($entry['images'] ?? []) : [];
+            if (! is_array($images)) {
+                continue;
+            }
+            foreach ($images as $image) {
+                $path = is_string($image) ? $image : (is_array($image) ? ($image['url'] ?? $image['path'] ?? null) : null);
+                $url = PublicStorage::url(is_string($path) ? $path : null);
+                if ($url) {
+                    return $url;
+                }
+            }
+        }
+
+        return null;
     }
 
     public function balancePayable(FarmOrder $order): bool

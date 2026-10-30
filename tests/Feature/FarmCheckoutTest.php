@@ -48,12 +48,61 @@ class FarmCheckoutTest extends TestCase
         config()->set('services.paymongo.base_url', 'https://paymongo.test/v1');
         config()->set('services.paymongo.secret', 'test-key');
         config()->set('services.paymongo.webhook_secret', 'farm-test-secret');
+        config()->set('services.paymongo.live_mode', false);
         DB::purge('sqlite');
         DB::reconnect('sqlite');
         Carbon::setTestNow(Carbon::parse('2026-10-27 02:00:00', 'UTC'));
         $this->withoutMiddleware(\Illuminate\Routing\Middleware\ThrottleRequests::class);
         $this->createSchema();
         (require database_path('migrations/2026_10_27_000001_create_farm_checkout_tables.php'))->up();
+        Schema::table('payments', function (Blueprint $table) {
+            $table->unsignedBigInteger('owner_user_id')->nullable();
+            $table->timestamp('last_reconciled_at')->nullable();
+        });
+        Schema::table('farm_orders', function (Blueprint $table) {
+            $table->uuid('session_closure_key')->nullable();
+            $table->timestamp('reservation_expires_at')->nullable();
+            $table->timestamp('reservation_expiry_notified_at')->nullable();
+        });
+        Schema::create('payment_receipts', function (Blueprint $table) {
+            $table->id();
+            $table->string('provider_payment_id')->unique();
+            $table->unsignedBigInteger('payment_id')->nullable();
+            $table->unsignedBigInteger('order_id')->nullable();
+            $table->unsignedBigInteger('amount_minor')->nullable();
+            $table->string('currency', 10)->nullable();
+            $table->string('status', 20);
+            $table->string('reason')->nullable();
+            $table->json('payload');
+            $table->timestamps();
+        });
+        Schema::create('payment_reviews', function (Blueprint $table) {
+            $table->id();
+            $table->string('fingerprint')->unique();
+            $table->unsignedBigInteger('order_id')->nullable();
+            $table->unsignedBigInteger('payment_id')->nullable();
+            $table->unsignedBigInteger('shop_id')->nullable();
+            $table->string('reason');
+            $table->json('details')->nullable();
+            $table->timestamp('resolved_at')->nullable();
+            $table->timestamps();
+        });
+        Schema::create('payment_methods', function (Blueprint $table) {
+            $table->id();
+            $table->string('name');
+            $table->string('status')->default('active');
+            $table->timestamps();
+        });
+        Schema::create('payment_webhook_events', function (Blueprint $table) {
+            $table->id();
+            $table->string('event_id')->unique();
+            $table->string('body_hash', 64);
+            $table->string('status', 20)->default('pending');
+            $table->unsignedInteger('attempts')->default(0);
+            $table->json('payload');
+            $table->text('last_error')->nullable();
+            $table->timestamps();
+        });
         $this->farm = Farm::create(['name' => 'Test Farm', 'address' => 'Bay, Laguna', 'status' => 'active', 'latitude' => 14.0, 'longitude' => 121.0]);
         $this->customer = $this->user('customer');
         $this->owner = $this->user('owner_manager', $this->farm->id);
@@ -512,6 +561,58 @@ class FarmCheckoutTest extends TestCase
         return $this->postJson('/api/farm-checkout/quote', $this->quoteInput($ids, $fulfillment))->assertOk()->json('data');
     }
 
+    public function test_farm_owner_manager_orders_page_lists_paid_farm_orders(): void
+    {
+        $entry = $this->entry('per pair');
+        $quote = $this->quote([$entry->id]);
+        $id = $this->postJson('/api/farm-orders', [
+            'quote_token' => $quote['quote_token'],
+            'items' => [[
+                'listing_id' => $entry->listing_id,
+                'birds' => [
+                    ['wingband_no' => 'A1', 'feather_color' => 'red', 'feet_color' => 'yellow'],
+                    ['wingband_no' => 'A2', 'feather_color' => 'black', 'feet_color' => 'yellow'],
+                ],
+            ]],
+        ], ['Idempotency-Key' => 'owner-orders'])->assertCreated()->json('data.id');
+        $order = FarmOrder::where('order_id', $id)->firstOrFail();
+
+        $this->assertSame([], app(FarmOrderService::class)->ownerManagerCards($this->farm->id));
+
+        $this->pay($this->startPayment($order, 'deposit'));
+        $this->actingAs($this->owner);
+
+        $request = \Illuminate\Http\Request::create('/dashboard/owner-manager/orders', 'GET');
+        $request->headers->set('X-Inertia', 'true');
+        $request->setUserResolver(fn () => $this->owner);
+        $page = app(\App\Http\Controllers\DashboardController::class)
+            ->ownerManagerOrders()
+            ->toResponse($request);
+        $orders = $page->getData(true)['props']['orders'];
+
+        $this->assertCount(1, $orders);
+        $this->assertSame($order->order_id, $orders[0]['id']);
+        $this->assertSame('farm', $orders[0]['orderType']);
+        $this->assertSame('new', $orders[0]['status']);
+        $this->assertSame('Awaiting Confirmation', $orders[0]['statusDescription']);
+        $this->assertSame('Buyer', $orders[0]['customerName']);
+        $this->assertSame('Gamefowl', $orders[0]['products'][0]['name']);
+        $this->assertSame(2, $orders[0]['products'][0]['birdCount']);
+
+        app(\App\Http\Controllers\DashboardController::class)->ownerManagerConfirmFarmOrder($order->order_id);
+        $order->refresh();
+        $this->assertNotNull($order->confirmed_at);
+        $this->assertSame('awaiting_schedule', $order->status);
+
+        $confirmed = app(FarmOrderService::class)->ownerManagerCards($this->farm->id);
+        $this->assertSame('preparing', $confirmed[0]['status']);
+        $this->assertSame('Awaiting Schedule', $confirmed[0]['statusDescription']);
+        $this->assertFalse($confirmed[0]['farmSummary']['canConfirm']);
+
+        $other = Farm::create(['name' => 'Other Farm', 'status' => 'active']);
+        $this->assertSame([], app(FarmOrderService::class)->ownerManagerCards($other->id));
+    }
+
     private function makeOrder(string $fulfillment = 'delivery'): FarmOrder
     {
         $entry = $this->entry('per pair');
@@ -561,7 +662,7 @@ class FarmCheckoutTest extends TestCase
 
     private function webhook(string $type, array $data)
     {
-        $raw = json_encode(['data' => ['attributes' => ['type' => $type, 'data' => $data]]]);
+        $raw = json_encode(['data' => ['attributes' => ['type' => $type, 'livemode' => false, 'data' => $data]]]);
         $timestamp = (string) now()->timestamp;
         $signature = hash_hmac('sha256', $timestamp.'.'.$raw, 'farm-test-secret');
 
@@ -630,6 +731,7 @@ class FarmCheckoutTest extends TestCase
         Schema::create('delivery_method', function (Blueprint $t) {
             $t->id();
             $t->string('description');
+            $t->string('info')->nullable();
             $t->boolean('status');
         });
         Schema::create('order_details', function (Blueprint $t) {
@@ -643,6 +745,8 @@ class FarmCheckoutTest extends TestCase
             $t->text('order_instruction')->nullable();
             $t->unsignedBigInteger('delivery_method_id');
             $t->string('payment_method')->nullable();
+            $t->boolean('checkout_is_cod')->nullable();
+            $t->json('payment_snapshot')->nullable();
             $t->string('payment_status')->default('pending');
             $t->timestamps();
         });

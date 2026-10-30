@@ -30,6 +30,11 @@ export default function OwnerManagerOrders({
                 orders={orders}
                 deliveryMethods={deliveryMethods}
                 preparingItemStatusId={preparingItemStatusId}
+                subtitle={
+                    managesFarm
+                        ? 'Manage and track farm orders'
+                        : 'Manage and track all customer orders'
+                }
             />
         </OwnerManagerKlasmeytLayout>
     )
