@@ -215,9 +215,10 @@ class FarmPaymentService
                 $order->status = 'on_hold';
             }
             $order->save();
-            $order->order->orderDetail->update([
+            $orderDetail = $order->order->orderDetail;
+            $orderDetail->update([
                 'payment_status' => $order->fully_paid_at ? 'paid' : 'partially_paid',
-                'payment_method' => $method ?? $payment->payment_method,
+                'payment_method' => app(PaymentMethodResolver::class)->resolveId($payment->payment_method) ?? $orderDetail->payment_method,
             ]);
             $workflow->event($order, 'payment_confirmed', null, ['purpose' => $payment->purpose, 'amount' => $payment->amount]);
             $workflow->notice($order, $order->customer_id, $payment->purpose.'_paid', 'Your '.str_replace('farm_', '', $payment->purpose).' payment has been confirmed.');
