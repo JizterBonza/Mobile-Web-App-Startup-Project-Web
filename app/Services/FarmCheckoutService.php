@@ -34,7 +34,7 @@ class FarmCheckoutService
     public static function birdsPerUnit(string $unit): int
     {
         return match ($unit) {
-            'per head' => 1, 'per pair' => 2, 'per trio' => 3,
+            'per bird', 'per head' => 1, 'per pair' => 2, 'per trio' => 3,
             'per quadruplet' => 4, 'per dozen' => 12,
             default => abort(422, 'This listing has an unsupported selling unit.'),
         };
