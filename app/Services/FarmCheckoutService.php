@@ -17,6 +17,7 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 
 class FarmCheckoutService
 {
@@ -109,12 +110,57 @@ class FarmCheckoutService
         ];
     }
 
-    public function create(User $user, string $token, string $key): array
+    private function normalizeBirdDetails(array $items): array
     {
-        return DB::transaction(function () use ($user, $token, $key) {
+        $errors = [];
+        $wingbands = [];
+        foreach ($items as $i => &$item) {
+            $item['listing_id'] = (int) $item['listing_id'];
+            foreach ($item['birds'] as $b => &$bird) {
+                $normalized = [];
+                foreach (['wingband_no', 'feather_color', 'feet_color'] as $field) {
+                    $value = trim($bird[$field] ?? '');
+                    if ($value !== '') {
+                        $normalized[$field] = $value;
+                    }
+                }
+                if ($normalized === []) {
+                    $errors["items.$i.birds.$b"] = 'Provide at least one of wingband number, feather color, or feet color for this bird.';
+                }
+                if (isset($normalized['wingband_no'])) {
+                    $wingband = mb_strtolower($normalized['wingband_no']);
+                    if (isset($wingbands[$wingband])) {
+                        $errors["items.$i.birds.$b.wingband_no"] = 'Wingband numbers must be unique within the order.';
+                    }
+                    $wingbands[$wingband] = true;
+                }
+                $bird = $normalized;
+            }
+            unset($bird);
+            $item = ['listing_id' => $item['listing_id'], 'birds' => $item['birds']];
+        }
+        unset($item);
+        if ($errors) {
+            throw ValidationException::withMessages($errors);
+        }
+
+        return $items;
+    }
+
+    public function create(User $user, string $token, string $key, ?array $items = null): array
+    {
+        $items = $items === null ? null : $this->normalizeBirdDetails($items);
+        $canonicalItems = $items;
+        if ($canonicalItems !== null) {
+            usort($canonicalItems, fn ($a, $b) => $a['listing_id'] <=> $b['listing_id']);
+        }
+
+        return DB::transaction(function () use ($user, $token, $key, $items, $canonicalItems) {
             // Serializes idempotency and cart changes for this customer on MySQL.
             User::whereKey($user->id)->lockForUpdate()->firstOrFail();
-            $hash = hash('sha256', $token);
+            $hash = hash('sha256', $items === null ? $token : json_encode([
+                'quote_token' => $token, 'items' => $canonicalItems,
+            ], JSON_THROW_ON_ERROR));
             $existing = FarmOrder::where('customer_id', $user->id)->where('idempotency_key', $key)->first();
             if ($existing) {
                 abort_unless(hash_equals($existing->request_hash, $hash), 409, 'Idempotency key was used with different input.');
@@ -129,8 +175,32 @@ class FarmCheckoutService
             abort_unless(($quote['customer_id'] ?? null) === $user->id, 403, 'Quote belongs to another customer.');
             abort_if(($quote['expires_at'] ?? 0) <= now()->timestamp, 409, 'Quote expired. Request a new quote.');
             $input = $quote['input'];
+            if ($items === null) {
+                throw ValidationException::withMessages(['items' => 'Provide details for every bird in the order.']);
+            }
+            $quotedItems = collect($quote['snapshot']['items'])->keyBy('listing_id');
+            $errors = [];
+            foreach ($items as $i => $item) {
+                $quotedItem = $quotedItems->get($item['listing_id']);
+                if (! $quotedItem) {
+                    $errors["items.$i.listing_id"] = 'This listing is not in the quote.';
+                } elseif (count($item['birds']) !== $quotedItem['bird_count']) {
+                    $errors["items.$i.birds"] = 'Provide details for exactly '.$quotedItem['bird_count'].' birds.';
+                }
+            }
+            if ($quotedItems->keys()->diff(array_column($items, 'listing_id'))->isNotEmpty()) {
+                $errors['items'] = 'Provide details for every listing in the quote.';
+            }
+            if ($errors) {
+                throw ValidationException::withMessages($errors);
+            }
             $snapshot = $this->snapshot($user, $input, true);
             abort_unless(json_encode($snapshot) === json_encode($quote['snapshot']), 409, 'Checkout changed. Request a new quote.');
+            $details = collect($items)->keyBy('listing_id');
+            foreach ($snapshot['items'] as &$item) {
+                $item['birds'] = $details->get($item['listing_id'])['birds'];
+            }
+            unset($item);
 
             $pickup = $input['fulfillment_method'] === 'pickup';
             $method = DB::table('delivery_method')->where('status', true)

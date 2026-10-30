@@ -72,10 +72,21 @@ class FarmCheckoutController extends Controller
     public function store(Request $request)
     {
         $user = $this->customer($request);
-        $input = $request->validate(['quote_token' => 'required|string|max:2000000']);
+        $input = $request->validate([
+            'quote_token' => 'required|string|max:2000000',
+            // Omission is allowed here only to support historical idempotency replays.
+            'items' => 'sometimes|required|array|list|min:1|max:100',
+            'items.*' => 'required|array:listing_id,birds',
+            'items.*.listing_id' => 'required|integer|distinct',
+            'items.*.birds' => 'required|array|list|min:1',
+            'items.*.birds.*' => 'present|array:wingband_no,feather_color,feet_color',
+            'items.*.birds.*.wingband_no' => 'nullable|string|max:100',
+            'items.*.birds.*.feather_color' => 'nullable|string|max:100',
+            'items.*.birds.*.feet_color' => 'nullable|string|max:100',
+        ]);
         $key = $request->header('Idempotency-Key');
         abort_unless(is_string($key) && preg_match('/^[A-Za-z0-9._:-]{1,100}$/D', $key), 422, 'A valid Idempotency-Key header is required.');
-        [$order, $created] = $this->checkout->create($user, $input['quote_token'], $key);
+        [$order, $created] = $this->checkout->create($user, $input['quote_token'], $key, $input['items'] ?? null);
 
         return response()->json(['success' => true, 'data' => $this->orders->summary($order)], $created ? 201 : 200);
     }
