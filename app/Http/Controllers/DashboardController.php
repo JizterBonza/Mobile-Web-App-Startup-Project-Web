@@ -360,14 +360,24 @@ class DashboardController extends Controller
             'release_date' => 'nullable|required_if:release_option,Set Release Date|date',
         ]);
 
-        $oldValues = $listing->toArray();
-        $listing->update([
-            'price' => $validated['price'],
-            'selling_unit' => $validated['selling_unit'],
-            'stock' => $validated['stock'],
-            'release_option' => $validated['release_option'],
-            'release_date' => $validated['release_option'] === 'Set Release Date' ? $validated['release_date'] : null,
-        ]);
+        $oldValues = DB::transaction(function () use ($listing, $validated) {
+            $locked = FarmGamefowlListing::lockForUpdate()->findOrFail($listing->id);
+            if ((int) $validated['stock'] < (int) $locked->reserved_stock) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'stock' => 'Stock cannot be reduced below the birds reserved for pending checkouts.',
+                ]);
+            }
+            $old = $locked->toArray();
+            $locked->update([
+                'price' => $validated['price'],
+                'selling_unit' => $validated['selling_unit'],
+                'stock' => $validated['stock'],
+                'release_option' => $validated['release_option'],
+                'release_date' => $validated['release_option'] === 'Set Release Date' ? $validated['release_date'] : null,
+            ]);
+
+            return $old;
+        });
 
         ActivityLog::log('updated', "Gamefowl listing updated for {$farm->name}", $listing, $oldValues, $listing->fresh()->toArray());
 

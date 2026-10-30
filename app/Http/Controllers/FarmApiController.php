@@ -190,6 +190,7 @@ class FarmApiController extends Controller
                 'name' => $listing->is_bundle ? $listing->bundle_name : $bird->name,
                 'price' => $listing->price,
                 'stock' => $listing->stock,
+                'available_birds' => max(0, $listing->stock - (int) $listing->reserved_stock),
                 'selling_unit' => $listing->selling_unit,
                 'release_option' => $listing->release_option,
                 'release_date' => $listing->release_date?->format('Y-m-d'),

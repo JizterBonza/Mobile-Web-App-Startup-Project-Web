@@ -26,6 +26,8 @@ class User extends Authenticatable
     const TYPE_CUSTOMER = 'customer';
     const TYPE_BREEDER = 'breeder';
     const TYPE_RIDER = 'rider';
+
+    const TYPE_SHIPPING_PARTNER = 'shipping_partner';
     const TYPE_OWNER_MANAGER = 'owner_manager';
 
     const STATUS_ACTIVE = 'active';

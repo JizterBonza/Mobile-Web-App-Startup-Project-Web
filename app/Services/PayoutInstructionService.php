@@ -89,6 +89,13 @@ class PayoutInstructionService
                     continue;
                 }
 
+                if (! $this->wallets->payoutEligible($shop)) {
+                    $skipped[] = ['shop_id' => $shop->id, 'shop_name' => $shop->shop_name, 'amount' => $amount,
+                        'reason' => 'Wallet funds require payment reconciliation before payout.'];
+
+                    continue;
+                }
+
                 if ($this->payoutAccountIsIncomplete($shop)) {
                     $skipped[] = [
                         'shop_id' => $shop->id,

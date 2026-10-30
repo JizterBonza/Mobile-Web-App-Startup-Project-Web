@@ -29,7 +29,7 @@ class UserController extends Controller
 
         // If current user is Admin, filter to show only operational roles they manage
         if ($currentUser->user_type === 'admin') {
-            $query->whereIn('user_type', ['vendor', 'veterinarian', 'breeder', 'rider', 'owner_manager']);
+            $query->whereIn('user_type', ['vendor', 'veterinarian', 'breeder', 'rider', 'owner_manager', 'shipping_partner']);
         }
 
         $users = $query->orderBy('created_at', 'desc')
@@ -150,11 +150,11 @@ class UserController extends Controller
         $currentUser = auth()->user();
         
         // Determine allowed user types based on current user's role
-        $allowedUserTypes = ['super_admin', 'admin', 'vendor', 'veterinarian', 'customer', 'rider', 'owner_manager'];
+        $allowedUserTypes = ['super_admin', 'admin', 'vendor', 'veterinarian', 'customer', 'rider', 'owner_manager', 'shipping_partner'];
         if ($currentUser->user_type === 'admin') {
             // Admin can only create Vendors, Veterinarians, Riders, and Owner/Managers.
             // Breeders are created through the breeder registration wizard.
-            $allowedUserTypes = ['vendor', 'veterinarian', 'rider', 'owner_manager'];
+            $allowedUserTypes = ['vendor', 'veterinarian', 'rider', 'owner_manager', 'shipping_partner'];
         }
 
         $rules = [
@@ -321,10 +321,10 @@ class UserController extends Controller
         }
 
         // Determine allowed user types based on current user's role
-        $allowedUserTypes = ['super_admin', 'admin', 'vendor', 'veterinarian', 'breeder', 'customer', 'rider', 'owner_manager'];
+        $allowedUserTypes = ['super_admin', 'admin', 'vendor', 'veterinarian', 'breeder', 'customer', 'rider', 'owner_manager', 'shipping_partner'];
         if ($currentUser->user_type === 'admin') {
             // Admin can only update to Vendors, Veterinarians, Breeders, Riders, and Owner/Managers
-            $allowedUserTypes = ['vendor', 'veterinarian', 'breeder', 'rider', 'owner_manager'];
+            $allowedUserTypes = ['vendor', 'veterinarian', 'breeder', 'rider', 'owner_manager', 'shipping_partner'];
         }
 
         $request->validate([

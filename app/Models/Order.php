@@ -100,6 +100,16 @@ class Order extends Model
         return $this->hasMany(OrderShop::class);
     }
 
+    public function farmOrder()
+    {
+        return $this->hasOne(FarmOrder::class);
+    }
+
+    public function isFarmOrder(): bool
+    {
+        return \Illuminate\Support\Facades\Schema::hasTable('farm_orders') && $this->farmOrder()->exists();
+    }
+
     /**
      * Get the latest payment attached to this order (null for COD orders).
      * Uses latestOfMany() so retries/new attempts surface the most recent record.

@@ -21,191 +21,167 @@ class PaymentStatusService
 
     public const RESULT_UNAVAILABLE = 'unavailable';
 
-    public function __construct(
-        private readonly PaymongoService $paymongo,
-        private readonly VoucherService $voucherService,
-    ) {}
+    public function __construct(private readonly PaymongoService $paymongo, private readonly VoucherService $voucherService) {}
 
-    /**
-     * Reconcile a pending local payment with its PayMongo checkout session.
-     */
-    public function syncPendingFromPaymongo(?Payment $payment): string
+    public function syncPendingFromPaymongo(?Payment $payment, bool $force = false): string
     {
         if (! $payment) {
             return self::RESULT_UNAVAILABLE;
         }
-
+        if (app(FarmPaymentService::class)->supports($payment)) {
+            return app(FarmPaymentService::class)->reconcile($payment, $force);
+        }
         $payment->refresh();
-        $payment->loadMissing('order.orderDetail');
-
-        if ($payment->status === 'paid'
-            || $payment->order?->orderDetail?->payment_status === 'paid'
-        ) {
+        if (! $force && $payment->status === 'paid') {
             return self::RESULT_PAID;
         }
+        if (! $payment->checkout_session_id && ! $payment->payment_intent_id) {
+            return self::RESULT_UNAVAILABLE;
+        }
+        if (! $this->claimPoll($payment, $force)) {
+            return $payment->status === 'paid' ? self::RESULT_PAID : self::RESULT_UNAVAILABLE;
+        }
+        try {
+            $response = $payment->checkout_session_id
+                ? $this->paymongo->retrieveCheckoutSession($payment->checkout_session_id)
+                : $this->paymongo->retrievePaymentIntent($payment->payment_intent_id);
+        } catch (\Throwable $e) {
+            Log::warning('Payment reconciliation unavailable.', ['payment_id' => $payment->id]);
 
-        if ($payment->status === 'failed'
-            || $payment->order?->orderDetail?->payment_status === 'failed'
-        ) {
+            return self::RESULT_UNAVAILABLE;
+        }
+        $data = $response['data'] ?? null;
+        if (! is_array($data) || ($data['id'] ?? null) !== ($payment->checkout_session_id ?: $payment->payment_intent_id)) {
+            return self::RESULT_UNAVAILABLE;
+        }
+        $paid = collect($data['attributes']['payments'] ?? [])->filter(fn ($p) => ($p['attributes']['status'] ?? null) === 'paid');
+        foreach ($paid as $resource) {
+            $payload = $payment->checkout_session_id ? $data : $resource;
+            $payload['attributes']['payment_intent_id'] ??= $payment->payment_intent_id;
+            $this->markPaid($payment, $resource['id'] ?? null, $resource['attributes']['source']['type'] ?? null,
+                $payload, $resource['attributes']['payment_intent_id'] ?? $data['attributes']['payment_intent']['id'] ?? $payment->payment_intent_id);
+        }
+        $payment->refresh();
+        if ($payment->status === 'paid') {
+            return self::RESULT_PAID;
+        }
+        if (($data['attributes']['status'] ?? null) === 'expired') {
+            DB::transaction(function () use ($payment) {
+                if ($payment->order_id) {
+                    $order = Order::whereKey($payment->order_id)->lockForUpdate()->firstOrFail();
+                    OrderDetail::whereKey($order->order_detail_id)->lockForUpdate()->firstOrFail();
+                }
+                $locked = Payment::lockForUpdate()->findOrFail($payment->id);
+                if ($locked->status !== 'paid') {
+                    $locked->update(['status' => 'expired']);
+                }
+            }, 3);
+
             return self::RESULT_FAILED;
         }
-
-        if (empty($payment->checkout_session_id)) {
-            Log::warning('PayMongo sync: payment has no checkout session.', [
-                'payment_id' => $payment->id,
-            ]);
-
+        if ($paid->isNotEmpty() || ! empty($data['attributes']['paid_at'])) {
             return self::RESULT_UNAVAILABLE;
         }
 
-        try {
-            $session = $this->paymongo->retrieveCheckoutSession($payment->checkout_session_id);
-        } catch (\Throwable $e) {
-            Log::warning('PayMongo sync: checkout session request failed.', [
-                'payment_id' => $payment->id,
-                'checkout_session_id' => $payment->checkout_session_id,
-                'error' => $e->getMessage(),
-            ]);
-
-            return self::RESULT_UNAVAILABLE;
-        }
-
-        if (! is_array($session) || empty($session['data'])) {
-            Log::warning('PayMongo sync: unable to retrieve checkout session.', [
-                'payment_id' => $payment->id,
-                'checkout_session_id' => $payment->checkout_session_id,
-                'response' => $session,
-            ]);
-
-            return self::RESULT_UNAVAILABLE;
-        }
-
-        $data = $session['data'];
-        $attrs = $data['attributes'] ?? [];
-        $payments = $attrs['payments'] ?? [];
-        $paymongoPayment = null;
-
-        if (is_array($payments)) {
-            foreach ($payments as $candidate) {
-                if (($candidate['attributes']['status'] ?? null) === 'paid') {
-                    $paymongoPayment = $candidate;
-                    break;
-                }
-            }
-        }
-
-        $isPaid = $paymongoPayment !== null || ! empty($attrs['paid_at']);
-        if (! $isPaid) {
-            return self::RESULT_PENDING;
-        }
-
-        if ($paymongoPayment === null && is_array($payments) && count($payments) > 0) {
-            $paymongoPayment = $payments[0];
-        }
-
-        $paymentMethod = $paymongoPayment['attributes']['source']['type']
-            ?? $paymongoPayment['attributes']['payment_method_used']
-            ?? $attrs['payment_method_used']
-            ?? null;
-        $paymentIntentId = $attrs['payment_intent']['id']
-            ?? $paymongoPayment['attributes']['payment_intent_id']
-            ?? null;
-
-        Log::info('PayMongo sync: marking local payment paid from checkout session.', [
-            'payment_id' => $payment->id,
-            'checkout_session_id' => $payment->checkout_session_id,
-            'session_status' => $attrs['status'] ?? null,
-            'paid_at' => $attrs['paid_at'] ?? null,
-        ]);
-
-        $this->markPaid(
-            $payment,
-            $paymongoPayment['id'] ?? null,
-            $paymentMethod,
-            $data,
-            $paymentIntentId,
-        );
-
-        return self::RESULT_PAID;
+        return self::RESULT_PENDING;
     }
 
-    /**
-     * Atomically mark a payment paid and emit its confirmation once.
-     */
-    public function markPaid(
-        Payment $payment,
-        ?string $paymongoPaymentId,
-        ?string $paymentMethod,
-        array $metadata,
-        ?string $paymentIntentId = null,
-    ): bool {
-        return DB::transaction(function () use (
-            $payment,
-            $paymongoPaymentId,
-            $paymentMethod,
-            $metadata,
-            $paymentIntentId,
-        ) {
-            $lockedPayment = Payment::query()->lockForUpdate()->find($payment->id);
-            if (! $lockedPayment) {
+    public function claimPoll(Payment $payment, bool $force = false): bool
+    {
+        $query = Payment::whereKey($payment->id);
+        if (! $force) {
+            $query->where(fn ($q) => $q->whereNull('last_reconciled_at')->orWhere('last_reconciled_at', '<=', now()->subSeconds((int) config('services.paymongo.reconciliation_cooldown', 10))));
+        }
+
+        $updated = $query->update(['last_reconciled_at' => now()]);
+
+        // MySQL reports zero changed rows when a forced poll uses the same timestamp.
+        return $force || $updated === 1;
+    }
+
+    public function markPaid(Payment $payment, ?string $paymongoPaymentId, ?string $paymentMethod, array $metadata, ?string $paymentIntentId = null): bool
+    {
+        if (app(FarmPaymentService::class)->supports($payment)) {
+            return app(FarmPaymentService::class)->markPaid($payment, $paymongoPaymentId, $paymentMethod, $metadata, $paymentIntentId);
+        }
+
+        return DB::transaction(function () use ($payment, $paymongoPaymentId, $paymentMethod, $metadata, $paymentIntentId) {
+            $order = $payment->order_id ? Order::lockForUpdate()->findOrFail($payment->order_id) : null;
+            $detail = $order ? OrderDetail::lockForUpdate()->findOrFail($order->order_detail_id) : null;
+            $locked = Payment::lockForUpdate()->findOrFail($payment->id);
+            $security = app(PaymentSecurityService::class);
+            $checkout = str_starts_with($metadata['id'] ?? '', 'cs_');
+            $resource = $checkout ? collect($metadata['attributes']['payments'] ?? [])->firstWhere('id', $paymongoPaymentId) : $metadata;
+            $resource ??= [];
+            $attempt = $metadata['attributes']['metadata']['payment_attempt_key'] ?? null;
+            $byAttempt = is_string($attempt) && $locked->attempt_key && hash_equals($locked->attempt_key, $attempt);
+            $linked = $checkout
+                ? (($locked->checkout_session_id && $locked->checkout_session_id === ($metadata['id'] ?? null)) || (! $locked->checkout_session_id && $byAttempt))
+                : (($paymentIntentId && $locked->payment_intent_id === $paymentIntentId) || ($paymongoPaymentId && $locked->payment_id === $paymongoPaymentId) || $byAttempt);
+            if ($order) {
+                $order->setRelation('orderDetail', $detail);
+                $linked = $linked && (int) $locked->owner_user_id === (int) $order->user_id;
+            }
+            $expected = $order ? $security->expected($order) : FarmCheckoutService::cents($locked->amount);
+            $matchesAttempt = $expected === FarmCheckoutService::cents($locked->amount) && $locked->currency === 'PHP';
+            $duplicate = ($locked->status === 'paid' && $locked->payment_id && $locked->payment_id !== $paymongoPaymentId)
+                || ($detail?->payment_status === 'paid' && $locked->status !== 'paid');
+            if (! $security->receipt($locked, $resource, $linked && $matchesAttempt, $expected, $duplicate)) {
                 return false;
             }
+            if ($locked->status === 'paid') {
+                $locked->update(['payment_id' => $locked->payment_id ?? $paymongoPaymentId,
+                    'payment_intent_id' => $locked->payment_intent_id ?? $paymentIntentId]);
 
-            $order = Order::query()->find($lockedPayment->order_id);
-            $orderDetail = $order
-                ? OrderDetail::query()->lockForUpdate()->find($order->order_detail_id)
-                : null;
-
-            if ($lockedPayment->status === 'paid' || $orderDetail?->payment_status === 'paid') {
                 return false;
             }
-
-            $resolvedPaymentMethod = $paymentMethod ?? $lockedPayment->payment_method;
-            $sessionIdFromPayload = $metadata['id'] ?? null;
-            $update = [
-                'status' => 'paid',
-                'payment_method' => $resolvedPaymentMethod,
-                'payment_id' => $paymongoPaymentId ?? $lockedPayment->payment_id,
-                'payment_intent_id' => $paymentIntentId ?? $lockedPayment->payment_intent_id,
-                'metadata' => $metadata,
-            ];
-
-            if (is_string($sessionIdFromPayload) && str_starts_with($sessionIdFromPayload, 'cs_')) {
-                $update['checkout_session_id'] = $sessionIdFromPayload;
-            }
-
-            $lockedPayment->update($update);
-
-            if (! $order || ! $orderDetail) {
+            $locked->update([
+                'status' => 'paid', 'payment_id' => $paymongoPaymentId, 'payment_intent_id' => $paymentIntentId ?? $locked->payment_intent_id,
+                'checkout_session_id' => $checkout ? $metadata['id'] : $locked->checkout_session_id,
+                'payment_method' => $paymentMethod ?? $locked->payment_method,
+                'metadata' => array_merge($locked->metadata ?? [], ['provider_payload' => $metadata]),
+            ]);
+            // A late callback can recover a previously unknown creation result.
+            DB::table('payment_reviews')->where('payment_id', $locked->id)->where('reason', 'creation_unknown')
+                ->whereNull('resolved_at')->update(['resolved_at' => now(), 'updated_at' => now()]);
+            if (! $order || ! $detail) {
                 return true;
             }
-
-            $orderDetail->update(['payment_status' => 'paid']);
-            $this->recordVoucherUsageIfNeeded($order, $orderDetail);
-
+            if ($security->held($order->id)) {
+                return true; // Receipt is real; an unresolved order hold still prevents fulfillment.
+            }
+            $detail->update(['payment_status' => 'paid']);
+            $this->recordVoucherUsageIfNeeded($order, $detail);
             Notification::query()->firstOrCreate(
-                [
-                    'user_id' => $order->user_id,
-                    'type' => 'payment_confirmed',
-                    'reference_type' => Order::class,
-                    'reference_id' => $order->id,
-                ],
-                [
-                    'category' => Notification::CATEGORY_PAYMENT,
-                    'title' => 'Payment Confirmed',
-                    'message' => "Your payment for order {$orderDetail->order_code} has been confirmed. Amount: ₱".number_format((float) $lockedPayment->amount, 2),
-                    'data' => [
-                        'order_id' => $order->id,
-                        'order_code' => $orderDetail->order_code,
-                        'amount' => $lockedPayment->amount,
-                        'payment_method' => $resolvedPaymentMethod,
-                    ],
-                    'action_url' => "/orders/{$order->id}",
-                ],
-            );
+                ['user_id' => $order->user_id, 'type' => 'payment_confirmed', 'reference_type' => Order::class, 'reference_id' => $order->id],
+                ['category' => Notification::CATEGORY_PAYMENT, 'title' => 'Payment Confirmed',
+                    'message' => "Your payment for order {$detail->order_code} has been confirmed.",
+                    'data' => ['order_id' => $order->id, 'order_code' => $detail->order_code, 'amount' => $locked->amount, 'payment_method' => $locked->payment_method],
+                    'action_url' => "/orders/{$order->id}"]);
 
             return true;
-        });
+        }, 3);
+    }
+
+    public function markFailed(Payment $payment, array $payload): void
+    {
+        if (app(FarmPaymentService::class)->supports($payment)) {
+            app(FarmPaymentService::class)->failed($payment, $payload);
+
+            return;
+        }
+        DB::transaction(function () use ($payment, $payload) {
+            if ($payment->order_id) {
+                $order = Order::lockForUpdate()->findOrFail($payment->order_id);
+                $detail = OrderDetail::lockForUpdate()->findOrFail($order->order_detail_id);
+            }
+            $locked = Payment::lockForUpdate()->findOrFail($payment->id);
+            if ($locked->status === 'paid' || ($detail->payment_status ?? null) === 'paid') {
+                return;
+            }
+            // A failed payment attempt does not terminate a reusable hosted checkout.
+            $locked->update(['metadata' => array_merge($locked->metadata ?? [], ['last_failed_attempt' => $payload])]);
+        }, 3);
     }
 
     private function recordVoucherUsageIfNeeded(Order $order, OrderDetail $orderDetail): void

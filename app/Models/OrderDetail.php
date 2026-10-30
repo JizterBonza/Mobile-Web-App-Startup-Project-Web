@@ -22,6 +22,8 @@ class OrderDetail extends Model
      * @var array<int, string>
      */
     protected $fillable = [
+        'checkout_is_cod',
+        'payment_snapshot',
         'order_code',
         'subtotal',
         'shipping_fee',
@@ -54,6 +56,8 @@ class OrderDetail extends Model
     protected function casts(): array
     {
         return [
+            'checkout_is_cod' => 'boolean',
+            'payment_snapshot' => 'array',
             'subtotal' => 'decimal:2',
             'shipping_fee' => 'decimal:2',
             'delivery_base_fee' => 'decimal:2',

@@ -46,6 +46,9 @@ return [
     'public' => env('PAYMONGO_PUBLIC_KEY'),
     'base_url' => env('PAYMONGO_BASE_URL'),
     'webhook_secret' => env('PAYMONGO_WEBHOOK_SECRET'),
+    'live_mode' => env('PAYMONGO_LIVE_MODE', true),
+    'webhook_tolerance' => 300,
+    'reconciliation_cooldown' => 10,
     ],
 
 ];

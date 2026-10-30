@@ -8,6 +8,7 @@ use App\Http\Controllers\CartController;
 use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\CustomerShopMessageController;
 use App\Http\Controllers\FarmApiController;
+use App\Http\Controllers\FarmCheckoutController;
 use App\Http\Controllers\FavoriteController;
 use App\Http\Controllers\ItemController;
 use App\Http\Controllers\KlasrumApiController;
@@ -99,8 +100,8 @@ Route::get('order-statuses', [MobileController::class, 'getOrderStatuses']);
 Route::get('addresses/types', [AddressController::class, 'getAddressTypes']);
 
 // PayMongo callbacks (signature / redirect — not bearer-auth)
-Route::get('/payment-success', [PaymentController::class, 'paymentSuccess']);
-Route::get('/payment-cancel', [PaymentController::class, 'paymentCancel']);
+Route::get('/payment-success', [PaymentController::class, 'paymentSuccess'])->middleware('throttle:60,1');
+Route::get('/payment-cancel', [PaymentController::class, 'paymentCancel'])->middleware('throttle:60,1');
 Route::post('/payment/webhook', [PaymentController::class, 'handleWebhook']);
 
 /*
@@ -110,6 +111,23 @@ Route::post('/payment/webhook', [PaymentController::class, 'handleWebhook']);
 */
 
 Route::middleware(['auth:sanctum', 'account.active'])->group(function () {
+    Route::get('farm-cart', [FarmCheckoutController::class, 'cart']);
+    Route::post('farm-cart/items', [FarmCheckoutController::class, 'addCart']);
+    Route::patch('farm-cart/items/{id}', [FarmCheckoutController::class, 'updateCart'])->whereNumber('id');
+    Route::delete('farm-cart/items/{id}', [FarmCheckoutController::class, 'deleteCart'])->whereNumber('id');
+    Route::post('farm-checkout/quote', [FarmCheckoutController::class, 'quote'])->middleware('throttle:60,1');
+    Route::get('farm-orders', [FarmCheckoutController::class, 'index']);
+    Route::post('farm-orders', [FarmCheckoutController::class, 'store'])->middleware('throttle:30,1');
+    Route::get('farm-orders/{id}', [FarmCheckoutController::class, 'show'])->whereNumber('id');
+    Route::post('farm-orders/{id}/payment-session', [FarmCheckoutController::class, 'paymentSession'])->whereNumber('id')->middleware('throttle:20,1');
+    Route::post('farm-orders/{id}/cancel', [FarmCheckoutController::class, 'cancel'])->whereNumber('id');
+    Route::post('farm-orders/{id}/confirm', [FarmCheckoutController::class, 'confirm'])->whereNumber('id');
+    Route::put('admin/farm-orders/{id}/shipping-partner', [FarmCheckoutController::class, 'assignPartner'])->whereNumber('id');
+    Route::put('admin/farm-orders/{id}/resolve-hold', [FarmCheckoutController::class, 'resolveHold'])->whereNumber('id');
+    Route::get('shipping-partner/farm-orders', [FarmCheckoutController::class, 'partnerIndex']);
+    Route::put('farm-orders/{id}/shipping-confirmation', [FarmCheckoutController::class, 'shippingConfirmation'])->whereNumber('id');
+    Route::put('farm-orders/{id}/pickup-schedule', [FarmCheckoutController::class, 'pickupSchedule'])->whereNumber('id');
+
     // Private channel auth for mobile (Sanctum Bearer token)
     Route::post('broadcasting/auth', [BroadcastController::class, 'authenticate']);
 
@@ -224,11 +242,12 @@ Route::middleware(['auth:sanctum', 'account.active'])->group(function () {
     Route::get('activity-logs/{id}', [ActivityLogController::class, 'show']);
 
     // Payments (order-scoped / intent creation)
-    Route::post('/payment/intent', [PaymentController::class, 'createIntent']);
-    Route::post('/payment/attach', [PaymentController::class, 'attachPayment']);
-    Route::post('/payment/checkout', [PaymentController::class, 'checkout']);
-    Route::get('/payment/checkout-url/{orderId}', [PaymentController::class, 'getCheckoutUrlByOrderId']);
-    Route::get('/payment/status/{orderId}', [PaymentController::class, 'getPaymentStatusByOrderId']);
+    Route::post('/payment/intent', [PaymentController::class, 'createIntent'])->middleware('throttle:20,1');
+    Route::post('/payment/attach', [PaymentController::class, 'attachPayment'])->middleware('throttle:20,1');
+    Route::post('/payment/checkout', [PaymentController::class, 'checkout'])->middleware('throttle:20,1');
+    Route::get('/payment/checkout-url/{orderId}', [PaymentController::class, 'getCheckoutUrlByOrderId'])->middleware('throttle:20,1');
+    Route::post('/orders/{orderId}/payment-session', [PaymentController::class, 'getCheckoutUrlByOrderId'])->whereNumber('orderId')->middleware('throttle:20,1');
+    Route::get('/payment/status/{orderId}', [PaymentController::class, 'getPaymentStatusByOrderId'])->middleware('throttle:60,1');
 });
 
 /*
