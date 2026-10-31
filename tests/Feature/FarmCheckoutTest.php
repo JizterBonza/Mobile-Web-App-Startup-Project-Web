@@ -606,11 +606,70 @@ class FarmCheckoutTest extends TestCase
 
         $confirmed = app(FarmOrderService::class)->ownerManagerCards($this->farm->id);
         $this->assertSame('preparing', $confirmed[0]['status']);
-        $this->assertSame('Awaiting Schedule', $confirmed[0]['statusDescription']);
+        $this->assertSame('Immediate', $confirmed[0]['statusDescription']);
         $this->assertFalse($confirmed[0]['farmSummary']['canConfirm']);
+        $this->assertTrue($confirmed[0]['farmSummary']['releaseImmediate']);
+        $this->assertTrue($confirmed[0]['farmSummary']['pickupImmediate']);
+        $this->assertTrue($confirmed[0]['farmSummary']['showDonePreparing']);
+        $this->assertNull($confirmed[0]['farmSummary']['preparedReleaseDate']);
+        $this->assertNull($confirmed[0]['farmSummary']['riderPickupDate']);
+
+        $this->schedule($order, '2026-10-30');
+        $this->actingAs($this->owner);
+        $withPickup = app(FarmOrderService::class)->ownerManagerCards($this->farm->id);
+        $this->assertSame('scheduled', $order->fresh()->status);
+        $this->assertSame('Immediate', $withPickup[0]['statusDescription']);
+
+        app(\App\Http\Controllers\DashboardController::class)->ownerManagerDonePreparingFarmOrder($order->order_id);
+        $prepared = app(FarmOrderService::class)->ownerManagerCards($this->farm->id);
+        $this->assertSame('preparing', $prepared[0]['status']);
+        $this->assertSame('Ready for Pickup', $prepared[0]['statusDescription']);
+        $this->assertFalse($prepared[0]['farmSummary']['showDonePreparing']);
+        $this->assertTrue($prepared[0]['farmSummary']['showReadyForPickup']);
+        $this->assertSame('2026-10-27', $prepared[0]['farmSummary']['preparedReleaseDate']);
+        $this->assertNull($prepared[0]['farmSummary']['riderPickupDate']);
+
+        app(\App\Http\Controllers\DashboardController::class)->ownerManagerReadyForPickupFarmOrder($order->order_id);
+        $ready = app(FarmOrderService::class)->ownerManagerCards($this->farm->id);
+        $this->assertSame('ready_for_pickup', $order->fresh()->status);
+        $this->assertSame('for-pickup', $ready[0]['status']);
+        $this->assertSame('Ready for Pickup', $ready[0]['statusDescription']);
+        $this->assertFalse($ready[0]['farmSummary']['showReadyForPickup']);
 
         $other = Farm::create(['name' => 'Other Farm', 'status' => 'active']);
         $this->assertSame([], app(FarmOrderService::class)->ownerManagerCards($other->id));
+    }
+
+    public function test_farm_order_with_a_release_date_shows_scheduled(): void
+    {
+        $entry = $this->entry('per head', 1);
+        $entry->listing->update([
+            'release_option' => 'Set Release Date',
+            'release_date' => '2026-11-20',
+        ]);
+        $quote = $this->quote([$entry->id]);
+        $id = $this->postJson('/api/farm-orders', [
+            'quote_token' => $quote['quote_token'],
+            'items' => [[
+                'listing_id' => $entry->listing_id,
+                'birds' => [
+                    ['wingband_no' => 'B1', 'feather_color' => 'red', 'feet_color' => 'yellow'],
+                ],
+            ]],
+        ], ['Idempotency-Key' => 'dated-release'])->assertCreated()->json('data.id');
+        $order = FarmOrder::where('order_id', $id)->firstOrFail();
+        $this->pay($this->startPayment($order, 'deposit'));
+        $this->actingAs($this->owner);
+
+        app(\App\Http\Controllers\DashboardController::class)->ownerManagerConfirmFarmOrder($order->order_id);
+
+        $card = collect(app(FarmOrderService::class)->ownerManagerCards($this->farm->id))
+            ->firstWhere('id', $order->order_id);
+        $this->assertSame('awaiting_schedule', $order->fresh()->status);
+        $this->assertSame('preparing', $card['status']);
+        $this->assertSame('Scheduled', $card['statusDescription']);
+        $this->assertFalse($card['farmSummary']['releaseImmediate']);
+        $this->assertFalse($card['farmSummary']['showDonePreparing']);
     }
 
     private function makeOrder(string $fulfillment = 'delivery'): FarmOrder

@@ -284,6 +284,7 @@ class FarmCheckoutService
                 'name' => $listing->is_bundle ? $listing->bundle_name : $listing->gamefowl->name,
                 'selling_unit' => $listing->selling_unit, 'is_bundle' => (bool) $listing->is_bundle,
                 'bundle_catalog_ids' => $listing->bundle_catalog_ids ?? [],
+                'release_option' => $listing->release_option,
                 'release_date' => $listing->release_date?->toDateString(),
                 'catalog' => GamefowlCatalog::whereIn('id', $catalogIds)->orderBy('id')->get(['id', 'name', 'sex', 'images'])->toArray(),
             ];

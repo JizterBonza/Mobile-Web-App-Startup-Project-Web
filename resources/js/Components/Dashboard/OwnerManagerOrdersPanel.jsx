@@ -196,6 +196,30 @@ export default function OwnerManagerOrdersPanel({
     });
   };
 
+  const handleDonePreparingFarmOrder = (order) => {
+    if (!order?.id || processingOrderId || !order.farmSummary?.showDonePreparing) {
+      return;
+    }
+
+    setProcessingOrderId(order.id);
+    router.patch(`${ordersApiBasePath}/${order.id}/done-preparing`, {}, {
+      preserveScroll: true,
+      onFinish: () => setProcessingOrderId(null),
+    });
+  };
+
+  const handleReadyForPickupFarmOrder = (order) => {
+    if (!order?.id || processingOrderId || !order.farmSummary?.showReadyForPickup) {
+      return;
+    }
+
+    setProcessingOrderId(order.id);
+    router.patch(`${ordersApiBasePath}/${order.id}/ready-for-pickup`, {}, {
+      preserveScroll: true,
+      onFinish: () => setProcessingOrderId(null),
+    });
+  };
+
   const isItemPreparing = (product) => {
     if (preparingItemStatusId == null || product?.itemStatusId == null) {
       return false;
@@ -268,7 +292,7 @@ export default function OwnerManagerOrdersPanel({
     if (status.includes("pending") || status === "new") {
       return "bg-[#FEF3C7] text-[#92400E]";
     }
-    if (status.includes("prepar")) {
+    if (status.includes("prepar") || (order.orderType === "farm" && status.includes("immediate"))) {
       return "bg-[#FEF3C7] text-[#92400E]";
     }
     if (status.includes("ready")) {
@@ -670,12 +694,20 @@ export default function OwnerManagerOrdersPanel({
                     </p>
                   </div>
                   <div>
-                    <label className="text-xs text-[#6B7280]">Earliest release</label>
-                    <p className="text-[#102059] font-medium">{order.farmSummary.earliestReleaseDate || "—"}</p>
+                    <label className="text-xs text-[#6B7280]">Release Date</label>
+                    <p className="text-[#102059] font-medium">
+                      {order.farmSummary.releaseImmediate
+                        ? (order.farmSummary.preparedReleaseDate || "—")
+                        : (order.farmSummary.earliestReleaseDate || "—")}
+                    </p>
                   </div>
                   <div>
-                    <label className="text-xs text-[#6B7280]">Pickup date</label>
-                    <p className="text-[#102059] font-medium">{order.farmSummary.pickupDate || "Not scheduled"}</p>
+                    <label className="text-xs text-[#6B7280]">Pickup Date</label>
+                    <p className="text-[#102059] font-medium">
+                      {order.farmSummary.releaseImmediate
+                        ? (order.farmSummary.riderPickupDate || "—")
+                        : (order.farmSummary.pickupDate || "Not scheduled")}
+                    </p>
                   </div>
                 </div>
                 {order.farmSummary.finalTotal != null && (
@@ -820,7 +852,34 @@ export default function OwnerManagerOrdersPanel({
               </div>
             )}
 
-            {/* Action Buttons (for new orders only — vendors only) */}
+            {canPerformOrderActions && isFarmOrder && order.status === "preparing" && order.farmSummary?.showDonePreparing && (
+              <div className="pt-3 border-t border-[#E5E7EB]">
+                <button
+                  type="button"
+                  onClick={() => handleDonePreparingFarmOrder(order)}
+                  disabled={processingOrderId === order.id}
+                  className="w-full px-4 py-2.5 bg-[#D3A218] text-white rounded-lg font-semibold text-sm hover:bg-[#B8890F] transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                  style={{ fontFamily: "Inter Condensed, sans-serif" }}
+                >
+                  {processingOrderId === order.id ? "Updating…" : "Done Preparing"}
+                </button>
+              </div>
+            )}
+
+            {canPerformOrderActions && isFarmOrder && order.status === "preparing" && order.farmSummary?.showReadyForPickup && (
+              <div className="pt-3 border-t border-[#E5E7EB]">
+                <button
+                  type="button"
+                  onClick={() => handleReadyForPickupFarmOrder(order)}
+                  disabled={processingOrderId === order.id}
+                  className="w-full px-4 py-2.5 bg-[#244693] text-white rounded-lg font-semibold text-sm hover:bg-[#1a3570] transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                  style={{ fontFamily: "Inter Condensed, sans-serif" }}
+                >
+                  {processingOrderId === order.id ? "Updating…" : "Ready for Pickup"}
+                </button>
+              </div>
+            )}
+
             {canPerformOrderActions && isFarmOrder && order.status === "new" && order.farmSummary?.canConfirm && (
               <div className="pt-3 border-t border-[#E5E7EB]">
                 <button
@@ -834,6 +893,7 @@ export default function OwnerManagerOrdersPanel({
               </div>
             )}
 
+            {/* Action Buttons (for new store orders) */}
             {canPerformOrderActions && !isFarmOrder && order.status === "new" && (
               <div className="flex items-center gap-3 pt-3 border-t border-[#E5E7EB]">
                 <button

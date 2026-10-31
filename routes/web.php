@@ -415,6 +415,8 @@ Route::middleware(['auth', 'session.valid', 'user.type:owner_manager'])->prefix(
     Route::patch('/support/tickets/{id}/accept', [SupportTicketController::class, 'vendorAccept'])->name('support.tickets.accept');
     Route::post('/support/tickets/{id}/reopen', [SupportTicketController::class, 'vendorReopen'])->name('support.tickets.reopen');
     Route::patch('/orders/{orderId}/confirm', [DashboardController::class, 'ownerManagerConfirmFarmOrder'])->name('orders.confirm');
+    Route::patch('/orders/{orderId}/done-preparing', [DashboardController::class, 'ownerManagerDonePreparingFarmOrder'])->name('orders.done-preparing');
+    Route::patch('/orders/{orderId}/ready-for-pickup', [DashboardController::class, 'ownerManagerReadyForPickupFarmOrder'])->name('orders.ready-for-pickup');
     Route::patch('/orders/{orderId}/accept', [DashboardController::class, 'ownerManagerAcceptOrder'])->name('orders.accept');
     Route::patch('/orders/{orderId}/decline', [DashboardController::class, 'ownerManagerDeclineOrder'])->name('orders.decline');
     Route::patch('/orders/{orderId}/ready', [DashboardController::class, 'ownerManagerMarkOrderReady'])->name('orders.ready');

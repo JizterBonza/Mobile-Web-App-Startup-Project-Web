@@ -1012,6 +1012,56 @@ class DashboardController extends Controller
             ->with('success', 'Farm order confirmed.');
     }
 
+    public function ownerManagerDonePreparingFarmOrder(int $orderId)
+    {
+        $user = auth()->user();
+        $farm = $user->managedFarm;
+        abort_unless($farm, 404);
+
+        $farmOrder = FarmOrder::query()
+            ->where('order_id', $orderId)
+            ->where('farm_id', $farm->id)
+            ->whereNotNull('deposit_paid_at')
+            ->firstOrFail();
+
+        try {
+            app(FarmOrderService::class)->markPrepared($farmOrder, $user);
+        } catch (HttpException $exception) {
+            return redirect()
+                ->route('dashboard.owner-manager.orders')
+                ->with('error', $exception->getMessage() ?: 'This farm order cannot be marked as done preparing.');
+        }
+
+        return redirect()
+            ->route('dashboard.owner-manager.orders')
+            ->with('success', 'Order marked as done preparing.');
+    }
+
+    public function ownerManagerReadyForPickupFarmOrder(int $orderId)
+    {
+        $user = auth()->user();
+        $farm = $user->managedFarm;
+        abort_unless($farm, 404);
+
+        $farmOrder = FarmOrder::query()
+            ->where('order_id', $orderId)
+            ->where('farm_id', $farm->id)
+            ->whereNotNull('deposit_paid_at')
+            ->firstOrFail();
+
+        try {
+            app(FarmOrderService::class)->markReadyForPickup($farmOrder, $user);
+        } catch (HttpException $exception) {
+            return redirect()
+                ->route('dashboard.owner-manager.orders')
+                ->with('error', $exception->getMessage() ?: 'This farm order cannot be marked ready for pickup.');
+        }
+
+        return redirect()
+            ->route('dashboard.owner-manager.orders')
+            ->with('success', 'Order moved to For Pick-up.');
+    }
+
     public function ownerManagerAcceptOrder(int $orderId)
     {
         $shopIds = $this->ownerManagerShopIdsOrAbort();
