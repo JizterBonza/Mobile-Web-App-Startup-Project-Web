@@ -1910,6 +1910,8 @@ class OrderStatusHistoryTest extends TestCase
 
     private function createSchema(): void
     {
+        \App\Models\ProductCatalog::clearListedLookups();
+        Schema::create('product_catalog', function (Blueprint $table) { $table->id(); $table->string('status'); });
         Schema::create('user_details', function (Blueprint $table) {
             $table->id();
             $table->string('first_name');
@@ -1972,6 +1974,7 @@ class OrderStatusHistoryTest extends TestCase
             $table->unsignedBigInteger('address_id')->nullable();
             $table->string('shipping_address')->nullable();
             $table->decimal('shipping_fee', 10, 2)->default(0);
+            $table->string('payment_method')->default('COD');
             $table->timestamps();
         });
         Schema::create('orders', function (Blueprint $table) {

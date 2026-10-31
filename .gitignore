@@ -30,13 +30,5 @@ database/migrations/2026_08_19_000008_seed_demo_agrivet_shop_catalog_listings.ph
 database/migrations/2026_08_19_000009_seed_demo_agrivet_shop_catalog_orders.php
 database/migrations/2026_08_26_000001_seed_completed_test_orders.php
 /tests/*
-!/tests/Feature/
-/tests/Feature/*
-!/tests/Feature/FarmCheckoutTest.php
-!/tests/Feature/PaymentStatusMigrationTest.php
-!/tests/Feature/ShopConversationFarmMigrationTest.php
-/tests/Feature/FarmApiTest.php
-/mobile_app/docs
-tests/Feature/ShopConversationFarmMigrationTest.php
-docs/gamefowl-mobile-checkout.md
-docs/farm-checkout-api.md
+docs/
+

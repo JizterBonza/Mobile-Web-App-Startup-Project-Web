@@ -57,10 +57,25 @@ The deposit is 30% of chicken subtotal, rounded half up to centavos. A double bo
 `POST /api/farm-orders`, with `Idempotency-Key: <unique-checkout-key>`:
 
 ```json
-{ "quote_token": "<token from quote>" }
+{
+  "quote_token": "<token from quote>",
+  "items": [
+    {
+      "listing_id": 12,
+      "birds": [
+        { "wingband_no": "00123", "feather_color": "Red", "feet_color": "Yellow" },
+        { "feather_color": "White" }
+      ]
+    }
+  ]
+}
 ```
 
-Returns 201 with the order summary, or 200 for an identical replay. Reusing the same key with a different token returns 409. An identical successful replay still works after the quote expires. Changed prices, cart quantities, address details, or availability require a fresh quote.
+Include exactly one `items` entry for each listing in the quote. Each `birds` array must contain exactly the quoted item's `bird_count` entries: two pairs require four bird entries. Every bird must have at least one nonblank `wingband_no`, `feather_color`, or `feet_color`. Each field is an optional nullable string of at most 100 characters; surrounding whitespace is trimmed and blank/null fields are omitted from the saved details. Send wingband numbers as strings to preserve leading zeros. Supplied wingbands must be unique across the order, ignoring case and surrounding whitespace. These are customer descriptions, not verified inventory identifiers. Unknown item/bird fields are rejected. Invalid details return 422 with indexed errors such as `items.0.birds.1.wingband_no`; no cart or inventory changes occur.
+
+The normalized `birds` array is saved in each order item's purchase snapshot and returned in create, list, and detail responses. Historical orders may lack this field. New orders require details; historical token-only idempotency retries remain supported.
+
+Returns 201 with the order summary, or 200 for an identical replay. Reusing the same key with a different token or different normalized bird details returns 409. Item entry order does not affect replay matching, but bird array order does. An identical successful replay still works after the quote expires. Changed prices, cart quantities, address details, or availability require a fresh quote.
 
 Creation reserves birds, saves purchase snapshots, removes only the selected cart entries, and persists an `awaiting_session` deposit payment request. It does not call PayMongo while creating the order. Cancellation does not automatically restore cart entries.
 
@@ -100,7 +115,7 @@ Session responses may be 202 with `creating` or `creation_unknown` and no URL. P
 - `GET /api/payment/status/{id}`: includes `is_paid`, `payment_status`, `amount_paid`, `remaining_balance`, and the farm summary in `data`.
 - `POST /api/farm-orders/{id}/cancel`: cancels only before a deposit is confirmed. Payable sessions must first be verified closed. Paid, processing, or unverified payments return 409 and retain inventory. A repeated successful cancellation is safe. Paid deposit cancellation requires admin review; no refund or forfeiture occurs automatically.
 
-Unpaid orders have no automatic reservation timer. Closing the app, a cancel redirect, or an individual failed payment attempt does not free inventory. Verified terminal session closure releases an unpaid order's reservation once.
+Unpaid reservations expire 24 hours after creation. At most three unpaid reservations per customer per farm are allowed. A warning is sent before expiry; historical overdue reservations receive a warning on their first expiry-processing run. The minute `payments:reconcile` command releases stock only after all known sessions are verified closed; paid, processing, unknown, or unavailable outcomes retain inventory for review. Closing the app, a cancel redirect, or an individual failed payment attempt does not free inventory. Verified terminal session closure releases an unpaid order's reservation once. See [payment security rollout](payment-security-rollout.md) for migration and mobile compatibility requirements.
 
 ## Farm, admin, and shipping partner operations
 
