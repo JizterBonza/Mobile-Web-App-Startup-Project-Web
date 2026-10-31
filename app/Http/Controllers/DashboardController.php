@@ -1091,12 +1091,15 @@ class DashboardController extends Controller
 
         $now = now();
 
-        $this->transitionShopOrderRows(
+        $error = $this->transitionShopOrderRows(
             $orderShops,
             $preparingStatusId,
             'Order accepted by owner/manager.',
             'owner_manager_dashboard',
         );
+        if ($error) {
+            return redirect()->route('dashboard.owner-manager.orders')->with('error', $error);
+        }
 
         $preparingItemStatusId = DB::table('order_item_status')->where('stat_description', 'Preparing')->value('id');
         if ($preparingItemStatusId) {
@@ -1144,12 +1147,15 @@ class DashboardController extends Controller
         $now = now();
         $declineReason = trim($request->input('decline_reason'));
 
-        $this->transitionShopOrderRows(
+        $error = $this->transitionShopOrderRows(
             $orderShops,
             $cancelledStatusId,
             $declineReason,
             'owner_manager_dashboard',
         );
+        if ($error) {
+            return redirect()->route('dashboard.owner-manager.orders')->with('error', $error);
+        }
 
         $cancelledItemStatusId = DB::table('order_item_status')->where('stat_description', 'Cancelled')->value('id');
         if ($cancelledItemStatusId) {
@@ -1202,12 +1208,15 @@ class DashboardController extends Controller
                 ->with('error', 'Mark every item as done preparing before marking the order ready.');
         }
 
-        $this->transitionShopOrderRows(
+        $error = $this->transitionShopOrderRows(
             $orderShops,
             $readyStatus['order_status_id'],
             'Order marked as ready by owner/manager.',
             'owner_manager_dashboard',
         );
+        if ($error) {
+            return redirect()->route('dashboard.owner-manager.orders')->with('error', $error);
+        }
 
         return redirect()->route('dashboard.owner-manager.orders')
             ->with('success', 'Order marked as '.$readyStatus['label'].'.');
