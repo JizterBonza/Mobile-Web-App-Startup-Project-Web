@@ -7,6 +7,7 @@ use App\Models\OrderDetail;
 use App\Models\Payment;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 
 class PaymentSecurityService
 {
@@ -84,7 +85,17 @@ class PaymentSecurityService
         $received = (int) DB::table('payment_receipts')->where('order_id', $order->id)
             ->where('status', 'verified')->where('currency', 'PHP')->sum('amount_minor');
 
-        return $expected !== null && $received === $expected;
+        if ($expected !== null && $received === $expected) {
+            return true;
+        }
+
+        // Orders marked paid before provider receipts existed have no payment
+        // attempt to reconcile. A live checkout always inserts a payments row.
+        if ($expected === null || $received !== 0 || ! Schema::hasTable('payments')) {
+            return false;
+        }
+
+        return ! DB::table('payments')->where('order_id', $order->id)->exists();
     }
 
     /** Caller holds the order/payment locks. Each actual provider receipt is durable. */

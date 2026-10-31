@@ -8,7 +8,9 @@ use App\Models\ActivityLog;
 use App\Models\Category;
 use App\Models\Farm;
 use App\Models\FarmGamefowlListing;
+use App\Models\FarmOrder;
 use App\Models\GamefowlCatalog;
+use App\Services\FarmOrderService;
 use App\Models\ProductCatalog;
 use App\Models\SubCategory;
 use App\Models\Zone;
@@ -18,6 +20,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
+use Symfony\Component\HttpKernel\Exception\HttpException;
 
 class DashboardController extends Controller
 {
@@ -940,7 +943,16 @@ class DashboardController extends Controller
             }
         }
 
-        if ($agrivet || $user->managedFarm) {
+        $farm = $user->managedFarm;
+        if ($farm) {
+            $orders = collect($orders)
+                ->merge(app(FarmOrderService::class)->ownerManagerCards((int) $farm->id))
+                ->sortByDesc(fn (array $order) => $order['dateOfOrder'] ?? '')
+                ->values()
+                ->all();
+        }
+
+        if ($agrivet || $farm) {
             $deliveryMethods = $this->activeDeliveryMethods();
         }
 
@@ -975,6 +987,81 @@ class DashboardController extends Controller
         ]);
     }
 
+    public function ownerManagerConfirmFarmOrder(int $orderId)
+    {
+        $user = auth()->user();
+        $farm = $user->managedFarm;
+        abort_unless($farm, 404);
+
+        $farmOrder = FarmOrder::query()
+            ->where('order_id', $orderId)
+            ->where('farm_id', $farm->id)
+            ->whereNotNull('deposit_paid_at')
+            ->firstOrFail();
+
+        try {
+            app(FarmOrderService::class)->confirm($farmOrder, $user);
+        } catch (HttpException $exception) {
+            return redirect()
+                ->route('dashboard.owner-manager.orders')
+                ->with('error', $exception->getMessage() ?: 'This farm order cannot be confirmed.');
+        }
+
+        return redirect()
+            ->route('dashboard.owner-manager.orders')
+            ->with('success', 'Farm order confirmed.');
+    }
+
+    public function ownerManagerDonePreparingFarmOrder(int $orderId)
+    {
+        $user = auth()->user();
+        $farm = $user->managedFarm;
+        abort_unless($farm, 404);
+
+        $farmOrder = FarmOrder::query()
+            ->where('order_id', $orderId)
+            ->where('farm_id', $farm->id)
+            ->whereNotNull('deposit_paid_at')
+            ->firstOrFail();
+
+        try {
+            app(FarmOrderService::class)->markPrepared($farmOrder, $user);
+        } catch (HttpException $exception) {
+            return redirect()
+                ->route('dashboard.owner-manager.orders')
+                ->with('error', $exception->getMessage() ?: 'This farm order cannot be marked as done preparing.');
+        }
+
+        return redirect()
+            ->route('dashboard.owner-manager.orders')
+            ->with('success', 'Order marked as done preparing.');
+    }
+
+    public function ownerManagerReadyForPickupFarmOrder(int $orderId)
+    {
+        $user = auth()->user();
+        $farm = $user->managedFarm;
+        abort_unless($farm, 404);
+
+        $farmOrder = FarmOrder::query()
+            ->where('order_id', $orderId)
+            ->where('farm_id', $farm->id)
+            ->whereNotNull('deposit_paid_at')
+            ->firstOrFail();
+
+        try {
+            app(FarmOrderService::class)->markReadyForPickup($farmOrder, $user);
+        } catch (HttpException $exception) {
+            return redirect()
+                ->route('dashboard.owner-manager.orders')
+                ->with('error', $exception->getMessage() ?: 'This farm order cannot be marked ready for pickup.');
+        }
+
+        return redirect()
+            ->route('dashboard.owner-manager.orders')
+            ->with('success', 'Order moved to For Pick-up.');
+    }
+
     public function ownerManagerAcceptOrder(int $orderId)
     {
         $shopIds = $this->ownerManagerShopIdsOrAbort();
@@ -1004,12 +1091,15 @@ class DashboardController extends Controller
 
         $now = now();
 
-        $this->transitionShopOrderRows(
+        $error = $this->transitionShopOrderRows(
             $orderShops,
             $preparingStatusId,
             'Order accepted by owner/manager.',
             'owner_manager_dashboard',
         );
+        if ($error) {
+            return redirect()->route('dashboard.owner-manager.orders')->with('error', $error);
+        }
 
         $preparingItemStatusId = DB::table('order_item_status')->where('stat_description', 'Preparing')->value('id');
         if ($preparingItemStatusId) {
@@ -1057,12 +1147,15 @@ class DashboardController extends Controller
         $now = now();
         $declineReason = trim($request->input('decline_reason'));
 
-        $this->transitionShopOrderRows(
+        $error = $this->transitionShopOrderRows(
             $orderShops,
             $cancelledStatusId,
             $declineReason,
             'owner_manager_dashboard',
         );
+        if ($error) {
+            return redirect()->route('dashboard.owner-manager.orders')->with('error', $error);
+        }
 
         $cancelledItemStatusId = DB::table('order_item_status')->where('stat_description', 'Cancelled')->value('id');
         if ($cancelledItemStatusId) {
@@ -1115,12 +1208,15 @@ class DashboardController extends Controller
                 ->with('error', 'Mark every item as done preparing before marking the order ready.');
         }
 
-        $this->transitionShopOrderRows(
+        $error = $this->transitionShopOrderRows(
             $orderShops,
             $readyStatus['order_status_id'],
             'Order marked as ready by owner/manager.',
             'owner_manager_dashboard',
         );
+        if ($error) {
+            return redirect()->route('dashboard.owner-manager.orders')->with('error', $error);
+        }
 
         return redirect()->route('dashboard.owner-manager.orders')
             ->with('success', 'Order marked as '.$readyStatus['label'].'.');

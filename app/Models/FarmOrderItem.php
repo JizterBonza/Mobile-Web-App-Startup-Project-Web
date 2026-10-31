@@ -9,4 +9,9 @@ class FarmOrderItem extends Model
     protected $guarded = [];
 
     protected $casts = ['snapshot' => 'array', 'quantity' => 'integer', 'bird_count' => 'integer', 'unit_price_cents' => 'integer'];
+
+    public function listing()
+    {
+        return $this->belongsTo(FarmGamefowlListing::class, 'listing_id');
+    }
 }

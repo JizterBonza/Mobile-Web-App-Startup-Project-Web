@@ -5,8 +5,10 @@ namespace App\Http\Controllers\Concerns;
 use App\Services\OrderStatusTransitionService;
 use App\Support\DisplayDateTime;
 use App\Support\PublicStorage;
+use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Validation\ValidationException;
 
 trait ManagesShopOrders
 {
@@ -472,12 +474,15 @@ trait ManagesShopOrders
             return 'Only orders that are ready for pickup can be marked as picked up.';
         }
 
-        $this->transitionShopOrderRows(
+        $error = $this->transitionShopOrderRows(
             $orderShops,
             $deliveredStatusId,
             $notes,
             $source,
         );
+        if ($error) {
+            return $error;
+        }
 
         $deliveredItemStatusId = $this->deliveredItemStatusId();
         if ($deliveredItemStatusId) {
@@ -523,23 +528,37 @@ trait ManagesShopOrders
         int $toStatusId,
         ?string $notes = null,
         string $source = 'dashboard',
-    ): void {
+    ): ?string {
         $service = app(OrderStatusTransitionService::class);
         $actor = auth()->user();
 
-        DB::transaction(function () use ($orderShops, $toStatusId, $notes, $source, $service, $actor) {
-            foreach ($orderShops as $orderShop) {
-                $service->transition(
-                    (int) $orderShop->id,
-                    $toStatusId,
-                    $actor,
-                    [
-                        'notes' => $notes,
-                        'source' => $source,
-                    ],
-                );
-            }
-        });
+        try {
+            DB::transaction(function () use ($orderShops, $toStatusId, $notes, $source, $service, $actor) {
+                foreach ($orderShops as $orderShop) {
+                    $service->transition(
+                        (int) $orderShop->id,
+                        $toStatusId,
+                        $actor,
+                        [
+                            'notes' => $notes,
+                            'source' => $source,
+                        ],
+                    );
+                }
+            });
+        } catch (ValidationException $exception) {
+            $message = collect($exception->errors())->flatten()->first();
+
+            return is_string($message) && $message !== ''
+                ? $message
+                : 'This order cannot be updated.';
+        } catch (AuthorizationException $exception) {
+            $message = trim($exception->getMessage());
+
+            return $message !== '' ? $message : 'You are not allowed to update this order.';
+        }
+
+        return null;
     }
 
     protected function firstItemImageUrl(mixed $itemImages): ?string

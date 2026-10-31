@@ -1010,12 +1010,15 @@ class VendorController extends Controller
                         ->where('shop_id', $shop->id)
                         ->first();
                     if ($orderShop) {
-                        $this->transitionShopOrderRows(
+                        $error = $this->transitionShopOrderRows(
                             [$orderShop],
                             $newOrderStatus,
                             'Order became ready after all items were prepared.',
                             'vendor_item_status',
                         );
+                        if ($error) {
+                            return redirect()->back()->with('error', $error);
+                        }
                     }
                 }
             }
@@ -1040,12 +1043,15 @@ class VendorController extends Controller
                         ->where('shop_id', $shop->id)
                         ->first();
                     if ($orderShop) {
-                        $this->transitionShopOrderRows(
+                        $error = $this->transitionShopOrderRows(
                             [$orderShop],
                             (int) $preparingOrderStatusId,
                             'Order preparation started after all items were accepted.',
                             'vendor_item_status',
                         );
+                        if ($error) {
+                            return redirect()->back()->with('error', $error);
+                        }
                     }
                 }
             }
@@ -1430,12 +1436,15 @@ class VendorController extends Controller
 
         $now = now();
 
-        $this->transitionShopOrderRows(
+        $error = $this->transitionShopOrderRows(
             $orderShops,
             $preparingStatusId,
             'Order accepted by vendor.',
             'vendor_dashboard',
         );
+        if ($error) {
+            return $this->redirectToVendorStoreOrdersTab()->with('error', $error);
+        }
 
         $preparingItemStatusId = DB::table('order_item_status')->where('stat_description', 'Preparing')->value('id');
         if ($preparingItemStatusId) {
@@ -1483,12 +1492,15 @@ class VendorController extends Controller
         $now = now();
         $declineReason = trim($request->input('decline_reason'));
 
-        $this->transitionShopOrderRows(
+        $error = $this->transitionShopOrderRows(
             $orderShops,
             $cancelledStatusId,
             $declineReason,
             'vendor_dashboard',
         );
+        if ($error) {
+            return $this->redirectToVendorStoreOrdersTab()->with('error', $error);
+        }
 
         $cancelledItemStatusId = DB::table('order_item_status')->where('stat_description', 'Cancelled')->value('id');
         if ($cancelledItemStatusId) {
@@ -1541,12 +1553,15 @@ class VendorController extends Controller
                 ->with('error', 'Mark every item as done preparing before marking the order ready.');
         }
 
-        $this->transitionShopOrderRows(
+        $error = $this->transitionShopOrderRows(
             $orderShops,
             $readyStatus['order_status_id'],
             'Order marked as ready by vendor.',
             'vendor_dashboard',
         );
+        if ($error) {
+            return $this->redirectToVendorStoreOrdersTab()->with('error', $error);
+        }
 
         return $this->redirectToVendorStoreOrdersTab()
             ->with('success', 'Order marked as '.$readyStatus['label'].'.');
