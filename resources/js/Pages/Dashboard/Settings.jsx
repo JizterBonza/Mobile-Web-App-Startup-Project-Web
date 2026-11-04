@@ -43,6 +43,9 @@ export default function Settings({ auth, userData, flash }) {
       veterinarian: 'Veterinarian',
       customer: 'Customer',
       rider: 'Rider',
+      owner_manager: 'Owner Manager',
+      breeder: 'Breeder',
+      shipping_partner: 'Shipping Partner',
     }
     return labels[type] || type
   }
@@ -55,6 +58,9 @@ export default function Settings({ auth, userData, flash }) {
       veterinarian: 'badge-info',
       customer: 'badge-secondary',
       rider: 'badge-warning',
+      owner_manager: 'badge-primary',
+      breeder: 'badge-warning',
+      shipping_partner: 'badge-info',
     }
     return classes[type] || 'badge-secondary'
   }

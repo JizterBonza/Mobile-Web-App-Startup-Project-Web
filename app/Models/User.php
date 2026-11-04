@@ -127,7 +127,7 @@ class User extends Authenticatable
             self::TYPE_VENDOR => '/dashboard/vendor',
             self::TYPE_OWNER_MANAGER => '/dashboard/owner-manager',
             self::TYPE_VETERINARIAN => '/dashboard/veterinarian',
-            default => '/dashboard',
+            default => '/login',
         };
     }
 

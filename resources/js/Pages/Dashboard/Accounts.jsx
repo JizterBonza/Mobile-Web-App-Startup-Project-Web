@@ -5,6 +5,7 @@ import {
     Bird,
     Building2,
     Tractor,
+    Truck,
     Database,
     Pencil,
     Plus,
@@ -32,6 +33,7 @@ const ROLE_ORDER = [
     "breeder",
     "customer",
     "rider",
+    "shipping_partner",
 ];
 
 const ROLE_META = {
@@ -53,7 +55,7 @@ const ROLE_META = {
     rider: { label: "Rider", Icon: Bike, iconBg: "bg-[#244693]" },
     shipping_partner: {
         label: "Shipping Partner",
-        Icon: Bike,
+        Icon: Truck,
         iconBg: "bg-[#244693]",
     },
     other: { label: "Other", Icon: Users, iconBg: "bg-[#9CA3AF]" },

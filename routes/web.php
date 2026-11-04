@@ -695,6 +695,7 @@ Route::get('/dashboard/veterinarian', function () {
 
 // Legacy dashboard route - redirect to user's specific dashboard
 Route::get('/dashboard', function () {
-    $user = auth()->user();
-    return redirect($user->getDashboardUrl());
+    $dashboard = auth()->user()?->getWebDashboardUrl();
+
+    return redirect($dashboard ?? '/login');
 })->middleware(['auth', 'session.valid']);
