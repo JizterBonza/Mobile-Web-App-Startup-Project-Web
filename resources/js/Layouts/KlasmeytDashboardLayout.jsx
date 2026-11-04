@@ -15,6 +15,8 @@ function dashboardHomePath(userType) {
             return '/dashboard/owner-manager'
         case 'veterinarian':
             return '/dashboard/veterinarian'
+        case 'shipping_partner':
+            return '/dashboard/shipping-partner'
         default:
             return '/dashboard'
     }
@@ -186,6 +188,14 @@ function VeterinarianNav() {
     )
 }
 
+function ShippingPartnerNav() {
+    return (
+        <NavLink href="/dashboard/shipping-partner" iconClass="fas fa-truck">
+            Dashboard
+        </NavLink>
+    )
+}
+
 export default function KlasmeytDashboardLayout({
     children,
     auth,
@@ -310,7 +320,8 @@ export default function KlasmeytDashboardLayout({
                             )}
                             {userType === 'vendor' && <VendorNav />}
                             {userType === 'veterinarian' && <VeterinarianNav />}
-                            {!['super_admin', 'admin', 'vendor', 'veterinarian'].includes(userType) && (
+                            {userType === 'shipping_partner' && <ShippingPartnerNav />}
+                            {!['super_admin', 'admin', 'vendor', 'veterinarian', 'shipping_partner'].includes(userType) && (
                                 <NavLink href={home} iconClass="fas fa-tachometer-alt">
                                     Dashboard
                                 </NavLink>

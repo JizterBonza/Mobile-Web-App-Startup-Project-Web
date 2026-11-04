@@ -25,6 +25,7 @@ class GoogleAuthController extends Controller
         User::TYPE_VENDOR,
         User::TYPE_OWNER_MANAGER,
         User::TYPE_VETERINARIAN,
+        User::TYPE_SHIPPING_PARTNER,
     ];
 
     /**

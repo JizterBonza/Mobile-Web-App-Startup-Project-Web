@@ -17,6 +17,7 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Schema;
+use Inertia\Testing\AssertableInertia as Assert;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
@@ -530,6 +531,62 @@ class FarmCheckoutTest extends TestCase
             ->assertOk()->assertJsonPath('data.release_authorized', true)->assertJsonPath('data.final_shipping_fee', '2700.00');
         $this->assertNull($order->fresh()->held_at);
         $this->assertDatabaseHas('farm_order_events', ['farm_order_id' => $order->id, 'event' => 'hold_resolved', 'actor_id' => $this->admin->id]);
+    }
+
+    public function test_shipping_partner_dashboard_lists_assigned_orders_and_saves_a_schedule(): void
+    {
+        $entry = $this->entry('per pair');
+        $quote = $this->quote([$entry->id]);
+        $id = $this->postJson('/api/farm-orders', [
+            'quote_token' => $quote['quote_token'],
+            'items' => [[
+                'listing_id' => $entry->listing_id,
+                'birds' => [
+                    ['wingband_no' => 'A1', 'feather_color' => 'red', 'feet_color' => 'yellow'],
+                    ['wingband_no' => 'A2', 'feather_color' => 'red', 'feet_color' => 'yellow'],
+                ],
+            ]],
+        ], ['Idempotency-Key' => 'partner-dash-'.uniqid()])->assertCreated()->json('data.id');
+        $order = FarmOrder::where('order_id', $id)->firstOrFail();
+        $this->pay($this->startPayment($order, 'deposit'));
+        Sanctum::actingAs($this->admin);
+        $this->putJson('/api/admin/farm-orders/'.$order->order_id.'/shipping-partner', ['shipping_partner_id' => $this->partner->id])->assertOk();
+
+        $this->actingAs($this->partner)
+            ->get('/dashboard/shipping-partner')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Dashboard/ShippingPartnerDashboard')
+                ->where('stats.assigned', 1)
+                ->where('stats.needsSchedule', 0)
+                ->where('orders.0.id', $order->order_id)
+                ->where('orders.0.canSchedule', false)
+                ->where('orders.0.farmName', 'Test Farm')
+            );
+
+        Sanctum::actingAs($this->owner);
+        $this->postJson('/api/farm-orders/'.$order->order_id.'/confirm')->assertOk();
+
+        $this->actingAs($this->partner)
+            ->get('/dashboard/shipping-partner')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('stats.needsSchedule', 1)
+                ->where('orders.0.canSchedule', true)
+            );
+
+        $this->actingAs($this->partner)
+            ->from('/dashboard/shipping-partner')
+            ->post('/dashboard/shipping-partner/orders/'.$order->order_id.'/schedule', [
+                'pickup_date' => '2026-11-10',
+                'per_box_fee' => '2700',
+            ])
+            ->assertRedirect('/dashboard/shipping-partner');
+
+        $fresh = $order->fresh();
+        $this->assertSame('2026-11-10', $fresh->pickup_date->toDateString());
+        $this->assertSame('scheduled', $fresh->status);
+        $this->assertSame(270000, $fresh->per_box_cents);
     }
 
     private function user(string $type, ?int $farmId = null): User

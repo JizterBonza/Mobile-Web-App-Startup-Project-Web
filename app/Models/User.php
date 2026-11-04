@@ -127,6 +127,7 @@ class User extends Authenticatable
             self::TYPE_VENDOR => '/dashboard/vendor',
             self::TYPE_OWNER_MANAGER => '/dashboard/owner-manager',
             self::TYPE_VETERINARIAN => '/dashboard/veterinarian',
+            self::TYPE_SHIPPING_PARTNER => '/dashboard/shipping-partner',
             default => '/login',
         };
     }
@@ -141,7 +142,8 @@ class User extends Authenticatable
             self::TYPE_ADMIN,
             self::TYPE_VENDOR,
             self::TYPE_OWNER_MANAGER,
-            self::TYPE_VETERINARIAN => $this->getDashboardUrl(),
+            self::TYPE_VETERINARIAN,
+            self::TYPE_SHIPPING_PARTNER => $this->getDashboardUrl(),
             default => null,
         };
     }
