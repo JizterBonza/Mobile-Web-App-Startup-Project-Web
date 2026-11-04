@@ -661,6 +661,15 @@ export default function OwnerManagerOrdersPanel({
                   Farm Order
                 </h4>
                 <div className="grid grid-cols-2 gap-3 p-3 bg-[#F9FAFB] rounded-lg border border-[#E5E7EB] text-sm">
+                  <div className="col-span-2">
+                    <label className="text-xs text-[#6B7280]">Farm location</label>
+                    <p className="text-[#102059] font-medium">
+                      {order.farmSummary.farmLocation || "—"}
+                    </p>
+                    <p className="mt-1 text-xs text-[#6B7280]">
+                      Items above and this location are the basis for the shipping fee.
+                    </p>
+                  </div>
                   <div>
                     <label className="text-xs text-[#6B7280]">Birds / boxes</label>
                     <p className="text-[#102059] font-medium">
@@ -888,7 +897,7 @@ export default function OwnerManagerOrdersPanel({
                   className="w-full px-4 py-2.5 bg-[#00C950] text-white rounded-lg font-semibold text-sm hover:bg-[#00B048] transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                   style={{ fontFamily: "Inter Condensed, sans-serif" }}
                 >
-                  {processingOrderId === order.id ? "Confirming…" : "Confirm Order"}
+                  {processingOrderId === order.id ? "Accepting…" : "Accept Order"}
                 </button>
               </div>
             )}

@@ -188,14 +188,6 @@ function VeterinarianNav() {
     )
 }
 
-function ShippingPartnerNav() {
-    return (
-        <NavLink href="/dashboard/shipping-partner" iconClass="fas fa-truck">
-            Dashboard
-        </NavLink>
-    )
-}
-
 export default function KlasmeytDashboardLayout({
     children,
     auth,
@@ -320,8 +312,7 @@ export default function KlasmeytDashboardLayout({
                             )}
                             {userType === 'vendor' && <VendorNav />}
                             {userType === 'veterinarian' && <VeterinarianNav />}
-                            {userType === 'shipping_partner' && <ShippingPartnerNav />}
-                            {!['super_admin', 'admin', 'vendor', 'veterinarian', 'shipping_partner'].includes(userType) && (
+                            {!['super_admin', 'admin', 'vendor', 'veterinarian'].includes(userType) && (
                                 <NavLink href={home} iconClass="fas fa-tachometer-alt">
                                     Dashboard
                                 </NavLink>

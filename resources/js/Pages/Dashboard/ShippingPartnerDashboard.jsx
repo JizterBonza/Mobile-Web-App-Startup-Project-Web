@@ -1,15 +1,17 @@
 import { useForm, usePage } from '@inertiajs/react'
-import KlasmeytDashboardLayout from '../../Layouts/KlasmeytDashboardLayout'
+import ShippingPartnerKlasmeytLayout from '../../Layouts/ShippingPartnerKlasmeytLayout'
 import { KlasmeytStatCard } from '../../Components/Dashboard/KlasmeytStatCard'
-import { useDashboardSession } from '../../hooks/useDashboardSession'
 
 const STATUS_LABELS = {
     awaiting_deposit: 'Awaiting deposit',
-    awaiting_schedule: 'Awaiting schedule',
-    scheduled: 'Scheduled',
+    awaiting_schedule: 'Preparing',
+    prepared: 'Prepared',
+    ready_for_pickup: 'Ready for Pickup',
+    ready_for_release: 'Ready for Release',
+    release_authorized: 'Ready for Release',
+    in_transit: 'In Transit',
+    delivered: 'Delivered',
     on_hold: 'On hold',
-    ready_for_pickup: 'Ready for pickup',
-    release_authorized: 'Release authorized',
     cancelled: 'Cancelled',
 }
 
@@ -66,7 +68,7 @@ function ScheduleForm({ order }) {
                 {errors.pickup_date && <span className="mt-1 block text-xs text-[#E20E28]">{errors.pickup_date}</span>}
             </label>
             <label className="block text-sm">
-                <span className="font-medium text-[#374151]">Price per box</span>
+                <span className="font-medium text-[#374151]">Shipping fee per box</span>
                 <input
                     type="number"
                     required
@@ -85,10 +87,43 @@ function ScheduleForm({ order }) {
                 disabled={processing}
                 className="rounded-full bg-[#244693] px-5 py-2 text-sm font-semibold text-white hover:bg-[#1b3770] disabled:opacity-60"
             >
-                {processing ? 'Saving…' : order.pickupDate ? 'Update schedule' : 'Submit shipping'}
+                {processing ? 'Saving…' : 'Ready for Pickup'}
             </button>
         </form>
     )
+}
+
+function TransitActions({ order }) {
+    const pickup = useForm({})
+    const deliver = useForm({})
+
+    if (order.canPickUp) {
+        return (
+            <button
+                type="button"
+                disabled={pickup.processing}
+                onClick={() => pickup.post(`/dashboard/shipping-partner/orders/${order.id}/pickup`, { preserveScroll: true })}
+                className="mt-5 w-full rounded-full bg-[#244693] px-5 py-2 text-sm font-semibold text-white hover:bg-[#1b3770] disabled:opacity-60 sm:w-auto"
+            >
+                {pickup.processing ? 'Updating…' : 'Pick up'}
+            </button>
+        )
+    }
+
+    if (order.canDeliver) {
+        return (
+            <button
+                type="button"
+                disabled={deliver.processing}
+                onClick={() => deliver.post(`/dashboard/shipping-partner/orders/${order.id}/deliver`, { preserveScroll: true })}
+                className="mt-5 w-full rounded-full bg-[#00C950] px-5 py-2 text-sm font-semibold text-white hover:bg-[#00B048] disabled:opacity-60 sm:w-auto"
+            >
+                {deliver.processing ? 'Updating…' : 'Mark delivered'}
+            </button>
+        )
+    }
+
+    return null
 }
 
 function OrderCard({ order }) {
@@ -103,6 +138,42 @@ function OrderCard({ order }) {
                 <span className="rounded-full bg-[#EEF2FF] px-3 py-1 text-xs font-semibold text-[#244693]">
                     {statusLabel(order.status)}
                 </span>
+            </div>
+
+            <div className="mt-5 rounded-lg border border-[#E5E7EB] bg-[#F9FAFB] p-4">
+                <h3 className="text-xs font-bold uppercase tracking-wide text-[#102059]">Order details</h3>
+                <p className="mt-1 text-xs text-[#6B7280]">Items and the farm location are the basis for the shipping fee.</p>
+                <ul className="mt-3 space-y-3 text-sm text-[#102059]">
+                    {(order.items || []).length === 0 ? (
+                        <li>No item details yet.</li>
+                    ) : (
+                        order.items.map((item, index) => (
+                            <li key={`${item.name}-${index}`}>
+                                <p className="font-medium">
+                                    {item.name} × {item.quantity}
+                                    {item.sellingUnit ? ` ${item.sellingUnit}` : ''} ({item.birdCount} birds)
+                                </p>
+                                {(item.birds || []).length > 0 && (
+                                    <ul className="mt-1 space-y-1 pl-4 text-xs text-[#374151]">
+                                        {item.birds.map((bird, birdIndex) => (
+                                            <li key={`${bird.wingband || 'bird'}-${birdIndex}`}>
+                                                {[
+                                                    bird.wingband ? `Wingband ${bird.wingband}` : null,
+                                                    bird.featherColor ? `feather ${bird.featherColor}` : null,
+                                                    bird.feetColor ? `feet ${bird.feetColor}` : null,
+                                                ].filter(Boolean).join(' · ') || 'Bird details not recorded'}
+                                            </li>
+                                        ))}
+                                    </ul>
+                                )}
+                            </li>
+                        ))
+                    )}
+                </ul>
+                <p className="mt-3 text-sm text-[#102059]">
+                    <span className="text-[#6B7280]">Farm location: </span>
+                    {[order.farmName, order.farmLocation].filter(Boolean).join(' — ') || '—'}
+                </p>
             </div>
 
             <dl className="mt-5 grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-4">
@@ -133,31 +204,31 @@ function OrderCard({ order }) {
             {order.cancelled && (
                 <p className="mt-4 rounded-lg bg-[#F3F4F6] px-4 py-3 text-sm text-[#374151]">This order was cancelled.</p>
             )}
-            {!order.confirmed && !order.cancelled && (
+            {!order.prepared && !order.cancelled && !order.canPickUp && !order.canDeliver && (
                 <p className="mt-4 rounded-lg bg-[#F8F9FB] px-4 py-3 text-sm text-[#374151]">
-                    Waiting for the farm to confirm this order. You can set the pickup date and box price after confirmation.
+                    Waiting for the farm to finish preparing this order. The item list and farm location will be the basis for your shipping fee.
                 </p>
             )}
-            {order.fullyPaid && !order.onHold && (
+            {order.fullyPaid && order.status === 'ready_for_release' && !order.onHold && (
                 <p className="mt-4 rounded-lg bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
-                    The customer has paid in full. Coordinate release on {order.pickupDate || 'the confirmed pickup date'}.
+                    The customer paid in full. This order is ready for release. Pick it up on {order.pickupDate || 'the confirmed pickup date'}.
                 </p>
             )}
             {order.canSchedule && <ScheduleForm order={order} />}
+            <TransitActions order={order} />
         </article>
     )
 }
 
 export default function ShippingPartnerDashboard({ auth, orders = [], stats = {} }) {
-    useDashboardSession()
     const { flash, errors } = usePage().props
 
     return (
-        <KlasmeytDashboardLayout auth={auth} title="Shipping Partner">
+        <ShippingPartnerKlasmeytLayout auth={auth} title="Shipping Partner">
             <div className="mb-6">
                 <h1 className="text-2xl font-semibold text-[#102059]">Shipping Partner</h1>
                 <p className="mt-1 text-sm text-[#6B7280]">
-                    Assigned farm deliveries. Set the pickup date and price per box after the farm confirms the order.
+                    Assigned farm deliveries. After the farm marks an order prepared, set the shipping fee and pickup date.
                 </p>
             </div>
 
@@ -191,6 +262,6 @@ export default function ShippingPartnerDashboard({ auth, orders = [], stats = {}
                     orders.map((order) => <OrderCard key={order.id} order={order} />)
                 )}
             </div>
-        </KlasmeytDashboardLayout>
+        </ShippingPartnerKlasmeytLayout>
     )
 }

@@ -697,6 +697,8 @@ Route::get('/dashboard/veterinarian', function () {
 Route::middleware(['auth', 'session.valid', 'user.type:shipping_partner'])->prefix('dashboard/shipping-partner')->name('dashboard.shipping-partner.')->group(function () {
     Route::get('/', [ShippingPartnerDashboardController::class, 'index'])->name('index');
     Route::post('/orders/{orderId}/schedule', [ShippingPartnerDashboardController::class, 'schedule'])->whereNumber('orderId')->name('schedule');
+    Route::post('/orders/{orderId}/pickup', [ShippingPartnerDashboardController::class, 'pickup'])->whereNumber('orderId')->name('pickup');
+    Route::post('/orders/{orderId}/deliver', [ShippingPartnerDashboardController::class, 'deliver'])->whereNumber('orderId')->name('deliver');
 });
 
 // Legacy dashboard route - redirect to user's specific dashboard
