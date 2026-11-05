@@ -4,7 +4,7 @@ import { KlasmeytStatCard } from '../../Components/Dashboard/KlasmeytStatCard'
 
 const STATUS_LABELS = {
     awaiting_deposit: 'Awaiting deposit',
-    awaiting_schedule: 'Preparing',
+    preparing: 'Preparing',
     prepared: 'Prepared',
     ready_for_pickup: 'Ready for Pickup',
     ready_for_release: 'Ready for Release',

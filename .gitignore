@@ -33,13 +33,5 @@ database/migrations/2026_10_31_000001_seed_farm_owner_manager_test_orders.php
 database/migrations/2026_11_04_000001_seed_farm_delivery_flow_test_orders.php
 database/migrations/2026_11_06_000001_seed_farm_test_orders.php
 /tests/*
-!/tests/Feature/
-/tests/Feature/*
-!/tests/Feature/FarmCheckoutTest.php
-!/tests/Feature/PaymentStatusMigrationTest.php
-!/tests/Feature/ShopConversationFarmMigrationTest.php
-/tests/Feature/FarmApiTest.php
-/mobile_app/docs
-tests/Feature/ShopConversationFarmMigrationTest.php
-docs/gamefowl-mobile-checkout.md
-docs/farm-checkout-api.md
+docs/
+
