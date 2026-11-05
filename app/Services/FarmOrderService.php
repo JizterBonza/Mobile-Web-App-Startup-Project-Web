@@ -257,7 +257,7 @@ class FarmOrderService
             'ready_for_pickup' => ['status' => 'for-pickup', 'isSuccessful' => null, 'statusDescription' => 'Ready for Pickup'],
             'prepared' => ['status' => 'preparing', 'isSuccessful' => null, 'statusDescription' => 'Prepared'],
             'scheduled' => ['status' => 'preparing', 'isSuccessful' => null, 'statusDescription' => 'Scheduled'],
-            'awaiting_schedule' => ['status' => 'preparing', 'isSuccessful' => null, 'statusDescription' => 'Preparing'],
+            'preparing' => ['status' => 'preparing', 'isSuccessful' => null, 'statusDescription' => 'Preparing'],
             'on_hold' => ['status' => 'preparing', 'isSuccessful' => null, 'statusDescription' => 'On Hold'],
             default => ['status' => 'new', 'isSuccessful' => null, 'statusDescription' => 'Awaiting Confirmation'],
         };
@@ -428,7 +428,7 @@ class FarmOrderService
             abort_unless($actor->user_type === User::TYPE_OWNER_MANAGER && (int) $actor->farm_id === (int) $order->farm_id, 403);
             abort_unless($order->deposit_paid_at && ! $order->cancelled_at, 409, 'A verified deposit is required before confirmation.');
             if (! $order->confirmed_at) {
-                $order->update(['confirmed_at' => now(), 'status' => 'awaiting_schedule']);
+                $order->update(['confirmed_at' => now(), 'status' => 'preparing']);
                 $this->event($order, 'farm_confirmed', $actor);
                 $this->notice($order, $order->customer_id, 'farm_confirmed', 'Farm confirmed your order.');
                 if ($order->shipping_partner_id && $order->fulfillment_method === 'delivery') {
@@ -447,7 +447,7 @@ class FarmOrderService
             $order->load(['items.listing', 'events']);
             abort_unless($actor->user_type === User::TYPE_OWNER_MANAGER && (int) $actor->farm_id === (int) $order->farm_id, 403);
             abort_unless($order->deposit_paid_at && $order->confirmed_at && ! $order->cancelled_at, 409, 'Confirm the order before marking it done preparing.');
-            abort_unless(in_array($order->status, ['awaiting_schedule', 'prepared', 'scheduled'], true), 409, 'Only orders being prepared can be marked as done.');
+            abort_unless(in_array($order->status, ['preparing', 'prepared', 'scheduled'], true), 409, 'Only orders being prepared can be marked as done.');
             $delivery = $order->fulfillment_method === 'delivery';
             abort_unless($delivery || $this->releaseIsImmediate($order), 409, 'Done Preparing is available when the pickup date is immediate.');
             if (! $this->preparingCompleted($order)) {
@@ -476,7 +476,7 @@ class FarmOrderService
             $order->load('events');
             abort_unless($actor->user_type === User::TYPE_OWNER_MANAGER && (int) $actor->farm_id === (int) $order->farm_id, 403);
             abort_unless($order->deposit_paid_at && $order->confirmed_at && ! $order->cancelled_at, 409, 'Confirm the order before marking it ready for pickup.');
-            abort_unless(in_array($order->status, ['awaiting_schedule', 'prepared', 'scheduled'], true), 409, 'Only orders being prepared can be marked ready for pickup.');
+            abort_unless(in_array($order->status, ['preparing', 'prepared', 'scheduled'], true), 409, 'Only orders being prepared can be marked ready for pickup.');
             abort_unless($order->fulfillment_method !== 'delivery', 409, 'The shipping partner marks delivery orders ready for pickup.');
             abort_unless($this->preparingCompleted($order), 409, 'Mark the order done preparing first.');
             $order->update(['status' => 'ready_for_pickup']);
