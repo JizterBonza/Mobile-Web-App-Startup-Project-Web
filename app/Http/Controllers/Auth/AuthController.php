@@ -131,6 +131,12 @@ class AuthController extends Controller
             ]);
         }
 
+        if ($user->getWebDashboardUrl() === null) {
+            throw ValidationException::withMessages([
+                'email' => 'This account cannot sign in to the web dashboard. Please use the Klasmeyt mobile app.',
+            ]);
+        }
+
         return $this->establishWebAuthSession($request, $user, $request->boolean('remember'));
     }
 

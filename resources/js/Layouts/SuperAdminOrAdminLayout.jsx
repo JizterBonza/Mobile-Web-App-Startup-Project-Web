@@ -1,5 +1,6 @@
 import AdminKlasmeytLayout from './AdminKlasmeytLayout'
 import OwnerManagerKlasmeytLayout from './OwnerManagerKlasmeytLayout'
+import ShippingPartnerKlasmeytLayout from './ShippingPartnerKlasmeytLayout'
 import SuperAdminKlasmeytLayout from './SuperAdminKlasmeytLayout'
 import VendorKlasmeytLayout from './VendorKlasmeytLayout'
 
@@ -24,6 +25,9 @@ export default function SuperAdminOrAdminLayout({
     }
     if (userType === 'vendor') {
         return <VendorKlasmeytLayout {...layoutProps}>{children}</VendorKlasmeytLayout>
+    }
+    if (userType === 'shipping_partner') {
+        return <ShippingPartnerKlasmeytLayout {...layoutProps}>{children}</ShippingPartnerKlasmeytLayout>
     }
     return <AdminKlasmeytLayout {...layoutProps}>{children}</AdminKlasmeytLayout>
 }

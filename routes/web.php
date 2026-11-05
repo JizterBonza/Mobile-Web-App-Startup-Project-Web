@@ -22,6 +22,7 @@ use App\Http\Controllers\ZoneController;
 use App\Http\Controllers\SuperAdminProductController;
 use App\Http\Controllers\ProductCatalogRequestController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\ShippingPartnerDashboardController;
 use App\Http\Controllers\ShopMessageController;
 use App\Http\Controllers\SupportTicketController;
 use App\Http\Controllers\VoucherController;
@@ -693,8 +694,16 @@ Route::get('/dashboard/veterinarian', function () {
     return Inertia::render('Dashboard/VeterinarianDashboard');
 })->middleware(['auth', 'session.valid', 'user.type:veterinarian'])->name('dashboard.veterinarian');
 
+Route::middleware(['auth', 'session.valid', 'user.type:shipping_partner'])->prefix('dashboard/shipping-partner')->name('dashboard.shipping-partner.')->group(function () {
+    Route::get('/', [ShippingPartnerDashboardController::class, 'index'])->name('index');
+    Route::post('/orders/{orderId}/schedule', [ShippingPartnerDashboardController::class, 'schedule'])->whereNumber('orderId')->name('schedule');
+    Route::post('/orders/{orderId}/pickup', [ShippingPartnerDashboardController::class, 'pickup'])->whereNumber('orderId')->name('pickup');
+    Route::post('/orders/{orderId}/deliver', [ShippingPartnerDashboardController::class, 'deliver'])->whereNumber('orderId')->name('deliver');
+});
+
 // Legacy dashboard route - redirect to user's specific dashboard
 Route::get('/dashboard', function () {
-    $user = auth()->user();
-    return redirect($user->getDashboardUrl());
+    $dashboard = auth()->user()?->getWebDashboardUrl();
+
+    return redirect($dashboard ?? '/login');
 })->middleware(['auth', 'session.valid']);

@@ -171,6 +171,7 @@ export default function UserManagement({ auth, users = [], flash }) {
         { value: 'vendor', label: 'Vendor' },
         { value: 'veterinarian', label: 'Veterinarian' },
         { value: 'rider', label: 'Rider' },
+        { value: 'shipping_partner', label: 'Shipping Partner' },
       ]
     }
     // Super Admin can add/edit all user types
@@ -181,6 +182,7 @@ export default function UserManagement({ auth, users = [], flash }) {
       { value: 'veterinarian', label: 'Veterinarian' },
       { value: 'customer', label: 'Customer' },
       { value: 'rider', label: 'Rider' },
+      { value: 'shipping_partner', label: 'Shipping Partner' },
     ]
   }
 
@@ -208,7 +210,7 @@ export default function UserManagement({ auth, users = [], flash }) {
   // Group users by user type
   const groupUsersByType = () => {
     const grouped = {}
-    const userTypeOrder = ['super_admin', 'admin', 'vendor', 'veterinarian', 'customer', 'rider']
+    const userTypeOrder = ['super_admin', 'admin', 'vendor', 'veterinarian', 'customer', 'rider', 'shipping_partner']
     
     // Initialize all user types
     userTypeOrder.forEach(type => {
@@ -367,6 +369,7 @@ export default function UserManagement({ auth, users = [], flash }) {
               {renderUserTable('veterinarian', groupedUsers.veterinarian)}
               {renderUserTable('customer', groupedUsers.customer)}
               {renderUserTable('rider', groupedUsers.rider)}
+              {renderUserTable('shipping_partner', groupedUsers.shipping_partner)}
               {groupedUsers.other && renderUserTable('other', groupedUsers.other)}
             </>
           )}

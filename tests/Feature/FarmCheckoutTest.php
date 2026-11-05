@@ -19,6 +19,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
+use Inertia\Testing\AssertableInertia as Assert;
 use Laravel\Sanctum\Sanctum;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
@@ -403,6 +404,7 @@ class FarmCheckoutTest extends TestCase
         $this->putJson('/api/farm-orders/'.$order->order_id.'/shipping-confirmation', ['per_box_fee' => 2700, 'pickup_date' => '2026-11-10'])->assertConflict();
         Sanctum::actingAs($this->owner);
         $this->postJson('/api/farm-orders/'.$order->order_id.'/confirm')->assertOk();
+        app(FarmOrderService::class)->markPrepared($order->fresh(), $this->owner);
         Sanctum::actingAs($this->user('shipping_partner'));
         $this->getJson('/api/farm-orders/'.$order->order_id)->assertNotFound();
         $this->putJson('/api/farm-orders/'.$order->order_id.'/shipping-confirmation', ['per_box_fee' => 2700, 'pickup_date' => '2026-11-10'])->assertNotFound();
@@ -802,6 +804,78 @@ class FarmCheckoutTest extends TestCase
         $this->assertSame(1, $entry->listing->fresh()->reserved_stock);
     }
 
+    public function test_shipping_partner_dashboard_lists_assigned_orders_and_saves_a_schedule(): void
+    {
+        $entry = $this->entry('per pair');
+        $quote = $this->quote([$entry->id]);
+        $id = $this->postJson('/api/farm-orders', [
+            'quote_token' => $quote['quote_token'],
+            'items' => [[
+                'listing_id' => $entry->listing_id,
+                'birds' => [
+                    ['wingband_no' => 'A1', 'feather_color' => 'red', 'feet_color' => 'yellow'],
+                    ['wingband_no' => 'A2', 'feather_color' => 'red', 'feet_color' => 'yellow'],
+                ],
+            ]],
+        ], ['Idempotency-Key' => 'partner-dash-'.uniqid()])->assertCreated()->json('data.id');
+        $order = FarmOrder::where('order_id', $id)->firstOrFail();
+        $this->pay($this->startPayment($order, 'deposit'));
+        Sanctum::actingAs($this->admin);
+        $this->putJson('/api/admin/farm-orders/'.$order->order_id.'/shipping-partner', ['shipping_partner_id' => $this->partner->id])->assertOk();
+
+        $this->actingAs($this->partner)
+            ->get('/dashboard/shipping-partner')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Dashboard/ShippingPartnerDashboard')
+                ->where('stats.assigned', 1)
+                ->where('stats.needsSchedule', 0)
+                ->where('orders.0.id', $order->order_id)
+                ->where('orders.0.canSchedule', false)
+                ->where('orders.0.farmName', 'Test Farm')
+            );
+
+        Sanctum::actingAs($this->owner);
+        $this->postJson('/api/farm-orders/'.$order->order_id.'/confirm')->assertOk();
+
+        $this->actingAs($this->partner)
+            ->get('/dashboard/shipping-partner')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('stats.needsSchedule', 0)
+                ->where('orders.0.canSchedule', false)
+                ->where('orders.0.prepared', false)
+            );
+
+        $this->actingAs($this->owner);
+        app(FarmOrderService::class)->markPrepared($order->fresh(), $this->owner);
+
+        $this->actingAs($this->partner)
+            ->get('/dashboard/shipping-partner')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('stats.needsSchedule', 1)
+                ->where('orders.0.canSchedule', true)
+                ->where('orders.0.prepared', true)
+                ->has('orders.0.items', 1)
+                ->where('orders.0.items.0.name', 'Gamefowl')
+                ->has('orders.0.items.0.birds', 2)
+            );
+
+        $this->actingAs($this->partner)
+            ->from('/dashboard/shipping-partner')
+            ->post('/dashboard/shipping-partner/orders/'.$order->order_id.'/schedule', [
+                'pickup_date' => '2026-11-10',
+                'per_box_fee' => '2700',
+            ])
+            ->assertRedirect('/dashboard/shipping-partner');
+
+        $fresh = $order->fresh();
+        $this->assertSame('2026-11-10', $fresh->pickup_date->toDateString());
+        $this->assertSame('ready_for_pickup', $fresh->status);
+        $this->assertSame(270000, $fresh->per_box_cents);
+    }
+
     private function user(string $type, ?int $farmId = null): User
     {
         return User::create(['user_type' => $type, 'status' => 'active', 'farm_id' => $farmId]);
@@ -887,7 +961,7 @@ class FarmCheckoutTest extends TestCase
 
         $confirmed = app(FarmOrderService::class)->ownerManagerCards($this->farm->id);
         $this->assertSame('preparing', $confirmed[0]['status']);
-        $this->assertSame('Immediate', $confirmed[0]['statusDescription']);
+        $this->assertSame('Preparing', $confirmed[0]['statusDescription']);
         $this->assertFalse($confirmed[0]['farmSummary']['canConfirm']);
         $this->assertTrue($confirmed[0]['farmSummary']['releaseImmediate']);
         $this->assertTrue($confirmed[0]['farmSummary']['pickupImmediate']);
@@ -895,27 +969,23 @@ class FarmCheckoutTest extends TestCase
         $this->assertNull($confirmed[0]['farmSummary']['preparedReleaseDate']);
         $this->assertNull($confirmed[0]['farmSummary']['riderPickupDate']);
 
-        $this->schedule($order, '2026-10-30');
-        $this->actingAs($this->owner);
-        $withPickup = app(FarmOrderService::class)->ownerManagerCards($this->farm->id);
-        $this->assertSame('scheduled', $order->fresh()->status);
-        $this->assertSame('Immediate', $withPickup[0]['statusDescription']);
-
         app(\App\Http\Controllers\DashboardController::class)->ownerManagerDonePreparingFarmOrder($order->order_id);
         $prepared = app(FarmOrderService::class)->ownerManagerCards($this->farm->id);
+        $this->assertSame('prepared', $order->fresh()->status);
         $this->assertSame('preparing', $prepared[0]['status']);
-        $this->assertSame('Ready for Pickup', $prepared[0]['statusDescription']);
+        $this->assertSame('Prepared', $prepared[0]['statusDescription']);
         $this->assertFalse($prepared[0]['farmSummary']['showDonePreparing']);
-        $this->assertTrue($prepared[0]['farmSummary']['showReadyForPickup']);
+        $this->assertFalse($prepared[0]['farmSummary']['showReadyForPickup']);
         $this->assertSame('2026-10-27', $prepared[0]['farmSummary']['preparedReleaseDate']);
-        $this->assertNull($prepared[0]['farmSummary']['riderPickupDate']);
 
-        app(\App\Http\Controllers\DashboardController::class)->ownerManagerReadyForPickupFarmOrder($order->order_id);
+        $this->actingAs($this->admin);
+        $this->putJson('/api/admin/farm-orders/'.$order->order_id.'/shipping-partner', ['shipping_partner_id' => $this->partner->id])->assertOk();
+        Sanctum::actingAs($this->partner);
+        $this->putJson('/api/farm-orders/'.$order->order_id.'/shipping-confirmation', ['per_box_fee' => 2700, 'pickup_date' => '2026-10-30'])->assertOk();
         $ready = app(FarmOrderService::class)->ownerManagerCards($this->farm->id);
         $this->assertSame('ready_for_pickup', $order->fresh()->status);
         $this->assertSame('for-pickup', $ready[0]['status']);
         $this->assertSame('Ready for Pickup', $ready[0]['statusDescription']);
-        $this->assertFalse($ready[0]['farmSummary']['showReadyForPickup']);
 
         $other = Farm::create(['name' => 'Other Farm', 'status' => 'active']);
         $this->assertSame([], app(FarmOrderService::class)->ownerManagerCards($other->id));
@@ -948,9 +1018,9 @@ class FarmCheckoutTest extends TestCase
             ->firstWhere('id', $order->order_id);
         $this->assertSame('awaiting_schedule', $order->fresh()->status);
         $this->assertSame('preparing', $card['status']);
-        $this->assertSame('Scheduled', $card['statusDescription']);
+        $this->assertSame('Preparing', $card['statusDescription']);
         $this->assertFalse($card['farmSummary']['releaseImmediate']);
-        $this->assertFalse($card['farmSummary']['showDonePreparing']);
+        $this->assertTrue($card['farmSummary']['showDonePreparing']);
     }
 
     private function makeOrder(string $fulfillment = 'delivery'): FarmOrder
@@ -975,6 +1045,7 @@ class FarmCheckoutTest extends TestCase
     {
         Sanctum::actingAs($this->owner);
         $this->postJson('/api/farm-orders/'.$order->order_id.'/confirm')->assertOk();
+        app(FarmOrderService::class)->markPrepared($order->fresh(), $this->owner);
         Sanctum::actingAs($this->admin);
         $this->putJson('/api/admin/farm-orders/'.$order->order_id.'/shipping-partner', ['shipping_partner_id' => $this->partner->id])->assertOk();
         Sanctum::actingAs($this->partner);

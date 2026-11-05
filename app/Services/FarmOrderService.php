@@ -21,7 +21,10 @@ class FarmOrderService
         $allowed = match ($user->user_type) {
             User::TYPE_CUSTOMER => (int) $order->customer_id === (int) $user->id,
             User::TYPE_OWNER_MANAGER => (int) $user->farm_id === (int) $order->farm_id && $order->deposit_paid_at !== null,
-            User::TYPE_SHIPPING_PARTNER => (int) $order->shipping_partner_id === (int) $user->id && $order->deposit_paid_at !== null,
+            User::TYPE_SHIPPING_PARTNER => $order->deposit_paid_at !== null && (
+                (int) $order->shipping_partner_id === (int) $user->id
+                || ($order->shipping_partner_id === null && $order->status === 'prepared' && $order->fulfillment_method === 'delivery')
+            ),
             User::TYPE_ADMIN, User::TYPE_SUPER_ADMIN => true,
             default => false,
         };
@@ -68,13 +71,14 @@ class FarmOrderService
         $pickup = $order->fulfillment_method === 'pickup';
         $section = $this->ownerManagerSection($order);
         $releaseImmediate = $this->releaseIsImmediate($order);
-        $prepared = $section['status'] === 'preparing' && $this->preparingCompleted($order);
+        $prepared = $this->preparingCompleted($order);
         $preparedReleaseDate = $releaseImmediate ? $this->eventDate($order, 'preparing_completed') : null;
         $riderPickupDate = $releaseImmediate ? $this->riderPickupDate($order) : null;
-        if ($prepared) {
-            $section['statusDescription'] = 'Ready for Pickup';
-        } elseif ($section['status'] === 'preparing' && $order->status !== 'on_hold') {
-            $section['statusDescription'] = $releaseImmediate ? 'Immediate' : 'Scheduled';
+        $delivery = $order->fulfillment_method === 'delivery';
+        if ($prepared && $section['status'] === 'preparing') {
+            $section['statusDescription'] = 'Prepared';
+        } elseif ($section['status'] === 'preparing' && $order->status !== 'on_hold' && $releaseImmediate && ! $delivery) {
+            $section['statusDescription'] = 'Immediate';
         }
         $paidCents = $this->loadedPaidCents($order);
         $customer = $this->ownerManagerCustomer($order, $address);
@@ -154,8 +158,9 @@ class FarmOrderService
                 'riderPickupDate' => $riderPickupDate,
                 'releaseImmediate' => $releaseImmediate,
                 'pickupImmediate' => $releaseImmediate,
-                'showDonePreparing' => $section['status'] === 'preparing' && $releaseImmediate && ! $prepared,
-                'showReadyForPickup' => $prepared,
+                'farmLocation' => $this->farmLocationLine($farm),
+                'showDonePreparing' => $section['status'] === 'preparing' && ! $prepared && ($delivery || $releaseImmediate),
+                'showReadyForPickup' => $prepared && ! $delivery && ! in_array($order->status, ['ready_for_pickup', 'ready_for_release', 'release_authorized', 'in_transit', 'delivered'], true),
                 'paymentStatus' => $order->fully_paid_at ? 'paid' : ($paidCents > 0 ? 'partially_paid' : 'pending'),
                 'holdReason' => $order->hold_reason,
                 'orderInstruction' => $detail?->order_instruction,
@@ -246,10 +251,13 @@ class FarmOrderService
         }
 
         return match ($order->status) {
+            'delivered' => ['status' => 'completed', 'isSuccessful' => true, 'statusDescription' => 'Delivered'],
+            'in_transit' => ['status' => 'in-transit', 'isSuccessful' => null, 'statusDescription' => 'In Transit'],
+            'ready_for_release', 'release_authorized' => ['status' => 'for-pickup', 'isSuccessful' => null, 'statusDescription' => 'Ready for Release'],
             'ready_for_pickup' => ['status' => 'for-pickup', 'isSuccessful' => null, 'statusDescription' => 'Ready for Pickup'],
-            'release_authorized' => ['status' => 'for-pickup', 'isSuccessful' => null, 'statusDescription' => 'Release Authorized'],
+            'prepared' => ['status' => 'preparing', 'isSuccessful' => null, 'statusDescription' => 'Prepared'],
             'scheduled' => ['status' => 'preparing', 'isSuccessful' => null, 'statusDescription' => 'Scheduled'],
-            'awaiting_schedule' => ['status' => 'preparing', 'isSuccessful' => null, 'statusDescription' => 'Awaiting Schedule'],
+            'awaiting_schedule' => ['status' => 'preparing', 'isSuccessful' => null, 'statusDescription' => 'Preparing'],
             'on_hold' => ['status' => 'preparing', 'isSuccessful' => null, 'statusDescription' => 'On Hold'],
             default => ['status' => 'new', 'isSuccessful' => null, 'statusDescription' => 'Awaiting Confirmation'],
         };
@@ -282,6 +290,52 @@ class FarmOrderService
     private function preparingCompleted(FarmOrder $order): bool
     {
         return $this->eventDate($order, 'preparing_completed') !== null;
+    }
+
+    private function assertAssignedPartner(FarmOrder $order, User $actor): void
+    {
+        abort_unless(
+            $actor->user_type === User::TYPE_SHIPPING_PARTNER && (int) $order->shipping_partner_id === (int) $actor->id,
+            403
+        );
+    }
+
+    private function noticeFarmOwners(FarmOrder $order, string $event, string $message): void
+    {
+        foreach (User::where('farm_id', $order->farm_id)->where('user_type', User::TYPE_OWNER_MANAGER)->pluck('id') as $ownerId) {
+            $this->notice($order, (int) $ownerId, $event, $message);
+        }
+    }
+
+    /**
+     * @param  array<string, mixed>  $farm
+     */
+    private function farmLocationLine(array $farm): string
+    {
+        $parts = [];
+        foreach (['address', 'street_address', 'barangay', 'city', 'city_municipality', 'province'] as $key) {
+            $value = trim((string) ($farm[$key] ?? ''));
+            if ($value !== '' && ! in_array($value, $parts, true)) {
+                $parts[] = $value;
+            }
+        }
+
+        return implode(', ', $parts);
+    }
+
+    private function preparedNotice(FarmOrder $order): string
+    {
+        $order->loadMissing('items');
+        $items = $order->items->map(function ($item) {
+            $snapshot = is_array($item->snapshot) ? $item->snapshot : [];
+            $name = $snapshot['name'] ?? 'Gamefowl';
+
+            return $name.' x '.(int) $item->quantity.' ('.(int) $item->bird_count.' birds)';
+        })->implode('; ');
+        $farm = is_array($order->farm_snapshot) ? $order->farm_snapshot : [];
+        $place = trim(($farm['name'] ?? 'Farm').($this->farmLocationLine($farm) !== '' ? ' — '.$this->farmLocationLine($farm) : ''));
+
+        return "Items are prepared. Use these details for the shipping fee. Items: {$items}. Location: {$place}.";
     }
 
     private function riderPickupDate(FarmOrder $order): ?string
@@ -377,8 +431,8 @@ class FarmOrderService
                 $order->update(['confirmed_at' => now(), 'status' => 'awaiting_schedule']);
                 $this->event($order, 'farm_confirmed', $actor);
                 $this->notice($order, $order->customer_id, 'farm_confirmed', 'Farm confirmed your order.');
-                if ($order->shipping_partner_id) {
-                    $this->notice($order, $order->shipping_partner_id, 'farm_confirmed', 'The farm confirmed the order. Coordinate pickup and submit shipping details.');
+                if ($order->shipping_partner_id && $order->fulfillment_method === 'delivery') {
+                    $this->notice($order, $order->shipping_partner_id, 'farm_confirmed', 'The farm accepted the order. You will be notified when the items are prepared.');
                 }
             }
 
@@ -393,11 +447,22 @@ class FarmOrderService
             $order->load(['items.listing', 'events']);
             abort_unless($actor->user_type === User::TYPE_OWNER_MANAGER && (int) $actor->farm_id === (int) $order->farm_id, 403);
             abort_unless($order->deposit_paid_at && $order->confirmed_at && ! $order->cancelled_at, 409, 'Confirm the order before marking it done preparing.');
-            abort_unless(in_array($order->status, ['awaiting_schedule', 'scheduled'], true), 409, 'Only orders being prepared can be marked as done.');
-            abort_unless($this->releaseIsImmediate($order), 409, 'Done Preparing is available when the pickup date is immediate.');
+            abort_unless(in_array($order->status, ['awaiting_schedule', 'prepared', 'scheduled'], true), 409, 'Only orders being prepared can be marked as done.');
+            $delivery = $order->fulfillment_method === 'delivery';
+            abort_unless($delivery || $this->releaseIsImmediate($order), 409, 'Done Preparing is available when the pickup date is immediate.');
             if (! $this->preparingCompleted($order)) {
+                $order->update(['status' => 'prepared']);
                 $this->event($order, 'preparing_completed', $actor);
                 $this->notice($order, $order->customer_id, 'preparing_completed', 'The farm finished preparing your order.');
+                if ($delivery) {
+                    $message = $this->preparedNotice($order);
+                    $partnerIds = $order->shipping_partner_id
+                        ? [(int) $order->shipping_partner_id]
+                        : User::where('user_type', User::TYPE_SHIPPING_PARTNER)->where('status', 'active')->pluck('id')->map(fn ($id) => (int) $id)->all();
+                    foreach ($partnerIds as $partnerId) {
+                        $this->notice($order, $partnerId, 'preparing_completed', $message);
+                    }
+                }
             }
 
             return $order->refresh();
@@ -411,11 +476,42 @@ class FarmOrderService
             $order->load('events');
             abort_unless($actor->user_type === User::TYPE_OWNER_MANAGER && (int) $actor->farm_id === (int) $order->farm_id, 403);
             abort_unless($order->deposit_paid_at && $order->confirmed_at && ! $order->cancelled_at, 409, 'Confirm the order before marking it ready for pickup.');
-            abort_unless(in_array($order->status, ['awaiting_schedule', 'scheduled'], true), 409, 'Only orders being prepared can be marked ready for pickup.');
+            abort_unless(in_array($order->status, ['awaiting_schedule', 'prepared', 'scheduled'], true), 409, 'Only orders being prepared can be marked ready for pickup.');
+            abort_unless($order->fulfillment_method !== 'delivery', 409, 'The shipping partner marks delivery orders ready for pickup.');
             abort_unless($this->preparingCompleted($order), 409, 'Mark the order done preparing first.');
             $order->update(['status' => 'ready_for_pickup']);
             $this->event($order, 'ready_for_pickup', $actor);
             $this->notice($order, $order->customer_id, 'ready_for_pickup', 'The farm marked your order ready for pickup.');
+
+            return $order->refresh();
+        });
+    }
+
+    public function markPickedUp(FarmOrder $order, User $actor): FarmOrder
+    {
+        return DB::transaction(function () use ($order, $actor) {
+            $order = FarmOrder::lockForUpdate()->findOrFail($order->id);
+            $this->assertAssignedPartner($order, $actor);
+            abort_unless($order->status === 'ready_for_release' && $order->fully_paid_at && ! $order->cancelled_at && ! $order->held_at, 409, 'Pick up the order after the customer pays and it is ready for release.');
+            $order->update(['status' => 'in_transit']);
+            $this->event($order, 'picked_up', $actor);
+            $this->notice($order, $order->customer_id, 'in_transit', 'Your order has been picked up and is in transit.');
+            $this->noticeFarmOwners($order, 'in_transit', 'The shipping partner picked up the order. It is now in transit.');
+
+            return $order->refresh();
+        });
+    }
+
+    public function markDelivered(FarmOrder $order, User $actor): FarmOrder
+    {
+        return DB::transaction(function () use ($order, $actor) {
+            $order = FarmOrder::lockForUpdate()->findOrFail($order->id);
+            $this->assertAssignedPartner($order, $actor);
+            abort_unless($order->status === 'in_transit' && ! $order->cancelled_at, 409, 'Only orders in transit can be marked delivered.');
+            $order->update(['status' => 'delivered']);
+            $this->event($order, 'delivered', $actor);
+            $this->notice($order, $order->customer_id, 'delivered', 'Your order has been delivered.');
+            $this->noticeFarmOwners($order, 'delivered', 'The shipping partner marked the order delivered.');
 
             return $order->refresh();
         });
@@ -433,7 +529,10 @@ class FarmOrderService
             if ((int) $order->shipping_partner_id !== $partnerId) {
                 $order->update(['shipping_partner_id' => $partnerId]);
                 $this->event($order, 'shipping_partner_assigned', $actor, ['shipping_partner_id' => $partnerId]);
-                $this->notice($order, $partnerId, 'order_assigned', 'A farm order has been assigned to you. Coordinate its pickup with the farm.');
+                $message = $this->preparingCompleted($order)
+                    ? $this->preparedNotice($order)
+                    : 'A farm order has been assigned to you. You will be notified when the items are prepared.';
+                $this->notice($order, $partnerId, 'order_assigned', $message);
             }
 
             return $order;
@@ -451,14 +550,20 @@ class FarmOrderService
         $result = app(FarmPaymentService::class)->withClosedSessions($order, 'farm_balance', fn () => DB::transaction(function () use ($order, $actor, $pickupDate, $perBoxCents) {
             $order = FarmOrder::lockForUpdate()->findOrFail($order->id);
             [$date, $rate, $shipping] = $this->scheduleValues($order, $actor, $pickupDate, $perBoxCents);
+            $claiming = $actor->user_type === User::TYPE_SHIPPING_PARTNER && ! $order->shipping_partner_id;
             $order->update([
                 'per_box_cents' => $rate, 'shipping_cents' => $shipping,
                 'total_cents' => $order->subtotal_cents + $shipping, 'pickup_date' => $pickupDate,
                 'balance_opens_at' => $date->copy()->subDays(7)->startOfDay()->utc(),
                 'balance_due_at' => $date->copy()->subDay()->endOfDay()->utc(),
                 'schedule_version' => $order->schedule_version + 1,
-                'held_at' => null, 'hold_reason' => null, 'status' => 'scheduled',
+                'held_at' => null, 'hold_reason' => null,
+                'shipping_partner_id' => $claiming ? $actor->id : $order->shipping_partner_id,
+                'status' => $order->fulfillment_method === 'delivery' ? 'ready_for_pickup' : 'scheduled',
             ]);
+            if ($claiming) {
+                $this->event($order, 'shipping_partner_assigned', $actor, ['shipping_partner_id' => $actor->id]);
+            }
             $order->order->orderDetail->update([
                 'shipping_fee' => FarmCheckoutService::money($shipping),
                 'total_amount' => FarmCheckoutService::money($order->total_cents),
@@ -467,7 +572,12 @@ class FarmOrderService
                 'pickup_date' => $pickupDate, 'per_box_fee' => FarmCheckoutService::money($rate),
                 'shipping_fee' => FarmCheckoutService::money($shipping),
             ]);
-            $this->notice($order, $order->customer_id, 'schedule_updated', 'Your pickup schedule and final balance are confirmed. Review your order tracking.');
+            $fee = FarmCheckoutService::money($shipping);
+            $remaining = FarmCheckoutService::money(max(0, (int) $order->total_cents - $this->paidCents($order)));
+            $this->notice($order, $order->customer_id, 'balance_due', "Pickup is set for {$pickupDate}. Please pay the remaining balance of {$remaining}.");
+            foreach (User::where('farm_id', $order->farm_id)->where('user_type', User::TYPE_OWNER_MANAGER)->pluck('id') as $ownerId) {
+                $this->notice($order, (int) $ownerId, 'pickup_date_set', "Pickup is set for {$pickupDate}. Shipping fee is {$fee}.");
+            }
             $this->checkLocked($order);
 
             return $order->refresh();
@@ -481,10 +591,16 @@ class FarmOrderService
     {
         $admin = in_array($actor->user_type, [User::TYPE_ADMIN, User::TYPE_SUPER_ADMIN], true);
         $allowed = $order->fulfillment_method === 'delivery'
-            ? $actor->user_type === User::TYPE_SHIPPING_PARTNER && (int) $order->shipping_partner_id === (int) $actor->id
+            ? $actor->user_type === User::TYPE_SHIPPING_PARTNER && (
+                (int) $order->shipping_partner_id === (int) $actor->id
+                || ($order->shipping_partner_id === null && $order->status === 'prepared')
+            )
             : $actor->user_type === User::TYPE_OWNER_MANAGER && (int) $actor->farm_id === (int) $order->farm_id;
         abort_unless($allowed || $admin, 403);
         abort_unless($order->confirmed_at && $order->deposit_paid_at && ! $order->cancelled_at, 409, 'Farm confirmation and deposit are required.');
+        if ($order->fulfillment_method === 'delivery' && ! $admin) {
+            abort_unless($this->preparingCompleted($order), 409, 'The farm must finish preparing the order before pickup can be scheduled.');
+        }
         abort_if($order->fully_paid_at, 409, 'Fully paid orders require a separate adjustment process.');
         abort_if($order->held_at && ! $admin, 409, 'An administrator must resolve this order hold.');
         $date = Carbon::createFromFormat('!Y-m-d', $pickupDate, 'Asia/Manila');
@@ -528,7 +644,8 @@ class FarmOrderService
                 'pickup_date' => $pickupDate, 'balance_opens_at' => $date->copy()->subDays(7)->startOfDay()->utc(),
                 'balance_due_at' => $date->copy()->subDay()->endOfDay()->utc(),
                 'schedule_version' => $order->schedule_version + 1,
-                'held_at' => null, 'hold_reason' => null, 'status' => 'scheduled',
+                'held_at' => null, 'hold_reason' => null,
+                'status' => $order->fulfillment_method === 'delivery' ? 'ready_for_pickup' : 'scheduled',
             ]);
             $this->event($order, 'hold_resolved', $actor, ['reason' => $reason, 'pickup_date' => $pickupDate]);
             foreach ($this->recipients($order) as $id) {
@@ -566,10 +683,10 @@ class FarmOrderService
         }
         if ($order->fully_paid_at && $order->confirmed_at && $order->pickup_date && $order->inventory_state === 'allocated'
             && ! $order->held_at && ! $order->release_authorized_at) {
-            $order->update(['release_authorized_at' => now(), 'status' => 'release_authorized']);
+            $order->update(['release_authorized_at' => now(), 'status' => 'ready_for_release']);
             $this->event($order, 'release_authorized');
             foreach ($this->recipients($order) as $id) {
-                $this->notice($order, $id, 'release_authorized', 'The order is fully paid and authorized for release on the confirmed pickup date.');
+                $this->notice($order, $id, 'release_authorized', 'The customer paid in full. The order is ready for release.');
             }
         }
     }

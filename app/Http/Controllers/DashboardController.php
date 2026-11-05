@@ -1518,7 +1518,7 @@ class DashboardController extends Controller
      */
     private function platformInsights(bool $includeSuperAdmins): array
     {
-        $userTypes = ['admin', 'vendor', 'veterinarian', 'rider'];
+        $userTypes = ['admin', 'vendor', 'veterinarian', 'rider', 'shipping_partner'];
         if ($includeSuperAdmins) {
             $userTypes[] = 'super_admin';
         }
@@ -1589,6 +1589,7 @@ class DashboardController extends Controller
             'vendors' => $roleStat('vendor'),
             'veterinarians' => $roleStat('veterinarian'),
             'riders' => $roleStat('rider'),
+            'shippingPartners' => $roleStat('shipping_partner'),
         ];
 
         if ($includeSuperAdmins) {

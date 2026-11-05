@@ -7,6 +7,7 @@ import {
     ShoppingCart,
     Star,
     Store,
+    Truck,
     TrendingDown,
     TrendingUp,
     UserCog,
@@ -18,6 +19,7 @@ const defaultUserStats = {
     agrivets: { total: 0, active: 0, inactive: 0 },
     vendors: { total: 0, active: 0, inactive: 0 },
     riders: { total: 0, active: 0, inactive: 0 },
+    shippingPartners: { total: 0, active: 0, inactive: 0 },
 }
 
 const defaultOrderMetrics = {
@@ -109,6 +111,7 @@ export function SuperAdminPlatformInsights({
         agrivets: normalizeRoleStats(userStatsProp?.agrivets, defaultUserStats.agrivets),
         vendors: normalizeRoleStats(userStatsProp?.vendors, defaultUserStats.vendors),
         riders: normalizeRoleStats(userStatsProp?.riders, defaultUserStats.riders),
+        shippingPartners: normalizeRoleStats(userStatsProp?.shippingPartners, defaultUserStats.shippingPartners),
     }
     const orderMetrics = { ...defaultOrderMetrics, ...orderMetricsProp }
 
@@ -134,7 +137,7 @@ export function SuperAdminPlatformInsights({
 
                 <div
                     className={`grid grid-cols-1 gap-4 md:grid-cols-2 ${
-                        showSuperAdminStats ? 'lg:grid-cols-3 xl:grid-cols-5' : 'lg:grid-cols-4'
+                        showSuperAdminStats ? 'lg:grid-cols-3 xl:grid-cols-6' : 'lg:grid-cols-5'
                     }`}
                 >
                     {showSuperAdminStats && (
@@ -177,6 +180,14 @@ export function SuperAdminPlatformInsights({
                         active={userStats.riders.active}
                         inactive={userStats.riders.inactive}
                         icon={Bike}
+                        iconBg="bg-[#244693]"
+                    />
+                    <UserRoleCard
+                        title="Shipping Partner"
+                        total={userStats.shippingPartners.total}
+                        active={userStats.shippingPartners.active}
+                        inactive={userStats.shippingPartners.inactive}
+                        icon={Truck}
                         iconBg="bg-[#244693]"
                     />
                 </div>

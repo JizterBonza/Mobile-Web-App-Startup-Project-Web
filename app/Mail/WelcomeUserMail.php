@@ -30,6 +30,8 @@ class WelcomeUserMail extends Mailable
             User::TYPE_CUSTOMER => 'Customer',
             User::TYPE_RIDER => 'Rider',
             User::TYPE_OWNER_MANAGER => 'Owner/Manager',
+            User::TYPE_BREEDER => 'Breeder',
+            User::TYPE_SHIPPING_PARTNER => 'Shipping Partner',
             default => ucfirst(str_replace('_', ' ', $user->user_type)),
         };
 
