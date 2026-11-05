@@ -176,7 +176,7 @@ function OrderCard({ order }) {
                 </p>
             </div>
 
-            <dl className="mt-5 grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-4">
+            <dl className="mt-5 grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-3">
                 <div>
                     <dt className="text-[#6B7280]">Delivery address</dt>
                     <dd className="mt-1 font-medium text-[#102059]">{order.deliveryAddress || '—'}</dd>
@@ -184,10 +184,6 @@ function OrderCard({ order }) {
                 <div>
                     <dt className="text-[#6B7280]">Birds / boxes</dt>
                     <dd className="mt-1 font-medium text-[#102059]">{order.birdCount} birds · {order.boxCount} boxes</dd>
-                </div>
-                <div>
-                    <dt className="text-[#6B7280]">Shipping estimate</dt>
-                    <dd className="mt-1 font-medium text-[#102059]">{pesos(order.estimateMin)} – {pesos(order.estimateMax)}</dd>
                 </div>
                 <div>
                     <dt className="text-[#6B7280]">Pickup</dt>

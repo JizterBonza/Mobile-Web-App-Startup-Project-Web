@@ -31,6 +31,7 @@ database/migrations/2026_08_19_000009_seed_demo_agrivet_shop_catalog_orders.php
 database/migrations/2026_08_26_000001_seed_completed_test_orders.php
 database/migrations/2026_10_31_000001_seed_farm_owner_manager_test_orders.php
 database/migrations/2026_11_04_000001_seed_farm_delivery_flow_test_orders.php
+database/migrations/2026_11_06_000001_seed_farm_test_orders.php
 /tests/*
 !/tests/Feature/
 /tests/Feature/*
