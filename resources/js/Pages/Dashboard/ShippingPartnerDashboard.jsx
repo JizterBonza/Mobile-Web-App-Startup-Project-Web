@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useForm, usePage } from '@inertiajs/react'
 import ShippingPartnerKlasmeytLayout from '../../Layouts/ShippingPartnerKlasmeytLayout'
 import { KlasmeytStatCard } from '../../Components/Dashboard/KlasmeytStatCard'
@@ -97,16 +98,30 @@ function TransitActions({ order }) {
     const pickup = useForm({})
     const deliver = useForm({})
 
-    if (order.canPickUp) {
+    if (order.showTransitAction) {
+        const enabled = Boolean(order.canPickUp) && !order.onHold
+
         return (
-            <button
-                type="button"
-                disabled={pickup.processing}
-                onClick={() => pickup.post(`/dashboard/shipping-partner/orders/${order.id}/pickup`, { preserveScroll: true })}
-                className="mt-5 w-full rounded-full bg-[#244693] px-5 py-2 text-sm font-semibold text-white hover:bg-[#1b3770] disabled:opacity-60 sm:w-auto"
-            >
-                {pickup.processing ? 'Updating…' : 'Pick up'}
-            </button>
+            <div className="mt-5">
+                {!enabled && !order.onHold && (
+                    <p className="mb-3 rounded-lg bg-[#F8F9FB] px-4 py-3 text-sm text-[#374151]">
+                        Ready for Transit stays disabled until this order is Ready for Release. Full payment sets that status.
+                    </p>
+                )}
+                <button
+                    type="button"
+                    disabled={!enabled || pickup.processing}
+                    onClick={() => {
+                        if (!enabled) {
+                            return
+                        }
+                        pickup.post(`/dashboard/shipping-partner/orders/${order.id}/pickup`, { preserveScroll: true })
+                    }}
+                    className="w-full rounded-full bg-[#244693] px-5 py-2 text-sm font-semibold text-white hover:bg-[#1b3770] disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+                >
+                    {pickup.processing ? 'Updating…' : 'Ready for Transit'}
+                </button>
+            </div>
         )
     }
 
@@ -118,7 +133,7 @@ function TransitActions({ order }) {
                 onClick={() => deliver.post(`/dashboard/shipping-partner/orders/${order.id}/deliver`, { preserveScroll: true })}
                 className="mt-5 w-full rounded-full bg-[#00C950] px-5 py-2 text-sm font-semibold text-white hover:bg-[#00B048] disabled:opacity-60 sm:w-auto"
             >
-                {deliver.processing ? 'Updating…' : 'Mark delivered'}
+                {deliver.processing ? 'Updating…' : 'Delivery Complete'}
             </button>
         )
     }
@@ -200,14 +215,9 @@ function OrderCard({ order }) {
             {order.cancelled && (
                 <p className="mt-4 rounded-lg bg-[#F3F4F6] px-4 py-3 text-sm text-[#374151]">This order was cancelled.</p>
             )}
-            {!order.prepared && !order.cancelled && !order.canPickUp && !order.canDeliver && (
-                <p className="mt-4 rounded-lg bg-[#F8F9FB] px-4 py-3 text-sm text-[#374151]">
-                    Waiting for the farm to finish preparing this order. The item list and farm location will be the basis for your shipping fee.
-                </p>
-            )}
             {order.fullyPaid && order.status === 'ready_for_release' && !order.onHold && (
                 <p className="mt-4 rounded-lg bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
-                    The customer paid in full. This order is ready for release. Pick it up on {order.pickupDate || 'the confirmed pickup date'}.
+                    The customer paid in full. This order is ready for release. Mark it Ready for Transit on {order.pickupDate || 'the confirmed pickup date'}.
                 </p>
             )}
             {order.canSchedule && <ScheduleForm order={order} />}
@@ -216,15 +226,31 @@ function OrderCard({ order }) {
     )
 }
 
+const TABS = [
+    { id: 'prepared', label: 'Prepared', empty: 'No prepared orders. An order appears here after the farm owner manager marks it done preparing.' },
+    { id: 'for_pickup', label: 'For Pickup', empty: 'No orders waiting for pickup. Set the pickup date and shipping fee from Prepared, then the order moves here.' },
+    { id: 'in_transit', label: 'In Transit', empty: 'No orders in transit.' },
+    { id: 'completed', label: 'Completed', empty: 'No completed deliveries.' },
+]
+
 export default function ShippingPartnerDashboard({ auth, orders = [], stats = {} }) {
     const { flash, errors } = usePage().props
+    const [activeTab, setActiveTab] = useState('prepared')
+    const visibleOrders = orders.filter((order) => order.tab === activeTab)
+    const active = TABS.find((tab) => tab.id === activeTab) || TABS[0]
+    const counts = {
+        prepared: stats.prepared ?? orders.filter((order) => order.tab === 'prepared').length,
+        for_pickup: stats.forPickup ?? orders.filter((order) => order.tab === 'for_pickup').length,
+        in_transit: stats.inTransit ?? orders.filter((order) => order.tab === 'in_transit').length,
+        completed: stats.completed ?? orders.filter((order) => order.tab === 'completed').length,
+    }
 
     return (
         <ShippingPartnerKlasmeytLayout auth={auth} title="Shipping Partner">
             <div className="mb-6">
                 <h1 className="text-2xl font-semibold text-[#102059]">Shipping Partner</h1>
                 <p className="mt-1 text-sm text-[#6B7280]">
-                    Assigned farm deliveries. After the farm marks an order prepared, set the shipping fee and pickup date.
+                    Prepared farm deliveries. Set the pickup date and shipping fee, then move the order through pickup, transit, and delivery.
                 </p>
             </div>
 
@@ -240,22 +266,43 @@ export default function ShippingPartnerDashboard({ auth, orders = [], stats = {}
             )}
 
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                <KlasmeytStatCard label="Assigned" value={String(stats.assigned ?? 0)} iconClass="fas fa-truck" />
-                <KlasmeytStatCard label="Needs schedule" value={String(stats.needsSchedule ?? 0)} iconClass="fas fa-calendar-plus" />
-                <KlasmeytStatCard label="Scheduled" value={String(stats.scheduled ?? 0)} iconClass="fas fa-calendar-check" />
-                <KlasmeytStatCard label="On hold" value={String(stats.onHold ?? 0)} iconClass="fas fa-pause-circle" />
+                <KlasmeytStatCard label="Prepared" value={String(counts.prepared)} iconClass="fas fa-box" />
+                <KlasmeytStatCard label="For Pickup" value={String(counts.for_pickup)} iconClass="fas fa-dolly" />
+                <KlasmeytStatCard label="In Transit" value={String(counts.in_transit)} iconClass="fas fa-truck" />
+                <KlasmeytStatCard label="Completed" value={String(counts.completed)} iconClass="fas fa-check-circle" />
             </div>
 
-            <div className="mt-8 space-y-4">
-                {orders.length === 0 ? (
+            <div className="mt-8 flex gap-2 overflow-x-auto rounded-2xl border border-[#E5E7EB] bg-white p-2 shadow-sm" role="tablist" aria-label="Shipping orders">
+                {TABS.map((tab) => {
+                    const selected = activeTab === tab.id
+                    return (
+                        <button
+                            key={tab.id}
+                            type="button"
+                            role="tab"
+                            aria-selected={selected}
+                            onClick={() => setActiveTab(tab.id)}
+                            className={`flex items-center gap-2 whitespace-nowrap rounded-xl px-4 py-2.5 text-sm font-semibold transition-colors ${
+                                selected ? 'bg-[#244693] text-white' : 'text-[#6B7280] hover:bg-[#F8F9FB]'
+                            }`}
+                        >
+                            {tab.label}
+                            <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${selected ? 'bg-white/20 text-white' : 'bg-[#F3F4F6] text-[#102059]'}`}>
+                                {counts[tab.id] ?? 0}
+                            </span>
+                        </button>
+                    )
+                })}
+            </div>
+
+            <div className="mt-4 space-y-4">
+                {visibleOrders.length === 0 ? (
                     <section className="rounded-2xl border border-[#E5E7EB] bg-white p-8 shadow-sm">
-                        <h2 className="text-xl font-semibold text-[#102059]">No assigned deliveries</h2>
-                        <p className="mt-3 text-sm leading-relaxed text-[#6B7280]">
-                            Orders appear here after an administrator assigns them to you and the customer’s deposit is paid.
-                        </p>
+                        <h2 className="text-xl font-semibold text-[#102059]">{active.label}</h2>
+                        <p className="mt-3 text-sm leading-relaxed text-[#6B7280]">{active.empty}</p>
                     </section>
                 ) : (
-                    orders.map((order) => <OrderCard key={order.id} order={order} />)
+                    visibleOrders.map((order) => <OrderCard key={order.id} order={order} />)
                 )}
             </div>
         </ShippingPartnerKlasmeytLayout>

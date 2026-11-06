@@ -23,10 +23,10 @@ class ShippingPartnerDashboardController extends Controller
         return Inertia::render('Dashboard/ShippingPartnerDashboard', [
             'orders' => $cards,
             'stats' => [
-                'assigned' => count($cards),
-                'needsSchedule' => count(array_filter($cards, fn (array $order) => $order['canSchedule'] && ! $order['pickupDate'])),
-                'scheduled' => count(array_filter($cards, fn (array $order) => $order['pickupDate'] && ! $order['onHold'])),
-                'onHold' => count(array_filter($cards, fn (array $order) => $order['onHold'])),
+                'prepared' => count(array_filter($cards, fn (array $order) => $order['tab'] === 'prepared')),
+                'forPickup' => count(array_filter($cards, fn (array $order) => $order['tab'] === 'for_pickup')),
+                'inTransit' => count(array_filter($cards, fn (array $order) => $order['tab'] === 'in_transit')),
+                'completed' => count(array_filter($cards, fn (array $order) => $order['tab'] === 'completed')),
             ],
         ]);
     }
@@ -54,7 +54,7 @@ class ShippingPartnerDashboardController extends Controller
             ])->withInput();
         }
 
-        return back()->with('success', 'Pickup date and shipping fee saved. The farm and customer have been notified.');
+        return back()->with('success', 'Pickup date and shipping fee saved. The order is now For Pickup.');
     }
 
     public function pickup(Request $request, int $orderId)
@@ -76,7 +76,7 @@ class ShippingPartnerDashboardController extends Controller
             return back()->withErrors(['schedule' => $exception->getMessage() ?: 'This order cannot be marked delivered.']);
         }
 
-        return back()->with('success', 'Order marked delivered.');
+        return back()->with('success', 'Delivery complete. The order is now completed.');
     }
 
     /**
@@ -119,17 +119,20 @@ class ShippingPartnerDashboardController extends Controller
         $minPickupDate = ($release && $release > $soonest) ? $release : $soonest;
         $onHold = $order->held_at !== null;
         $prepared = $order->events->contains(fn ($event) => $event->event === 'preparing_completed');
+        $cancelled = $order->cancelled_at !== null || $order->status === 'cancelled';
+        $tab = $this->tab($order, $prepared, $cancelled);
         $canSchedule = $prepared
             && $order->fulfillment_method === 'delivery'
             && $order->pickup_date === null
             && $order->confirmed_at !== null
             && $order->deposit_paid_at !== null
-            && $order->cancelled_at === null
+            && ! $cancelled
             && $order->fully_paid_at === null
             && ! $onHold;
 
         return [
             'id' => (int) $order->order_id,
+            'tab' => $tab,
             'orderCode' => $order->order?->orderDetail?->order_code ?: 'FARM-'.$order->order_id,
             'status' => (string) $order->status,
             'farmName' => $farm['name'] ?? 'Farm',
@@ -165,11 +168,28 @@ class ShippingPartnerDashboardController extends Controller
             'onHold' => $onHold,
             'holdReason' => $order->hold_reason,
             'fullyPaid' => $order->fully_paid_at !== null,
-            'cancelled' => $order->cancelled_at !== null,
+            'cancelled' => $cancelled,
             'canSchedule' => $canSchedule,
-            'canPickUp' => $order->status === 'ready_for_release' && ! $onHold && $order->cancelled_at === null,
-            'canDeliver' => $order->status === 'in_transit' && $order->cancelled_at === null,
+            'showTransitAction' => $tab === 'for_pickup' && ! $cancelled,
+            'canPickUp' => $order->status === 'ready_for_release' && ! $onHold && ! $cancelled,
+            'canDeliver' => $order->status === 'in_transit' && ! $cancelled,
         ];
+    }
+
+    private function tab(FarmOrder $order, bool $prepared, bool $cancelled): ?string
+    {
+        if ($cancelled) {
+            return 'completed';
+        }
+
+        return match ($order->status) {
+            'delivered' => 'completed',
+            'in_transit' => 'in_transit',
+            'ready_for_pickup', 'ready_for_release', 'release_authorized', 'scheduled' => 'for_pickup',
+            'on_hold' => $order->pickup_date ? 'for_pickup' : ($prepared ? 'prepared' : null),
+            'prepared' => 'prepared',
+            default => $prepared && $order->pickup_date === null ? 'prepared' : null,
+        };
     }
 
     /**
