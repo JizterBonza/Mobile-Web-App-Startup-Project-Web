@@ -1929,9 +1929,9 @@ export default function AgrivetStoreInformation({
                         <div
                           key={listing.id}
                           onClick={() => handleOpenProductDetail(listing)}
-                          className="bg-white border border-[#E5E7EB] rounded-lg overflow-hidden hover:shadow-sm transition-all cursor-pointer"
+                          className="relative flex h-full cursor-pointer flex-col overflow-hidden rounded-lg border border-[#E5E7EB] bg-white transition-all hover:shadow-sm"
                         >
-                          <div className="aspect-square bg-[#F9FAFB] overflow-hidden relative">
+                          <div className="relative aspect-square shrink-0 overflow-hidden bg-[#F9FAFB]">
                             <img
                               src={getListingImageSrc(listing)}
                               alt={listing.productName}
@@ -1961,7 +1961,7 @@ export default function AgrivetStoreInformation({
                               </span>
                             </div>
                           </div>
-                          <div className="p-3">
+                          <div className={`flex flex-1 flex-col p-3 ${canAddListings && getListingItemUpdateUrl(listing.id) ? '!pb-16' : ''}`}>
                             <h6 className="text-[#102059] mb-0.5 line-clamp-1 text-[12px]">
                               {listing.productName}
                             </h6>
@@ -2002,7 +2002,7 @@ export default function AgrivetStoreInformation({
                                 Catalog disabled — restock unavailable
                               </p>
                             )}
-                            <div className="flex items-center justify-between text-xs mb-3">
+                            <div className="flex items-center justify-between text-xs">
                               <span className="text-[#6B7280]">Popularity:</span>
                               <div className="flex items-center gap-1">
                                 <Heart className="w-3 h-3 text-[#102059]" />
@@ -2016,7 +2016,7 @@ export default function AgrivetStoreInformation({
                                   e.stopPropagation()
                                   handleProductStatusToggle(listing)
                                 }}
-                                className={`w-full text-xs font-semibold py-1.5 rounded-lg text-white transition-colors ${
+                                className={`absolute bottom-3 left-3 right-3 text-xs font-semibold py-1.5 rounded-lg text-white transition-colors ${
                                   (listing.manualStatus || 'Active') === 'Active'
                                     ? 'bg-[#E20E28] hover:bg-[#C10D23]'
                                     : 'bg-[#00C950] hover:bg-[#00B548]'

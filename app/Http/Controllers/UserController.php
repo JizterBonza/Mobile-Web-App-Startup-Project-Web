@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\ActivityLog;
 use App\Models\Agrivet;
+use App\Models\ShippingPartner;
 use App\Models\User;
 use App\Models\UserDetail;
 use App\Models\UserCredential;
@@ -25,7 +26,7 @@ class UserController extends Controller
     public function index()
     {
         $currentUser = auth()->user();
-        $query = User::with(['userDetail', 'userCredential']);
+        $query = User::with(['userDetail', 'userCredential', 'managedShippingPartner']);
 
         // If current user is Admin, filter to show only operational roles they manage
         if ($currentUser->user_type === 'admin') {
@@ -42,6 +43,7 @@ class UserController extends Controller
                     'last_name' => $user->userDetail->last_name ?? '',
                     'email' => $user->userDetail->email ?? '',
                     'mobile_number' => $user->userDetail->mobile_number ?? '',
+                    'company_name' => $user->managedShippingPartner->name ?? '',
                     'user_type' => $user->user_type,
                     'status' => $user->status,
                     'username' => $user->userCredential->username ?? '',
@@ -131,6 +133,14 @@ class UserController extends Controller
     }
 
     /**
+     * Multi-step shipping partner registration, matching the other account wizards.
+     */
+    public function shippingPartnerRegistration()
+    {
+        return Inertia::render('Dashboard/ShippingPartnerRegistration');
+    }
+
+    /**
      * Placeholder for the template "Clear All Data" action (demo localStorage wipe).
      * A full platform reset is environment-specific and is not executed here.
      */
@@ -196,6 +206,20 @@ class UserController extends Controller
             ]);
         }
 
+        if ($request->user_type === 'shipping_partner') {
+            $rules['mobile_number'] = 'required|string|max:20';
+            $rules = array_merge($rules, [
+                'company_name' => 'required|string|max:255',
+                'company_registered_name' => 'nullable|string|max:255',
+                'company_address' => 'required|string|max:500',
+                'company_city' => 'required|string|max:100',
+                'company_province' => 'required|string|max:100',
+                'company_contact_number' => 'required|string|max:30',
+                'company_service_area' => 'required|string|max:255',
+                'company_permits' => 'nullable|string|max:1000',
+            ]);
+        }
+
         $request->validate($rules);
 
         try {
@@ -227,6 +251,29 @@ class UserController extends Controller
                 ];
             }
 
+            $shippingPartner = null;
+            if ($request->user_type === 'shipping_partner') {
+                $ownerName = trim(implode(' ', array_filter([
+                    $request->first_name,
+                    $request->middle_name,
+                    $request->last_name,
+                ])));
+
+                $shippingPartner = ShippingPartner::create([
+                    'name' => $request->company_name,
+                    'registered_business_name' => $request->company_registered_name,
+                    'owner_name' => $ownerName !== '' ? $ownerName : null,
+                    'address' => $request->company_address,
+                    'city' => $request->company_city,
+                    'province' => $request->company_province,
+                    'contact_number' => $request->company_contact_number,
+                    'email' => $request->email,
+                    'service_area' => $request->company_service_area,
+                    'permits' => $request->company_permits,
+                    'status' => $request->status ?? 'active',
+                ]);
+            }
+
             // Create UserDetail
             $userDetail = UserDetail::create(array_merge([
                 'first_name' => $request->first_name,
@@ -243,12 +290,17 @@ class UserController extends Controller
             ]);
 
             // Create User
-            $user = User::create([
+            $userAttributes = [
                 'user_detail_id' => $userDetail->id,
                 'user_credential_id' => $userCredential->id,
                 'status' => $request->status ?? 'active',
                 'user_type' => $request->user_type,
-            ]);
+            ];
+            if ($shippingPartner) {
+                $userAttributes['shipping_partner_id'] = $shippingPartner->id;
+            }
+
+            $user = User::create($userAttributes);
 
             if ($request->user_type === 'veterinarian' && $request->hasFile('license_front') && $request->hasFile('license_back')) {
                 $frontPath = $request->file('license_front')->store("veterinarian-licenses/{$user->id}", 'public');
@@ -277,6 +329,16 @@ class UserController extends Controller
 
             DB::commit();
 
+            if ($shippingPartner) {
+                ActivityLog::log(
+                    'created',
+                    "Shipping partner created: {$shippingPartner->name}",
+                    $shippingPartner,
+                    null,
+                    $shippingPartner->toArray()
+                );
+            }
+
             ActivityLog::log(
                 'created',
                 "User created: {$user->userDetail->email} (type: {$user->user_type})",
@@ -292,7 +354,12 @@ class UserController extends Controller
                 ? 'dashboard.admin.users.index' 
                 : 'dashboard.super-admin.users.index';
 
-            $successMessage = UserWelcomeEmailService::successMessage($emailSent);
+            $successMessage = UserWelcomeEmailService::successMessage(
+                $emailSent,
+                $shippingPartner
+                    ? 'Shipping partner and login created successfully.'
+                    : 'User created successfully.'
+            );
 
             return redirect()->route($redirectRoute)
                 ->with('success', $successMessage);

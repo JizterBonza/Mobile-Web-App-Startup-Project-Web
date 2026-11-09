@@ -317,6 +317,14 @@ export default function Accounts({ auth, users = [], flash }) {
             router.visit(`${prefix}/users/breeder-registration`);
             return;
         }
+        if (userTypeValue === "shipping_partner") {
+            const prefix =
+                auth?.user?.user_type === "admin"
+                    ? "/dashboard/admin"
+                    : "/dashboard/super-admin";
+            router.visit(`${prefix}/users/shipping-partner-registration`);
+            return;
+        }
         addForm.setData("user_type", userTypeValue);
         setShowAddModal(true);
         setShowAddModalAnimation(false);
@@ -394,6 +402,7 @@ export default function Accounts({ auth, users = [], flash }) {
             return (
                 name.includes(q) ||
                 (u.email || "").toLowerCase().includes(q) ||
+                (u.company_name || "").toLowerCase().includes(q) ||
                 (u.username || "").toLowerCase().includes(q) ||
                 roleLabel.includes(q) ||
                 String(u.id).includes(q)
@@ -851,6 +860,15 @@ export default function Accounts({ auth, users = [], flash }) {
                                           year: "numeric",
                                       })
                                     : "—";
+                                const linkedCompany =
+                                    user.user_type === "shipping_partner" &&
+                                    user.company_name
+                                        ? user.company_name
+                                        : "";
+                                const accountTitle = linkedCompany || displayName(user);
+                                const accountMeta = linkedCompany
+                                    ? `Shipping Partner • Linked user: ${displayName(user)} • ${user.email || "—"} • Added ${addedDate}`
+                                    : `${getUserTypeLabel(user.user_type)} • ${user.email || "—"} • Added ${addedDate}`;
                                 return (
                                     <div
                                         key={user.id}
@@ -866,14 +884,10 @@ export default function Accounts({ auth, users = [], flash }) {
                                             <div className="grid min-w-0 flex-1 grid-cols-1 items-center gap-4 gap-y-3 sm:grid-cols-[1fr_180px_auto]">
                                                 <div className="min-w-0">
                                                     <div className="mb-1 text-sm font-bold text-[#102059]">
-                                                        {displayName(user)}
+                                                        {accountTitle}
                                                     </div>
                                                     <div className="text-xs text-[#6B7280]">
-                                                        {getUserTypeLabel(
-                                                            user.user_type,
-                                                        )}{" "}
-                                                        • {user.email || "—"} •
-                                                        Added {addedDate}
+                                                        {accountMeta}
                                                     </div>
                                                 </div>
 
@@ -900,7 +914,7 @@ export default function Accounts({ auth, users = [], flash }) {
                                                             user.status ===
                                                             "active"
                                                         }
-                                                        aria-label={`Toggle status for ${displayName(user)}`}
+                                                        aria-label={`Toggle status for ${accountTitle}`}
                                                         style={{
                                                             borderRadius:
                                                                 "0.7rem",
@@ -1029,18 +1043,18 @@ export default function Accounts({ auth, users = [], flash }) {
             {/* Role Selection Modal for Create Account — matches Klasmeyt SuperAdminDashboard template */}
             {showRoleSelectionModal && (
                 <div
-                    className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+                    className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/50 p-4"
                     role="presentation"
                     onClick={() => setShowRoleSelectionModal(false)}
                 >
                     <div
-                        className="w-full max-w-2xl rounded-lg border border-[#E5E7EB] bg-white p-6"
+                        className="my-auto flex max-h-[calc(100dvh-2rem)] w-full max-w-2xl flex-col overflow-hidden rounded-lg border border-[#E5E7EB] bg-white p-6 shadow-xl"
                         role="dialog"
                         aria-modal="true"
                         aria-labelledby="role-selection-title"
                         onClick={(e) => e.stopPropagation()}
                     >
-                        <div className="mb-6 flex items-center justify-between">
+                        <div className="mb-6 flex shrink-0 items-center justify-between">
                             <h3
                                 id="role-selection-title"
                                 className="text-lg font-semibold text-[#102059]"
@@ -1058,10 +1072,10 @@ export default function Accounts({ auth, users = [], flash }) {
                                 <X className="h-5 w-5 text-[#6B7280]" />
                             </button>
                         </div>
-                        <p className="mb-6 text-sm text-[#6B7280]">
+                        <p className="mb-6 shrink-0 text-sm text-[#6B7280]">
                             Choose the type of account you want to create:
                         </p>
-                        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                        <div className="grid min-h-0 grid-cols-1 gap-4 overflow-y-auto overscroll-contain pr-1 md:grid-cols-2">
                             {(auth?.user?.user_type === "super_admin" ||
                                 auth?.user?.user_type === "admin") && (
                                 <button
@@ -1367,6 +1381,19 @@ export default function Accounts({ auth, users = [], flash }) {
                                                         closeAddModal();
                                                         router.visit(
                                                             `${prefix}/users/breeder-registration`,
+                                                        );
+                                                        return;
+                                                    }
+                                                    if (v === "shipping_partner") {
+                                                        const prefix =
+                                                            auth?.user
+                                                                ?.user_type ===
+                                                            "admin"
+                                                                ? "/dashboard/admin"
+                                                                : "/dashboard/super-admin";
+                                                        closeAddModal();
+                                                        router.visit(
+                                                            `${prefix}/users/shipping-partner-registration`,
                                                         );
                                                         return;
                                                     }

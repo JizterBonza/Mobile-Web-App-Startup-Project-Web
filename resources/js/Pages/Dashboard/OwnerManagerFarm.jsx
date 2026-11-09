@@ -1080,14 +1080,14 @@ function GamefowlCatalogPanel({ listings = [], catalog = [] }) {
                             <article
                                 key={listing.id}
                                 onClick={() => setSelectedListing(listing)}
-                                className="cursor-pointer overflow-hidden rounded-lg border border-[#E5E7EB] bg-white text-left transition-shadow hover:shadow-sm"
+                                className="relative flex h-full cursor-pointer flex-col overflow-hidden rounded-lg border border-[#E5E7EB] bg-white text-left transition-shadow hover:shadow-sm"
                             >
-                                <div className="aspect-[5/6] bg-[#E5E7EB]">
+                                <div className="aspect-[5/6] shrink-0 bg-[#E5E7EB]">
                                     {listing.image ? (
                                         <img src={listing.image} alt="" className="h-full w-full object-cover" />
                                     ) : null}
                                 </div>
-                                <div className="p-3">
+                                <div className="flex flex-1 flex-col p-3 !pb-16">
                                     <h3 className="break-words text-sm font-bold leading-snug text-[#102059]">{listing.title}</h3>
                                     <p className="mt-0.5 break-words text-[11px] leading-snug text-[#9CA3AF]">
                                         {listing.composition} | {listing.age} | {listing.sex}
@@ -1122,7 +1122,7 @@ function GamefowlCatalogPanel({ listings = [], catalog = [] }) {
                                                 },
                                             )
                                         }}
-                                        className={`mt-3 w-full rounded-lg py-2 text-xs font-semibold text-white transition-colors disabled:opacity-60 ${
+                                        className={`absolute bottom-3 left-3 right-3 rounded-lg py-2 text-xs font-semibold text-white transition-colors disabled:opacity-60 ${
                                             isActive
                                                 ? 'bg-[#E20E28] hover:bg-[#C10D23]'
                                                 : 'bg-[#00C950] hover:bg-[#00B548]'

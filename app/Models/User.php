@@ -9,6 +9,7 @@ use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
 use App\Models\Agrivet;
 use App\Models\Farm;
+use App\Models\ShippingPartner;
 use App\Models\Shop;
 use App\Models\Notification;
 
@@ -46,6 +47,7 @@ class User extends Authenticatable
         'user_type',
         'agrivet_id',
         'farm_id',
+        'shipping_partner_id',
     ];
 
     /**
@@ -162,6 +164,14 @@ class User extends Authenticatable
     public function managedFarm()
     {
         return $this->belongsTo(Farm::class, 'farm_id');
+    }
+
+    /**
+     * Shipping company this shipping partner account signs in for.
+     */
+    public function managedShippingPartner()
+    {
+        return $this->belongsTo(ShippingPartner::class, 'shipping_partner_id');
     }
 
     /**
