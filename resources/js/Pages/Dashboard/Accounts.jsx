@@ -317,6 +317,14 @@ export default function Accounts({ auth, users = [], flash }) {
             router.visit(`${prefix}/users/breeder-registration`);
             return;
         }
+        if (userTypeValue === "shipping_partner") {
+            const prefix =
+                auth?.user?.user_type === "admin"
+                    ? "/dashboard/admin"
+                    : "/dashboard/super-admin";
+            router.visit(`${prefix}/users/shipping-partner-registration`);
+            return;
+        }
         addForm.setData("user_type", userTypeValue);
         setShowAddModal(true);
         setShowAddModalAnimation(false);
@@ -394,6 +402,7 @@ export default function Accounts({ auth, users = [], flash }) {
             return (
                 name.includes(q) ||
                 (u.email || "").toLowerCase().includes(q) ||
+                (u.company_name || "").toLowerCase().includes(q) ||
                 (u.username || "").toLowerCase().includes(q) ||
                 roleLabel.includes(q) ||
                 String(u.id).includes(q)
@@ -851,6 +860,15 @@ export default function Accounts({ auth, users = [], flash }) {
                                           year: "numeric",
                                       })
                                     : "—";
+                                const linkedCompany =
+                                    user.user_type === "shipping_partner" &&
+                                    user.company_name
+                                        ? user.company_name
+                                        : "";
+                                const accountTitle = linkedCompany || displayName(user);
+                                const accountMeta = linkedCompany
+                                    ? `Shipping Partner • Linked user: ${displayName(user)} • ${user.email || "—"} • Added ${addedDate}`
+                                    : `${getUserTypeLabel(user.user_type)} • ${user.email || "—"} • Added ${addedDate}`;
                                 return (
                                     <div
                                         key={user.id}
@@ -866,14 +884,10 @@ export default function Accounts({ auth, users = [], flash }) {
                                             <div className="grid min-w-0 flex-1 grid-cols-1 items-center gap-4 gap-y-3 sm:grid-cols-[1fr_180px_auto]">
                                                 <div className="min-w-0">
                                                     <div className="mb-1 text-sm font-bold text-[#102059]">
-                                                        {displayName(user)}
+                                                        {accountTitle}
                                                     </div>
                                                     <div className="text-xs text-[#6B7280]">
-                                                        {getUserTypeLabel(
-                                                            user.user_type,
-                                                        )}{" "}
-                                                        • {user.email || "—"} •
-                                                        Added {addedDate}
+                                                        {accountMeta}
                                                     </div>
                                                 </div>
 
@@ -900,7 +914,7 @@ export default function Accounts({ auth, users = [], flash }) {
                                                             user.status ===
                                                             "active"
                                                         }
-                                                        aria-label={`Toggle status for ${displayName(user)}`}
+                                                        aria-label={`Toggle status for ${accountTitle}`}
                                                         style={{
                                                             borderRadius:
                                                                 "0.7rem",
@@ -1367,6 +1381,19 @@ export default function Accounts({ auth, users = [], flash }) {
                                                         closeAddModal();
                                                         router.visit(
                                                             `${prefix}/users/breeder-registration`,
+                                                        );
+                                                        return;
+                                                    }
+                                                    if (v === "shipping_partner") {
+                                                        const prefix =
+                                                            auth?.user
+                                                                ?.user_type ===
+                                                            "admin"
+                                                                ? "/dashboard/admin"
+                                                                : "/dashboard/super-admin";
+                                                        closeAddModal();
+                                                        router.visit(
+                                                            `${prefix}/users/shipping-partner-registration`,
                                                         );
                                                         return;
                                                     }
