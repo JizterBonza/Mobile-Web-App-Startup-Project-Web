@@ -60,6 +60,58 @@ class AgrivetController extends Controller
     }
 
     /**
+     * Company details and the logins connected to this agrivet.
+     */
+    public function show(int $id)
+    {
+        $agrivet = Agrivet::with('shops')->findOrFail($id);
+        $users = User::with(['userDetail', 'userCredential'])
+            ->where('agrivet_id', $agrivet->id)
+            ->get();
+
+        $shops = $agrivet->shops->sortBy(fn (Shop $shop) => $shop->shop_name ?? '')->values();
+        $address = $shops
+            ->map(function (Shop $shop) {
+                return collect([$shop->shop_address, $shop->shop_city, $shop->shop_province])
+                    ->filter()
+                    ->implode(', ');
+            })
+            ->filter()
+            ->unique()
+            ->implode("\n");
+        $serviceArea = $shops
+            ->map(fn (Shop $shop) => collect([$shop->shop_city, $shop->shop_province])->filter()->implode(', '))
+            ->filter()
+            ->unique()
+            ->implode(', ');
+
+        return Inertia::render('Dashboard/AgrivetShow', [
+            'agrivet' => [
+                'id' => $agrivet->id,
+                'name' => $agrivet->name,
+                'registered_business_name' => $agrivet->registered_business_name,
+                'owner_name' => $agrivet->owner_name,
+                'address' => $address !== '' ? $address : null,
+                'contact_number' => $agrivet->contact_number,
+                'email' => $agrivet->email,
+                'service_area' => $serviceArea !== '' ? $serviceArea : null,
+                'permits' => $this->readablePermits($agrivet->permits),
+                'status' => $agrivet->status,
+                'created_at' => $agrivet->created_at?->format('Y-m-d H:i:s'),
+                'users' => $this->mapConnectedUsers($users),
+                'shops' => $shops->map(fn (Shop $shop) => [
+                    'id' => $shop->id,
+                    'name' => $shop->shop_name,
+                    'address' => collect([$shop->shop_address, $shop->shop_city, $shop->shop_province])
+                        ->filter()
+                        ->implode(', ') ?: null,
+                    'status' => $shop->shop_status,
+                ])->values(),
+            ],
+        ]);
+    }
+
+    /**
      * Multi-step "Add Agrivet" wizard (Klasmeyt template parity).
      */
     public function create()
@@ -1905,5 +1957,66 @@ class AgrivetController extends Controller
     private function storeAgrivetImage(\Illuminate\Http\UploadedFile $file, string $folder): string
     {
         return $file->store("agrivets/{$folder}", 'public');
+    }
+
+    /**
+     * @param  \Illuminate\Support\Collection<int, User>  $users
+     * @return \Illuminate\Support\Collection<int, array<string, mixed>>
+     */
+    private function mapConnectedUsers($users)
+    {
+        return $users
+            ->sortByDesc(fn (User $user) => $user->created_at?->getTimestamp() ?? 0)
+            ->values()
+            ->map(function (User $user) {
+                $detail = $user->userDetail;
+                $name = $detail
+                    ? trim(implode(' ', array_filter([
+                        $detail->first_name,
+                        $detail->middle_name,
+                        $detail->last_name,
+                    ])))
+                    : '';
+
+                return [
+                    'id' => $user->id,
+                    'name' => $name !== '' ? $name : null,
+                    'email' => $detail?->email,
+                    'mobile_number' => $detail?->mobile_number,
+                    'username' => $user->userCredential?->username,
+                    'user_type' => $user->user_type,
+                    'status' => $user->status,
+                    'created_at' => $user->created_at?->format('Y-m-d H:i:s'),
+                ];
+            })
+            ->values();
+    }
+
+    private function readablePermits(?string $permits): ?string
+    {
+        if ($permits === null || trim($permits) === '') {
+            return null;
+        }
+
+        $trimmed = trim($permits);
+        if (! str_starts_with($trimmed, '{')) {
+            return $permits;
+        }
+
+        $parsed = json_decode($trimmed, true);
+        if (! is_array($parsed)) {
+            return $permits;
+        }
+
+        $notes = trim((string) ($parsed['notes'] ?? ''));
+        if ($notes !== '') {
+            return $notes;
+        }
+
+        if (! empty($parsed['permit_document_url'])) {
+            return 'Permit on file';
+        }
+
+        return null;
     }
 }

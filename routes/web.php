@@ -252,6 +252,7 @@ Route::middleware(['auth', 'session.valid', 'user.type:super_admin'])->prefix('d
     Route::post('/{id}/shops/{shopId}/vendors/{vendorId}/reassign', [AgrivetController::class, 'reassignVendor'])->name('shops.vendors.reassign');
     Route::patch('/{id}/shops/{shopId}/vendors/{vendorId}/status', [AgrivetController::class, 'updateVendorStatus'])->name('shops.vendors.status');
 
+    Route::get('/{id}', [AgrivetController::class, 'show'])->whereNumber('id')->name('show');
     Route::put('/{id}', [AgrivetController::class, 'update'])->name('update');
     Route::delete('/{id}', [AgrivetController::class, 'destroy'])->name('destroy');
 });
@@ -268,6 +269,7 @@ Route::middleware(['auth', 'session.valid', 'user.type:super_admin'])->prefix('d
     Route::get('/', [FarmController::class, 'index'])->name('index');
     Route::get('/create', [FarmController::class, 'create'])->name('create');
     Route::post('/setup-wizard', [FarmController::class, 'storeSetupWizard'])->name('setup-wizard.store');
+    Route::get('/{id}', [FarmController::class, 'show'])->whereNumber('id')->name('show');
     Route::put('/{id}', [FarmController::class, 'update'])->name('update');
     Route::delete('/{id}', [FarmController::class, 'destroy'])->name('destroy');
 });
@@ -521,6 +523,7 @@ Route::middleware(['auth', 'session.valid', 'user.type:admin'])->prefix('dashboa
     Route::post('/{id}/shops/{shopId}/vendors/{vendorId}/reassign', [AgrivetController::class, 'reassignVendor'])->name('shops.vendors.reassign');
     Route::patch('/{id}/shops/{shopId}/vendors/{vendorId}/status', [AgrivetController::class, 'updateVendorStatus'])->name('shops.vendors.status');
 
+    Route::get('/{id}', [AgrivetController::class, 'show'])->whereNumber('id')->name('show');
     Route::put('/{id}', [AgrivetController::class, 'update'])->name('update');
     Route::delete('/{id}', [AgrivetController::class, 'destroy'])->name('destroy');
 });
@@ -537,6 +540,7 @@ Route::middleware(['auth', 'session.valid', 'user.type:admin'])->prefix('dashboa
     Route::get('/', [FarmController::class, 'index'])->name('index');
     Route::get('/create', [FarmController::class, 'create'])->name('create');
     Route::post('/setup-wizard', [FarmController::class, 'storeSetupWizard'])->name('setup-wizard.store');
+    Route::get('/{id}', [FarmController::class, 'show'])->whereNumber('id')->name('show');
     Route::put('/{id}', [FarmController::class, 'update'])->name('update');
     Route::delete('/{id}', [FarmController::class, 'destroy'])->name('destroy');
 });

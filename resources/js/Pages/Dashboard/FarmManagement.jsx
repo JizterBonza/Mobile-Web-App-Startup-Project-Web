@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import { useForm, router } from '@inertiajs/react'
+import { Link, useForm, router } from '@inertiajs/react'
 import { Pencil, Plus, Search, Trash2, Upload, X } from 'lucide-react'
 import SuperAdminOrAdminLayout from '../../Layouts/SuperAdminOrAdminLayout'
 import { storageUrl } from '../../utils/storageUrl'
@@ -325,11 +325,17 @@ export default function FarmManagement({ auth, farms = [], flash }) {
                 return (
                   <div key={farm.id} className="px-6 py-4">
                     <div className="flex items-center gap-3">
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-[#E5E7EB] bg-[#102059]">
-                        <span className="text-sm font-bold text-white">{getInitials(farm.name)}</span>
-                      </div>
+                      <Link
+                        href={`${getBaseRoute()}/${farm.id}`}
+                        className="shrink-0 no-underline"
+                        title="View details"
+                      >
+                        <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-[#E5E7EB] bg-[#102059]">
+                          <span className="text-sm font-bold text-white">{getInitials(farm.name)}</span>
+                        </div>
+                      </Link>
                       <div className="grid min-w-0 flex-1 grid-cols-1 gap-4 gap-y-3 lg:grid-cols-[1fr_200px_140px_auto] lg:items-center">
-                        <div className="min-w-0">
+                        <Link href={`${getBaseRoute()}/${farm.id}`} className="min-w-0 no-underline" title="View details">
                           <div className="text-sm font-bold text-[#102059]">{farm.name || 'N/A'}</div>
                           <div className="text-sm text-[#6B7280]">
                             {farm.owner_name || farm.owner_manager_name || 'N/A'}
@@ -340,7 +346,7 @@ export default function FarmManagement({ auth, farms = [], flash }) {
                           <div className="mt-1 text-xs text-[#9CA3AF] lg:hidden">
                             {location || 'No location'} · Added {dateAdded}
                           </div>
-                        </div>
+                        </Link>
                         <div className="hidden items-center lg:flex">
                           <div>
                             <div className="text-xs font-semibold uppercase tracking-wider text-[#9CA3AF]">Date Added</div>

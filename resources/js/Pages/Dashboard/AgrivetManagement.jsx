@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import { useForm, router } from '@inertiajs/react'
+import { Link, useForm, router } from '@inertiajs/react'
 import { Search, Trash2, Pencil, Store, Upload, X } from 'lucide-react'
 import SuperAdminOrAdminLayout from '../../Layouts/SuperAdminOrAdminLayout'
 import { storageUrl } from '../../utils/storageUrl'
@@ -523,28 +523,22 @@ export default function AgrivetManagement({ auth, agrivets = [], flash }) {
                     })
                   : 'N/A'
                 return (
-                  <div
-                    key={agrivet.id}
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => router.visit(`${getBaseRoute()}/${agrivet.id}/shops`)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault()
-                        router.visit(`${getBaseRoute()}/${agrivet.id}/shops`)
-                      }
-                    }}
-                    className="cursor-pointer px-6 py-4 transition-colors hover:bg-[#F8F9FB]"
-                  >
+                  <div key={agrivet.id} className="px-6 py-4">
                     <div className="flex items-center gap-3">
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-[#E5E7EB] bg-[#102059]">
-                        <span className="text-sm font-bold text-white">
-                          {getInitials(agrivet.name)}
-                        </span>
-                      </div>
+                      <Link
+                        href={`${getBaseRoute()}/${agrivet.id}`}
+                        className="shrink-0 no-underline"
+                        title="View details"
+                      >
+                        <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-[#E5E7EB] bg-[#102059]">
+                          <span className="text-sm font-bold text-white">
+                            {getInitials(agrivet.name)}
+                          </span>
+                        </div>
+                      </Link>
 
                       <div className="grid min-w-0 flex-1 grid-cols-1 gap-4 gap-y-3 lg:grid-cols-[1fr_200px_140px_auto] lg:items-center">
-                        <div className="min-w-0">
+                        <Link href={`${getBaseRoute()}/${agrivet.id}`} className="min-w-0 no-underline" title="View details">
                           <div className="text-sm font-bold text-[#102059]">
                             {agrivet.name || 'N/A'}
                           </div>
@@ -559,7 +553,7 @@ export default function AgrivetManagement({ auth, agrivets = [], flash }) {
                           <div className="mt-1 text-xs text-[#9CA3AF] lg:hidden">
                             {agrivet.shops_count ?? 0} shop(s) · Added {dateAdded}
                           </div>
-                        </div>
+                        </Link>
 
                         <div className="hidden items-center lg:flex">
                           <div>
