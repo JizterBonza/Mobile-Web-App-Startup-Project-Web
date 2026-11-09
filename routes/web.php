@@ -260,6 +260,8 @@ Route::middleware(['auth', 'session.valid', 'user.type:super_admin'])->prefix('d
 // Farm Management Routes
 Route::middleware(['auth', 'session.valid', 'user.type:super_admin'])->prefix('dashboard/super-admin/shipping-partners')->name('dashboard.super-admin.shipping-partners.')->group(function () {
     Route::get('/', [ShippingPartnerController::class, 'index'])->name('index');
+    Route::post('/{id}/users', [ShippingPartnerController::class, 'storeUser'])->name('users.store');
+    Route::post('/{id}/users/add-existing', [ShippingPartnerController::class, 'addExistingUser'])->name('users.add-existing');
     Route::put('/{id}', [ShippingPartnerController::class, 'update'])->name('update');
     Route::delete('/{id}', [ShippingPartnerController::class, 'destroy'])->name('destroy');
     Route::get('/{id}', [ShippingPartnerController::class, 'show'])->name('show');
@@ -531,6 +533,8 @@ Route::middleware(['auth', 'session.valid', 'user.type:admin'])->prefix('dashboa
 // Admin Farm Management Routes
 Route::middleware(['auth', 'session.valid', 'user.type:admin'])->prefix('dashboard/admin/shipping-partners')->name('dashboard.admin.shipping-partners.')->group(function () {
     Route::get('/', [ShippingPartnerController::class, 'index'])->name('index');
+    Route::post('/{id}/users', [ShippingPartnerController::class, 'storeUser'])->name('users.store');
+    Route::post('/{id}/users/add-existing', [ShippingPartnerController::class, 'addExistingUser'])->name('users.add-existing');
     Route::put('/{id}', [ShippingPartnerController::class, 'update'])->name('update');
     Route::delete('/{id}', [ShippingPartnerController::class, 'destroy'])->name('destroy');
     Route::get('/{id}', [ShippingPartnerController::class, 'show'])->name('show');
