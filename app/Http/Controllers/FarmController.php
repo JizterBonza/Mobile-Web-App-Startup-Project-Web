@@ -68,6 +68,36 @@ class FarmController extends Controller
     }
 
     /**
+     * Company details and the logins connected to this farm.
+     */
+    public function show(int $id)
+    {
+        $farm = Farm::findOrFail($id);
+        $users = User::with(['userDetail', 'userCredential'])
+            ->where('farm_id', $farm->id)
+            ->get();
+        $address = collect([$farm->address, $farm->city, $farm->province])->filter()->implode(', ');
+
+        return Inertia::render('Dashboard/FarmShow', [
+            'farm' => [
+                'id' => $farm->id,
+                'name' => $farm->name,
+                'registered_business_name' => $farm->registered_business_name,
+                'owner_name' => $farm->owner_name,
+                'address' => $address !== '' ? $address : null,
+                'contact_number' => $farm->contact_number,
+                'email' => $farm->email,
+                'operating_days' => $farm->operating_days,
+                'operating_hours' => $farm->operating_hours,
+                'permits' => $this->readablePermits($farm->permits),
+                'status' => $farm->status,
+                'created_at' => $farm->created_at?->format('Y-m-d H:i:s'),
+                'users' => $this->mapConnectedUsers($users),
+            ],
+        ]);
+    }
+
+    /**
      * Multi-step "Add Farm" wizard. Creates the farm and its owner/manager login.
      */
     public function create()
@@ -352,5 +382,66 @@ class FarmController extends Controller
     private function storeFarmImage(UploadedFile $file, string $folder): string
     {
         return $file->store("farms/{$folder}", 'public');
+    }
+
+    /**
+     * @param  \Illuminate\Support\Collection<int, User>  $users
+     * @return \Illuminate\Support\Collection<int, array<string, mixed>>
+     */
+    private function mapConnectedUsers($users)
+    {
+        return $users
+            ->sortByDesc(fn (User $user) => $user->created_at?->getTimestamp() ?? 0)
+            ->values()
+            ->map(function (User $user) {
+                $detail = $user->userDetail;
+                $name = $detail
+                    ? trim(implode(' ', array_filter([
+                        $detail->first_name,
+                        $detail->middle_name,
+                        $detail->last_name,
+                    ])))
+                    : '';
+
+                return [
+                    'id' => $user->id,
+                    'name' => $name !== '' ? $name : null,
+                    'email' => $detail?->email,
+                    'mobile_number' => $detail?->mobile_number,
+                    'username' => $user->userCredential?->username,
+                    'user_type' => $user->user_type,
+                    'status' => $user->status,
+                    'created_at' => $user->created_at?->format('Y-m-d H:i:s'),
+                ];
+            })
+            ->values();
+    }
+
+    private function readablePermits(?string $permits): ?string
+    {
+        if ($permits === null || trim($permits) === '') {
+            return null;
+        }
+
+        $trimmed = trim($permits);
+        if (! str_starts_with($trimmed, '{')) {
+            return $permits;
+        }
+
+        $parsed = json_decode($trimmed, true);
+        if (! is_array($parsed)) {
+            return $permits;
+        }
+
+        $notes = trim((string) ($parsed['notes'] ?? ''));
+        if ($notes !== '') {
+            return $notes;
+        }
+
+        if (! empty($parsed['permit_document_url'])) {
+            return 'Permit on file';
+        }
+
+        return null;
     }
 }

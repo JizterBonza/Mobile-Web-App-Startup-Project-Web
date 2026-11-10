@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useForm, usePage } from '@inertiajs/react'
-import { Bell, ChevronDown, CreditCard, History, LogOut, Map, MessageSquareMore, Settings, SlidersHorizontal, Smartphone, Ticket, Truck, Wallet } from 'lucide-react'
+import { Bell, ChevronDown, CreditCard, History, LogOut, Map, MessageSquareMore, Settings, Ship, SlidersHorizontal, Smartphone, Ticket, Truck, Wallet } from 'lucide-react'
 import primaryLogo from '../../../../Logo/Primary Logo.png'
 
 /**
@@ -227,7 +227,7 @@ export function DashboardHeader({
                                     aria-label="Close menu"
                                     onClick={() => setShowUserDropdown(false)}
                                 />
-                                <div className="absolute right-0 z-20 mt-2 w-56 overflow-hidden rounded-lg border border-[#E5E7EB] bg-white">
+                                <div className="absolute right-0 z-20 mt-2 max-h-[calc(100dvh-5.5rem)] w-56 overflow-y-auto overscroll-contain rounded-lg border border-[#E5E7EB] bg-white">
                                     {dropdownNavItems.map((item, index) => (
                                         <Fragment key={item.id ?? item.href ?? item.label}>
                                             {index > 0 && <div className="border-t border-[#E5E7EB]" />}
@@ -389,6 +389,7 @@ export const SUPER_ADMIN_HEADER_NAV = [
 ]
 
 export const SUPER_ADMIN_DROPDOWN_NAV = [
+    { label: 'Shipping Partners', href: '/dashboard/super-admin/shipping-partners', Icon: Ship },
     { label: 'Activity Logs', href: '/dashboard/super-admin/activity-logs', Icon: History },
     { label: 'Payout Records', href: '/dashboard/super-admin/payout-records', Icon: Wallet },
     { label: 'Vouchers', href: '/dashboard/super-admin/vouchers', Icon: Ticket },
@@ -421,6 +422,7 @@ export const ADMIN_HEADER_NAV = [
 ]
 
 export const ADMIN_DROPDOWN_NAV = [
+    { label: 'Shipping Partners', href: '/dashboard/admin/shipping-partners', Icon: Ship },
     { label: 'Activity Logs', href: '/dashboard/admin/activity-logs', Icon: History },
     { label: 'Payout Records', href: '/dashboard/admin/payout-records', Icon: Wallet },
     { label: 'Vouchers', href: '/dashboard/admin/vouchers', Icon: Ticket },
