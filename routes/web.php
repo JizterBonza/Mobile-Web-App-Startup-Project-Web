@@ -177,6 +177,7 @@ foreach (['super_admin' => 'super-admin', 'admin' => 'admin'] as $gamefowlRole =
             Route::get('gamefowls/{id}/edit', [GamefowlCatalogController::class, 'edit'])->name('gamefowls.edit');
             Route::put('gamefowls/{id}', [GamefowlCatalogController::class, 'update'])->name('gamefowls.update');
             Route::patch('gamefowls/{id}/status', [GamefowlCatalogController::class, 'updateStatus'])->name('gamefowls.status');
+            Route::delete('gamefowls/{id}', [GamefowlCatalogController::class, 'destroy'])->name('gamefowls.destroy');
             Route::get('gamefowls/{id}', [GamefowlCatalogController::class, 'show'])->name('gamefowls.show');
         });
 }
@@ -192,6 +193,10 @@ Route::put('/dashboard/super-admin/products/{id}', [SuperAdminProductController:
 Route::patch('/dashboard/super-admin/products/{id}/status', [SuperAdminProductController::class, 'updateStatus'])
     ->middleware(['auth', 'session.valid', 'user.type:super_admin'])
     ->name('dashboard.super-admin.products.status');
+
+Route::delete('/dashboard/super-admin/products/{id}', [SuperAdminProductController::class, 'destroy'])
+    ->middleware(['auth', 'session.valid', 'user.type:super_admin'])
+    ->name('dashboard.super-admin.products.destroy');
 
 Route::get('/dashboard/super-admin/products/{id}', [SuperAdminProductController::class, 'show'])
     ->middleware(['auth', 'session.valid', 'user.type:super_admin'])
@@ -480,6 +485,10 @@ Route::put('/dashboard/admin/products/{id}', [SuperAdminProductController::class
 Route::patch('/dashboard/admin/products/{id}/status', [SuperAdminProductController::class, 'updateStatus'])
     ->middleware(['auth', 'session.valid', 'user.type:admin'])
     ->name('dashboard.admin.products.status');
+
+Route::delete('/dashboard/admin/products/{id}', [SuperAdminProductController::class, 'destroy'])
+    ->middleware(['auth', 'session.valid', 'user.type:admin'])
+    ->name('dashboard.admin.products.destroy');
 
 Route::get('/dashboard/admin/products/{id}', [SuperAdminProductController::class, 'show'])
     ->middleware(['auth', 'session.valid', 'user.type:admin'])

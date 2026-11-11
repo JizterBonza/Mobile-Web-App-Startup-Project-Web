@@ -13,6 +13,8 @@ class GamefowlCatalog extends Model
 
     public const STATUS_INACTIVE = 'inactive';
 
+    public const STATUS_DELETED = 'deleted';
+
     public const STATUS_REJECTED = 'rejected';
 
     protected $table = 'gamefowl_catalog';

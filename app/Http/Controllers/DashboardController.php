@@ -403,6 +403,11 @@ class DashboardController extends Controller
             ->where('farm_id', $farm->id)
             ->findOrFail($id);
 
+        if ($listing->status === 'removed' || ($validated['status'] === 'active' && ! $this->gamefowlListingCanBeSold($listing))) {
+            return redirect('/dashboard/owner-manager/farm?tab=gamefowl')
+                ->with('error', 'This gamefowl was removed from the catalog and can no longer be listed for sale.');
+        }
+
         $listing->update(['status' => $validated['status']]);
 
         return redirect('/dashboard/owner-manager/farm?tab=gamefowl')
@@ -572,6 +577,7 @@ class DashboardController extends Controller
     {
         $listings = FarmGamefowlListing::query()
             ->where('farm_id', $farm->id)
+            ->whereIn('status', ['active', 'inactive'])
             ->with(['gamefowl.bloodline', 'gamefowl.ageType'])
             ->latest()
             ->get();
@@ -641,6 +647,23 @@ class DashboardController extends Controller
         $images = $gamefowl?->images ?? [];
 
         return $images[$gamefowl?->primary_image_index ?? 0] ?? ($images[0] ?? null);
+    }
+
+    private function gamefowlListingCanBeSold(FarmGamefowlListing $listing): bool
+    {
+        $catalogIds = $listing->is_bundle
+            ? array_map('intval', $listing->bundle_catalog_ids ?? [])
+            : array_filter([(int) $listing->gamefowl_catalog_id]);
+
+        $catalogIds = array_values(array_unique($catalogIds));
+        if ($catalogIds === []) {
+            return false;
+        }
+
+        return GamefowlCatalog::query()
+            ->whereIn('id', $catalogIds)
+            ->where('status', GamefowlCatalog::STATUS_ACTIVE)
+            ->count() === count($catalogIds);
     }
 
     private function gamefowlMatchesSex(?GamefowlCatalog $gamefowl, string $sex): bool

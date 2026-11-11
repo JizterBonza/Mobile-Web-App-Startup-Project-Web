@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Controllers\Concerns\CreatesProductCatalogEntry;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 use App\Models\ActivityLog;
@@ -248,6 +249,51 @@ class SuperAdminProductController extends Controller
             : 'Product enabled. Agrivets can add and restock this product again.';
 
         return redirect()->back()->with('success', $message);
+    }
+
+    /**
+     * Remove a catalog product from the catalog.
+     * Shops that still stock it can sell the remainder, but cannot restock it.
+     */
+    public function destroy($id)
+    {
+        $catalog = ProductCatalog::listedInCatalog()->findOrFail($id);
+        $oldValues = $catalog->toArray();
+        $name = $catalog->product_name;
+        $status = $catalog->status;
+
+        $shopListings = DB::transaction(function () use ($catalog, $oldValues, $name) {
+            $direct = DB::table('items')->where('product_catalog_id', $catalog->id)->count();
+            $bundles = DB::table('items')
+                ->whereNotNull('bundle_catalog_ids')
+                ->where(function ($query) use ($catalog) {
+                    $query->whereJsonContains('bundle_catalog_ids', $catalog->id)
+                        ->orWhereJsonContains('bundle_catalog_ids', (string) $catalog->id);
+                })
+                ->count();
+
+            $catalog->update(['status' => ProductCatalog::STATUS_DELETED]);
+
+            ActivityLog::log(
+                'deleted',
+                "Product catalog entry deleted: {$name}",
+                $catalog,
+                $oldValues,
+                $catalog->fresh()->toArray()
+            );
+
+            return $direct + $bundles;
+        });
+
+        $message = $shopListings > 0
+            ? 'Product deleted from the catalog. Shops that still have stock can sell what remains, but they cannot restock it.'
+            : 'Product deleted from the catalog.';
+
+        $route = $status === ProductCatalog::STATUS_INACTIVE
+            ? $this->productsInactiveRoute()
+            : $this->productsIndexRoute();
+
+        return redirect()->route($route)->with('success', $message);
     }
 
     /**
