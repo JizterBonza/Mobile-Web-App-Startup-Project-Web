@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, router } from '@inertiajs/react'
-import { ArrowLeft, Ban, CheckCircle, Clock, Package, Pencil, Plus, Search, Star } from 'lucide-react'
+import { ArrowLeft, Clock, Package, Pencil, Plus, Search, Star, Trash2 } from 'lucide-react'
 import SuperAdminOrAdminLayout from '../../../Layouts/SuperAdminOrAdminLayout'
 
 function getProductsBaseRoute(userType) {
@@ -44,6 +44,8 @@ export default function SuperAdminProducts({ auth, products = [], flash, pending
     const [showErrorAlert, setShowErrorAlert]     = useState(true)
     const [statusModal, setStatusModal]           = useState(null)
     const [updatingStatusId, setUpdatingStatusId] = useState(null)
+    const [deleteModal, setDeleteModal]           = useState(null)
+    const [deletingId, setDeletingId]             = useState(null)
 
     const normalizedProducts = useMemo(() => {
         return products.map(p => ({
@@ -126,6 +128,20 @@ export default function SuperAdminProducts({ auth, products = [], flash, pending
                 },
             }
         )
+    }
+
+    const confirmDelete = () => {
+        if (!deleteModal || deletingId) return
+        setDeletingId(deleteModal.id)
+        router.delete(`${productsBase}/${deleteModal.id}`, {
+            preserveScroll: true,
+            onFinish: () => {
+                setDeletingId(null)
+                setDeleteModal(null)
+                setShowSuccessAlert(true)
+                setShowErrorAlert(true)
+            },
+        })
     }
 
     return (
@@ -333,34 +349,39 @@ export default function SuperAdminProducts({ auth, products = [], flash, pending
                                     </div>
                                     </Link>
                                     <div className="flex flex-shrink-0 items-center gap-2">
-                                        {isInactive ? (
-                                            <button
-                                                type="button"
-                                                onClick={() => openStatusModal(product, 'active')}
-                                                disabled={updatingStatusId === product.id}
-                                                className="inline-flex items-center gap-1.5 rounded-lg border border-[#00C950]/30 bg-white px-3 py-2 text-xs font-semibold text-[#00C950] transition-colors hover:bg-[#F0FDF4] disabled:opacity-50"
-                                            >
-                                                <CheckCircle className="h-3.5 w-3.5" />
-                                                Enable
-                                            </button>
-                                        ) : (
-                                            <button
-                                                type="button"
-                                                onClick={() => openStatusModal(product, 'inactive')}
-                                                disabled={updatingStatusId === product.id}
-                                                className="inline-flex items-center gap-1.5 rounded-lg border border-[#E20E28]/30 bg-white px-3 py-2 text-xs font-semibold text-[#E20E28] transition-colors hover:bg-[#FEF2F2] disabled:opacity-50"
-                                            >
-                                                <Ban className="h-3.5 w-3.5" />
-                                                Disable
-                                            </button>
-                                        )}
+                                        <button
+                                            type="button"
+                                            onClick={() => openStatusModal(product, product.status === 'active' ? 'inactive' : 'active')}
+                                            disabled={updatingStatusId === product.id}
+                                            aria-pressed={product.status === 'active'}
+                                            aria-label={product.status === 'active' ? `Disable ${product.productName}` : `Enable ${product.productName}`}
+                                            className={`relative inline-flex h-6 w-11 shrink-0 items-center transition-colors duration-300 disabled:opacity-50 ${
+                                                product.status === 'active' ? 'bg-[#00C950]' : 'bg-[#D1D5DB]'
+                                            }`}
+                                            style={{ borderRadius: '0.7rem' }}
+                                        >
+                                            <span
+                                                className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-sm transition-transform duration-300 ${
+                                                    product.status === 'active' ? 'translate-x-[22px]' : 'translate-x-[2px]'
+                                                }`}
+                                            />
+                                        </button>
                                         <Link
                                             href={`${productsBase}/${product.id}/edit`}
-                                            className="inline-flex items-center gap-1.5 rounded-lg border border-[#E5E7EB] bg-white px-3 py-2 text-xs font-semibold text-[#102059] transition-colors hover:bg-[#F0F7FF]"
+                                            className="inline-flex items-center gap-1.5 rounded-lg !bg-[#244693] px-3 py-2 text-xs font-semibold !text-white transition-colors hover:!bg-[#102059] hover:!text-white"
                                         >
                                             <Pencil className="h-3.5 w-3.5" />
                                             Edit
                                         </Link>
+                                        <button
+                                            type="button"
+                                            onClick={() => setDeleteModal({ id: product.id, productName: product.productName })}
+                                            disabled={deletingId === product.id}
+                                            className="inline-flex items-center gap-1.5 rounded-lg bg-[#E20E28] px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-[#C10D23] disabled:opacity-50"
+                                        >
+                                            <Trash2 className="h-3.5 w-3.5" />
+                                            Delete
+                                        </button>
                                     </div>
                                 </div>
                             )
@@ -417,6 +438,37 @@ export default function SuperAdminProducts({ auth, products = [], flash, pending
                     </div>
                 </div>
             </div>
+
+            {deleteModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+                    <div className="w-full max-w-md rounded-lg border border-[#E5E7EB] bg-white p-6">
+                        <h3 className="mb-2 text-lg font-bold text-[#102059]">Delete Product</h3>
+                        <p className="mb-6 text-sm text-[#6B7280]">
+                            Delete <span className="font-semibold text-[#102059]">{deleteModal.productName}</span>?
+                            This removes it from the catalog and cannot be undone.
+                            Shops that still have it in stock can sell what remains, but they cannot restock it.
+                        </p>
+                        <div className="flex justify-end gap-3">
+                            <button
+                                type="button"
+                                onClick={() => !deletingId && setDeleteModal(null)}
+                                disabled={Boolean(deletingId)}
+                                className="rounded-lg border border-[#E5E7EB] bg-white px-4 py-2 text-sm font-medium text-[#6B7280] transition-colors hover:bg-[#F9FAFB] disabled:opacity-50"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="button"
+                                onClick={confirmDelete}
+                                disabled={Boolean(deletingId)}
+                                className="rounded-lg bg-[#E20E28] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#C10D23] disabled:opacity-50"
+                            >
+                                {deletingId ? 'Deleting...' : 'Delete Product'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {statusModal && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">

@@ -2,13 +2,12 @@ import { useState } from 'react'
 import { Link, router } from '@inertiajs/react'
 import {
     ArrowLeft,
-    Ban,
     Calendar,
-    CheckCircle,
     ChevronLeft,
     ChevronRight,
     Package,
     Pencil,
+    Trash2,
     User,
     Star,
 } from 'lucide-react'
@@ -27,6 +26,8 @@ export default function ProductShow({ auth, product, flash }) {
     const [current, setCurrent] = useState(primaryIndex < photos.length ? primaryIndex : 0)
     const [showStatusModal, setShowStatusModal] = useState(false)
     const [updatingStatus, setUpdatingStatus] = useState(false)
+    const [showDeleteModal, setShowDeleteModal] = useState(false)
+    const [deleting, setDeleting] = useState(false)
 
     const isActive = product.status === 'active'
     const nextStatus = isActive ? 'inactive' : 'active'
@@ -59,6 +60,16 @@ export default function ProductShow({ auth, product, flash }) {
             }
         )
     }
+
+    const confirmDelete = () => {
+        if (deleting) return
+        setDeleting(true)
+        router.delete(`${productsBase}/${product.id}`, {
+            onFinish: () => setDeleting(false),
+        })
+    }
+
+    const canManageCatalog = product.status === 'active' || product.status === 'inactive'
 
     return (
         <SuperAdminOrAdminLayout auth={auth} title="Product Detail">
@@ -174,14 +185,35 @@ export default function ProductShow({ auth, product, flash }) {
                             <InfoField label="Sub-Category" value={product.sub_category_name || '—'} />
                             <InfoField label="Unit / Size"  value={unit} />
                             <div className="col-span-2">
-                                <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-[#6B7280]">Status</p>
-                                <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${
-                                    product.status === 'active'
-                                        ? 'bg-[#00C950]/10 text-[#00C950]'
-                                        : 'bg-[#F3F4F6] text-[#6B7280]'
-                                }`}>
-                                    {product.status === 'active' ? 'Active' : 'Inactive'}
-                                </span>
+                                <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-[#6B7280]">Status</p>
+                                <div className="flex items-center justify-between gap-4 rounded-lg border border-[#E5E7EB] bg-[#F9FAFB] px-3 py-2.5">
+                                    <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+                                        product.status === 'active'
+                                            ? 'bg-[#00C950]/10 text-[#00C950]'
+                                            : 'bg-[#F3F4F6] text-[#6B7280]'
+                                    }`}>
+                                        {product.status === 'active' ? 'Active' : 'Inactive'}
+                                    </span>
+                                    {canManageCatalog && (
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowStatusModal(true)}
+                                            disabled={updatingStatus}
+                                            aria-pressed={isActive}
+                                            aria-label={isActive ? 'Disable product' : 'Enable product'}
+                                            className={`relative inline-flex h-7 w-12 shrink-0 items-center transition-colors duration-300 disabled:opacity-50 ${
+                                                isActive ? 'bg-[#00C950]' : 'bg-[#D1D5DB]'
+                                            }`}
+                                            style={{ borderRadius: '0.7rem' }}
+                                        >
+                                            <span
+                                                className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-sm transition-transform duration-300 ${
+                                                    isActive ? 'translate-x-[26px]' : 'translate-x-[4px]'
+                                                }`}
+                                            />
+                                        </button>
+                                    )}
+                                </div>
                             </div>
                         </div>
 
@@ -204,28 +236,57 @@ export default function ProductShow({ auth, product, flash }) {
                         <div className="mt-6 flex flex-wrap gap-3">
                             <Link
                                 href={`${productsBase}/${product.id}/edit`}
-                                className="inline-flex items-center justify-center gap-2 rounded-lg border border-[#102059]/30 bg-white px-5 py-2 text-sm font-medium text-[#102059] transition-colors hover:bg-[#F0F7FF]"
+                                className="inline-flex items-center justify-center gap-2 rounded-lg !bg-[#244693] px-5 py-2 text-sm font-medium !text-white transition-colors hover:!bg-[#102059] hover:!text-white"
                             >
                                 <Pencil className="h-4 w-4" />
                                 Edit Product
                             </Link>
-                            <button
-                                type="button"
-                                onClick={() => setShowStatusModal(true)}
-                                disabled={updatingStatus}
-                                className={`inline-flex items-center justify-center gap-2 rounded-lg border px-5 py-2 text-sm font-medium transition-colors disabled:opacity-50 ${
-                                    isActive
-                                        ? 'border-[#E20E28]/30 bg-white text-[#E20E28] hover:bg-[#FEF2F2]'
-                                        : 'border-[#00C950]/30 bg-white text-[#00C950] hover:bg-[#F0FDF4]'
-                                }`}
-                            >
-                                {isActive ? <Ban className="h-4 w-4" /> : <CheckCircle className="h-4 w-4" />}
-                                {isActive ? 'Disable Product' : 'Enable Product'}
-                            </button>
+                            {canManageCatalog && (
+                                <button
+                                    type="button"
+                                    onClick={() => setShowDeleteModal(true)}
+                                    disabled={deleting}
+                                    className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#E20E28] px-5 py-2 text-sm font-medium text-white transition-colors hover:bg-[#C10D23] disabled:opacity-50"
+                                >
+                                    <Trash2 className="h-4 w-4" />
+                                    Delete Product
+                                </button>
+                            )}
                         </div>
                     </div>
                 </div>
             </div>
+
+            {showDeleteModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+                    <div className="w-full max-w-md rounded-lg border border-[#E5E7EB] bg-white p-6">
+                        <h3 className="mb-2 text-lg font-bold text-[#102059]">Delete Product</h3>
+                        <p className="mb-6 text-sm text-[#6B7280]">
+                            Delete <span className="font-semibold text-[#102059]">{product.product_name}</span>?
+                            This removes it from the catalog and cannot be undone.
+                            Shops that still have it in stock can sell what remains, but they cannot restock it.
+                        </p>
+                        <div className="flex justify-end gap-3">
+                            <button
+                                type="button"
+                                onClick={() => setShowDeleteModal(false)}
+                                disabled={deleting}
+                                className="rounded-lg border border-[#E5E7EB] bg-white px-4 py-2 text-sm font-medium text-[#6B7280] transition-colors hover:bg-[#F9FAFB] disabled:opacity-50"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="button"
+                                onClick={confirmDelete}
+                                disabled={deleting}
+                                className="rounded-lg bg-[#E20E28] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#C10D23] disabled:opacity-50"
+                            >
+                                {deleting ? 'Deleting...' : 'Delete Product'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {showStatusModal && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">

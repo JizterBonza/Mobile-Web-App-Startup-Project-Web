@@ -13,6 +13,7 @@ class ProductCatalog extends Model
     public const STATUS_PENDING  = 'pending';
     public const STATUS_ACTIVE   = 'active';
     public const STATUS_INACTIVE = 'inactive';
+    public const STATUS_DELETED  = 'deleted';
     public const STATUS_REJECTED = 'rejected';
 
     public const RESTOCK_BLOCKED_MESSAGE = 'This product is disabled in the catalog and cannot be restocked.';
@@ -130,35 +131,30 @@ class ProductCatalog extends Model
         $bundleIds = array_values(array_unique($bundleIds));
 
         $activeNames = [];
-        $listedNames = [];
+        $blockedNames = [];
         if ($names !== []) {
-            $listed = self::listedInCatalog()
+            $named = self::query()
+                ->whereIn('status', [self::STATUS_ACTIVE, self::STATUS_INACTIVE, self::STATUS_DELETED])
                 ->whereIn('product_name', $names)
                 ->get(['product_name', 'status']);
 
-            foreach ($listed as $catalog) {
+            foreach ($named as $catalog) {
                 $key = mb_strtolower((string) $catalog->product_name);
-                $listedNames[$key] = true;
                 if ($catalog->status === self::STATUS_ACTIVE) {
                     $activeNames[$key] = true;
+                } else {
+                    $blockedNames[$key] = true;
                 }
             }
         }
 
-        $listedById = [];
-        $activeById = [];
-        if ($catalogIds !== []) {
-            $listed = self::listedInCatalog()
+        $activeById = $catalogIds === []
+            ? []
+            : self::approved()
                 ->whereIn('id', $catalogIds)
-                ->get(['id', 'status']);
-
-            foreach ($listed as $catalog) {
-                $listedById[(int) $catalog->id] = true;
-                if ($catalog->status === self::STATUS_ACTIVE) {
-                    $activeById[(int) $catalog->id] = true;
-                }
-            }
-        }
+                ->pluck('id')
+                ->mapWithKeys(fn ($id) => [(int) $id => true])
+                ->all();
 
         $activeBundleIds = $bundleIds === []
             ? []
@@ -178,14 +174,12 @@ class ProductCatalog extends Model
 
             $catalogId = self::itemCatalogId($item);
             if ($catalogId !== null) {
-                $flags[$item->id] = isset($listedById[$catalogId]) && ! isset($activeById[$catalogId]);
+                $flags[$item->id] = ! isset($activeById[$catalogId]);
                 continue;
             }
 
             $key = mb_strtolower((string) ($item->item_name ?? ''));
-            $inCatalog = $key !== '' && isset($listedNames[$key]);
-            $isActive = isset($activeNames[$key]);
-            $flags[$item->id] = $inCatalog && ! $isActive;
+            $flags[$item->id] = $key !== '' && isset($blockedNames[$key]) && ! isset($activeNames[$key]);
         }
 
         return $flags;
