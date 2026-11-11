@@ -49,9 +49,10 @@ class SearchController extends Controller
             $shops = $this->searchShops($searchTerm, $limit);
         }
 
-        if ($type === null || $type === 'gamefowl') {
-            $gamefowl = $discovery->search($searchTerm, $limit);
-        }
+        // Temporarily hide gamefowl listings from main search results.
+        // if ($type === null || $type === 'gamefowl') {
+        //     $gamefowl = $discovery->search($searchTerm, $limit);
+        // }
 
         return response()->json([
             'success' => true,
