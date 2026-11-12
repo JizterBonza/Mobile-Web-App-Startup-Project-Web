@@ -40,7 +40,7 @@ export default function GamefowlRequests({ auth, requests = [], flash }) {
                     </Link>
                     <h1 className="mb-1 text-2xl font-semibold text-[#102059]">Gamefowl Registration Requests</h1>
                     <p className="text-sm text-[#6B7280]">
-                        Review and approve gamefowl submissions before they appear in the catalog.
+                        Approve or reject a farm’s registration request. An approved gamefowl can be listed only by the farm that requested it.
                     </p>
                 </div>
 

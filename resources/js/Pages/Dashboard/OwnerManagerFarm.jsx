@@ -461,9 +461,9 @@ function PublishGamefowlListingModal({ catalog = [], listings = [], onClose }) {
                     {cards.length === 0 ? (
                         <div className="flex min-h-[220px] items-center justify-center text-center">
                             <p className="text-sm text-[#9CA3AF]">
-                                {catalog.length === 0
-                                    ? 'No approved gamefowl are available to list yet.'
-                                    : 'No gamefowl match your search.'}
+                                    {catalog.length === 0
+                                        ? 'No approved gamefowls from this farm’s registration requests are available to list yet.'
+                                        : 'No gamefowl match your search.'}
                             </p>
                         </div>
                     ) : (
@@ -619,7 +619,7 @@ function CreateGamefowlBundleModal({ catalog = [], onClose }) {
                             <h2 id="add-gamefowl-to-store-title" className="text-lg font-bold text-[#111827]">
                                 Add Gamefowl to Store
                             </h2>
-                            <p className="mt-1 text-sm text-[#6B7280]">Choose from registered gamefowl and set listing details</p>
+                            <p className="mt-1 text-sm text-[#6B7280]">Choose from this farm’s approved registration requests</p>
                         </div>
                         <button
                             type="button"
@@ -670,7 +670,7 @@ function CreateGamefowlBundleModal({ catalog = [], onClose }) {
                             <div className="flex min-h-[220px] items-center justify-center text-center">
                                 <p className="text-sm text-[#9CA3AF]">
                                     {catalog.length === 0
-                                        ? 'No approved gamefowl are available yet.'
+                                        ? 'No approved gamefowls from this farm’s registration requests are available yet.'
                                         : query.trim()
                                           ? `No ${slot === 'stag' ? 'male' : 'female'} gamefowl match your search.`
                                           : `No ${slot === 'stag' ? 'male' : 'female'} gamefowl are available.`}
@@ -782,7 +782,7 @@ function CreateGamefowlBundleModal({ catalog = [], onClose }) {
                         <h2 id="create-gamefowl-bundle-title" className="text-xl font-bold text-[#111827]">
                             Create Gamefowl Bundle
                         </h2>
-                        <p className="mt-1 text-sm text-[#6B7280]">Choose from registered gamefowl and set listing details</p>
+                        <p className="mt-1 text-sm text-[#6B7280]">Choose from this farm’s approved registration requests</p>
                     </div>
                     <button
                         type="button"
@@ -989,7 +989,7 @@ function GamefowlCatalogPanel({ listings = [], catalog = [] }) {
                         className="inline-flex items-center gap-2 rounded-lg border border-[#244693] bg-white px-4 py-2 text-sm font-semibold text-[#244693] transition-colors hover:bg-[#F4F7FF]"
                     >
                         <Bird className="h-4 w-4" />
-                        Register Gamefowl
+                        Request Registration
                     </Link>
                     <button
                         type="button"

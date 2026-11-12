@@ -27,41 +27,6 @@ class GamefowlCatalogController extends Controller
         return $this->renderListing(GamefowlCatalog::STATUS_INACTIVE);
     }
 
-    public function create()
-    {
-        return Inertia::render('Dashboard/RegisterGamefowl', $this->formOptions());
-    }
-
-    public function store(Request $request)
-    {
-        $validated = $this->validateEntry($request, true);
-        $images = $this->resolveImages($request);
-
-        if (count($images) < 5) {
-            return back()->withInput()->withErrors(['images' => 'Please upload all 5 gamefowl images.']);
-        }
-
-        $gamefowl = GamefowlCatalog::create([
-            'name' => $validated['name'],
-            'bloodline_id' => $validated['bloodline_id'],
-            'age_type_id' => $validated['age_type_id'],
-            'class_id' => $validated['class_id'],
-            'sex' => $validated['sex'],
-            'hatch_date' => $validated['hatch_date'] ?? null,
-            'description' => $validated['description'] ?? null,
-            'images' => array_values($images),
-            'primary_image_index' => (int) $validated['primary_image_index'],
-            'status' => GamefowlCatalog::STATUS_ACTIVE,
-            'created_by' => auth()->id(),
-            'reviewed_by' => auth()->id(),
-            'reviewed_at' => now(),
-        ]);
-
-        ActivityLog::log('created', "Gamefowl catalog entry created: {$gamefowl->name}", $gamefowl, null, $gamefowl->toArray());
-
-        return redirect($this->basePath())->with('success', 'Gamefowl registered in the catalog.');
-    }
-
     public function show($id)
     {
         $gamefowl = GamefowlCatalog::with(['bloodline', 'ageType', 'gamefowlClass', 'creator.userDetail'])->findOrFail($id);

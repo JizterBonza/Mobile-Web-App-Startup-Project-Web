@@ -151,8 +151,6 @@ foreach (['super_admin' => 'super-admin', 'admin' => 'admin'] as $gamefowlRole =
         ->prefix("dashboard/{$gamefowlSegment}")
         ->name("dashboard.{$gamefowlSegment}.")
         ->group(function () {
-            Route::get('gamefowls/create', [GamefowlCatalogController::class, 'create'])->name('gamefowls.create');
-            Route::post('gamefowls', [GamefowlCatalogController::class, 'store'])->name('gamefowls.store');
             Route::get('gamefowls', [GamefowlCatalogController::class, 'index'])->name('gamefowls');
             Route::get('gamefowls/inactive', [GamefowlCatalogController::class, 'inactive'])->name('gamefowls.inactive');
             Route::get('gamefowls/requests', [GamefowlCatalogController::class, 'requests'])->name('gamefowls.requests');
