@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, router } from '@inertiajs/react'
-import { ArrowLeft, Clock, Package, Pencil, Plus, Search, Trash2 } from 'lucide-react'
+import { ArrowLeft, Clock, Package, Pencil, Search, Trash2 } from 'lucide-react'
 import SuperAdminOrAdminLayout from '../../Layouts/SuperAdminOrAdminLayout'
 
 function gamefowlBase(userType) {
@@ -145,18 +145,10 @@ export default function Gamefowls({ auth, gamefowls = [], flash, pendingCount = 
                     <p className="text-sm text-[#6B7280]">
                         {isInactive
                             ? 'Gamefowls that have been disabled. They stay in the catalog but are marked inactive. Enable a gamefowl to return it to the catalog.'
-                            : 'Manage the platform gamefowl catalog. Farms list gamefowls from the entries registered here. Disabled gamefowls are listed separately and stay marked inactive.'}
+                            : 'Review farm registration requests, then approve or reject them. Edit a listing when the submitted data needs a correction. Disabled gamefowls stay in the catalog and are marked inactive.'}
                     </p>
                     {!isInactive && (
                     <div className="mt-4 flex flex-wrap gap-3">
-                        <Link
-                            href={`${base}/create`}
-                            className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#102059] px-5 py-2 text-sm font-medium text-white transition-colors hover:bg-[#244693]"
-                            style={{ backgroundColor: '#102059', border: '1px solid #102059' }}
-                        >
-                            <Plus className="h-4 w-4" />
-                            Register Gamefowl
-                        </Link>
                         <Link href={`${base}/bloodlines`} className={outlineButton} style={{ backgroundColor: '#102059', border: '1px solid #102059' }}>
                             Go to Bloodline Categories
                         </Link>
@@ -314,11 +306,6 @@ export default function Gamefowls({ auth, gamefowls = [], flash, pendingCount = 
                                 <p className="text-sm text-[#9CA3AF]">
                                     {isInactive ? 'No inactive gamefowls.' : 'No gamefowls found in the catalog.'}
                                 </p>
-                                {!isInactive && (
-                                <Link href={`${base}/create`} className="mt-3 inline-flex items-center gap-1.5 text-sm font-medium text-[#102059] hover:underline">
-                                    <Plus className="h-4 w-4" /> Register the first gamefowl
-                                </Link>
-                                )}
                             </div>
                         )}
                     </div>

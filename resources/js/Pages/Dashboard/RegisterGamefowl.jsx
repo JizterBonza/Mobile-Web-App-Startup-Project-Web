@@ -208,7 +208,7 @@ export default function RegisterGamefowl({ auth, bloodlines = [], ageTypes = [],
     ]
 
     return (
-        <SuperAdminOrAdminLayout auth={auth} title={requestMode ? 'Request Gamefowl Register' : (isEdit ? 'Edit Gamefowl' : 'Register Gamefowl')}>
+        <SuperAdminOrAdminLayout auth={auth} title={requestMode ? 'Request Registration' : (isEdit ? 'Edit Gamefowl' : 'Request Registration')}>
             <div className={`mx-auto ${requestMode ? 'max-w-5xl' : 'max-w-6xl'}`}>
                 {requestMode && (
                     <div className="mb-8 flex items-center gap-4">
@@ -221,8 +221,8 @@ export default function RegisterGamefowl({ auth, bloodlines = [], ageTypes = [],
                             <ChevronLeft className="h-5 w-5" />
                         </button>
                         <div>
-                            <h1 className="text-2xl font-bold tracking-tight text-[#111827]">Request Gamefowl Register</h1>
-                            <p className="text-sm text-[#6B7280]">Create a new gamefowl catalog</p>
+                            <h1 className="text-2xl font-bold tracking-tight text-[#111827]">Request Registration</h1>
+                            <p className="text-sm text-[#6B7280]">Submit this gamefowl for an administrator to approve</p>
                         </div>
                     </div>
                 )}
@@ -260,7 +260,9 @@ export default function RegisterGamefowl({ auth, bloodlines = [], ageTypes = [],
                         <div className="rounded-xl border border-[#E5E7EB] bg-white p-8 shadow-sm">
                             <h1 className="text-lg font-semibold text-[#111827]">General Information</h1>
                             <p className="mt-1 mb-8 text-sm text-[#6B7280]">
-                                {isEdit ? 'Update this gamefowl catalog entry.' : 'Create a new gamefowl catalog'}
+                                {isEdit
+                                    ? 'Update this gamefowl catalog entry.'
+                                    : 'Tell us about the gamefowl this farm wants to register.'}
                             </p>
 
                             <div className="grid gap-x-8 gap-y-6 md:grid-cols-2">
@@ -441,7 +443,9 @@ export default function RegisterGamefowl({ auth, bloodlines = [], ageTypes = [],
                         <div className="rounded-xl border border-[#E5E7EB] bg-white p-8 shadow-sm">
                             <h1 className="text-lg font-semibold text-[#111827]">Gamefowl Images</h1>
                             <p className="mt-1 mb-8 text-sm text-[#6B7280]">
-                                {isEdit ? 'Update this gamefowl catalog entry.' : 'Create a new gamefowl catalog'}
+                                {isEdit
+                                    ? 'Review the updated gamefowl details before saving.'
+                                    : 'Review this registration request before submitting it.'}
                             </p>
 
                             <h2 className="mb-3 text-xs font-bold tracking-wide text-[#111827]">GAMEFOWL INFORMATION</h2>

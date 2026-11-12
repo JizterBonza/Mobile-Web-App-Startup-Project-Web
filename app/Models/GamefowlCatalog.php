@@ -51,6 +51,17 @@ class GamefowlCatalog extends Model
         return $query->where('status', self::STATUS_PENDING);
     }
 
+    /**
+     * Approved requests belong to the farm whose owner or manager submitted them.
+     */
+    public function scopeRequestedByFarm(Builder $query, int $farmId): Builder
+    {
+        return $query->whereHas('creator', function (Builder $creator) use ($farmId) {
+            $creator->where('farm_id', $farmId)
+                ->where('user_type', User::TYPE_OWNER_MANAGER);
+        });
+    }
+
     public function bloodline()
     {
         return $this->belongsTo(GamefowlLookup::class, 'bloodline_id');
