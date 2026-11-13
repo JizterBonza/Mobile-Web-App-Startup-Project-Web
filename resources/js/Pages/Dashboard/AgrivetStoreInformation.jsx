@@ -276,6 +276,128 @@ function getProductStatus(listing) {
   return 'Active'
 }
 
+function isDeactivatedListing(listing) {
+  return (listing.manualStatus || 'Active') === 'Inactive'
+}
+
+function listingMatchesQuery(listing, query) {
+  const searchLower = query.toLowerCase()
+  return (
+    listing.productName.toLowerCase().includes(searchLower) ||
+    listing.brand.toLowerCase().includes(searchLower) ||
+    String(listing.id).includes(searchLower)
+  )
+}
+
+function sortProductListings(listings, sortBy) {
+  return [...listings].sort((a, b) => {
+    if (sortBy === 'name') return a.productName.localeCompare(b.productName)
+    if (sortBy === 'date') return new Date(b.dateAdded).getTime() - new Date(a.dateAdded).getTime()
+    if (sortBy === 'popularity') return (b.popularity ?? 0) - (a.popularity ?? 0)
+    return 0
+  })
+}
+
+function ProductListingCard({ listing, canManage, onOpen, onToggleStatus }) {
+  const isActive = (listing.manualStatus || 'Active') === 'Active'
+
+  return (
+    <div
+      onClick={() => onOpen(listing)}
+      className="relative flex h-full cursor-pointer flex-col overflow-hidden rounded-lg border border-[#E5E7EB] bg-white transition-all hover:shadow-sm"
+    >
+      <div className="relative aspect-square shrink-0 overflow-hidden bg-[#F9FAFB]">
+        <img
+          src={getListingImageSrc(listing)}
+          alt={listing.productName}
+          className="w-full h-full object-contain p-12"
+          onError={(e) => {
+            if (!e.currentTarget.dataset.fallback) {
+              e.currentTarget.dataset.fallback = 'true'
+              e.currentTarget.src = LISTING_IMAGE_FALLBACK
+            }
+          }}
+        />
+        <div className="absolute top-2 left-2 flex flex-col gap-1">
+          <span
+            className={`text-[10px] font-semibold px-2 py-1 rounded-full ${
+              getProductStatus(listing) === 'Active'
+                ? 'bg-[#10B981] text-white'
+                : getProductStatus(listing) === 'Inactive'
+                  ? 'bg-[#6B7280] text-white'
+                  : getProductStatus(listing) === 'Low'
+                    ? 'bg-[#F59E0B] text-white'
+                    : getProductStatus(listing) === 'Out'
+                      ? 'bg-[#E20E28] text-white'
+                      : 'bg-[#E5E7EB] text-[#102059]'
+            }`}
+          >
+            {getProductStatus(listing)}
+          </span>
+          {listing.isBundle && (
+            <span className="w-fit rounded-full bg-[#D3A218] px-2 py-1 text-[10px] font-semibold text-white">
+              Bundle
+            </span>
+          )}
+        </div>
+      </div>
+      <div className={`flex flex-1 flex-col p-3 ${canManage ? '!pb-16' : ''}`}>
+        <h6 className="text-[#102059] mb-0.5 line-clamp-1 text-[12px]">{listing.productName}</h6>
+        <p className="text-xs text-[#6B7280] mb-2">{listing.isBundle ? 'Bundle' : listing.brand}</p>
+        <div className="flex flex-col gap-0.5 mb-2">
+          {getEffectiveDiscount(listing) > 0 ? (
+            <>
+              <div className="flex items-center gap-2">
+                <span className="font-bold text-[#E20E28] text-[12px]">₱{getDiscountedPrice(listing).toFixed(2)}</span>
+                <span className="text-[9px] font-semibold bg-[#E20E28] text-white px-1.5 py-0.5 rounded">
+                  -{getEffectiveDiscount(listing)}%
+                </span>
+              </div>
+              <div className="flex items-baseline gap-1">
+                <span className="text-[10px] text-[#6B7280] line-through">₱{listing.price.toFixed(2)}</span>
+                <span className="text-[9px] text-[#6B7280]">/{listing.unit}</span>
+              </div>
+            </>
+          ) : (
+            <div className="flex items-baseline gap-1">
+              <span className="font-bold text-[#102059] text-[12px]">₱{listing.price.toFixed(2)}</span>
+              <span className="text-xs text-[#6B7280]">/{listing.unit}</span>
+            </div>
+          )}
+        </div>
+        <div className="flex items-center justify-between text-xs mb-1">
+          <span className="text-[#6B7280]">Stock:</span>
+          <span className="font-semibold text-[#102059]">{listing.stock}</span>
+        </div>
+        {listing.canRestock === false && (
+          <p className="mb-2 text-[10px] font-semibold text-[#E20E28]">Catalog disabled — restock unavailable</p>
+        )}
+        <div className="flex items-center justify-between text-xs">
+          <span className="text-[#6B7280]">Popularity:</span>
+          <div className="flex items-center gap-1">
+            <Heart className="w-3 h-3 text-[#102059]" />
+            <span className="font-semibold text-[#102059]">{listing.popularity}</span>
+          </div>
+        </div>
+        {canManage && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              onToggleStatus(listing)
+            }}
+            className={`absolute bottom-3 left-3 right-3 text-xs font-semibold py-1.5 rounded-lg text-white transition-colors ${
+              isActive ? 'bg-[#E20E28] hover:bg-[#C10D23]' : 'bg-[#00C950] hover:bg-[#00B548]'
+            }`}
+          >
+            {isActive ? 'Deactivate' : 'Reactivate'}
+          </button>
+        )}
+      </div>
+    </div>
+  )
+}
+
 const BUNDLE_CONTAINING_PREFIX = 'Bundle containing: '
 
 function parseBundleProductNames(description) {
@@ -1201,27 +1323,34 @@ export default function AgrivetStoreInformation({
 
   const categories = useMemo(() => ['All', ...new Set(productListings.map((l) => l.category))], [productListings])
 
-  const filteredListings = useMemo(() => {
-    const searchLower = productSearchQuery.toLowerCase()
-    return productListings
-      .filter((l) => {
-        const matchesSearch =
-          l.productName.toLowerCase().includes(searchLower) ||
-          l.brand.toLowerCase().includes(searchLower) ||
-          String(l.id).includes(searchLower)
-        const matchesCategory = categoryFilter === 'All' || l.category === categoryFilter
-        const matchesStatus = productStatusFilter === 'All' || getProductStatus(l) === productStatusFilter
-        return matchesSearch && matchesCategory && matchesStatus
-      })
-      .sort((a, b) => {
-        if (productSortBy === 'name') return a.productName.localeCompare(b.productName)
-        if (productSortBy === 'date') {
-          return new Date(b.dateAdded).getTime() - new Date(a.dateAdded).getTime()
-        }
-        if (productSortBy === 'popularity') return (b.popularity ?? 0) - (a.popularity ?? 0)
-        return 0
-      })
+  const activeListings = useMemo(() => {
+    return sortProductListings(
+      productListings.filter((listing) => {
+        if (isDeactivatedListing(listing)) return false
+        const matchesCategory = categoryFilter === 'All' || listing.category === categoryFilter
+        const matchesStatus = productStatusFilter === 'All' || getProductStatus(listing) === productStatusFilter
+        return listingMatchesQuery(listing, productSearchQuery) && matchesCategory && matchesStatus
+      }),
+      productSortBy
+    )
   }, [productListings, productSearchQuery, categoryFilter, productStatusFilter, productSortBy])
+
+  const deactivatedListings = useMemo(() => {
+    return sortProductListings(
+      productListings.filter((listing) => {
+        if (!isDeactivatedListing(listing)) return false
+        const matchesCategory = categoryFilter === 'All' || listing.category === categoryFilter
+        return listingMatchesQuery(listing, productSearchQuery) && matchesCategory
+      }),
+      productSortBy
+    )
+  }, [productListings, productSearchQuery, categoryFilter, productSortBy])
+
+  const activeListingTotal = useMemo(
+    () => productListings.filter((listing) => !isDeactivatedListing(listing)).length,
+    [productListings]
+  )
+  const deactivatedListingTotal = productListings.length - activeListingTotal
 
   if (!shop || !store) {
     return (
@@ -1817,10 +1946,9 @@ export default function AgrivetStoreInformation({
                     <div>
                       <h2 className="text-lg font-bold text-[#102059] mb-1">Product Listings</h2>
                       <p className="text-sm text-[#6B7280]">
-                        {filteredListings.length}{' '}
-                        {filteredListings.length === 1 ? 'listing' : 'listings'}
-                        {productListings.length !== filteredListings.length &&
-                          ` of ${productListings.length} total`}
+                        {activeListings.length}{' '}
+                        {activeListings.length === 1 ? 'listing' : 'listings'}
+                        {activeListingTotal !== activeListings.length && ` of ${activeListingTotal} active`}
                       </p>
                     </div>
                     {canAddListings && (
@@ -1887,7 +2015,6 @@ export default function AgrivetStoreInformation({
                           >
                             <option value="All">All Statuses</option>
                             <option value="Active">Active</option>
-                            <option value="Inactive">Inactive</option>
                             <option value="Low">Low</option>
                             <option value="Out">Out</option>
                           </select>
@@ -1907,129 +2034,75 @@ export default function AgrivetStoreInformation({
                     </div>
                   </div>
 
-                  {filteredListings.length === 0 ? (
-                    <div className="flex items-center justify-center h-[500px]">
+                  {activeListings.length === 0 ? (
+                    <div className="flex items-center justify-center py-16">
                       <div className="text-center">
                         <Package className="w-16 h-16 text-[#E5E7EB] mx-auto mb-4" />
                         <h2 className="text-xl font-bold text-[#102059] mb-2">
-                          {productListings.length === 0 ? 'No Product Listings Yet' : 'No Matching Products'}
+                          {productListings.length === 0
+                            ? 'No Product Listings Yet'
+                            : activeListingTotal === 0
+                              ? 'No Active Listings'
+                              : 'No Matching Products'}
                         </h2>
                         <p className="text-sm text-[#6B7280] mb-4">
                           {productListings.length === 0
                             ? canAddListings
                               ? 'Start adding products from the registered catalog to this store.'
                               : "This store hasn't added any product listings yet."
-                            : 'Try adjusting your filters or search query.'}
+                            : activeListingTotal === 0
+                              ? 'Deactivated products and bundles are listed below.'
+                              : 'Try adjusting your filters or search query.'}
                         </p>
                       </div>
                     </div>
                   ) : (
                     <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
-                      {filteredListings.map((listing) => (
-                        <div
+                      {activeListings.map((listing) => (
+                        <ProductListingCard
                           key={listing.id}
-                          onClick={() => handleOpenProductDetail(listing)}
-                          className="relative flex h-full cursor-pointer flex-col overflow-hidden rounded-lg border border-[#E5E7EB] bg-white transition-all hover:shadow-sm"
-                        >
-                          <div className="relative aspect-square shrink-0 overflow-hidden bg-[#F9FAFB]">
-                            <img
-                              src={getListingImageSrc(listing)}
-                              alt={listing.productName}
-                              className="w-full h-full object-contain p-12"
-                              onError={(e) => {
-                                if (!e.currentTarget.dataset.fallback) {
-                                  e.currentTarget.dataset.fallback = 'true'
-                                  e.currentTarget.src = LISTING_IMAGE_FALLBACK
-                                }
-                              }}
-                            />
-                            <div className="absolute top-2 left-2">
-                              <span
-                                className={`text-[10px] font-semibold px-2 py-1 rounded-full ${
-                                  getProductStatus(listing) === 'Active'
-                                    ? 'bg-[#10B981] text-white'
-                                    : getProductStatus(listing) === 'Inactive'
-                                      ? 'bg-[#6B7280] text-white'
-                                      : getProductStatus(listing) === 'Low'
-                                        ? 'bg-[#F59E0B] text-white'
-                                        : getProductStatus(listing) === 'Out'
-                                          ? 'bg-[#E20E28] text-white'
-                                          : 'bg-[#E5E7EB] text-[#102059]'
-                                }`}
-                              >
-                                {getProductStatus(listing)}
-                              </span>
-                            </div>
-                          </div>
-                          <div className={`flex flex-1 flex-col p-3 ${canAddListings && getListingItemUpdateUrl(listing.id) ? '!pb-16' : ''}`}>
-                            <h6 className="text-[#102059] mb-0.5 line-clamp-1 text-[12px]">
-                              {listing.productName}
-                            </h6>
-                            <p className="text-xs text-[#6B7280] mb-2">{listing.brand}</p>
-                            <div className="flex flex-col gap-0.5 mb-2">
-                              {getEffectiveDiscount(listing) > 0 ? (
-                                <>
-                                  <div className="flex items-center gap-2">
-                                    <span className="font-bold text-[#E20E28] text-[12px]">
-                                      ₱{getDiscountedPrice(listing).toFixed(2)}
-                                    </span>
-                                    <span className="text-[9px] font-semibold bg-[#E20E28] text-white px-1.5 py-0.5 rounded">
-                                      -{getEffectiveDiscount(listing)}%
-                                    </span>
-                                  </div>
-                                  <div className="flex items-baseline gap-1">
-                                    <span className="text-[10px] text-[#6B7280] line-through">
-                                      ₱{listing.price.toFixed(2)}
-                                    </span>
-                                    <span className="text-[9px] text-[#6B7280]">/{listing.unit}</span>
-                                  </div>
-                                </>
-                              ) : (
-                                <div className="flex items-baseline gap-1">
-                                  <span className="font-bold text-[#102059] text-[12px]">
-                                    ₱{listing.price.toFixed(2)}
-                                  </span>
-                                  <span className="text-xs text-[#6B7280]">/{listing.unit}</span>
-                                </div>
-                              )}
-                            </div>
-                            <div className="flex items-center justify-between text-xs mb-1">
-                              <span className="text-[#6B7280]">Stock:</span>
-                              <span className="font-semibold text-[#102059]">{listing.stock}</span>
-                            </div>
-                            {listing.canRestock === false && (
-                              <p className="mb-2 text-[10px] font-semibold text-[#E20E28]">
-                                Catalog disabled — restock unavailable
-                              </p>
-                            )}
-                            <div className="flex items-center justify-between text-xs">
-                              <span className="text-[#6B7280]">Popularity:</span>
-                              <div className="flex items-center gap-1">
-                                <Heart className="w-3 h-3 text-[#102059]" />
-                                <span className="font-semibold text-[#102059]">{listing.popularity}</span>
-                              </div>
-                            </div>
-                            {canAddListings && getListingItemUpdateUrl(listing.id) && (
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  handleProductStatusToggle(listing)
-                                }}
-                                className={`absolute bottom-3 left-3 right-3 text-xs font-semibold py-1.5 rounded-lg text-white transition-colors ${
-                                  (listing.manualStatus || 'Active') === 'Active'
-                                    ? 'bg-[#E20E28] hover:bg-[#C10D23]'
-                                    : 'bg-[#00C950] hover:bg-[#00B548]'
-                                }`}
-                              >
-                                {(listing.manualStatus || 'Active') === 'Active' ? 'Deactivate' : 'Reactivate'}
-                              </button>
-                            )}
-                          </div>
-                        </div>
+                          listing={listing}
+                          canManage={canAddListings && Boolean(getListingItemUpdateUrl(listing.id))}
+                          onOpen={handleOpenProductDetail}
+                          onToggleStatus={handleProductStatusToggle}
+                        />
                       ))}
                     </div>
                   )}
+
+                  <div className="mt-10 border-t border-[#E5E7EB] pt-8">
+                    <div className="mb-6">
+                      <h2 className="text-lg font-bold text-[#102059] mb-1">Deactivated Products and Bundles</h2>
+                      <p className="text-sm text-[#6B7280]">
+                        {deactivatedListings.length}{' '}
+                        {deactivatedListings.length === 1 ? 'listing' : 'listings'}
+                        {deactivatedListingTotal !== deactivatedListings.length &&
+                          ` of ${deactivatedListingTotal}`}
+                        . These stay off sale until you reactivate them.
+                      </p>
+                    </div>
+                    {deactivatedListings.length === 0 ? (
+                      <div className="flex items-center justify-center py-10">
+                        <p className="text-sm text-[#6B7280]">
+                          {deactivatedListingTotal === 0
+                            ? 'No deactivated products or bundles.'
+                            : 'No matching deactivated products or bundles.'}
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
+                        {deactivatedListings.map((listing) => (
+                          <ProductListingCard
+                            key={listing.id}
+                            listing={listing}
+                            canManage={canAddListings && Boolean(getListingItemUpdateUrl(listing.id))}
+                            onOpen={handleOpenProductDetail}
+                            onToggleStatus={handleProductStatusToggle}
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
 

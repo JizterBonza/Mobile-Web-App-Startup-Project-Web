@@ -926,6 +926,56 @@ function CreateGamefowlBundleModal({ catalog = [], onClose }) {
     )
 }
 
+function GamefowlListingCard({ listing, isUpdating, onOpen, onToggleStatus }) {
+    const isActive = listing.status !== 'inactive'
+
+    return (
+        <article
+            onClick={() => onOpen(listing)}
+            className="relative flex h-full cursor-pointer flex-col overflow-hidden rounded-lg border border-[#E5E7EB] bg-white text-left transition-shadow hover:shadow-sm"
+        >
+            <div className="relative aspect-[5/6] shrink-0 bg-[#E5E7EB]">
+                {listing.image ? <img src={listing.image} alt="" className="h-full w-full object-cover" /> : null}
+                {listing.isBundle && (
+                    <span className="absolute left-2 top-2 rounded-full bg-[#D3A218] px-2 py-1 text-[10px] font-semibold text-white">
+                        Bundle
+                    </span>
+                )}
+            </div>
+            <div className="flex flex-1 flex-col p-3 !pb-16">
+                <h3 className="break-words text-sm font-bold leading-snug text-[#102059]">{listing.title}</h3>
+                <p className="mt-0.5 break-words text-[11px] leading-snug text-[#9CA3AF]">
+                    {listing.composition} | {listing.age} | {listing.sex}
+                </p>
+                <div className="mt-2 flex flex-wrap items-start justify-between gap-x-2 gap-y-1">
+                    <p className="text-xs font-bold leading-4 text-[#102059]">{formatPeso(listing.price, listing.unit)}</p>
+                    <div className="grid shrink-0 grid-cols-[auto_auto] gap-x-2 gap-y-0.5 text-[10px] leading-4">
+                        <span className="text-[#9CA3AF]">Stocks:</span>
+                        <span className="font-medium text-[#102059]">{listing.stocks}</span>
+                        <span className="text-[#9CA3AF]">Release Date:</span>
+                        <span className="font-medium text-[#102059]">{listing.releaseDate}</span>
+                        <span className="text-[#9CA3AF]">Popularity:</span>
+                        <span className="font-medium text-[#102059]">{listing.popularity}</span>
+                    </div>
+                </div>
+                <button
+                    type="button"
+                    disabled={isUpdating}
+                    onClick={(event) => {
+                        event.stopPropagation()
+                        onToggleStatus(listing, isActive)
+                    }}
+                    className={`absolute bottom-3 left-3 right-3 rounded-lg py-2 text-xs font-semibold text-white transition-colors disabled:opacity-60 ${
+                        isActive ? 'bg-[#E20E28] hover:bg-[#C10D23]' : 'bg-[#00C950] hover:bg-[#00B548]'
+                    }`}
+                >
+                    {isActive ? 'Deactivate' : 'Reactivate'}
+                </button>
+            </div>
+        </article>
+    )
+}
+
 function GamefowlCatalogPanel({ listings = [], catalog = [] }) {
     const [searchQuery, setSearchQuery] = useState('')
     const [categoryFilter, setCategoryFilter] = useState('')
@@ -942,17 +992,17 @@ function GamefowlCatalogPanel({ listings = [], catalog = [] }) {
         return Array.from(new Set(rows.map((item) => item.category).filter((name) => name && name !== 'Uncategorized'))).sort()
     }, [rows])
 
-    const visible = useMemo(() => {
+    const matchesListingFilters = (item, { includeStatus = true } = {}) => {
         const query = searchQuery.trim().toLowerCase()
-        const filtered = rows.filter((item) => {
-            const haystack = [item.title, item.composition, item.age, item.sex, item.category].join(' ').toLowerCase()
-            const matchesSearch = !query || haystack.includes(query)
-            const matchesCategory = !categoryFilter || item.category === categoryFilter
-            const matchesStatus = !statusFilter || item.status === statusFilter
-            return matchesSearch && matchesCategory && matchesStatus
-        })
+        const haystack = [item.title, item.composition, item.age, item.sex, item.category].join(' ').toLowerCase()
+        const matchesSearch = !query || haystack.includes(query)
+        const matchesCategory = !categoryFilter || item.category === categoryFilter
+        const matchesStatus = !includeStatus || !statusFilter || item.status === statusFilter
+        return matchesSearch && matchesCategory && matchesStatus
+    }
 
-        const sorted = [...filtered]
+    const sortListings = (items) => {
+        const sorted = [...items]
         sorted.sort((a, b) => {
             if (sortBy === 'name') return a.title.localeCompare(b.title)
             if (sortBy === 'price-asc') return Number(a.price) - Number(b.price)
@@ -961,7 +1011,33 @@ function GamefowlCatalogPanel({ listings = [], catalog = [] }) {
             return 0
         })
         return sorted
-    }, [rows, searchQuery, categoryFilter, statusFilter, sortBy])
+    }
+
+    const activeRows = useMemo(() => rows.filter((item) => item.status !== 'inactive'), [rows])
+    const deactivatedRows = useMemo(() => rows.filter((item) => item.status === 'inactive'), [rows])
+
+    const visible = useMemo(
+        () => sortListings(activeRows.filter((item) => matchesListingFilters(item))),
+        [activeRows, searchQuery, categoryFilter, statusFilter, sortBy],
+    )
+
+    const deactivatedVisible = useMemo(
+        () => sortListings(deactivatedRows.filter((item) => matchesListingFilters(item, { includeStatus: false }))),
+        [deactivatedRows, searchQuery, categoryFilter, sortBy],
+    )
+
+    const toggleListingStatus = (listing, isActive) => {
+        const nextStatus = isActive ? 'inactive' : 'active'
+        setUpdatingListingId(listing.id)
+        router.patch(
+            `/dashboard/owner-manager/farm/gamefowls/listings/${listing.id}/status`,
+            { status: nextStatus },
+            {
+                preserveScroll: true,
+                onFinish: () => setUpdatingListingId(null),
+            },
+        )
+    }
 
     const selectClass = (value) =>
         `w-full appearance-none rounded-lg border border-[#E5E7EB] bg-white py-2.5 pl-3 pr-9 text-sm focus:border-[#244693] focus:outline-none ${
@@ -973,7 +1049,10 @@ function GamefowlCatalogPanel({ listings = [], catalog = [] }) {
             <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                 <div>
                     <h2 className="text-xl font-semibold text-[#102059]">Gamefowl Listings</h2>
-                    <p className="mt-1 text-sm text-[#9CA3AF]">Manage the gamefowl listed for sale on this farm.</p>
+                    <p className="mt-1 text-sm text-[#9CA3AF]">
+                        {visible.length} active {visible.length === 1 ? 'listing' : 'listings'}
+                        {activeRows.length !== visible.length && ` of ${activeRows.length}`}. Deactivated products and bundles are listed below.
+                    </p>
                 </div>
                 <div className="flex flex-wrap items-center gap-3">
                     <button
@@ -1038,7 +1117,6 @@ function GamefowlCatalogPanel({ listings = [], catalog = [] }) {
                     >
                         <option value="">Status</option>
                         <option value="active">Active</option>
-                        <option value="inactive">Inactive</option>
                     </select>
                     <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#9CA3AF]" />
                 </div>
@@ -1060,82 +1138,66 @@ function GamefowlCatalogPanel({ listings = [], catalog = [] }) {
             </div>
 
             {visible.length === 0 ? (
-                <div className="flex min-h-[280px] items-center justify-center text-center">
+                <div className="flex min-h-[180px] items-center justify-center text-center">
                     <div>
                         <h3 className="text-lg font-semibold text-[#102059]">
-                            {rows.length === 0 ? 'No Gamefowl Listed Yet' : 'No Matching Gamefowl'}
+                            {activeRows.length === 0 ? 'No Active Listings' : 'No Matching Gamefowl'}
                         </h3>
                         <p className="mt-1 text-sm text-[#9CA3AF]">
                             {rows.length === 0
                                 ? 'Gamefowl you list for sale will appear here.'
-                                : 'Try a different search or filter.'}
+                                : activeRows.length === 0
+                                  ? 'Deactivated products and bundles are listed below.'
+                                  : 'Try a different search or filter.'}
                         </p>
                     </div>
                 </div>
             ) : (
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-                    {visible.map((listing) => {
-                        const isActive = listing.status !== 'inactive'
-                        return (
-                            <article
-                                key={listing.id}
-                                onClick={() => setSelectedListing(listing)}
-                                className="relative flex h-full cursor-pointer flex-col overflow-hidden rounded-lg border border-[#E5E7EB] bg-white text-left transition-shadow hover:shadow-sm"
-                            >
-                                <div className="aspect-[5/6] shrink-0 bg-[#E5E7EB]">
-                                    {listing.image ? (
-                                        <img src={listing.image} alt="" className="h-full w-full object-cover" />
-                                    ) : null}
-                                </div>
-                                <div className="flex flex-1 flex-col p-3 !pb-16">
-                                    <h3 className="break-words text-sm font-bold leading-snug text-[#102059]">{listing.title}</h3>
-                                    <p className="mt-0.5 break-words text-[11px] leading-snug text-[#9CA3AF]">
-                                        {listing.composition} | {listing.age} | {listing.sex}
-                                    </p>
-                                    <div className="mt-2 flex flex-wrap items-start justify-between gap-x-2 gap-y-1">
-                                        <p className="text-xs font-bold leading-4 text-[#102059]">
-                                            {formatPeso(listing.price, listing.unit)}
-                                        </p>
-                                        <div className="grid shrink-0 grid-cols-[auto_auto] gap-x-2 gap-y-0.5 text-[10px] leading-4">
-                                            <span className="text-[#9CA3AF]">Stocks:</span>
-                                            <span className="font-medium text-[#102059]">{listing.stocks}</span>
-                                            <span className="text-[#9CA3AF]">Release Date:</span>
-                                            <span className="font-medium text-[#102059]">{listing.releaseDate}</span>
-                                            <span className="text-[#9CA3AF]">Popularity:</span>
-                                            <span className="font-medium text-[#102059]">{listing.popularity}</span>
-                                        </div>
-                                    </div>
-                                    <button
-                                        type="button"
-                                        disabled={updatingListingId === listing.id}
-                                        onClick={(event) => {
-                                            event.stopPropagation()
-                                            const nextStatus = isActive ? 'inactive' : 'active'
-                                            if (!window.confirm(`${isActive ? 'Deactivate' : 'Reactivate'} this gamefowl listing?`)) return
-                                            setUpdatingListingId(listing.id)
-                                            router.patch(
-                                                `/dashboard/owner-manager/farm/gamefowls/listings/${listing.id}/status`,
-                                                { status: nextStatus },
-                                                {
-                                                    preserveScroll: true,
-                                                    onFinish: () => setUpdatingListingId(null),
-                                                },
-                                            )
-                                        }}
-                                        className={`absolute bottom-3 left-3 right-3 rounded-lg py-2 text-xs font-semibold text-white transition-colors disabled:opacity-60 ${
-                                            isActive
-                                                ? 'bg-[#E20E28] hover:bg-[#C10D23]'
-                                                : 'bg-[#00C950] hover:bg-[#00B548]'
-                                        }`}
-                                    >
-                                        {isActive ? 'Deactivate' : 'Reactivate'}
-                                    </button>
-                                </div>
-                            </article>
-                        )
-                    })}
+                    {visible.map((listing) => (
+                        <GamefowlListingCard
+                            key={listing.id}
+                            listing={listing}
+                            isUpdating={updatingListingId === listing.id}
+                            onOpen={setSelectedListing}
+                            onToggleStatus={toggleListingStatus}
+                        />
+                    ))}
                 </div>
             )}
+
+            <div className="mt-10 border-t border-[#E5E7EB] pt-8">
+                <div className="mb-6">
+                    <h2 className="text-xl font-semibold text-[#102059]">Deactivated Products and Bundles</h2>
+                    <p className="mt-1 text-sm text-[#9CA3AF]">
+                        {deactivatedVisible.length}{' '}
+                        {deactivatedVisible.length === 1 ? 'listing' : 'listings'}
+                        {deactivatedRows.length !== deactivatedVisible.length && ` of ${deactivatedRows.length}`}
+                        . These stay off sale until you reactivate them.
+                    </p>
+                </div>
+                {deactivatedVisible.length === 0 ? (
+                    <div className="flex min-h-[140px] items-center justify-center text-center">
+                        <p className="text-sm text-[#9CA3AF]">
+                            {deactivatedRows.length === 0
+                                ? 'No deactivated products or bundles.'
+                                : 'No matching deactivated products or bundles.'}
+                        </p>
+                    </div>
+                ) : (
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+                        {deactivatedVisible.map((listing) => (
+                            <GamefowlListingCard
+                                key={listing.id}
+                                listing={listing}
+                                isUpdating={updatingListingId === listing.id}
+                                onOpen={setSelectedListing}
+                                onToggleStatus={toggleListingStatus}
+                            />
+                        ))}
+                    </div>
+                )}
+            </div>
             {showPublishModal && (
                 <PublishGamefowlListingModal
                     catalog={catalog}
