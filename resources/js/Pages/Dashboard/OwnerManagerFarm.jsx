@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, router, useForm, usePage } from '@inertiajs/react'
-import { Bird, Box, Calendar, Check, ChevronDown, CirclePlus, Clock, Landmark, MapPin, Pencil, Search, Star, X } from 'lucide-react'
+import { Calendar, Check, ChevronDown, Clock, Landmark, MapPin, Package, Pencil, Plus, Search, Star, X } from 'lucide-react'
 import PinLocationMap from '../../Components/PinLocationMap'
 import OwnerManagerKlasmeytLayout from '../../Layouts/OwnerManagerKlasmeytLayout'
 import { storageUrl } from '../../utils/storageUrl'
@@ -1046,7 +1046,7 @@ function GamefowlCatalogPanel({ listings = [], catalog = [] }) {
 
     return (
         <section className="rounded-xl border border-[#E5E7EB] bg-white p-6 sm:p-8">
-            <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                 <div>
                     <h2 className="text-xl font-semibold text-[#102059]">Gamefowl Listings</h2>
                     <p className="mt-1 text-sm text-[#9CA3AF]">
@@ -1054,28 +1054,28 @@ function GamefowlCatalogPanel({ listings = [], catalog = [] }) {
                         {activeRows.length !== visible.length && ` of ${activeRows.length}`}. Deactivated products and bundles are listed below.
                     </p>
                 </div>
-                <div className="flex flex-wrap items-center gap-3">
+                <div className="flex shrink-0 flex-wrap items-center gap-3">
                     <button
                         type="button"
                         onClick={() => setShowPublishModal(true)}
-                        className="inline-flex items-center gap-2 rounded-lg bg-[#244693] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#1a3570]"
+                        className="flex items-center gap-2 rounded-lg bg-[#102059] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#244693]"
                     >
-                        <CirclePlus className="h-4 w-4" />
+                        <Plus className="h-4 w-4" />
                         Add Listing
                     </button>
                     <Link
                         href="/dashboard/owner-manager/farm/gamefowls/request"
-                        className="inline-flex items-center gap-2 rounded-lg border border-[#244693] bg-white px-4 py-2 text-sm font-semibold text-[#244693] transition-colors hover:bg-[#F4F7FF]"
+                        className="flex items-center gap-2 rounded-lg border-2 border-[#102059] bg-white px-4 py-2.5 text-sm font-semibold text-[#102059] transition-colors hover:bg-[#F8F9FB]"
                     >
-                        <Bird className="h-4 w-4" />
+                        <Package className="h-4 w-4" />
                         Request Registration
                     </Link>
                     <button
                         type="button"
                         onClick={() => setShowBundleModal(true)}
-                        className="inline-flex items-center gap-2 rounded-lg border border-[#244693] bg-white px-4 py-2 text-sm font-semibold text-[#244693] transition-colors hover:bg-[#F4F7FF]"
+                        className="flex items-center gap-2 rounded-lg border-2 border-[#D3A218] bg-white px-4 py-2.5 text-sm font-semibold text-[#D3A218] transition-colors hover:bg-[#FFFBF0]"
                     >
-                        <Box className="h-4 w-4" />
+                        <Package className="h-4 w-4" />
                         Create Bundle
                     </button>
                 </div>
