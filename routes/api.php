@@ -4,6 +4,9 @@ use App\Http\Controllers\ActivityLogController;
 use App\Http\Controllers\AddressController;
 use App\Http\Controllers\Api\SocialAuthController;
 use App\Http\Controllers\AppReleaseApiController;
+use App\Http\Controllers\BreederPostController;
+use App\Http\Controllers\BreederPostCommentController;
+use App\Http\Controllers\BreederPostEngagementController;
 use App\Http\Controllers\CartController;
 use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\CustomerShopMessageController;
@@ -111,6 +114,25 @@ Route::post('/payment/webhook', [PaymentController::class, 'handleWebhook']);
 */
 
 Route::middleware(['auth:sanctum', 'account.active'])->group(function () {
+    // Breeder mobile feed. Keep /mine before the numeric post routes.
+    Route::get('breeder-posts', [BreederPostController::class, 'index']);
+    Route::get('breeder-posts/mine', [BreederPostController::class, 'mine']);
+    Route::get('breeder-posts/{post}', [BreederPostController::class, 'show'])->whereNumber('post');
+    Route::get('breeder-posts/{post}/comments', [BreederPostCommentController::class, 'index'])->whereNumber('post');
+
+    Route::middleware('throttle:60,1')->group(function () {
+        Route::post('breeder-posts', [BreederPostController::class, 'store']);
+        Route::patch('breeder-posts/{post}', [BreederPostController::class, 'update'])->whereNumber('post');
+        Route::delete('breeder-posts/{post}', [BreederPostController::class, 'destroy'])->whereNumber('post');
+        Route::put('breeder-posts/{post}/like', [BreederPostEngagementController::class, 'like'])->whereNumber('post');
+        Route::delete('breeder-posts/{post}/like', [BreederPostEngagementController::class, 'unlike'])->whereNumber('post');
+        Route::post('breeder-posts/{post}/comments', [BreederPostCommentController::class, 'store'])->whereNumber('post');
+        Route::patch('breeder-posts/{post}/comments/{comment}', [BreederPostCommentController::class, 'update'])->whereNumber(['post', 'comment']);
+        Route::delete('breeder-posts/{post}/comments/{comment}', [BreederPostCommentController::class, 'destroy'])->whereNumber(['post', 'comment']);
+        Route::put('breeders/{breeder}/follow', [BreederPostEngagementController::class, 'follow'])->whereNumber('breeder');
+        Route::delete('breeders/{breeder}/follow', [BreederPostEngagementController::class, 'unfollow'])->whereNumber('breeder');
+    });
+
     Route::get('farm-cart', [FarmCheckoutController::class, 'cart']);
     Route::post('farm-cart/items', [FarmCheckoutController::class, 'addCart']);
     Route::patch('farm-cart/items/{id}', [FarmCheckoutController::class, 'updateCart'])->whereNumber('id');

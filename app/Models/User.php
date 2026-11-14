@@ -172,6 +172,21 @@ class User extends Authenticatable
         return $this->hasOne(Gamefarm::class);
     }
 
+    public function breederPosts()
+    {
+        return $this->hasMany(BreederPost::class, 'breeder_id');
+    }
+
+    public function breederFollowers()
+    {
+        return $this->hasMany(BreederFollow::class, 'breeder_id');
+    }
+
+    public function breederFollowing()
+    {
+        return $this->hasMany(BreederFollow::class, 'follower_id');
+    }
+
     /**
      * Get the agrivets associated with this vendor.
      */
