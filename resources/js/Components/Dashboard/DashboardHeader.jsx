@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useForm, usePage } from '@inertiajs/react'
-import { Bell, ChevronDown, CreditCard, History, LogOut, Map, MessageSquareMore, Settings, Ship, SlidersHorizontal, Smartphone, Ticket, Truck, Wallet } from 'lucide-react'
+import { Link, router, useForm, usePage } from '@inertiajs/react'
+import { Bell, ChevronDown, CreditCard, History, LogOut, Map, MessageSquareMore, RefreshCw, Settings, Ship, SlidersHorizontal, Smartphone, Ticket, Truck, Wallet } from 'lucide-react'
 import primaryLogo from '../../../../Logo/Primary Logo.png'
 
 /**
@@ -51,6 +51,8 @@ export function DashboardHeader({
     showNav = true,
     /** Owner managers and vendors: show messaging icon beside notifications. */
     showMessaging = false,
+    /** Owner managers, vendors, and shipping partners: reload the current page. */
+    showRefresh = false,
     /** When set, messaging icon navigates here instead of opening a dropdown. */
     messagingHref = null,
     notificationCount = 0,
@@ -64,6 +66,7 @@ export function DashboardHeader({
     const [showUserDropdown, setShowUserDropdown] = useState(false)
     const [showNotifications, setShowNotifications] = useState(false)
     const [showMessages, setShowMessages] = useState(false)
+    const [refreshing, setRefreshing] = useState(false)
     const activeNavItemRef = useRef(null)
 
     const activeTab = useMemo(
@@ -89,6 +92,17 @@ export function DashboardHeader({
         e.preventDefault()
         setShowUserDropdown(false)
         post('/logout')
+    }
+
+    const refreshPage = () => {
+        if (refreshing) {
+            return
+        }
+        setRefreshing(true)
+        router.reload({
+            preserveScroll: true,
+            onFinish: () => setRefreshing(false),
+        })
     }
 
     return (
@@ -139,6 +153,21 @@ export function DashboardHeader({
                     >
                         Back to site
                     </Link> */}
+                    {showRefresh && (
+                        <button
+                            type="button"
+                            onClick={refreshPage}
+                            disabled={refreshing}
+                            className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-sm font-medium text-[#6B7280] transition-colors hover:bg-[#F3F4F6] hover:text-[#102059] disabled:cursor-wait disabled:opacity-70"
+                            aria-label="Refresh page"
+                            title="Refresh page"
+                        >
+                            <RefreshCw className={`h-5 w-5 ${refreshing ? 'animate-spin' : ''}`} />
+                            <span className="hidden sm:inline" style={{ fontFamily: 'Inter Condensed, sans-serif' }}>
+                                {refreshing ? 'Refreshing' : 'Refresh'}
+                            </span>
+                        </button>
+                    )}
                     <button
                         type="button"
                         onClick={() => {

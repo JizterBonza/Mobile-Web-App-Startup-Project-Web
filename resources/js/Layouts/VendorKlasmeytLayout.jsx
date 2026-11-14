@@ -22,6 +22,7 @@ export default function VendorKlasmeytLayout({
                 <DashboardHeader
                     showNav={false}
                     dropdownNavItems={VENDOR_DROPDOWN_NAV}
+                    showRefresh
                     showMessaging
                     messagingHref="/dashboard/vendor/messages"
                     userName={auth.user.name}

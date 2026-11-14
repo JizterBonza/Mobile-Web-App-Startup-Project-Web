@@ -67,6 +67,7 @@ export default function OwnerManagerKlasmeytLayout({
             <div className="klasmeyt-landing min-h-screen bg-[#F8F9FB]">
                 <DashboardHeader
                     compactNav
+                    showRefresh
                     showMessaging
                     messagingHref="/dashboard/owner-manager/messages"
                     navigationItems={navigationItems}
