@@ -405,9 +405,14 @@ class ShopMessagingService
      */
     public function listShopProductsForPicker(Shop $shop, ?string $search = null): array
     {
+        if (! $shop->agrivetIsActive()) {
+            return [];
+        }
+
         $query = Item::query()
             ->where('shop_id', $shop->id)
             ->where('item_status', 'active')
+            ->whereShopAgrivetIsActive()
             ->orderBy('item_name');
 
         $term = trim((string) $search);
@@ -508,7 +513,9 @@ class ShopMessagingService
         $listing->loadMissing('gamefowl.bloodline');
         $gamefowl = $listing->gamefowl;
         $images = $gamefowl?->images ?? [];
-        $image = $images[$gamefowl?->primary_image_index ?? 0] ?? ($images[0] ?? null);
+        $image = ($listing->is_bundle && filled($listing->bundle_image))
+            ? $listing->bundle_image
+            : ($images[$gamefowl?->primary_image_index ?? 0] ?? ($images[0] ?? null));
         $name = ($listing->is_bundle && filled($listing->bundle_name))
             ? $listing->bundle_name
             : ($gamefowl?->bloodline?->name ?: $gamefowl?->name ?: 'Gamefowl');
@@ -531,7 +538,7 @@ class ShopMessagingService
      */
     public function productMetadataFromItem(Item $item): array
     {
-        $itemPrice = round((float) $item->item_price, 2);
+        $itemPrice = $item->getListPrice();
         $effectivePrice = $item->getEffectivePrice();
         $discount = $item->getActiveDiscountPercent();
 

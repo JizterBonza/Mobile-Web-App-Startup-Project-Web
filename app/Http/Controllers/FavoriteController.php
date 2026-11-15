@@ -19,7 +19,8 @@ class FavoriteController extends Controller
         }
 
         $query = Favorite::with(['item', 'user'])
-            ->where('user_id', $this->authUserId($request));
+            ->where('user_id', $this->authUserId($request))
+            ->whereHas('item.shop', fn ($shop) => $shop->whereAgrivetIsActive());
 
         if ($request->has('item_id')) {
             $query->where('item_id', $request->item_id);
@@ -38,14 +39,16 @@ class FavoriteController extends Controller
 
     public function show(Request $request, $id)
     {
-        $favorite = Favorite::with(['item', 'user'])->find($id);
+        $favorite = Favorite::with(['item.shop.agrivet', 'user'])->find($id);
 
-        if (!$favorite) {
+        if (! $favorite || ! $favorite->item?->shopAgrivetIsActive()) {
             return response()->json([
                 'success' => false,
                 'message' => 'Favorite not found'
             ], 404);
         }
+
+        $favorite->item?->unsetRelation('shop');
 
         if ($response = $this->ensureResourceOwner($request, $favorite->user_id)) {
             return $response;
@@ -65,6 +68,7 @@ class FavoriteController extends Controller
 
         $favorites = Favorite::with(['item'])
             ->where('user_id', $userId)
+            ->whereHas('item.shop', fn ($shop) => $shop->whereAgrivetIsActive())
             ->orderBy('created_at', 'desc')
             ->get();
 
@@ -107,8 +111,8 @@ class FavoriteController extends Controller
 
         $userId = $this->authUserId($request);
 
-        $item = Item::find($request->item_id);
-        if (!$item) {
+        $item = Item::with('shop.agrivet:id,status')->find($request->item_id);
+        if (! $item || ! $item->shopAgrivetIsActive()) {
             return response()->json([
                 'success' => false,
                 'message' => 'Item not found'
@@ -222,8 +226,8 @@ class FavoriteController extends Controller
 
         $userId = $this->authUserId($request);
 
-        $item = Item::find($request->item_id);
-        if (!$item) {
+        $item = Item::with('shop.agrivet:id,status')->find($request->item_id);
+        if (! $item || ! $item->shopAgrivetIsActive()) {
             return response()->json([
                 'success' => false,
                 'message' => 'Item not found'

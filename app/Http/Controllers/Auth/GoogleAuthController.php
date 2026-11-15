@@ -212,7 +212,7 @@ class GoogleAuthController extends Controller
     protected function webDashboardAccessError(User $user): ?string
     {
         if (! $user->isActive()) {
-            return User::INACTIVE_ACCOUNT_MESSAGE;
+            return $user->inactiveMessage();
         }
 
         if (! $user->user_type) {

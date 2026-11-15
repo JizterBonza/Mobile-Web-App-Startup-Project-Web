@@ -28,6 +28,8 @@ use App\Http\Controllers\ShopMessageController;
 use App\Http\Controllers\SupportTicketController;
 use App\Http\Controllers\VoucherController;
 use App\Http\Controllers\PayoutRecordController;
+use App\Http\Controllers\RefundController;
+use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\KlasrumCategoryController;
 use App\Http\Controllers\KlasrumContentController;
 use App\Http\Controllers\KlasrumPostEngagementController;
@@ -35,6 +37,10 @@ use App\Http\Controllers\PublicStorageController;
 use App\Http\Controllers\PublicAppDownloadController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
+
+Route::post('/dashboard/notifications/{id}/open', [NotificationController::class, 'open'])
+    ->middleware(['auth', 'session.valid'])
+    ->name('dashboard.notifications.open');
 
 Route::get('/', function () {
     $dashboard = auth()->user()?->getWebDashboardUrl();
@@ -301,6 +307,13 @@ Route::middleware(['auth', 'session.valid', 'user.type:super_admin'])->prefix('d
     Route::get('/', [ActivityLogController::class, 'index'])->name('index');
     Route::get('/{id}', [ActivityLogController::class, 'show'])->name('show');
 });
+
+Route::get('/dashboard/super-admin/refunds', [RefundController::class, 'index'])
+    ->middleware(['auth', 'session.valid', 'user.type:super_admin'])
+    ->name('dashboard.super-admin.refunds');
+Route::post('/dashboard/super-admin/refunds/{refund}/refunded', [RefundController::class, 'markRefunded'])
+    ->middleware(['auth', 'session.valid', 'user.type:super_admin'])
+    ->name('dashboard.super-admin.refunds.refunded');
 
 Route::get('/dashboard/super-admin/payout-records', [PayoutRecordController::class, 'index'])
     ->middleware(['auth', 'session.valid', 'user.type:super_admin'])
@@ -578,6 +591,13 @@ Route::middleware(['auth', 'session.valid', 'user.type:admin'])->prefix('dashboa
     Route::get('/', [ActivityLogController::class, 'index'])->name('index');
     Route::get('/{id}', [ActivityLogController::class, 'show'])->name('show');
 });
+
+Route::get('/dashboard/admin/refunds', [RefundController::class, 'index'])
+    ->middleware(['auth', 'session.valid', 'user.type:admin'])
+    ->name('dashboard.admin.refunds');
+Route::post('/dashboard/admin/refunds/{refund}/refunded', [RefundController::class, 'markRefunded'])
+    ->middleware(['auth', 'session.valid', 'user.type:admin'])
+    ->name('dashboard.admin.refunds.refunded');
 
 Route::get('/dashboard/admin/payout-records', [PayoutRecordController::class, 'index'])
     ->middleware(['auth', 'session.valid', 'user.type:admin'])

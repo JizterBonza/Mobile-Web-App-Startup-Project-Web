@@ -170,7 +170,7 @@ class MobileAuthController extends Controller
 
         if (! $user->isActive()) {
             throw ValidationException::withMessages([
-                $loginField => [User::INACTIVE_ACCOUNT_MESSAGE],
+                $loginField => [$user->inactiveMessage()],
             ]);
         }
 
@@ -286,7 +286,7 @@ class MobileAuthController extends Controller
 
         if (! $user->isActive()) {
             return response()->json([
-                'message' => User::INACTIVE_ACCOUNT_MESSAGE,
+                'message' => $user->inactiveMessage(),
             ], 403);
         }
 
@@ -331,7 +331,7 @@ class MobileAuthController extends Controller
 
         if (! $user->isActive()) {
             return response()->json([
-                'message' => User::INACTIVE_ACCOUNT_MESSAGE,
+                'message' => $user->inactiveMessage(),
             ], 403);
         }
 

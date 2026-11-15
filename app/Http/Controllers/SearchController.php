@@ -73,6 +73,7 @@ class SearchController extends Controller
     private function searchItems(Request $request, string $searchTerm, int $limit)
     {
         $query = Item::query()
+            ->whereShopAgrivetIsActive()
             ->where('item_status', 'active')
             ->where(function ($q) use ($searchTerm) {
                 $q->where('item_name', 'like', '%' . $searchTerm . '%')
@@ -96,7 +97,7 @@ class SearchController extends Controller
         }
 
         return $query
-            ->select(['id', 'product_catalog_id', 'item_name', 'item_images', 'item_price', 'discount_percent', 'discount_type', 'discount_expires_at', 'is_bundle'])
+            ->select(['id', 'product_catalog_id', 'item_name', 'item_images', 'item_price', 'category', 'discount_percent', 'discount_type', 'discount_expires_at', 'is_bundle'])
             ->orderByRaw('CASE
                 WHEN item_name LIKE ? THEN 1
                 WHEN item_name LIKE ? THEN 2
@@ -117,6 +118,7 @@ class SearchController extends Controller
     private function searchShops(string $searchTerm, int $limit)
     {
         return Shop::query()
+            ->whereAgrivetIsActive()
             ->where('shop_status', 'active')
             ->where(function ($q) use ($searchTerm) {
                 $q->where('shop_name', 'like', '%' . $searchTerm . '%')

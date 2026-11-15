@@ -176,6 +176,7 @@ function OrderCard({ order }) {
                                                     bird.wingband ? `Wingband ${bird.wingband}` : null,
                                                     bird.featherColor ? `feather ${bird.featherColor}` : null,
                                                     bird.feetColor ? `feet ${bird.feetColor}` : null,
+                                                    bird.noseAndFeetMarkings ? `nose and feet ${bird.noseAndFeetMarkings}` : null,
                                                 ].filter(Boolean).join(' · ') || 'Bird details not recorded'}
                                             </li>
                                         ))}

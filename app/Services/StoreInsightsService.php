@@ -57,6 +57,7 @@ class StoreInsightsService
             DB::raw('COALESCE(orders.ordered_at, order_items.created_at) as ordered_at'),
             'order_items.quantity',
             'order_items.price_at_purchase',
+            'order_items.platform_fee',
         );
 
         if ($cancelledItemStatusId > 0) {
@@ -94,7 +95,7 @@ class StoreInsightsService
                     'user_id' => (int) $row->user_id,
                     'ordered_at' => Carbon::parse($row->ordered_at),
                     'quantity' => (int) $row->quantity,
-                    'revenue' => round((float) $row->quantity * (float) $row->price_at_purchase, 2),
+                    'revenue' => round((float) $row->quantity * (float) $row->price_at_purchase - (float) ($row->platform_fee ?? 0), 2),
                 ];
             })
             ->values();

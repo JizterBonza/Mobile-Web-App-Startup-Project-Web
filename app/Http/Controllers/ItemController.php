@@ -50,7 +50,7 @@ class ItemController extends Controller
         }
 
         // Order by created_at descending (newest first)
-        $query->orderBy('created_at', 'desc');
+        $query->whereShopAgrivetIsActive()->orderBy('created_at', 'desc');
 
         $items = $query->get();
 
@@ -71,9 +71,9 @@ class ItemController extends Controller
      */
     public function getByShopAndCategory($shopId, $categoryId, Request $request)
     {
-        $shop = Shop::find($shopId);
+        $shop = Shop::with('agrivet:id,status')->find($shopId);
 
-        if (!$shop) {
+        if (! $shop || ! $shop->agrivetIsActive()) {
             return response()->json([
                 'success' => false,
                 'message' => 'Shop not found',
@@ -91,7 +91,8 @@ class ItemController extends Controller
 
         $query = Item::query()
             ->where('shop_id', $shopId)
-            ->where('category', $categoryId);
+            ->where('category', $categoryId)
+            ->whereShopAgrivetIsActive();
 
         if ($request->has('status')) {
             $query->where('item_status', $request->status);
@@ -124,14 +125,16 @@ class ItemController extends Controller
      */
     public function show($id)
     {
-        $item = Item::find($id);
+        $item = Item::with('shop.agrivet:id,status')->find($id);
 
-        if (!$item) {
+        if (! $item || ! $item->shopAgrivetIsActive()) {
             return response()->json([
                 'success' => false,
                 'message' => 'Item not found'
             ], 404);
         }
+
+        $item->unsetRelation('shop');
 
         return response()->json([
             'success' => true,
@@ -141,14 +144,16 @@ class ItemController extends Controller
 
     public function getItemWithReviews($id)
     {
-        $item = Item::with(['ratingReviews' => function ($query) {
+        $item = Item::with([
+            'shop.agrivet:id,status',
+            'ratingReviews' => function ($query) {
             $query->orderBy('created_at', 'desc')
                   ->with(['user.userCredential' => function ($query) {
                       $query->select('id', 'username');
                   }]);
         }])->find($id);
 
-        if (!$item) {
+        if (! $item || ! $item->shopAgrivetIsActive()) {
             return response()->json([
                 'success' => false,
                 'message' => 'Item not found'
@@ -165,7 +170,9 @@ class ItemController extends Controller
             'average_rating', 'total_reviews', 'sold_count', 'created_at', 'updated_at'
         ]);
 
+        $itemData['list_price'] = $item->getListPrice();
         $itemData['effective_price'] = $item->getEffectivePrice();
+        $itemData['markup_percent'] = $item->getMarkupPercent();
         $itemData['active_discount_percent'] = $item->getActiveDiscountPercent();
         
         // Add reviews
@@ -224,6 +231,7 @@ class ItemController extends Controller
         }
 
         $items = Item::whereIn('id', $itemIds)
+            ->whereShopAgrivetIsActive()
             ->orderByRaw('FIELD(id, ' . $itemIds->implode(',') . ')')
             ->get();
 
@@ -242,7 +250,7 @@ class ItemController extends Controller
      */
     public function bundled(Request $request)
     {
-        $query = Item::query()->bundled();
+        $query = Item::query()->bundled()->whereShopAgrivetIsActive();
 
         if ($request->has('status')) {
             $query->where('item_status', $request->status);
@@ -277,7 +285,7 @@ class ItemController extends Controller
      */
     public function onSale(Request $request)
     {
-        $query = Item::query()->withActiveDiscount();
+        $query = Item::query()->withActiveDiscount()->whereShopAgrivetIsActive();
 
         if ($request->has('status')) {
             $query->where('item_status', $request->status);
@@ -313,7 +321,7 @@ class ItemController extends Controller
      */
     public function random(Request $request)
     {
-        $query = Item::query();
+        $query = Item::query()->whereShopAgrivetIsActive();
 
         // Filter by status if provided
         if ($request->has('status')) {
@@ -500,7 +508,7 @@ class ItemController extends Controller
             ], 422);
         }
 
-        $query = Item::query();
+        $query = Item::query()->whereShopAgrivetIsActive();
 
         // Only search active items by default
         $query->where('item_status', 'active');

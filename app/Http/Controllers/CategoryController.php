@@ -53,6 +53,7 @@ class CategoryController extends Controller
         ]);
 
         $category = Category::create($validated);
+        Category::flushRatesCache();
 
         CategoryRateLog::logChange($category, null, (float) $validated['category_rate']);
         ActivityLog::log(
@@ -93,6 +94,7 @@ class CategoryController extends Controller
         $newRate = (float) $validated['category_rate'];
 
         $category->update($validated);
+        Category::flushRatesCache();
 
         $rateChanged = $oldRate === null
             || bccomp(number_format((float) $oldRate, 2, '.', ''), number_format($newRate, 2, '.', ''), 2) !== 0;
@@ -141,6 +143,7 @@ class CategoryController extends Controller
         ActivityLog::log('deleted', "Category deleted: {$category->category_name}", null, $category->toArray(), null);
 
         $category->delete();
+        Category::flushRatesCache();
 
         return redirect()->back()->with('flash', [
             'success' => 'Category deleted successfully!'

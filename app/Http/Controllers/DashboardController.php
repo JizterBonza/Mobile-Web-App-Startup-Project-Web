@@ -18,6 +18,7 @@ use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Symfony\Component\HttpKernel\Exception\HttpException;
@@ -99,7 +100,7 @@ class DashboardController extends Controller
             ->select(
                 'items.item_name as name',
                 DB::raw('COALESCE(SUM(order_items.quantity), 0) as quantity'),
-                DB::raw('COALESCE(SUM(order_items.quantity * order_items.price_at_purchase), 0) as revenue'),
+                DB::raw('COALESCE(SUM(order_items.quantity * order_items.price_at_purchase - COALESCE(order_items.platform_fee, 0)), 0) as revenue'),
             )
             ->groupBy('items.id', 'items.item_name')
             ->orderByDesc('quantity')
@@ -152,7 +153,7 @@ class DashboardController extends Controller
             ->leftJoin('category', 'items.category', '=', 'category.id')
             ->select(
                 DB::raw("COALESCE(category.category_name, 'Uncategorized') as category"),
-                DB::raw('COALESCE(SUM(order_items.quantity * order_items.price_at_purchase), 0) as revenue'),
+                DB::raw('COALESCE(SUM(order_items.quantity * order_items.price_at_purchase - COALESCE(order_items.platform_fee, 0)), 0) as revenue'),
             )
             ->groupBy('category.id', 'category.category_name')
             ->orderByDesc('revenue')
@@ -269,6 +270,7 @@ class DashboardController extends Controller
             'stag_ids.*' => 'integer',
             'pullet_ids' => 'required|array',
             'pullet_ids.*' => 'integer',
+            'bundle_image' => 'required|file|mimes:jpeg,jpg,png,webp|max:10240',
         ]);
 
         $expected = [
@@ -328,21 +330,30 @@ class DashboardController extends Controller
             }
         }
 
-        $listing = FarmGamefowlListing::create([
-            'farm_id' => $farm->id,
-            'gamefowl_catalog_id' => $stagIds[0],
-            'is_bundle' => true,
-            'bundle_name' => $validated['bundle_name'],
-            'bundle_type' => $validated['bundle_type'],
-            'bundle_catalog_ids' => $ids,
-            'price' => $validated['price'],
-            'selling_unit' => $expected['unit'],
-            'stock' => $validated['stock'],
-            'release_option' => $validated['release_option'],
-            'release_date' => $validated['release_option'] === 'Set Release Date' ? $validated['release_date'] : null,
-            'popularity' => 0,
-            'status' => 'active',
-        ]);
+        $bundleImage = $request->file('bundle_image')->store('farms/gamefowl-bundles', 'public');
+
+        try {
+            $listing = FarmGamefowlListing::create([
+                'farm_id' => $farm->id,
+                'gamefowl_catalog_id' => $stagIds[0],
+                'is_bundle' => true,
+                'bundle_name' => $validated['bundle_name'],
+                'bundle_type' => $validated['bundle_type'],
+                'bundle_catalog_ids' => $ids,
+                'bundle_image' => $bundleImage,
+                'price' => $validated['price'],
+                'selling_unit' => $expected['unit'],
+                'stock' => $validated['stock'],
+                'release_option' => $validated['release_option'],
+                'release_date' => $validated['release_option'] === 'Set Release Date' ? $validated['release_date'] : null,
+                'popularity' => 0,
+                'status' => 'active',
+            ]);
+        } catch (\Throwable $exception) {
+            Storage::disk('public')->delete($bundleImage);
+
+            throw $exception;
+        }
 
         ActivityLog::log('created', "Gamefowl bundle added to {$farm->name}", $listing, null, $listing->toArray());
 
@@ -623,7 +634,9 @@ class DashboardController extends Controller
                     'release_date' => $listing->release_date?->format('Y-m-d'),
                     'popularity' => $listing->popularity,
                     'status' => $listing->status,
-                    'image' => $this->gamefowlPrimaryImage($gamefowl),
+                    'image' => $listing->is_bundle && filled($listing->bundle_image)
+                        ? $listing->bundle_image
+                        : $this->gamefowlPrimaryImage($gamefowl),
                 ];
 
                 if (! $listing->is_bundle) {
@@ -773,7 +786,7 @@ class DashboardController extends Controller
             ->select(
                 DB::raw('DATE(created_at) as income_date'),
                 DB::raw('MAX(created_at) as transferred_at'),
-                DB::raw('COALESCE(SUM(quantity * price_at_purchase), 0) as amount'),
+                DB::raw('COALESCE(SUM(quantity * price_at_purchase - COALESCE(platform_fee, 0)), 0) as amount'),
                 DB::raw('COUNT(*) as item_count'),
             )
             ->groupBy(DB::raw('DATE(created_at)'))
@@ -1518,7 +1531,7 @@ class DashboardController extends Controller
             ->sum('quantity');
 
         $revenueRow = $this->ownerManagerSalesItemsQuery($shopIds, $start, $end)
-            ->selectRaw('COALESCE(SUM(order_items.quantity * order_items.price_at_purchase), 0) as total')
+            ->selectRaw('COALESCE(SUM(order_items.quantity * order_items.price_at_purchase - COALESCE(order_items.platform_fee, 0)), 0) as total')
             ->first();
         $revenue = (float) ($revenueRow->total ?? 0);
 
@@ -1546,7 +1559,7 @@ class DashboardController extends Controller
         $revenue = $this->ownerManagerSalesItemsQuery($shopIds, $start, $end)
             ->select(
                 'order_items.shop_id',
-                DB::raw('COALESCE(SUM(order_items.quantity * order_items.price_at_purchase), 0) as revenue'),
+                DB::raw('COALESCE(SUM(order_items.quantity * order_items.price_at_purchase - COALESCE(order_items.platform_fee, 0)), 0) as revenue'),
             )
             ->groupBy('order_items.shop_id')
             ->get()
@@ -1611,6 +1624,15 @@ class DashboardController extends Controller
         $storesTotal = (int) DB::table('shops')->count();
         $storesActive = (int) DB::table('shops')
             ->whereRaw('lower(shop_status) = ?', ['active'])
+            ->where(function ($query) {
+                $query->whereNull('agrivet_id')
+                    ->orWhereExists(function ($agrivet) {
+                        $agrivet->select(DB::raw(1))
+                            ->from('agrivets')
+                            ->whereColumn('agrivets.id', 'shops.agrivet_id')
+                            ->whereRaw('LOWER(TRIM(agrivets.status)) = ?', ['active']);
+                    });
+            })
             ->count();
         $storesBeforeThisMonth = (int) DB::table('shops')
             ->where(function ($query) use ($monthStart) {

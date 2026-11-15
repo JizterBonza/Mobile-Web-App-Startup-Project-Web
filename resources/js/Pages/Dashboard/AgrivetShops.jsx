@@ -388,7 +388,8 @@ export default function AgrivetShops({ auth, agrivet, zones = [], shops = [], fl
               {shops.map((shop) => {
                 const r = ratingValue(shop)
                 const coverSrc = shopCoverUrl(shop.logo_url)
-                const statusActive = shop.shop_status === 'active'
+                const agrivetInactive = String(agrivet?.status || '').toLowerCase() === 'inactive'
+                const statusActive = !agrivetInactive && shop.shop_status === 'active'
                 const statusLabel = statusActive ? 'Active' : 'Inactive'
                 return (
                   <div
@@ -462,7 +463,11 @@ export default function AgrivetShops({ auth, agrivet, zones = [], shops = [], fl
                           >
                             <Pencil className="h-4 w-4" />
                           </button> */}
-                          {shop.shop_status === 'active' ? (
+                          {agrivetInactive ? (
+                            <span className="inline-flex items-center rounded-lg bg-[#F3F4F6] px-2.5 py-1.5 text-xs font-semibold text-[#6B7280]">
+                              Inactive with Agrivet
+                            </span>
+                          ) : shop.shop_status === 'active' ? (
                             <button
                               type="button"
                               onClick={(e) => openRemoveStore(e, shop)}
