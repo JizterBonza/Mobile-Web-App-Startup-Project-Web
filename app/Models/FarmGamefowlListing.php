@@ -13,6 +13,7 @@ class FarmGamefowlListing extends Model
         'bundle_name',
         'bundle_type',
         'bundle_catalog_ids',
+        'bundle_image',
         'price',
         'selling_unit',
         'stock',

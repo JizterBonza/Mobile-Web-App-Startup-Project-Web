@@ -18,6 +18,7 @@ use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Symfony\Component\HttpKernel\Exception\HttpException;
@@ -269,6 +270,7 @@ class DashboardController extends Controller
             'stag_ids.*' => 'integer',
             'pullet_ids' => 'required|array',
             'pullet_ids.*' => 'integer',
+            'bundle_image' => 'required|file|mimes:jpeg,jpg,png,webp|max:10240',
         ]);
 
         $expected = [
@@ -328,21 +330,30 @@ class DashboardController extends Controller
             }
         }
 
-        $listing = FarmGamefowlListing::create([
-            'farm_id' => $farm->id,
-            'gamefowl_catalog_id' => $stagIds[0],
-            'is_bundle' => true,
-            'bundle_name' => $validated['bundle_name'],
-            'bundle_type' => $validated['bundle_type'],
-            'bundle_catalog_ids' => $ids,
-            'price' => $validated['price'],
-            'selling_unit' => $expected['unit'],
-            'stock' => $validated['stock'],
-            'release_option' => $validated['release_option'],
-            'release_date' => $validated['release_option'] === 'Set Release Date' ? $validated['release_date'] : null,
-            'popularity' => 0,
-            'status' => 'active',
-        ]);
+        $bundleImage = $request->file('bundle_image')->store('farms/gamefowl-bundles', 'public');
+
+        try {
+            $listing = FarmGamefowlListing::create([
+                'farm_id' => $farm->id,
+                'gamefowl_catalog_id' => $stagIds[0],
+                'is_bundle' => true,
+                'bundle_name' => $validated['bundle_name'],
+                'bundle_type' => $validated['bundle_type'],
+                'bundle_catalog_ids' => $ids,
+                'bundle_image' => $bundleImage,
+                'price' => $validated['price'],
+                'selling_unit' => $expected['unit'],
+                'stock' => $validated['stock'],
+                'release_option' => $validated['release_option'],
+                'release_date' => $validated['release_option'] === 'Set Release Date' ? $validated['release_date'] : null,
+                'popularity' => 0,
+                'status' => 'active',
+            ]);
+        } catch (\Throwable $exception) {
+            Storage::disk('public')->delete($bundleImage);
+
+            throw $exception;
+        }
 
         ActivityLog::log('created', "Gamefowl bundle added to {$farm->name}", $listing, null, $listing->toArray());
 
@@ -623,7 +634,9 @@ class DashboardController extends Controller
                     'release_date' => $listing->release_date?->format('Y-m-d'),
                     'popularity' => $listing->popularity,
                     'status' => $listing->status,
-                    'image' => $this->gamefowlPrimaryImage($gamefowl),
+                    'image' => $listing->is_bundle && filled($listing->bundle_image)
+                        ? $listing->bundle_image
+                        : $this->gamefowlPrimaryImage($gamefowl),
                 ];
 
                 if (! $listing->is_bundle) {

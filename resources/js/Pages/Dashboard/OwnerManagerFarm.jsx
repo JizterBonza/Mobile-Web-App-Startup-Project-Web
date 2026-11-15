@@ -537,6 +537,8 @@ function CreateGamefowlBundleModal({ catalog = [], onClose }) {
     const [selected, setSelected] = useState({ stag: [], pullet: [] })
     const [selectError, setSelectError] = useState('')
     const [saving, setSaving] = useState(false)
+    const [bundleImage, setBundleImage] = useState(null)
+    const [bundleImagePreview, setBundleImagePreview] = useState('')
 
     const bundleSelection = {
         Pair: { stag: 1, pullet: 1, heading: 'Select 1 Stag and 1 Pullet only', requirement: 'Select 1 stag and 1 pullet.' },
@@ -561,6 +563,35 @@ function CreateGamefowlBundleModal({ catalog = [], onClose }) {
         return () => window.removeEventListener('keydown', onKey)
     }, [onClose])
 
+    const bundleImagePreviewRef = useRef('')
+
+    useEffect(() => {
+        return () => {
+            if (bundleImagePreviewRef.current) URL.revokeObjectURL(bundleImagePreviewRef.current)
+        }
+    }, [])
+
+    const handleBundleImageChange = (event) => {
+        const file = event.target.files?.[0]
+        event.target.value = ''
+        if (!file) return
+        const allowed = ['image/jpeg', 'image/png', 'image/webp']
+        if (!allowed.includes(file.type)) {
+            setError('Bundle image must be a JPG, PNG, or WEBP file.')
+            return
+        }
+        if (file.size > 10 * 1024 * 1024) {
+            setError('Bundle image must be 10MB or smaller.')
+            return
+        }
+        setError('')
+        if (bundleImagePreviewRef.current) URL.revokeObjectURL(bundleImagePreviewRef.current)
+        const preview = URL.createObjectURL(file)
+        bundleImagePreviewRef.current = preview
+        setBundleImage(file)
+        setBundleImagePreview(preview)
+    }
+
     const fieldClass =
         'w-full rounded-lg border border-[#E5E7EB] bg-white px-4 py-2.5 text-sm text-[#111827] placeholder:text-[#9CA3AF] focus:border-[#244693] focus:outline-none'
     const selectClass = (value) =>
@@ -569,6 +600,7 @@ function CreateGamefowlBundleModal({ catalog = [], onClose }) {
     const handleNext = () => {
         const missing = []
         if (!bundleName.trim()) missing.push('Bundle Description')
+        if (!bundleImage) missing.push('Bundle Image')
         if (!bundleType) missing.push('Bundle Type')
         if (!price.trim()) missing.push('Price')
         if (!stock.trim()) missing.push('Stock Quantity')
@@ -744,12 +776,21 @@ function CreateGamefowlBundleModal({ catalog = [], onClose }) {
                                         release_date: releaseOption === 'Set Release Date' ? releaseDate : null,
                                         stag_ids: selected.stag.map((item) => item.id),
                                         pullet_ids: selected.pullet.map((item) => item.id),
+                                        bundle_image: bundleImage,
                                     },
                                     {
+                                        forceFormData: true,
                                         preserveScroll: true,
                                         preserveState: true,
                                         onSuccess: () => onClose(),
                                         onError: (errors) => {
+                                            const imageError = errors.bundle_image
+                                            const imageMessage = Array.isArray(imageError) ? imageError[0] : imageError
+                                            if (typeof imageMessage === 'string' && imageMessage) {
+                                                setStep('details')
+                                                setError(imageMessage)
+                                                return
+                                            }
                                             const first = Object.values(errors)[0]
                                             const message = Array.isArray(first) ? first[0] : first
                                             setSelectError(typeof message === 'string' ? message : 'Could not create this bundle.')
@@ -774,10 +815,10 @@ function CreateGamefowlBundleModal({ catalog = [], onClose }) {
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby="create-gamefowl-bundle-title"
-                className="w-full max-w-4xl rounded-2xl bg-white shadow-xl"
+                className="flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl bg-white shadow-xl"
                 onClick={(event) => event.stopPropagation()}
             >
-                <div className="flex items-start justify-between gap-4 px-8 pb-5 pt-7">
+                <div className="flex shrink-0 items-start justify-between gap-4 px-8 pb-5 pt-7">
                     <div>
                         <h2 id="create-gamefowl-bundle-title" className="text-xl font-bold text-[#111827]">
                             Create Gamefowl Bundle
@@ -794,9 +835,47 @@ function CreateGamefowlBundleModal({ catalog = [], onClose }) {
                     </button>
                 </div>
 
-                <div className="border-t border-[#E5E7EB] px-8 pb-7 pt-7">
+                <div className="overflow-y-auto border-t border-[#E5E7EB] px-8 pb-7 pt-7">
                     {error && <p className="mb-4 text-sm text-[#E20E28]">{error}</p>}
                     <div className="grid grid-cols-1 gap-x-10 gap-y-6 md:grid-cols-2">
+                        <div className="md:col-span-2">
+                            <p className="mb-2 text-sm font-semibold text-[#111827]">Bundle Image</p>
+                            <div
+                                role="button"
+                                tabIndex={0}
+                                onClick={() => document.getElementById('bundle-image')?.click()}
+                                onKeyDown={(event) => {
+                                    if (event.key === 'Enter' || event.key === ' ') {
+                                        event.preventDefault()
+                                        document.getElementById('bundle-image')?.click()
+                                    }
+                                }}
+                                className="flex cursor-pointer items-center gap-4 rounded-lg border border-dashed border-[#D1D5DB] bg-[#F9FAFB] p-4 transition-colors hover:border-[#244693]"
+                            >
+                                <div className="flex h-24 w-20 shrink-0 items-center justify-center overflow-hidden rounded-md bg-[#E5E7EB]">
+                                    {bundleImagePreview ? (
+                                        <img src={bundleImagePreview} alt="" className="h-full w-full object-cover" />
+                                    ) : (
+                                        <span className="px-1 text-center text-[10px] font-semibold text-[#6B7280]">No photo</span>
+                                    )}
+                                </div>
+                                <div>
+                                    <p className="text-sm font-semibold text-[#111827]">
+                                        {bundleImage ? bundleImage.name : 'Upload a photo for this bundle'}
+                                    </p>
+                                    <p className="mt-1 text-xs leading-5 text-[#6B7280]">
+                                        Required. JPG, PNG, or WEBP. Max 10MB. This photo is the bundle picture.
+                                    </p>
+                                </div>
+                            </div>
+                            <input
+                                id="bundle-image"
+                                type="file"
+                                accept="image/jpeg,image/png,image/webp"
+                                className="hidden"
+                                onChange={handleBundleImageChange}
+                            />
+                        </div>
                         <div>
                             <label htmlFor="bundle-name" className="mb-2 block text-sm font-semibold text-[#111827]">
                                 Bundle Description

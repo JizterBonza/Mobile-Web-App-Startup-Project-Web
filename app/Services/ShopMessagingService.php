@@ -508,7 +508,9 @@ class ShopMessagingService
         $listing->loadMissing('gamefowl.bloodline');
         $gamefowl = $listing->gamefowl;
         $images = $gamefowl?->images ?? [];
-        $image = $images[$gamefowl?->primary_image_index ?? 0] ?? ($images[0] ?? null);
+        $image = ($listing->is_bundle && filled($listing->bundle_image))
+            ? $listing->bundle_image
+            : ($images[$gamefowl?->primary_image_index ?? 0] ?? ($images[0] ?? null));
         $name = ($listing->is_bundle && filled($listing->bundle_name))
             ? $listing->bundle_name
             : ($gamefowl?->bloodline?->name ?: $gamefowl?->name ?: 'Gamefowl');
