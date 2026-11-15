@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Concerns;
 
 use App\Services\OrderStatusTransitionService;
+use App\Services\ShopWalletService;
 use App\Support\DisplayDateTime;
 use App\Support\PublicStorage;
 use Illuminate\Auth\Access\AuthorizationException;
@@ -105,6 +106,7 @@ trait ManagesShopOrders
                 'order_items.quantity',
                 'order_items.price_at_purchase',
                 'order_items.original_price',
+                'order_items.platform_fee',
                 'order_items.discount_percent_at_purchase',
                 'order_items.item_status as item_status_id',
                 'order_item_status.stat_description as item_status_description',
@@ -174,13 +176,14 @@ trait ManagesShopOrders
             $statusMeta = $this->mapShopOrderStatus($row->status_description ?? '');
             $products = ($itemsByOrder->get($row->id) ?? collect())->map(function ($item) {
                 $thumbnail = $this->firstItemImageUrl($item->item_images);
+                $vendorPrices = ShopWalletService::vendorUnitPrices($item->price_at_purchase, $item->original_price, $item->platform_fee, $item->quantity);
 
                 return [
                     'id'           => (int) $item->id,
                     'name'         => $item->item_name_at_purchase ?: $item->item_name,
                     'quantity'     => (int) $item->quantity,
-                    'price'        => (float) $item->price_at_purchase,
-                    'originalPrice' => (float) ($item->original_price ?? $item->price_at_purchase),
+                    'price'        => $vendorPrices['price'],
+                    'originalPrice' => $vendorPrices['original_price'],
                     'discount'     => (float) ($item->discount_percent_at_purchase ?? 0),
                     'thumbnail'    => $thumbnail,
                     'itemStatusId' => (int) $item->item_status_id,

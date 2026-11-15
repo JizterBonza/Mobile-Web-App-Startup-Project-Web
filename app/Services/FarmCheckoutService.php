@@ -118,14 +118,14 @@ class FarmCheckoutService
             $item['listing_id'] = (int) $item['listing_id'];
             foreach ($item['birds'] as $b => &$bird) {
                 $normalized = [];
-                foreach (['wingband_no', 'feather_color', 'feet_color'] as $field) {
+                foreach (['wingband_no', 'feather_color', 'feet_color', 'nose_and_feet_markings'] as $field) {
                     $value = trim($bird[$field] ?? '');
                     if ($value !== '') {
                         $normalized[$field] = $value;
                     }
                 }
                 if ($normalized === []) {
-                    $errors["items.$i.birds.$b"] = 'Provide at least one of wingband number, feather color, or feet color for this bird.';
+                    $errors["items.$i.birds.$b"] = 'Provide at least one of wingband number, feather color, feet color, or nose and feet markings for this bird.';
                 }
                 if (isset($normalized['wingband_no'])) {
                     $wingband = mb_strtolower($normalized['wingband_no']);

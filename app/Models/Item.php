@@ -121,7 +121,7 @@ class Item extends Model
      *
      * @var array<int, string>
      */
-    protected $appends = ['shop_name', 'effective_price', 'active_discount_percent'];
+    protected $appends = ['shop_name', 'list_price', 'effective_price', 'active_discount_percent', 'markup_percent'];
 
     /**
      * Scope to product bundle items.
@@ -171,12 +171,52 @@ class Item extends Model
     }
 
     /**
-     * Price after applying an active discount.
+     * Category markup percentage applied on top of the vendor's item_price.
+     */
+    public function getMarkupPercent(): float
+    {
+        if ($this->category === null || ! is_numeric($this->category)) {
+            return 0.0;
+        }
+
+        return max(0.0, Category::rates()[(int) $this->category] ?? 0.0);
+    }
+
+    /**
+     * Customer price before discount (item_price plus category markup).
+     */
+    public function getListPrice(): float
+    {
+        return round((float) $this->item_price * (1 + $this->getMarkupPercent() / 100), 2);
+    }
+
+    /**
+     * Customer price after markup and active discount.
      */
     public function getEffectivePrice(): float
     {
+        return $this->applyDiscount((float) $this->item_price * (1 + $this->getMarkupPercent() / 100));
+    }
+
+    /**
+     * Vendor's share per unit: item_price after the active discount, without markup.
+     */
+    public function getVendorUnitPrice(): float
+    {
+        return $this->applyDiscount((float) $this->item_price);
+    }
+
+    /**
+     * Markup portion of the effective price, kept by the platform.
+     */
+    public function getPlatformFeePerUnit(): float
+    {
+        return round(max(0, $this->getEffectivePrice() - $this->getVendorUnitPrice()), 2);
+    }
+
+    private function applyDiscount(float $price): float
+    {
         $discount = $this->getActiveDiscountPercent();
-        $price = (float) $this->item_price;
 
         if ($discount <= 0) {
             return round($price, 2);
@@ -185,9 +225,19 @@ class Item extends Model
         return round($price * (1 - $discount / 100), 2);
     }
 
+    public function getListPriceAttribute(): float
+    {
+        return $this->getListPrice();
+    }
+
     public function getEffectivePriceAttribute(): float
     {
         return $this->getEffectivePrice();
+    }
+
+    public function getMarkupPercentAttribute(): float
+    {
+        return $this->getMarkupPercent();
     }
 
     public function getActiveDiscountPercentAttribute(): float

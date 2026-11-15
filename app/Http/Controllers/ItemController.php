@@ -165,7 +165,9 @@ class ItemController extends Controller
             'average_rating', 'total_reviews', 'sold_count', 'created_at', 'updated_at'
         ]);
 
+        $itemData['list_price'] = $item->getListPrice();
         $itemData['effective_price'] = $item->getEffectivePrice();
+        $itemData['markup_percent'] = $item->getMarkupPercent();
         $itemData['active_discount_percent'] = $item->getActiveDiscountPercent();
         
         // Add reviews
