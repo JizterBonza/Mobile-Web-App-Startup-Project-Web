@@ -309,7 +309,7 @@ export default function AgrivetVendors({ auth, agrivet, shop, vendors = [], avai
                         <td>{vendor.email}</td>
                         <td>{vendor.mobile_number || '-'}</td>
                         <td>{vendor.username}</td>
-                        <td>{getStatusBadge(vendor.pivot?.status || vendor.status)}</td>
+                        <td>{getStatusBadge(String(agrivet?.status || '').toLowerCase() === 'inactive' ? 'inactive' : (vendor.pivot?.status || vendor.status))}</td>
                         <td>{new Date(vendor.created_at).toLocaleDateString()}</td>
                         <td>
                           <button

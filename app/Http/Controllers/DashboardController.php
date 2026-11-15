@@ -1624,6 +1624,15 @@ class DashboardController extends Controller
         $storesTotal = (int) DB::table('shops')->count();
         $storesActive = (int) DB::table('shops')
             ->whereRaw('lower(shop_status) = ?', ['active'])
+            ->where(function ($query) {
+                $query->whereNull('agrivet_id')
+                    ->orWhereExists(function ($agrivet) {
+                        $agrivet->select(DB::raw(1))
+                            ->from('agrivets')
+                            ->whereColumn('agrivets.id', 'shops.agrivet_id')
+                            ->whereRaw('LOWER(TRIM(agrivets.status)) = ?', ['active']);
+                    });
+            })
             ->count();
         $storesBeforeThisMonth = (int) DB::table('shops')
             ->where(function ($query) use ($monthStart) {

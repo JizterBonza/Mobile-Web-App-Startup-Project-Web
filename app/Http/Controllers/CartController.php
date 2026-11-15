@@ -103,7 +103,8 @@ class CartController extends Controller
 
         $query = Cart::select(self::CART_SELECT)
             ->with($this->cartWith())
-            ->where('user_id', $userId);
+            ->where('user_id', $userId)
+            ->whereHas('item.shop', fn ($shop) => $shop->whereAgrivetIsActive());
 
         if ($request->has('status')) {
             $query->where('status', $request->status);
@@ -128,7 +129,7 @@ class CartController extends Controller
             ->with($this->cartWith())
             ->find($id);
 
-        if (!$cart) {
+        if (! $cart || ! $cart->item?->shopAgrivetIsActive()) {
             return response()->json([
                 'success' => false,
                 'message' => 'Cart item not found'
@@ -155,6 +156,7 @@ class CartController extends Controller
             ->with($this->cartWith(false))
             ->where('user_id', $userId)
             ->where('status', 'active')
+            ->whereHas('item.shop', fn ($shop) => $shop->whereAgrivetIsActive())
             ->orderBy('created_at', 'desc')
             ->get();
 
@@ -173,6 +175,7 @@ class CartController extends Controller
 
         $count = Cart::where('user_id', $userId)
             ->where('status', 'active')
+            ->whereHas('item.shop', fn ($shop) => $shop->whereAgrivetIsActive())
             ->count();
 
         return response()->json([
@@ -204,8 +207,8 @@ class CartController extends Controller
 
         $userId = $this->authUserId($request);
 
-        $item = Item::find($request->item_id);
-        if (!$item) {
+        $item = Item::with('shop.agrivet:id,status')->find($request->item_id);
+        if (! $item || ! $item->shopAgrivetIsActive()) {
             return response()->json([
                 'success' => false,
                 'message' => 'Item not found'

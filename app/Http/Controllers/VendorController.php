@@ -35,18 +35,13 @@ class VendorController extends Controller
         $user = auth()->user();
 
         if ($user->user_type === User::TYPE_OWNER_MANAGER && $user->agrivet_id) {
-            return Shop::where('agrivet_id', $user->agrivet_id)->orderBy('id')->first();
+            return Shop::where('agrivet_id', $user->agrivet_id)->whereAgrivetIsActive()->orderBy('id')->first();
         }
 
         $vendor = $user;
-        $vendor->load('shops');
+        $vendor->load('shops.agrivet');
 
-        if ($vendor->shops->isEmpty()) {
-            return null;
-        }
-
-        // Get the first active shop (vendors typically have one)
-        return $vendor->shops->first();
+        return $vendor->shops->first(fn (Shop $shop) => $shop->agrivetIsActive());
     }
 
     /**
@@ -71,7 +66,7 @@ class VendorController extends Controller
         $user = auth()->user();
 
         if ($user->user_type === User::TYPE_OWNER_MANAGER && $user->agrivet_id) {
-            return Shop::with('agrivet')->where('agrivet_id', $user->agrivet_id)->orderBy('id')->first();
+            return Shop::with('agrivet')->where('agrivet_id', $user->agrivet_id)->whereAgrivetIsActive()->orderBy('id')->first();
         }
 
         $vendor = $user;
@@ -79,11 +74,7 @@ class VendorController extends Controller
             $query->wherePivot('status', 'active');
         }, 'shops.agrivet']);
 
-        if ($vendor->shops->isEmpty()) {
-            return null;
-        }
-
-        return $vendor->shops->first();
+        return $vendor->shops->first(fn (Shop $shop) => $shop->agrivetIsActive());
     }
 
     /**

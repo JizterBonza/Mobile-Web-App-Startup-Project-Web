@@ -26,7 +26,7 @@ class UserController extends Controller
     public function index()
     {
         $currentUser = auth()->user();
-        $query = User::with(['userDetail', 'userCredential', 'managedShippingPartner']);
+        $query = User::with(['userDetail', 'userCredential', 'managedShippingPartner', 'managedAgrivet', 'agrivets']);
 
         // If current user is Admin, filter to show only operational roles they manage
         if ($currentUser->user_type === 'admin') {
@@ -45,7 +45,8 @@ class UserController extends Controller
                     'mobile_number' => $user->userDetail->mobile_number ?? '',
                     'company_name' => $user->managedShippingPartner->name ?? '',
                     'user_type' => $user->user_type,
-                    'status' => $user->status,
+                    'status' => $user->effectiveStatus(),
+                    'status_locked' => $user->accessLockedByOrganization(),
                     'username' => $user->userCredential->username ?? '',
                     'created_at' => $user->created_at->format('Y-m-d H:i:s'),
                     'updated_at' => $user->updated_at->format('Y-m-d H:i:s'),
@@ -392,6 +393,14 @@ class UserController extends Controller
         if ($currentUser->user_type === 'admin') {
             // Admin can only update to Vendors, Veterinarians, Breeders, Riders, and Owner/Managers
             $allowedUserTypes = ['vendor', 'veterinarian', 'breeder', 'rider', 'owner_manager', 'shipping_partner'];
+        }
+
+        if (
+            strtolower((string) ($request->input('status') ?? $user->status)) === User::STATUS_ACTIVE
+            && ! $user->organizationAllowsAccess()
+        ) {
+            return redirect()->back()
+                ->withErrors(['status' => 'This account stays inactive while its Agrivet is inactive.']);
         }
 
         $request->validate([

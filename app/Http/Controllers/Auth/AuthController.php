@@ -103,7 +103,7 @@ class AuthController extends Controller
 
         if (! $user->isActive()) {
             throw ValidationException::withMessages([
-                'email' => User::INACTIVE_ACCOUNT_MESSAGE,
+                'email' => $user->inactiveMessage(),
             ]);
         }
 

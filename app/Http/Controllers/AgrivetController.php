@@ -65,9 +65,15 @@ class AgrivetController extends Controller
     public function show(int $id)
     {
         $agrivet = Agrivet::with('shops')->findOrFail($id);
-        $users = User::with(['userDetail', 'userCredential'])
+        $vendorIds = DB::table('agrivet_vendor')
             ->where('agrivet_id', $agrivet->id)
-            ->get();
+            ->pluck('vendor_id');
+        $users = User::with(['userDetail', 'userCredential', 'managedAgrivet', 'agrivets'])
+            ->where('agrivet_id', $agrivet->id)
+            ->orWhereIn('id', $vendorIds)
+            ->get()
+            ->unique('id')
+            ->values();
 
         $shops = $agrivet->shops->sortBy(fn (Shop $shop) => $shop->shop_name ?? '')->values();
         $address = $shops
@@ -98,14 +104,14 @@ class AgrivetController extends Controller
                 'permits' => $this->readablePermits($agrivet->permits),
                 'status' => $agrivet->status,
                 'created_at' => $agrivet->created_at?->format('Y-m-d H:i:s'),
-                'users' => $this->mapConnectedUsers($users),
+                'users' => $this->mapConnectedUsers($users, ! $agrivet->isActive()),
                 'shops' => $shops->map(fn (Shop $shop) => [
                     'id' => $shop->id,
                     'name' => $shop->shop_name,
                     'address' => collect([$shop->shop_address, $shop->shop_city, $shop->shop_province])
                         ->filter()
                         ->implode(', ') ?: null,
-                    'status' => $shop->shop_status,
+                    'status' => $agrivet->isActive() && Agrivet::statusIsActive($shop->shop_status) ? 'active' : 'inactive',
                 ])->values(),
             ],
         ]);
@@ -1963,12 +1969,12 @@ class AgrivetController extends Controller
      * @param  \Illuminate\Support\Collection<int, User>  $users
      * @return \Illuminate\Support\Collection<int, array<string, mixed>>
      */
-    private function mapConnectedUsers($users)
+    private function mapConnectedUsers($users, bool $forceInactive = false)
     {
         return $users
             ->sortByDesc(fn (User $user) => $user->created_at?->getTimestamp() ?? 0)
             ->values()
-            ->map(function (User $user) {
+            ->map(function (User $user) use ($forceInactive) {
                 $detail = $user->userDetail;
                 $name = $detail
                     ? trim(implode(' ', array_filter([
@@ -1985,7 +1991,7 @@ class AgrivetController extends Controller
                     'mobile_number' => $detail?->mobile_number,
                     'username' => $user->userCredential?->username,
                     'user_type' => $user->user_type,
-                    'status' => $user->status,
+                    'status' => $forceInactive ? 'inactive' : $user->effectiveStatus(),
                     'created_at' => $user->created_at?->format('Y-m-d H:i:s'),
                 ];
             })

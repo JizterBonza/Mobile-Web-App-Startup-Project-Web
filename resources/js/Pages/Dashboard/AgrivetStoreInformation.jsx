@@ -477,7 +477,8 @@ export default function AgrivetStoreInformation({
 }) {
   const isOwnerManager = auth?.user?.user_type === 'owner_manager'
   const isVendor = auth?.user?.user_type === 'vendor'
-  const canManageStoreStatus = !isVendor
+  const agrivetInactive = String(agrivet?.status || '').toLowerCase() === 'inactive'
+  const canManageStoreStatus = !isVendor && !agrivetInactive
   const visibleTabs = isVendor ? vendorTabOrder : tabOrder
   const vendorOrdersApiBasePath = shop?.id ? `/dashboard/vendor/stores/${shop.id}/orders` : ''
 
@@ -541,7 +542,8 @@ export default function AgrivetStoreInformation({
       : `${getBaseRoute()}/${agrivet?.id}/shops/${shop?.id}/vendors/${vendorId}/status`
   )
 
-  const isVendorAssignmentActive = (vendor) => (vendor?.pivot?.status || vendor?.status) === 'active'
+  const isVendorAssignmentActive = (vendor) =>
+    !agrivetInactive && (vendor?.pivot?.status || vendor?.status) === 'active'
 
   // Build a "store" object that matches the template fields/shape as closely as possible.
   const store = useMemo(() => {
@@ -552,7 +554,7 @@ export default function AgrivetStoreInformation({
     return {
       id: shop.id,
       storeName: shop.shop_name,
-      status: shop.shop_status === 'active' ? 'Active' : 'Inactive',
+      status: !agrivetInactive && shop.shop_status === 'active' ? 'Active' : 'Inactive',
       street,
       barangay,
       city: shop.shop_city || '',
@@ -570,7 +572,7 @@ export default function AgrivetStoreInformation({
       permitPhoto: shopPermitUrl(shop.permit_url),
       permitIsPdf: isPermitPdf(shopPermitUrl(shop.permit_url)),
     }
-  }, [shop])
+  }, [shop, agrivetInactive])
 
   const [activeTab, setActiveTab] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -1475,7 +1477,9 @@ export default function AgrivetStoreInformation({
                         store.status === 'Active' ? 'bg-[#00C950]' : 'bg-[#D1D5DB]'
                       } ${canManageStoreStatus ? '' : 'opacity-60 cursor-not-allowed'}`}
                       title={
-                        canManageStoreStatus
+                        agrivetInactive
+                          ? 'Inactive while the Agrivet is disabled'
+                          : canManageStoreStatus
                           ? store.status === 'Active'
                             ? 'Deactivate store'
                             : 'Reactivate store'
@@ -1859,11 +1863,11 @@ export default function AgrivetStoreInformation({
                                 <button
                                   type="button"
                                   onClick={() => openStatusConfirm(v)}
-                                  disabled={isUpdatingVendorStatus}
+                                  disabled={isUpdatingVendorStatus || agrivetInactive}
                                   className={`relative inline-flex h-6 w-11 items-center rounded-full transition-all duration-300 flex-shrink-0 disabled:opacity-60 ${
                                     isVendorAssignmentActive(v) ? 'bg-[#00C950]' : 'bg-[#D1D5DB]'
                                   }`}
-                                  title={isVendorAssignmentActive(v) ? 'Disable vendor' : 'Enable vendor'}
+                                  title={agrivetInactive ? 'Inactive while the Agrivet is disabled' : isVendorAssignmentActive(v) ? 'Disable vendor' : 'Enable vendor'}
                                   aria-pressed={isVendorAssignmentActive(v)}
                                   style={{ borderRadius: '0.7rem' }}
                                 >

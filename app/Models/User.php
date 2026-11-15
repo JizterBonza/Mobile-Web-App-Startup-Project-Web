@@ -6,6 +6,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Facades\DB;
 use Laravel\Sanctum\HasApiTokens;
 use App\Models\Agrivet;
 use App\Models\Farm;
@@ -34,6 +35,8 @@ class User extends Authenticatable
     const STATUS_ACTIVE = 'active';
 
     const INACTIVE_ACCOUNT_MESSAGE = 'Your account is inactive. Please contact an administrator.';
+
+    const INACTIVE_AGRIVET_MESSAGE = 'Your Agrivet is inactive. Please contact an administrator.';
 
     /**
      * The attributes that are mass assignable.
@@ -82,11 +85,91 @@ class User extends Authenticatable
     }
 
     /**
-     * Only an explicit active status may sign in or keep a session.
+     * The account row itself is active, before Agrivet access is considered.
+     */
+    public function accountStatusIsActive(): bool
+    {
+        return strtolower(trim((string) $this->status)) === self::STATUS_ACTIVE;
+    }
+
+    /**
+     * Owner/managers and vendors of an inactive Agrivet cannot sign in.
+     * A vendor who still belongs to another active Agrivet can.
+     */
+    public function organizationAllowsAccess(): bool
+    {
+        if ($this->user_type === self::TYPE_OWNER_MANAGER && $this->agrivet_id) {
+            if ($this->relationLoaded('managedAgrivet')) {
+                return (bool) $this->managedAgrivet?->isActive();
+            }
+
+            $status = Agrivet::query()->whereKey($this->agrivet_id)->value('status');
+
+            return Agrivet::statusIsActive($status);
+        }
+
+        if ($this->user_type === self::TYPE_VENDOR) {
+            if ($this->relationLoaded('agrivets')) {
+                if ($this->agrivets->isEmpty()) {
+                    return true;
+                }
+
+                return $this->agrivets->contains(fn (Agrivet $agrivet) => $agrivet->isActive());
+            }
+
+            $assigned = DB::table('agrivet_vendor')->where('vendor_id', $this->id)->exists();
+            if (! $assigned) {
+                return true;
+            }
+
+            return DB::table('agrivet_vendor')
+                ->join('agrivets', 'agrivets.id', '=', 'agrivet_vendor.agrivet_id')
+                ->where('agrivet_vendor.vendor_id', $this->id)
+                ->whereRaw('LOWER(TRIM(agrivets.status)) = ?', ['active'])
+                ->exists();
+        }
+
+        return true;
+    }
+
+    /**
+     * Sign-in and API access require an active account and an active Agrivet.
      */
     public function isActive(): bool
     {
-        return strtolower(trim((string) $this->status)) === self::STATUS_ACTIVE;
+        return $this->accountStatusIsActive() && $this->organizationAllowsAccess();
+    }
+
+    /**
+     * Status shown to admins. An active account under a disabled Agrivet is inactive.
+     */
+    public function effectiveStatus(): string
+    {
+        if (! $this->accountStatusIsActive()) {
+            $status = strtolower(trim((string) $this->status));
+
+            return $status !== '' ? $status : 'inactive';
+        }
+
+        return $this->organizationAllowsAccess() ? self::STATUS_ACTIVE : 'inactive';
+    }
+
+    /**
+     * The account cannot be switched back on while its Agrivet is inactive.
+     */
+    public function accessLockedByOrganization(): bool
+    {
+        return in_array($this->user_type, [self::TYPE_OWNER_MANAGER, self::TYPE_VENDOR], true)
+            && ! $this->organizationAllowsAccess();
+    }
+
+    public function inactiveMessage(): string
+    {
+        if ($this->accountStatusIsActive() && ! $this->organizationAllowsAccess()) {
+            return self::INACTIVE_AGRIVET_MESSAGE;
+        }
+
+        return self::INACTIVE_ACCOUNT_MESSAGE;
     }
 
     /**

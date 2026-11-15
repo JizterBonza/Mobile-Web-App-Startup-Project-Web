@@ -405,9 +405,14 @@ class ShopMessagingService
      */
     public function listShopProductsForPicker(Shop $shop, ?string $search = null): array
     {
+        if (! $shop->agrivetIsActive()) {
+            return [];
+        }
+
         $query = Item::query()
             ->where('shop_id', $shop->id)
             ->where('item_status', 'active')
+            ->whereShopAgrivetIsActive()
             ->orderBy('item_name');
 
         $term = trim((string) $search);

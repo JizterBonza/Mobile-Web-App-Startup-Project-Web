@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, router, useForm, usePage } from '@inertiajs/react'
-import { Bell, ChevronDown, CreditCard, History, LogOut, Map, MessageSquareMore, RefreshCw, Settings, Ship, SlidersHorizontal, Smartphone, Ticket, Truck, Wallet } from 'lucide-react'
+import { Bell, ChevronDown, CreditCard, History, LogOut, Map, MessageSquareMore, RefreshCw, Settings, Ship, SlidersHorizontal, Smartphone, Ticket, Truck, Undo2, Wallet } from 'lucide-react'
 import primaryLogo from '../../../../Logo/Primary Logo.png'
 
 /**
@@ -28,6 +28,18 @@ export function getActiveNavId(pathname, items) {
     }
     const rank = (i) => Math.max(i.href.length, ...(i.matchPaths ?? []).map((p) => p.length))
     return matches.reduce((a, b) => (rank(a) >= rank(b) ? a : b)).id
+}
+
+function formatNotificationTime(iso) {
+    if (!iso) return ''
+    const diff = Date.now() - new Date(iso).getTime()
+    const minutes = Math.round(diff / 60000)
+    if (Number.isNaN(minutes) || minutes < 1) return 'Just now'
+    if (minutes < 60) return `${minutes} min ago`
+    const hours = Math.round(minutes / 60)
+    if (hours < 24) return `${hours} hr ago`
+    const days = Math.round(hours / 24)
+    return `${days} day ago`
 }
 
 function initialsFromName(name) {
@@ -61,7 +73,12 @@ export function DashboardHeader({
     userEmail,
     userInitials,
 }) {
-    const { url } = usePage()
+    const { url, props } = usePage()
+    const sharedNotifications = props.headerNotifications
+    const hasSharedNotifications = Array.isArray(sharedNotifications?.items)
+    const liveNotificationCount = hasSharedNotifications
+        ? Number(sharedNotifications.unread_count || 0)
+        : notificationCount
     const { post } = useForm()
     const [showUserDropdown, setShowUserDropdown] = useState(false)
     const [showNotifications, setShowNotifications] = useState(false)
@@ -178,9 +195,9 @@ export function DashboardHeader({
                         aria-label="Notifications"
                     >
                         <Bell className="h-5 w-5" />
-                        {notificationCount > 0 && (
+                        {liveNotificationCount > 0 && (
                             <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-[#E20E28] px-1 text-[10px] font-bold leading-none text-white">
-                                {notificationCount > 9 ? '9+' : notificationCount}
+                                {liveNotificationCount > 9 ? '9+' : liveNotificationCount}
                             </span>
                         )}
                     </button>
@@ -329,7 +346,35 @@ export function DashboardHeader({
                             </h3>
                         </div>
                         <div className="max-h-80 overflow-y-auto">
-                            {notificationCount > 0 ? (
+                            {hasSharedNotifications ? (
+                                sharedNotifications.items.length > 0 ? (
+                                    <div className="divide-y divide-[#E5E7EB]">
+                                        {sharedNotifications.items.map((item) => (
+                                            <button
+                                                key={item.id}
+                                                type="button"
+                                                onClick={() => {
+                                                    setShowNotifications(false)
+                                                    router.post(`/dashboard/notifications/${item.id}/open`)
+                                                }}
+                                                className="block w-full p-4 text-left transition-colors hover:bg-[#F9FAFB]"
+                                            >
+                                                <p className="mb-1 text-sm font-semibold text-[#102059]">
+                                                    {item.title}
+                                                </p>
+                                                <p className="line-clamp-2 text-xs text-[#4B5563]">{item.message}</p>
+                                                <p className="mt-1 text-xs text-[#6B7280]">
+                                                    {formatNotificationTime(item.created_at)}
+                                                </p>
+                                            </button>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <div className="p-8 text-center">
+                                        <p className="text-sm text-[#6B7280]">No new notifications</p>
+                                    </div>
+                                )
+                            ) : notificationCount > 0 ? (
                                 <div className="divide-y divide-[#E5E7EB]">
                                     {Array.from({ length: Math.min(notificationCount, 10) }).map((_, index) => (
                                         <div key={index} className="p-4 transition-colors hover:bg-[#F9FAFB]">
@@ -420,6 +465,7 @@ export const SUPER_ADMIN_HEADER_NAV = [
 export const SUPER_ADMIN_DROPDOWN_NAV = [
     { label: 'Shipping Partners', href: '/dashboard/super-admin/shipping-partners', Icon: Ship },
     { label: 'Activity Logs', href: '/dashboard/super-admin/activity-logs', Icon: History },
+    { label: 'Refunds', href: '/dashboard/super-admin/refunds', Icon: Undo2 },
     { label: 'Payout Records', href: '/dashboard/super-admin/payout-records', Icon: Wallet },
     { label: 'Vouchers', href: '/dashboard/super-admin/vouchers', Icon: Ticket },
     { label: 'Payment Methods', href: '/dashboard/super-admin/payment-methods', Icon: CreditCard },
@@ -453,6 +499,7 @@ export const ADMIN_HEADER_NAV = [
 export const ADMIN_DROPDOWN_NAV = [
     { label: 'Shipping Partners', href: '/dashboard/admin/shipping-partners', Icon: Ship },
     { label: 'Activity Logs', href: '/dashboard/admin/activity-logs', Icon: History },
+    { label: 'Refunds', href: '/dashboard/admin/refunds', Icon: Undo2 },
     { label: 'Payout Records', href: '/dashboard/admin/payout-records', Icon: Wallet },
     { label: 'Vouchers', href: '/dashboard/admin/vouchers', Icon: Ticket },
     { label: 'Payment Methods', href: '/dashboard/admin/payment-methods', Icon: CreditCard },

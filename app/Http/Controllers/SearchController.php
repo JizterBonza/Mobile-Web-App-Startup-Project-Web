@@ -73,6 +73,7 @@ class SearchController extends Controller
     private function searchItems(Request $request, string $searchTerm, int $limit)
     {
         $query = Item::query()
+            ->whereShopAgrivetIsActive()
             ->where('item_status', 'active')
             ->where(function ($q) use ($searchTerm) {
                 $q->where('item_name', 'like', '%' . $searchTerm . '%')
@@ -117,6 +118,7 @@ class SearchController extends Controller
     private function searchShops(string $searchTerm, int $limit)
     {
         return Shop::query()
+            ->whereAgrivetIsActive()
             ->where('shop_status', 'active')
             ->where(function ($q) use ($searchTerm) {
                 $q->where('shop_name', 'like', '%' . $searchTerm . '%')

@@ -165,6 +165,22 @@ class OrderStatusTransitionService
                     ]);
                 }
 
+                if ($this->statusKey($toStatus->stat_description) === 'cancelled') {
+                    try {
+                        app(AgrivetCancellationRefundService::class)->queueFromShopCancellation(
+                            (int) $leg->id,
+                            (int) $actor->id,
+                            is_string($notes) ? $notes : null,
+                        );
+                    } catch (\Throwable $e) {
+                        Log::warning('Order was cancelled but the manual refund alert failed.', [
+                            'order_id' => $leg->order_id,
+                            'order_shop_id' => $leg->id,
+                            'error' => $e->getMessage(),
+                        ]);
+                    }
+                }
+
                 if ($actor->user_type !== User::TYPE_RIDER) {
                     return;
                 }

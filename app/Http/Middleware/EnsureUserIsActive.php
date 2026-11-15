@@ -26,6 +26,8 @@ class EnsureUserIsActive
             return $next($request);
         }
 
+        $message = $user->inactiveMessage();
+
         $token = $user->currentAccessToken();
         if ($token) {
             $this->authTokenService->revokeByAccessTokenId($token->id);
@@ -40,10 +42,10 @@ class EnsureUserIsActive
 
         if ($request->expectsJson() || $request->is('api/*')) {
             return response()->json([
-                'message' => User::INACTIVE_ACCOUNT_MESSAGE,
+                'message' => $message,
             ], 403);
         }
 
-        return redirect()->route('login')->with('error', User::INACTIVE_ACCOUNT_MESSAGE);
+        return redirect()->route('login')->with('error', $message);
     }
 }
