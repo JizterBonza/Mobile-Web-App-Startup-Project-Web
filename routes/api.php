@@ -28,6 +28,7 @@ use App\Http\Controllers\ShopController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\VoucherApiController;
 use Illuminate\Broadcasting\BroadcastController;
+use Illuminate\Support\Facades\Broadcast;
 use Illuminate\Http\Request;
 
 /*
@@ -282,3 +283,5 @@ Route::middleware('payout.automation')->group(function () {
     Route::get('payouts', [PayoutController::class, 'index']);
     Route::post('payouts/status', [PayoutController::class, 'updateStatus']);
 });
+
+Broadcast::routes(['middleware' => ['auth:sanctum']]);
