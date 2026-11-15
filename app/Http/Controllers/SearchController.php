@@ -4,19 +4,20 @@ namespace App\Http\Controllers;
 
 use App\Models\Item;
 use App\Models\Shop;
+use App\Services\FarmListingDiscoveryService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 
 class SearchController extends Controller
 {
     /**
-     * Search items and stores (shops) in a single request.
+     * Search items, stores (shops), and gamefowl listings in a single request.
      */
-    public function index(Request $request)
+    public function index(Request $request, FarmListingDiscoveryService $discovery)
     {
         $validator = Validator::make($request->all(), [
             'q' => 'required|string|min:2|max:100',
-            'type' => 'nullable|in:items,shops',
+            'type' => 'nullable|in:items,shops,gamefowl',
             'shop_id' => 'nullable|exists:shops,id',
             'category' => 'nullable|string|max:100',
             'min_price' => 'nullable|numeric|min:0',
@@ -33,19 +34,25 @@ class SearchController extends Controller
         }
 
         $searchTerm = $request->input('q');
-        $limit = $request->input('limit', 10);
+        $limit = $request->input('limit') ?? 10;
         $type = $request->input('type');
 
         $items = collect();
         $shops = collect();
+        $gamefowl = collect();
 
-        if ($type !== 'shops') {
+        if ($type === null || $type === 'items') {
             $items = $this->searchItems($request, $searchTerm, $limit);
         }
 
-        if ($type !== 'items') {
+        if ($type === null || $type === 'shops') {
             $shops = $this->searchShops($searchTerm, $limit);
         }
+
+        // Temporarily hide gamefowl listings from main search results.
+        // if ($type === null || $type === 'gamefowl') {
+        //     $gamefowl = $discovery->search($searchTerm, $limit);
+        // }
 
         return response()->json([
             'success' => true,
@@ -53,10 +60,12 @@ class SearchController extends Controller
             'data' => [
                 'items' => $items,
                 'shops' => $shops,
+                'gamefowl' => $gamefowl,
             ],
             'count' => [
                 'items' => $items->count(),
                 'shops' => $shops->count(),
+                'gamefowl' => $gamefowl->count(),
             ],
         ]);
     }

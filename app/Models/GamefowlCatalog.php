@@ -13,6 +13,8 @@ class GamefowlCatalog extends Model
 
     public const STATUS_INACTIVE = 'inactive';
 
+    public const STATUS_DELETED = 'deleted';
+
     public const STATUS_REJECTED = 'rejected';
 
     protected $table = 'gamefowl_catalog';
@@ -47,6 +49,17 @@ class GamefowlCatalog extends Model
     public function scopePending(Builder $query): Builder
     {
         return $query->where('status', self::STATUS_PENDING);
+    }
+
+    /**
+     * Approved requests belong to the farm whose owner or manager submitted them.
+     */
+    public function scopeRequestedByFarm(Builder $query, int $farmId): Builder
+    {
+        return $query->whereHas('creator', function (Builder $creator) use ($farmId) {
+            $creator->where('farm_id', $farmId)
+                ->where('user_type', User::TYPE_OWNER_MANAGER);
+        });
     }
 
     public function bloodline()
