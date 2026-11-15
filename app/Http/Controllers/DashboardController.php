@@ -100,7 +100,7 @@ class DashboardController extends Controller
             ->select(
                 'items.item_name as name',
                 DB::raw('COALESCE(SUM(order_items.quantity), 0) as quantity'),
-                DB::raw('COALESCE(SUM(order_items.quantity * order_items.price_at_purchase), 0) as revenue'),
+                DB::raw('COALESCE(SUM(order_items.quantity * order_items.price_at_purchase - COALESCE(order_items.platform_fee, 0)), 0) as revenue'),
             )
             ->groupBy('items.id', 'items.item_name')
             ->orderByDesc('quantity')
@@ -153,7 +153,7 @@ class DashboardController extends Controller
             ->leftJoin('category', 'items.category', '=', 'category.id')
             ->select(
                 DB::raw("COALESCE(category.category_name, 'Uncategorized') as category"),
-                DB::raw('COALESCE(SUM(order_items.quantity * order_items.price_at_purchase), 0) as revenue'),
+                DB::raw('COALESCE(SUM(order_items.quantity * order_items.price_at_purchase - COALESCE(order_items.platform_fee, 0)), 0) as revenue'),
             )
             ->groupBy('category.id', 'category.category_name')
             ->orderByDesc('revenue')
@@ -786,7 +786,7 @@ class DashboardController extends Controller
             ->select(
                 DB::raw('DATE(created_at) as income_date'),
                 DB::raw('MAX(created_at) as transferred_at'),
-                DB::raw('COALESCE(SUM(quantity * price_at_purchase), 0) as amount'),
+                DB::raw('COALESCE(SUM(quantity * price_at_purchase - COALESCE(platform_fee, 0)), 0) as amount'),
                 DB::raw('COUNT(*) as item_count'),
             )
             ->groupBy(DB::raw('DATE(created_at)'))
@@ -1531,7 +1531,7 @@ class DashboardController extends Controller
             ->sum('quantity');
 
         $revenueRow = $this->ownerManagerSalesItemsQuery($shopIds, $start, $end)
-            ->selectRaw('COALESCE(SUM(order_items.quantity * order_items.price_at_purchase), 0) as total')
+            ->selectRaw('COALESCE(SUM(order_items.quantity * order_items.price_at_purchase - COALESCE(order_items.platform_fee, 0)), 0) as total')
             ->first();
         $revenue = (float) ($revenueRow->total ?? 0);
 
@@ -1559,7 +1559,7 @@ class DashboardController extends Controller
         $revenue = $this->ownerManagerSalesItemsQuery($shopIds, $start, $end)
             ->select(
                 'order_items.shop_id',
-                DB::raw('COALESCE(SUM(order_items.quantity * order_items.price_at_purchase), 0) as revenue'),
+                DB::raw('COALESCE(SUM(order_items.quantity * order_items.price_at_purchase - COALESCE(order_items.platform_fee, 0)), 0) as revenue'),
             )
             ->groupBy('order_items.shop_id')
             ->get()

@@ -1174,7 +1174,7 @@ class OrderController extends Controller
                 $serverSubtotal += $serverUnitPrice * $orderedQuantity;
 
                 // Store locked item for later update
-                $originalPrice = round((float) $itemModel->item_price, 2);
+                $originalPrice = $itemModel->getListPrice();
                 $discountPercent = round($itemModel->getActiveDiscountPercent(), 2);
 
                 $lockedItems[$item['item_id']] = [
@@ -1182,6 +1182,7 @@ class OrderController extends Controller
                     'ordered_quantity' => $orderedQuantity,
                     'unit_price' => $serverUnitPrice,
                     'original_price' => $originalPrice,
+                    'platform_fee_per_unit' => $itemModel->getPlatformFeePerUnit(),
                     'discount_percent_at_purchase' => $discountPercent,
                     'item_name_at_purchase' => $itemModel->item_name,
                 ];
@@ -1325,6 +1326,7 @@ class OrderController extends Controller
                         ?? (float) $item['price_at_purchase'];
                     $originalPrice = $locked['original_price'] ?? $unitPrice;
                     $discountPercent = $locked['discount_percent_at_purchase'] ?? 0;
+                    $platformFeePerUnit = $locked['platform_fee_per_unit'] ?? 0;
                     $itemName = $locked['item_name_at_purchase']
                         ?? Item::find($item['item_id'])?->item_name
                         ?? '';
@@ -1339,7 +1341,7 @@ class OrderController extends Controller
                         'quantity' => $quantity,
                         'price_at_purchase' => (float) $unitPrice,
                         'original_price' => (float) $originalPrice,
-                        'platform_fee' => 0,
+                        'platform_fee' => round($platformFeePerUnit * $quantity, 2),
                         'discount_percent_at_purchase' => (float) $discountPercent,
                         'item_status' => 1,
                     ]);

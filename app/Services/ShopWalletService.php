@@ -15,7 +15,25 @@ class ShopWalletService
 {
     public static function vendorShare(OrderItem $item): float
     {
-        return round(max(0, (float) $item->quantity * (float) $item->price_at_purchase), 2);
+        return round(max(0, ((float) $item->quantity * (float) $item->price_at_purchase) - (float) ($item->platform_fee ?? 0)), 2);
+    }
+
+    /**
+     * Vendor-facing unit prices with the platform markup removed.
+     *
+     * @return array{price: float, original_price: float}
+     */
+    public static function vendorUnitPrices(mixed $priceAtPurchase, mixed $originalPrice, mixed $platformFee, mixed $quantity): array
+    {
+        $price = (float) $priceAtPurchase;
+        $original = (float) ($originalPrice ?? $priceAtPurchase);
+        $quantity = max(1, (int) $quantity);
+        $vendorPrice = round(max(0, $price - (float) ($platformFee ?? 0) / $quantity), 2);
+
+        return [
+            'price' => $vendorPrice,
+            'original_price' => $price > 0 ? round($original * $vendorPrice / $price, 2) : round($original, 2),
+        ];
     }
 
     public function creditFromOrderItem(OrderItem $item): void

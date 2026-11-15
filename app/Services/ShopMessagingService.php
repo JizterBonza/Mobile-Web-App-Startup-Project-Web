@@ -538,7 +538,7 @@ class ShopMessagingService
      */
     public function productMetadataFromItem(Item $item): array
     {
-        $itemPrice = round((float) $item->item_price, 2);
+        $itemPrice = $item->getListPrice();
         $effectivePrice = $item->getEffectivePrice();
         $discount = $item->getActiveDiscountPercent();
 

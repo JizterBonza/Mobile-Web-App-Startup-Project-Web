@@ -46,7 +46,7 @@ class CartController extends Controller
         }
 
         return [
-            'original_price' => number_format((float) $item->item_price, 2, '.', ''),
+            'original_price' => number_format($item->getListPrice(), 2, '.', ''),
             'discounted_price' => number_format($item->getEffectivePrice(), 2, '.', ''),
             'discount_percent' => number_format($discountPercent, 2, '.', ''),
             'discount_type' => $item->discount_type,

@@ -20,6 +20,7 @@ use App\Models\ProductCatalog;
 use App\Http\Controllers\Concerns\CreatesProductCatalogEntry;
 use App\Http\Controllers\Concerns\ManagesShopOrders;
 use App\Http\Controllers\Concerns\PreventsDisabledCatalogRestock;
+use App\Services\ShopWalletService;
 use App\Support\PublicStorage;
 
 class VendorController extends Controller
@@ -866,6 +867,7 @@ class VendorController extends Controller
                 'order_items.quantity',
                 'order_items.price_at_purchase',
                 'order_items.original_price',
+                'order_items.platform_fee',
                 'order_items.discount_percent_at_purchase',
                 'order_items.item_status',
                 'order_items.created_at',
@@ -875,16 +877,18 @@ class VendorController extends Controller
             ->get();
 
         $orderItems = $orderItems->map(function ($item) {
+            $vendorPrices = ShopWalletService::vendorUnitPrices($item->price_at_purchase, $item->original_price, $item->platform_fee, $item->quantity);
+
             return [
                 'id' => $item->id,
                 'order_id' => $item->order_id,
                 'item_id' => $item->item_id,
                 'item_name' => $item->item_name_at_purchase ?: $item->item_name,
                 'quantity' => $item->quantity,
-                'price_at_purchase' => $item->price_at_purchase,
-                'original_price' => $item->original_price ?? $item->price_at_purchase,
+                'price_at_purchase' => $vendorPrices['price'],
+                'original_price' => $vendorPrices['original_price'],
                 'discount_percent_at_purchase' => $item->discount_percent_at_purchase ?? 0,
-                'total' => $item->quantity * $item->price_at_purchase,
+                'total' => round($item->quantity * $item->price_at_purchase - (float) ($item->platform_fee ?? 0), 2),
                 'item_status' => $item->item_status,
                 'created_at' => $item->created_at,
             ];
@@ -1083,6 +1087,7 @@ class VendorController extends Controller
                 'order_items.order_id',
                 'order_items.quantity',
                 'order_items.price_at_purchase',
+                'order_items.platform_fee',
                 'order_items.created_at',
                 'orders.ordered_at'
             )
@@ -1094,8 +1099,8 @@ class VendorController extends Controller
                 'id' => $order->id,
                 'order_id' => $order->order_id,
                 'quantity' => $order->quantity,
-                'price_at_purchase' => $order->price_at_purchase,
-                'total' => $order->quantity * $order->price_at_purchase,
+                'price_at_purchase' => ShopWalletService::vendorUnitPrices($order->price_at_purchase, null, $order->platform_fee, $order->quantity)['price'],
+                'total' => round($order->quantity * $order->price_at_purchase - (float) ($order->platform_fee ?? 0), 2),
                 'ordered_at' => $order->ordered_at,
                 'created_at' => $order->created_at,
             ];
