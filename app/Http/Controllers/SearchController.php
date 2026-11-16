@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Farm;
 use App\Models\Item;
 use App\Models\Shop;
 use App\Services\FarmListingDiscoveryService;
@@ -11,13 +12,13 @@ use Illuminate\Support\Facades\Validator;
 class SearchController extends Controller
 {
     /**
-     * Search items, stores (shops), and gamefowl listings in a single request.
+     * Search items, stores (shops), partner farms, and gamefowl listings in a single request.
      */
     public function index(Request $request, FarmListingDiscoveryService $discovery)
     {
         $validator = Validator::make($request->all(), [
             'q' => 'required|string|min:2|max:100',
-            'type' => 'nullable|in:items,shops,gamefowl',
+            'type' => 'nullable|in:items,shops,farms,gamefowl',
             'shop_id' => 'nullable|exists:shops,id',
             'category' => 'nullable|string|max:100',
             'min_price' => 'nullable|numeric|min:0',
@@ -39,6 +40,7 @@ class SearchController extends Controller
 
         $items = collect();
         $shops = collect();
+        $farms = collect();
         $gamefowl = collect();
 
         if ($type === null || $type === 'items') {
@@ -47,6 +49,10 @@ class SearchController extends Controller
 
         if ($type === null || $type === 'shops') {
             $shops = $this->searchShops($searchTerm, $limit);
+        }
+
+        if ($type === null || $type === 'farms') {
+            $farms = $this->searchFarms($searchTerm, $limit);
         }
 
         // Temporarily hide gamefowl listings from main search results.
@@ -60,11 +66,13 @@ class SearchController extends Controller
             'data' => [
                 'items' => $items,
                 'shops' => $shops,
+                'farms' => $farms,
                 'gamefowl' => $gamefowl,
             ],
             'count' => [
                 'items' => $items->count(),
                 'shops' => $shops->count(),
+                'farms' => $farms->count(),
                 'gamefowl' => $gamefowl->count(),
             ],
         ]);
@@ -137,6 +145,32 @@ class SearchController extends Controller
                 'shop_id' => $shop->id,
                 'name' => $shop->shop_name,
                 'image' => $shop->logo_url,
+            ]);
+    }
+
+    private function searchFarms(string $searchTerm, int $limit)
+    {
+        return Farm::query()
+            ->where('status', 'active')
+            ->where(function ($q) use ($searchTerm) {
+                $q->where('name', 'like', '%' . $searchTerm . '%')
+                    ->orWhere('description', 'like', '%' . $searchTerm . '%')
+                    ->orWhere('address', 'like', '%' . $searchTerm . '%');
+            })
+            ->select(['id', 'name', 'logo_url'])
+            ->orderByRaw('CASE
+                WHEN name LIKE ? THEN 1
+                WHEN name LIKE ? THEN 2
+                ELSE 3
+            END', [$searchTerm, $searchTerm . '%'])
+            ->latest()
+            ->orderByDesc('id')
+            ->limit($limit)
+            ->get()
+            ->map(fn (Farm $farm) => [
+                'farm_id' => $farm->id,
+                'name' => $farm->name,
+                'image' => $farm->logo_url,
             ]);
     }
 
