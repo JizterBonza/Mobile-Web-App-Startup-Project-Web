@@ -118,7 +118,7 @@ class FarmCheckoutService
             $item['listing_id'] = (int) $item['listing_id'];
             foreach ($item['birds'] as $b => &$bird) {
                 $normalized = [];
-                foreach (['wingband_no', 'feather_color', 'feet_color', 'nose_and_feet_markings'] as $field) {
+                foreach (['wingband_no', 'feather_color', 'feet_color', 'nose_feet_markings'] as $field) {
                     $value = trim($bird[$field] ?? '');
                     if ($value !== '') {
                         $normalized[$field] = $value;

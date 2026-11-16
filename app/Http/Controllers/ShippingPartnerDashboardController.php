@@ -157,7 +157,7 @@ class ShippingPartnerDashboardController extends Controller
                         'wingband' => is_array($bird) ? ($bird['wingband_no'] ?? '') : '',
                         'featherColor' => is_array($bird) ? ($bird['feather_color'] ?? '') : '',
                         'feetColor' => is_array($bird) ? ($bird['feet_color'] ?? '') : '',
-                        'noseAndFeetMarkings' => is_array($bird) ? ($bird['nose_and_feet_markings'] ?? '') : '',
+                        'noseFeetMarkings' => is_array($bird) ? ($bird['nose_feet_markings'] ?? $bird['nose_and_feet_markings'] ?? '') : '',
                     ], $birds)),
                 ];
             })->values()->all(),
