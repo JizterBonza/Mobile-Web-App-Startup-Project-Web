@@ -71,7 +71,7 @@ class ShopController extends Controller
         }
 
         // Order by created_at descending (newest first)
-        $query->orderBy('created_at', 'desc');
+        $query->whereAgrivetIsActive()->orderBy('created_at', 'desc');
 
         $shops = $query->with(['agrivet' => function ($query) {
             $query->select('id', 'banner_url');
@@ -95,11 +95,11 @@ class ShopController extends Controller
     {
         $shop = Shop::query()
             ->with(['agrivet' => function ($query) {
-                $query->select('id', 'banner_url');
+                $query->select('id', 'banner_url', 'status');
             }])
             ->find($id);
 
-        if (!$shop) {
+        if (! $shop || ! $shop->agrivetIsActive()) {
             return response()->json([
                 'success' => false,
                 'message' => 'Shop not found'
@@ -122,7 +122,7 @@ class ShopController extends Controller
     {
         $shop = Shop::with([
             'agrivet' => function ($query) {
-                $query->select('id', 'banner_url');
+                $query->select('id', 'banner_url', 'status');
             },
             'items' => function ($query) {
                 $query->where('item_status', 'active')
@@ -130,7 +130,7 @@ class ShopController extends Controller
             },
         ])->find($id);
 
-        if (!$shop) {
+        if (! $shop || ! $shop->agrivetIsActive()) {
             return response()->json([
                 'success' => false,
                 'message' => 'Shop not found'
@@ -153,9 +153,10 @@ class ShopController extends Controller
     {
         $shops = Shop::query()
             ->with(['agrivet' => function ($query) {
-                $query->select('id', 'banner_url');
+                $query->select('id', 'banner_url', 'status');
             }])
             ->where('agrivet_id', $agrivetId)
+            ->whereAgrivetIsActive()
             ->get();
         $shops->each->includeAgrivetBanner();
 
@@ -372,7 +373,7 @@ class ShopController extends Controller
             },
         ])->find($id);
 
-        if (!$shop) {
+        if (! $shop || ! $shop->agrivetIsActive()) {
             return response()->json([
                 'success' => false,
                 'message' => 'Shop not found'
@@ -508,9 +509,10 @@ class ShopController extends Controller
 
         $shops = Shop::query()
             ->with(['agrivet' => function ($query) {
-                $query->select('id', 'banner_url');
+                $query->select('id', 'banner_url', 'status');
             }])
             ->where('shop_status', 'active')
+            ->whereAgrivetIsActive()
             ->whereNotNull('shop_lat')
             ->whereNotNull('shop_long')
             ->get()
@@ -578,8 +580,8 @@ class ShopController extends Controller
             $query->select('id', 'banner_url');
         }]);
 
-        // Only search active shops by default
-        $query->where('shop_status', 'active');
+        // Only search active shops of an active Agrivet
+        $query->where('shop_status', 'active')->whereAgrivetIsActive();
 
         // Search by shop name and description
         $searchTerm = $request->input('q');

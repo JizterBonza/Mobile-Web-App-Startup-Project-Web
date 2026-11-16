@@ -73,6 +73,41 @@ class Shop extends Model
     }
 
     /**
+     * Shops with no Agrivet stay visible. Shops under an inactive Agrivet do not.
+     */
+    public function scopeWhereAgrivetIsActive($query)
+    {
+        return $query->where(function ($query) {
+            $query->whereNull('agrivet_id')
+                ->orWhereHas('agrivet', function ($agrivet) {
+                    $agrivet->whereRaw('LOWER(TRIM(status)) = ?', ['active']);
+                });
+        });
+    }
+
+    public function agrivetIsActive(): bool
+    {
+        if (! $this->agrivet_id) {
+            return true;
+        }
+
+        if ($this->relationLoaded('agrivet')) {
+            if (! $this->agrivet) {
+                return false;
+            }
+
+            if (array_key_exists('status', $this->agrivet->getAttributes())) {
+                return $this->agrivet->isActive();
+            }
+        }
+
+        return Agrivet::query()
+            ->whereKey($this->agrivet_id)
+            ->whereRaw('LOWER(TRIM(status)) = ?', ['active'])
+            ->exists();
+    }
+
+    /**
      * Agrivet banner path. Not a shops column; exposed when appended for API payloads.
      */
     public function getBannerUrlAttribute(): ?string

@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Controllers\Concerns\EnsuresApiOwnership;
 use App\Models\Notification;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 
 class NotificationController extends Controller
@@ -123,6 +124,22 @@ class NotificationController extends Controller
             'success' => true,
             'count' => $count,
         ]);
+    }
+
+    public function open(Request $request, int $id): RedirectResponse
+    {
+        $notification = Notification::query()
+            ->where('user_id', $request->user()->id)
+            ->findOrFail($id);
+
+        $notification->markAsRead();
+
+        $url = $notification->action_url;
+        if (is_string($url) && str_starts_with($url, '/') && ! str_starts_with($url, '//')) {
+            return redirect($url);
+        }
+
+        return back();
     }
 
     public function destroy(Request $request, $id)

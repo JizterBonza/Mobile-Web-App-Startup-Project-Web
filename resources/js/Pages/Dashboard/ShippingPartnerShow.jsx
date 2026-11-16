@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useForm } from '@inertiajs/react'
 import { ArrowLeft, Plus, Search, UserPlus, X } from 'lucide-react'
 import PasswordInput from '../../Components/PasswordInput'
@@ -66,6 +66,66 @@ function Field({ label, error, children }) {
     )
 }
 
+// Chrome treats this dialog as a login form and fills the saved session
+// email and password. Keep those values out unless the admin types or pastes.
+const credentialFieldNames = {
+    email: 'partner_contact',
+    username: 'partner_handle',
+    password: 'partner_secret',
+    password_confirmation: 'partner_secret_confirm',
+}
+
+function clearInjectedValue(input, nextValue) {
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set
+    setter?.call(input, nextValue)
+    input._valueTracker?.setValue(nextValue)
+}
+
+function allowTypedValue(event, onUnlock, field) {
+    const ignored = ['Tab', 'Escape', 'Shift', 'Control', 'Alt', 'Meta', 'CapsLock', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End']
+    if (ignored.includes(event.key) || event.altKey || event.metaKey || event.ctrlKey) return
+    event.currentTarget.dataset.userEdit = 'true'
+    event.currentTarget.readOnly = false
+    onUnlock(field)
+}
+
+function credentialFieldProps(field, value, onValue, unlocked, onUnlock) {
+    const locked = !unlocked[field]
+
+    return {
+        name: credentialFieldNames[field],
+        autoComplete: 'new-password',
+        'data-lpignore': 'true',
+        'data-1p-ignore': 'true',
+        'data-form-type': 'other',
+        'data-guard': locked ? 'locked' : 'open',
+        readOnly: locked,
+        value,
+        onFocus: (event) => {
+            event.currentTarget.readOnly = false
+            onUnlock(field)
+        },
+        onKeyDown: (event) => allowTypedValue(event, onUnlock, field),
+        onPaste: (event) => {
+            event.currentTarget.dataset.userEdit = 'true'
+            event.currentTarget.readOnly = false
+            onUnlock(field)
+        },
+        onDrop: (event) => {
+            event.currentTarget.dataset.userEdit = 'true'
+            event.currentTarget.readOnly = false
+            onUnlock(field)
+        },
+        onChange: (event) => {
+            if (event.currentTarget.dataset.userEdit !== 'true') {
+                clearInjectedValue(event.currentTarget, '')
+                return
+            }
+            onValue(event.target.value)
+        },
+    }
+}
+
 function Modal({ title, open, animated, onClose, children }) {
     if (!open) return null
 
@@ -111,6 +171,8 @@ export default function ShippingPartnerShow({ auth, partner, availableUsers = []
     const [showExistingModalAnimation, setShowExistingModalAnimation] = useState(false)
     const [existingQuery, setExistingQuery] = useState('')
     const [showSuccessAlert, setShowSuccessAlert] = useState(false)
+    const [unlockedFields, setUnlockedFields] = useState({})
+    const addFormRef = useRef(null)
 
     const addForm = useForm({
         first_name: '',
@@ -131,10 +193,21 @@ export default function ShippingPartnerShow({ auth, partner, availableUsers = []
     useEffect(() => {
         if (!showAddModal) {
             setShowAddModalAnimation(false)
+            setUnlockedFields({})
             return undefined
         }
         const timer = setTimeout(() => setShowAddModalAnimation(true), 10)
-        return () => clearTimeout(timer)
+        const clearLockedAutofill = () => {
+            addFormRef.current?.querySelectorAll('input[data-guard]').forEach((node) => {
+                if (!(node instanceof HTMLInputElement) || node.dataset.userEdit === 'true' || !node.value) return
+                clearInjectedValue(node, '')
+            })
+        }
+        const interval = setInterval(clearLockedAutofill, 150)
+        return () => {
+            clearTimeout(timer)
+            clearInterval(interval)
+        }
     }, [showAddModal])
 
     useEffect(() => {
@@ -183,8 +256,27 @@ export default function ShippingPartnerShow({ auth, partner, availableUsers = []
         }, 300)
     }
 
+    const unlockField = (field) => {
+        setUnlockedFields((current) => (current[field] ? current : { ...current, [field]: true }))
+    }
+
     const handleAddUser = (event) => {
         event.preventDefault()
+        const form = event.currentTarget
+        form.querySelectorAll('[data-guard]').forEach((node) => {
+            node.readOnly = false
+            if (node.dataset.userEdit !== 'true') clearInjectedValue(node, '')
+        })
+        setUnlockedFields({
+            email: true,
+            username: true,
+            password: true,
+            password_confirmation: true,
+        })
+        if (!form.checkValidity()) {
+            form.reportValidity()
+            return
+        }
         addForm.post(`${base}/${partner.id}/users`, {
             preserveScroll: true,
             onSuccess: () => {
@@ -331,7 +423,7 @@ export default function ShippingPartnerShow({ auth, partner, availableUsers = []
             </div>
 
             <Modal title="Add new user" open={showAddModal} animated={showAddModalAnimation} onClose={closeAddModal}>
-                <form onSubmit={handleAddUser}>
+                <form ref={addFormRef} autoComplete="off" onSubmit={handleAddUser}>
                     <div className="space-y-4 px-6 py-4">
                         <p className="text-sm text-[#6B7280]">
                             Creates a shipping partner login for {partner?.name || 'this company'}. The company record stays the same.
@@ -373,8 +465,13 @@ export default function ShippingPartnerShow({ auth, partner, availableUsers = []
                                     type="email"
                                     required
                                     className={`${inputClass} ${addForm.errors.email ? 'border-red-400' : ''}`}
-                                    value={addForm.data.email}
-                                    onChange={(event) => addForm.setData('email', event.target.value)}
+                                    {...credentialFieldProps(
+                                        'email',
+                                        addForm.data.email,
+                                        (next) => addForm.setData('email', next),
+                                        unlockedFields,
+                                        unlockField,
+                                    )}
                                 />
                             </Field>
                         </div>
@@ -392,9 +489,14 @@ export default function ShippingPartnerShow({ auth, partner, availableUsers = []
                                 <input
                                     type="text"
                                     className={`${inputClass} ${addForm.errors.username ? 'border-red-400' : ''}`}
-                                    value={addForm.data.username}
-                                    onChange={(event) => addForm.setData('username', event.target.value)}
                                     placeholder="Auto-generated if empty"
+                                    {...credentialFieldProps(
+                                        'username',
+                                        addForm.data.username,
+                                        (next) => addForm.setData('username', next),
+                                        unlockedFields,
+                                        unlockField,
+                                    )}
                                 />
                             </Field>
                         </div>
@@ -403,16 +505,26 @@ export default function ShippingPartnerShow({ auth, partner, availableUsers = []
                                 <PasswordInput
                                     required
                                     className={`${inputClass} ${addForm.errors.password ? 'border-red-400' : ''}`}
-                                    value={addForm.data.password}
-                                    onChange={(event) => addForm.setData('password', event.target.value)}
+                                    {...credentialFieldProps(
+                                        'password',
+                                        addForm.data.password,
+                                        (next) => addForm.setData('password', next),
+                                        unlockedFields,
+                                        unlockField,
+                                    )}
                                 />
                             </Field>
                             <Field label="Confirm password *" error={addForm.errors.password_confirmation}>
                                 <PasswordInput
                                     required
                                     className={`${inputClass} ${addForm.errors.password_confirmation ? 'border-red-400' : ''}`}
-                                    value={addForm.data.password_confirmation}
-                                    onChange={(event) => addForm.setData('password_confirmation', event.target.value)}
+                                    {...credentialFieldProps(
+                                        'password_confirmation',
+                                        addForm.data.password_confirmation,
+                                        (next) => addForm.setData('password_confirmation', next),
+                                        unlockedFields,
+                                        unlockField,
+                                    )}
                                 />
                             </Field>
                         </div>

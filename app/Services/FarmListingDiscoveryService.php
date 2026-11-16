@@ -106,9 +106,15 @@ class FarmListingDiscoveryService
                 'release_date' => $listing->release_date?->format('Y-m-d'),
                 'status' => $listing->status,
                 'popularity' => $listing->popularity,
-                'images' => $bird->images ?? [],
-                'primary_image_index' => $bird->primary_image_index,
-                'image' => ($bird->images ?? [])[$bird->primary_image_index] ?? ($bird->images[0] ?? null),
+                'images' => $listing->is_bundle && filled($listing->bundle_image)
+                    ? [$listing->bundle_image]
+                    : ($bird->images ?? []),
+                'primary_image_index' => $listing->is_bundle && filled($listing->bundle_image)
+                    ? 0
+                    : $bird->primary_image_index,
+                'image' => $listing->is_bundle && filled($listing->bundle_image)
+                    ? $listing->bundle_image
+                    : (($bird->images ?? [])[$bird->primary_image_index] ?? ($bird->images[0] ?? null)),
                 'is_bundle' => $listing->is_bundle,
                 'bundle_name' => $listing->bundle_name,
                 'bundle_type' => $listing->bundle_type,

@@ -252,6 +252,7 @@ class CustomerShopMessageController extends Controller
             ->where('id', $itemId)
             ->where('shop_id', $shopId)
             ->where('item_status', 'active')
+            ->whereShopAgrivetIsActive()
             ->first();
 
         if (! $item) {

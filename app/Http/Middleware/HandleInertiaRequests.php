@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\Notification;
 use App\Models\User;
 use App\Services\ShopMessagingService;
 use Illuminate\Http\Request;
@@ -75,6 +76,32 @@ class HandleInertiaRequests extends Middleware
 
                 return [
                     'unread_count' => app(ShopMessagingService::class)->unreadCountForDashboard($user),
+                ];
+            },
+            'headerNotifications' => function () use ($user) {
+                if (! $user || ! in_array($user->user_type, [User::TYPE_SUPER_ADMIN, User::TYPE_ADMIN], true)) {
+                    return null;
+                }
+
+                $unread = Notification::query()
+                    ->where('user_id', $user->id)
+                    ->where('read', false);
+
+                return [
+                    'unread_count' => (clone $unread)->count(),
+                    'items' => (clone $unread)
+                        ->latest()
+                        ->limit(8)
+                        ->get(['id', 'title', 'message', 'action_url', 'created_at'])
+                        ->map(fn (Notification $notification) => [
+                            'id' => $notification->id,
+                            'title' => $notification->title,
+                            'message' => $notification->message,
+                            'action_url' => $notification->action_url,
+                            'created_at' => $notification->created_at?->toIso8601String(),
+                        ])
+                        ->values()
+                        ->all(),
                 ];
             },
         ];

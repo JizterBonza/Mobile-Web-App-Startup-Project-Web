@@ -902,7 +902,13 @@ export default function Accounts({ auth, users = [], flash }) {
                                                         }
                                                         disabled={
                                                             togglingUserId ===
-                                                            user.id
+                                                                user.id ||
+                                                            user.status_locked
+                                                        }
+                                                        title={
+                                                            user.status_locked
+                                                                ? "Inactive while the Agrivet is disabled"
+                                                                : undefined
                                                         }
                                                         className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-all duration-300 disabled:opacity-50 ${
                                                             user.status ===
@@ -946,8 +952,9 @@ export default function Accounts({ auth, users = [], flash }) {
                                                     >
                                                         <Pencil className="h-5 w-5" />
                                                     </button> */}
-                                                    {user.status ===
-                                                        "active" && (
+                                                    {(user.status ===
+                                                        "active" ||
+                                                        user.status_locked) && (
                                                         <button
                                                             type="button"
                                                             onClick={(e) => {
