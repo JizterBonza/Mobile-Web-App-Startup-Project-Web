@@ -28,8 +28,13 @@ export default function AddFarm({ auth, zones = [], flash }) {
     const [bannerPreview, setBannerPreview] = useState(null)
     const [permitIsPdf, setPermitIsPdf] = useState(false)
     const [errorMessage, setErrorMessage] = useState(null)
+    const [errorTitle, setErrorTitle] = useState('Required')
     const [operatingDays, setOperatingDays] = useState([])
     const isSubmittingRef = useRef(false)
+    const coverFileRef = useRef(null)
+    const permitFileRef = useRef(null)
+    const logoFileRef = useRef(null)
+    const bannerFileRef = useRef(null)
 
     const zonesForMap = useMemo(
         () => (zones || []).filter((z) => z.boundary && Array.isArray(z.boundary) && z.boundary.length >= 3),
@@ -75,9 +80,28 @@ export default function AddFarm({ auth, zones = [], flash }) {
         { number: 4, title: 'Review & Confirm' },
     ]
 
+    const rememberFile = (field, file) => {
+        if (field === 'cover_image') coverFileRef.current = file
+        if (field === 'permit_image') permitFileRef.current = file
+        if (field === 'logo') logoFileRef.current = file
+        if (field === 'banner') bannerFileRef.current = file
+    }
+
+    const chosenFile = (field) => {
+        const stored = {
+            cover_image: coverFileRef.current,
+            permit_image: permitFileRef.current,
+            logo: logoFileRef.current,
+            banner: bannerFileRef.current,
+        }[field]
+        if (stored instanceof File) return stored
+        return form.data[field] instanceof File ? form.data[field] : null
+    }
+
     const handleStoreImageUpload = (e) => {
         const file = e.target.files?.[0]
         if (file) {
+            rememberFile('cover_image', file)
             form.setData('cover_image', file)
             const reader = new FileReader()
             reader.onloadend = () => setStoreImagePreview(reader.result)
@@ -88,6 +112,7 @@ export default function AddFarm({ auth, zones = [], flash }) {
     const handlePermitImageUpload = (e) => {
         const file = e.target.files?.[0]
         if (file) {
+            rememberFile('permit_image', file)
             form.setData('permit_image', file)
             const isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name)
             setPermitIsPdf(isPdf)
@@ -103,10 +128,46 @@ export default function AddFarm({ auth, zones = [], flash }) {
 
     const handleImageUpload = (field, file, setPreview) => {
         if (!file) return
+        rememberFile(field, file)
         form.setData(field, file)
         const reader = new FileReader()
         reader.onloadend = () => setPreview(reader.result)
         reader.readAsDataURL(file)
+    }
+
+    const showFormError = (title, message, step) => {
+        setErrorTitle(title)
+        setErrorMessage(message)
+        if (step) setCurrentStep(step)
+        window.scrollTo({ top: 0, behavior: 'smooth' })
+    }
+
+    const stepForErrors = (errors) => {
+        const keys = Object.keys(errors || {})
+        const hit = (names) => keys.some((key) => names.includes(key))
+        if (hit(['first_name', 'middle_name', 'last_name', 'email', 'password', 'password_confirmation', 'phone_number'])) return 1
+        if (hit(['farm_name', 'description', 'logo', 'banner'])) return 2
+        if (hit(['street', 'barangay', 'city', 'province', 'zip_code', 'farm_lat', 'farm_long', 'opening_time', 'closing_time', 'operating_days', 'cover_image', 'permit_image'])) return 3
+        return 4
+    }
+
+    const firstErrorText = (errors) => {
+        for (const value of Object.values(errors || {})) {
+            const text = Array.isArray(value) ? value.find(Boolean) : value
+            if (text) return text
+        }
+        return 'Registration could not be submitted. Please check the highlighted fields.'
+    }
+
+    const fileProblem = (file, label, { allowPdf = false } = {}) => {
+        if (!file) return `Upload the ${label} before submitting.`
+        const name = file.name || ''
+        const type = file.type || ''
+        const image = /^image\/(jpeg|png|webp)$/.test(type) || /\.(jpe?g|png|webp)$/i.test(name)
+        const pdf = allowPdf && (type === 'application/pdf' || /\.pdf$/i.test(name))
+        if (!image && !pdf) return `${label} must be a JPG, PNG, or WEBP${allowPdf ? ' (PDF is also allowed)' : ''}.`
+        if (file.size > 10 * 1024 * 1024) return `${label} must be 10MB or smaller.`
+        return null
     }
 
     const handleSubmit = (e) => {
@@ -118,25 +179,79 @@ export default function AddFarm({ auth, zones = [], flash }) {
         if (currentStep !== 4) {
             return
         }
-        if (!form.data.cover_image || !form.data.permit_image) {
-            alert('Please upload both farm photo and business permit.')
+
+        const cover = chosenFile('cover_image')
+        const permit = chosenFile('permit_image')
+        const required = [
+            [1, form.data.first_name.trim(), 'Enter the owner first name.'],
+            [1, form.data.last_name.trim(), 'Enter the owner last name.'],
+            [1, form.data.email.trim(), 'Enter the owner email.'],
+            [1, form.data.password, 'Enter a password for the owner/manager login.'],
+            [1, form.data.phone_number.trim(), 'Enter a phone number.'],
+            [2, form.data.farm_name.trim(), 'Enter the farm name.'],
+            [3, form.data.street.trim(), 'Enter the street.'],
+            [3, form.data.barangay.trim(), 'Enter the barangay.'],
+            [3, form.data.city.trim(), 'Enter the city or municipality.'],
+            [3, form.data.province.trim(), 'Enter the province.'],
+            [3, form.data.zip_code.trim(), 'Enter the ZIP code.'],
+        ]
+        const missing = required.find(([, value]) => !value)
+        if (missing) {
+            showFormError('Required', missing[2], missing[0])
             return
         }
+        if (form.data.password.length < 6) {
+            showFormError('Required', 'Password must be at least 6 characters.', 1)
+            return
+        }
+        if (form.data.password !== form.data.password_confirmation) {
+            showFormError('Required', 'Password and confirmation do not match.', 1)
+            return
+        }
+        if (form.data.phone_number.trim().length > 30) {
+            showFormError('Required', 'Phone number must be 30 characters or fewer.', 1)
+            return
+        }
+        if (form.data.street.trim().length > 255) {
+            showFormError('Required', 'Street is too long. Use the road name, not the full map address.', 3)
+            return
+        }
+        if (operatingDays.length === 0) {
+            showFormError('Required', 'Select at least one operating day.', 3)
+            return
+        }
+        const coverProblem = fileProblem(cover, 'farm photo')
+        if (coverProblem) {
+            showFormError('Required', coverProblem, 3)
+            return
+        }
+        const permitProblem = fileProblem(permit, 'business permit', { allowPdf: true })
+        if (permitProblem) {
+            showFormError('Required', permitProblem, 3)
+            return
+        }
+
         isSubmittingRef.current = true
         const daysSorted = [...operatingDays].sort((a, b) => FULL_DAYS.indexOf(a) - FULL_DAYS.indexOf(b))
 
-        // Ensure `operating_days` is included in the SAME request.
-        // `setData()` is async; using `transform()` avoids the “submit twice” issue caused by stale state.
+        // Ensure `operating_days` and the chosen files are included in the SAME request.
+        // `setData()` is async; using `transform()` avoids submitting stale state.
         form.transform((data) => ({
             ...data,
             operating_days: daysSorted.join(', '),
+            cover_image: cover,
+            permit_image: permit,
+            logo: chosenFile('logo'),
+            banner: chosenFile('banner'),
         }))
         form.post(`${baseRoute}/setup-wizard`, {
             forceFormData: true,
             preserveScroll: true,
+            onError: (errors) => {
+                showFormError('Registration was not submitted', firstErrorText(errors), stepForErrors(errors))
+            },
             onFinish: () => {
                 isSubmittingRef.current = false
-                // Reset transform so it doesn't affect other submissions.
                 form.transform((data) => data)
             },
         })
@@ -148,19 +263,23 @@ export default function AddFarm({ auth, zones = [], flash }) {
             e.stopPropagation()
         }
         setErrorMessage(null)
+        setErrorTitle('Required')
 
         if (currentStep === 3) {
-            if (!form.data.cover_image || !form.data.permit_image) {
+            if (!chosenFile('cover_image') || !chosenFile('permit_image')) {
+                setErrorTitle('Required')
                 setErrorMessage('Please upload both farm photo and business permit before proceeding.')
                 window.scrollTo({ top: 0, behavior: 'smooth' })
                 return
             }
             if (operatingDays.length === 0) {
+                setErrorTitle('Required')
                 setErrorMessage('Please select at least one operating day for your farm.')
                 window.scrollTo({ top: 0, behavior: 'smooth' })
                 return
             }
             if (!form.data.opening_time || !form.data.closing_time) {
+                setErrorTitle('Required')
                 setErrorMessage('Please set both opening and closing times for your farm.')
                 window.scrollTo({ top: 0, behavior: 'smooth' })
                 return
@@ -281,7 +400,7 @@ export default function AddFarm({ auth, zones = [], flash }) {
                                 <div className="flex items-start gap-3">
                                     <X className="mt-0.5 h-5 w-5 shrink-0 text-[#E20E28]" />
                                     <div className="flex-1">
-                                        <p className="mb-1 text-sm font-semibold text-[#E20E28]">Required</p>
+                                        <p className="mb-1 text-sm font-semibold text-[#E20E28]">{errorTitle}</p>
                                         <p className="text-sm text-[#991B1B]">{errorMessage}</p>
                                     </div>
                                     <button
@@ -566,23 +685,17 @@ export default function AddFarm({ auth, zones = [], flash }) {
                                                 initialLat={form.data.farm_lat}
                                                 initialLng={form.data.farm_long}
                                                 onLocationSelect={(loc) => {
-                                                    form.setData('farm_lat', loc.latitude != null ? String(loc.latitude) : '')
-                                                    form.setData('farm_long', loc.longitude != null ? String(loc.longitude) : '')
-                                                    if (loc.city) {
-                                                        form.setData('city', loc.city)
-                                                    }
-                                                    if (loc.province) {
-                                                        form.setData('province', loc.province)
-                                                    }
-                                                    if (loc.postal_code) {
-                                                        form.setData('zip_code', loc.postal_code)
-                                                    }
-                                                    if (loc.address) {
-                                                        form.setData('street', loc.address)
-                                                    }
-                                                    if (loc.barangay) {
-                                                        form.setData('barangay', loc.barangay)
-                                                    }
+                                                    const street = (loc.street || '').trim() || (loc.address || '').split(',')[0].trim()
+                                                    form.setData((data) => ({
+                                                        ...data,
+                                                        farm_lat: loc.latitude != null ? String(loc.latitude) : '',
+                                                        farm_long: loc.longitude != null ? String(loc.longitude) : '',
+                                                        ...(loc.city ? { city: loc.city } : {}),
+                                                        ...(loc.province ? { province: loc.province } : {}),
+                                                        ...(loc.postal_code ? { zip_code: loc.postal_code } : {}),
+                                                        ...(street ? { street } : {}),
+                                                        ...(loc.barangay ? { barangay: loc.barangay } : {}),
+                                                    }))
                                                 }}
                                             />
                                         </div>
