@@ -16,6 +16,7 @@ use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 use Inertia\Inertia;
 
 class FarmController extends Controller
@@ -188,7 +189,7 @@ class FarmController extends Controller
                     'permits' => $permitsPayload,
                     'logo_url' => $logoUrl,
                     'banner_url' => $bannerUrl,
-                    'address' => $validated['street'].', '.$validated['barangay'],
+                    'address' => $this->farmAddress($validated['street'], $validated['barangay']),
                     'city' => $validated['city'],
                     'province' => $validated['province'],
                     'postal_code' => $validated['zip_code'],
@@ -201,7 +202,7 @@ class FarmController extends Controller
                     'status' => 'active',
                 ]);
 
-                $ownerUsername = explode('@', $validated['email'])[0].'_'.time();
+                $ownerUsername = $this->ownerUsername($validated['email']);
 
                 $ownerDetail = UserDetail::create([
                     'first_name' => $validated['first_name'],
@@ -260,7 +261,13 @@ class FarmController extends Controller
             $msg = 'Failed to create farm. Please try again.';
             $sql = $e instanceof QueryException ? $e->getMessage() : '';
 
-            if (config('app.debug')) {
+            if ($sql !== '' && str_contains($sql, 'Data too long')) {
+                if (str_contains($sql, 'address')) {
+                    $msg = 'The street and barangay together are too long. Shorten the street to the road name, then submit again.';
+                } elseif (str_contains($sql, 'mobile_number')) {
+                    $msg = 'The phone number is too long. Use at most 30 characters.';
+                }
+            } elseif (config('app.debug')) {
                 $msg = $e->getMessage();
             } elseif ($sql !== '') {
                 if (str_contains($sql, 'farm_id') && str_contains($sql, 'Unknown column')) {
@@ -370,6 +377,27 @@ class FarmController extends Controller
             return redirect()->back()
                 ->withErrors(['error' => 'Failed to deactivate farm. Please try again.']);
         }
+    }
+
+    private function farmAddress(string $street, string $barangay): string
+    {
+        $street = trim($street);
+        $barangay = trim($barangay);
+        $address = $street;
+
+        if ($barangay !== '' && ! str_contains(mb_strtolower($street), mb_strtolower($barangay))) {
+            $address = $street.', '.$barangay;
+        }
+
+        return Str::limit($address, 500, '');
+    }
+
+    private function ownerUsername(string $email): string
+    {
+        $local = preg_replace('/[^A-Za-z0-9._-]/', '', explode('@', $email)[0] ?? '') ?: 'owner';
+        $suffix = '_'.time();
+
+        return substr($local, 0, 100 - strlen($suffix)).$suffix;
     }
 
     private function indexRoute(): string

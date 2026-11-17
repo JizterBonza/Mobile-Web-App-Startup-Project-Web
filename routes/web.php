@@ -7,6 +7,8 @@ use App\Http\Controllers\AgrivetController;
 use App\Http\Controllers\AppReleaseController;
 use App\Http\Controllers\BreederController;
 use App\Http\Controllers\FarmController;
+use App\Http\Controllers\FeaturedSectionController;
+use App\Http\Controllers\LogisticsCoordinationController;
 use App\Http\Controllers\GamefowlCatalogController;
 use App\Http\Controllers\GamefowlLookupController;
 use App\Http\Controllers\VendorController;
@@ -374,6 +376,38 @@ Route::middleware(['auth', 'session.valid', 'user.type:super_admin'])->prefix('d
     Route::put('/{id}', [VoucherController::class, 'update'])->name('update');
     Route::delete('/{id}', [VoucherController::class, 'destroy'])->name('destroy');
 });
+
+// Logistics Coordination: Agrivet store orders and products (Super Admin and Admin)
+foreach (['super_admin' => 'super-admin', 'admin' => 'admin'] as $logisticsRole => $logisticsSegment) {
+    Route::middleware(['auth', 'session.valid', "user.type:{$logisticsRole}"])
+        ->prefix("dashboard/{$logisticsSegment}/logistics")
+        ->name("dashboard.{$logisticsSegment}.logistics.")
+        ->group(function () {
+            Route::get('/', [LogisticsCoordinationController::class, 'orders'])->name('orders');
+            Route::get('/products', [LogisticsCoordinationController::class, 'products'])->name('products');
+            Route::patch('/orders/{orderId}/accept', [LogisticsCoordinationController::class, 'acceptOrder'])->whereNumber('orderId')->name('orders.accept');
+            Route::patch('/orders/{orderId}/decline', [LogisticsCoordinationController::class, 'declineOrder'])->whereNumber('orderId')->name('orders.decline');
+            Route::patch('/orders/{orderId}/ready', [LogisticsCoordinationController::class, 'markOrderReady'])->whereNumber('orderId')->name('orders.ready');
+            Route::patch('/orders/{orderId}/done-store-pickup', [LogisticsCoordinationController::class, 'doneStorePickup'])->whereNumber('orderId')->name('orders.done-store-pickup');
+            Route::patch('/orders/{orderId}/items/{orderItemId}/done-preparing', [LogisticsCoordinationController::class, 'donePreparingItem'])
+                ->whereNumber(['orderId', 'orderItemId'])
+                ->name('orders.items.done-preparing');
+        });
+}
+
+// Featured Section for the mobile app (Super Admin and Admin share one list)
+foreach (['super_admin' => 'super-admin', 'admin' => 'admin'] as $featuredRole => $featuredSegment) {
+    Route::middleware(['auth', 'session.valid', "user.type:{$featuredRole}"])
+        ->prefix("dashboard/{$featuredSegment}/featured")
+        ->name("dashboard.{$featuredSegment}.featured.")
+        ->group(function () {
+            Route::get('/', [FeaturedSectionController::class, 'index'])->name('index');
+            Route::post('/', [FeaturedSectionController::class, 'store'])->name('store');
+            Route::put('/reorder', [FeaturedSectionController::class, 'reorder'])->name('reorder');
+            Route::patch('/{featuredEntry}/active', [FeaturedSectionController::class, 'toggle'])->whereNumber('featuredEntry')->name('toggle');
+            Route::delete('/{featuredEntry}', [FeaturedSectionController::class, 'destroy'])->whereNumber('featuredEntry')->name('destroy');
+        });
+}
 
 // Super Admin Support
 Route::get('/dashboard/super-admin/support', [DashboardController::class, 'superAdminSupport'])
