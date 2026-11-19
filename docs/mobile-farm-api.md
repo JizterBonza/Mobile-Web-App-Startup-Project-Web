@@ -27,6 +27,79 @@ does not need listings to appear in discovery. Zero-stock and future-release
 offerings remain visible for inquiries; visibility does not imply immediate availability.
 Passing a status parameter does not expose inactive records.
 
+## Combined catalog search
+
+`GET /api/search?q=kelso` searches items, shops, and gamefowl listings in one
+public request. `q` is required (2-100 characters). Optional `type` selects only
+`items`, `shops`, or `gamefowl`; omit it to search all three. All three arrays and
+counts are always present, with `[]` and `0` for unmatched or unsearched groups.
+`limit` is optional (1-50, default 10), applied independently to each group.
+Counts describe returned results after limits, not total matches.
+
+Gamefowl results include individual and bundle listings. Matching and ordering
+are the same as `/farm-gamefowl-listings?search=...`: display name, anchor bird
+name and bloodline, and bundle member names and bloodlines; case-insensitive
+substring matching, exact display names first, then prefixes, then other matches.
+Within each rank, newest listings come first. The same active-record and bundle
+visibility rules apply; zero-stock and future-release offerings remain visible.
+
+Existing `shop_id`, `category`, `min_price`, and `max_price` filters affect only
+items. This endpoint does not return farm profiles; use `/farms/search` for those.
+Use the gamefowl result's `listing_id` with `/farm-gamefowl-listings/{id}` for full
+details. It is a listing ID, not a catalog ID. Prices are JSON numbers,
+`is_bundle` is boolean, and `image` may be `null`.
+
+Illustrative response:
+
+```json
+{
+  "success": true,
+  "query": "kelso",
+  "data": {
+    "items": [
+      {
+        "item_id": 42,
+        "item_name": "Kelso Gamefowl Feed",
+        "image": "items/kelso-feed.jpg",
+        "price": 850
+      }
+    ],
+    "shops": [
+      {
+        "shop_id": 12,
+        "name": "Kelso Agrivet Supply",
+        "image": "shops/kelso-agrivet-logo.jpg"
+      }
+    ],
+    "gamefowl": [
+      {
+        "listing_id": 101,
+        "farm_id": 7,
+        "name": "Kelso Red",
+        "image": "gamefowls/kelso-red.jpg",
+        "price": 1500,
+        "is_bundle": false
+      },
+      {
+        "listing_id": 102,
+        "farm_id": 7,
+        "name": "Kelso Breeding Pair",
+        "image": "gamefowls/kelso-pair.jpg",
+        "price": 2800,
+        "is_bundle": true
+      }
+    ]
+  },
+  "count": {"items": 1, "shops": 1, "gamefowl": 2}
+}
+```
+
+Image values retain existing storage paths/URLs. A bare public-disk path such as
+`items/kelso-feed.jpg` is served at `{server origin}/storage/items/kelso-feed.jpg`,
+backed by `storage/app/public/items/kelso-feed.jpg`. Resolve `/storage/...` against
+the server origin (without `/api`); preserve full external image URLs. These
+example filenames are illustrative.
+
 ## Public fields
 
 Every farm object includes `id`, `name`, `registered_business_name`, `owner_name`,
@@ -165,11 +238,12 @@ Browsing does not add offerings to the existing cart or create orders.
 
 The existing farm, catalog, listing, and bundle migrations must be applied,
 including `2026_10_14_131700_add_bundle_fields_to_farm_gamefowl_listings`.
-No new database migration is introduced by this API. Existing shop endpoints and
-the combined `/api/search` contract are unchanged.
+No new database migration is introduced by this API. Existing shop endpoints are
+unchanged. The combined `/api/search` now adds `data.gamefowl`, `count.gamefowl`,
+and the exclusive `type=gamefowl` option, as documented above.
 
 Run the isolated browsing tests with:
 
 ```sh
-php artisan test --compact tests/Feature/FarmApiTest.php
+php artisan test --compact tests/Feature/SearchApiTest.php
 ```
