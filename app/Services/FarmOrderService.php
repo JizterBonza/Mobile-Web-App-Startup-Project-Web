@@ -720,9 +720,16 @@ class FarmOrderService
             'schedule_version' => $order->schedule_version, 'created_at' => now(), 'updated_at' => now(),
         ]);
         if ($inserted) {
+            $order->loadMissing('order.orderDetail');
+            $orderCode = trim((string) ($order->order?->orderDetail?->order_code ?? ''));
+
             Notification::createForUser(
                 $userId, 'farm_'.$event, 'Farm Order Update', $message, Notification::CATEGORY_ORDER,
-                $order->order, ['order_id' => $order->order_id, 'schedule_version' => $order->schedule_version],
+                $order->order, [
+                    'order_id' => $order->order_id,
+                    'order_code' => $orderCode !== '' ? $orderCode : null,
+                    'schedule_version' => $order->schedule_version,
+                ],
                 '/farm-orders/'.$order->order_id,
             );
         }

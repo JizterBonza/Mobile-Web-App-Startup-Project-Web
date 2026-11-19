@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\ActivityLog;
 use App\Models\Voucher;
+use App\Support\DisplayDateTime;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\Rule;
@@ -29,6 +30,7 @@ class VoucherController extends Controller
         return Inertia::render('Dashboard/Vouchers', [
             'vouchers' => $vouchers,
             'voucherTypes' => Voucher::getTypes(),
+            'displayTimezone' => (string) config('app.display_timezone', 'Asia/Manila'),
             'flash' => $request->session()->get('flash', []),
         ]);
     }
@@ -41,11 +43,7 @@ class VoucherController extends Controller
         $validated = $this->validateVoucher($request);
 
         $validated['code'] = strtoupper(trim($validated['code']));
-        $validated['status'] = Voucher::resolveStatus(
-            $validated['status'] ?? null,
-            $validated['start_date'],
-            $validated['end_date']
-        );
+        $validated = $this->normalizeSchedule($validated);
         $validated['created_by'] = Auth::id();
 
         $voucher = Voucher::create($validated);
@@ -74,11 +72,7 @@ class VoucherController extends Controller
         $validated = $this->validateVoucher($request, $voucher->id);
 
         $validated['code'] = strtoupper(trim($validated['code']));
-        $validated['status'] = Voucher::resolveStatus(
-            $validated['status'] ?? null,
-            $validated['start_date'],
-            $validated['end_date']
-        );
+        $validated = $this->normalizeSchedule($validated);
 
         $voucher->update($validated);
 
@@ -160,6 +154,23 @@ class VoucherController extends Controller
         if ($validated['type'] === 'free_shipping') {
             $validated['discount_value'] = null;
         }
+
+        return $validated;
+    }
+
+    /**
+     * datetime-local values are Philippine wall time. Store the UTC instant and
+     * derive active vs scheduled from that instant, not from the raw clock time.
+     */
+    private function normalizeSchedule(array $validated): array
+    {
+        $validated['start_date'] = DisplayDateTime::fromLocalInput($validated['start_date']);
+        $validated['end_date'] = DisplayDateTime::fromLocalInput($validated['end_date']);
+        $validated['status'] = Voucher::resolveStatus(
+            $validated['status'] ?? null,
+            $validated['start_date'],
+            $validated['end_date']
+        );
 
         return $validated;
     }

@@ -18,18 +18,36 @@ const EMPTY_FORM = {
   status: 'active',
 }
 
-function formatDateForInput(dateStr) {
+function formatDateForInput(dateStr, timeZone = 'Asia/Manila') {
   if (!dateStr) return ''
   const date = new Date(dateStr)
   if (Number.isNaN(date.getTime())) return ''
-  const pad = (n) => String(n).padStart(2, '0')
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(date)
+  const pick = (type) => parts.find((part) => part.type === type)?.value ?? ''
+  const hour = pick('hour') === '24' ? '00' : pick('hour')
+  return `${pick('year')}-${pick('month')}-${pick('day')}T${hour}:${pick('minute')}`
 }
 
-function formatDateRange(start, end) {
+function formatDateRange(start, end, timeZone = 'Asia/Manila') {
   if (!start || !end) return 'N/A'
-  const opts = { year: 'numeric', month: 'short', day: 'numeric' }
-  return `${new Date(start).toLocaleDateString('en-US', opts)} – ${new Date(end).toLocaleDateString('en-US', opts)}`
+  const opts = {
+    timeZone,
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  }
+  const format = (value) => new Date(value).toLocaleString('en-US', opts)
+  return `${format(start)} – ${format(end)}`
 }
 
 function getDiscountLabel(voucher) {
@@ -243,7 +261,7 @@ function VoucherFormFields({ form, voucherTypes }) {
   )
 }
 
-export default function Vouchers({ auth, vouchers = [], voucherTypes = {}, flash }) {
+export default function Vouchers({ auth, vouchers = [], voucherTypes = {}, displayTimezone = 'Asia/Manila', flash }) {
   const [showAddModal, setShowAddModal] = useState(false)
   const [showAddModalAnimation, setShowAddModalAnimation] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
@@ -340,8 +358,8 @@ export default function Vouchers({ auth, vouchers = [], voucherTypes = {}, flash
       discount_value: voucher.discount_value ?? '',
       minimum_order_amount: voucher.minimum_order_amount ?? '',
       maximum_discount: voucher.maximum_discount ?? '',
-      start_date: formatDateForInput(voucher.start_date),
-      end_date: formatDateForInput(voucher.end_date),
+      start_date: formatDateForInput(voucher.start_date, displayTimezone),
+      end_date: formatDateForInput(voucher.end_date, displayTimezone),
       usage_limit: voucher.usage_limit ?? '',
       per_customer_limit: voucher.per_customer_limit ?? '',
       status: voucher.status === 'expired' ? 'inactive' : (voucher.status || 'active'),
@@ -529,7 +547,7 @@ export default function Vouchers({ auth, vouchers = [], voucherTypes = {}, flash
                       <div className="hidden lg:block">
                         <div className="text-xs font-semibold uppercase tracking-wider text-[#9CA3AF]">Valid Period</div>
                         <div className="mt-0.5 text-xs text-[#6B7280]">
-                          {formatDateRange(voucher.start_date, voucher.end_date)}
+                          {formatDateRange(voucher.start_date, voucher.end_date, displayTimezone)}
                         </div>
                       </div>
 
