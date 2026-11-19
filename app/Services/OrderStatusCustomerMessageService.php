@@ -214,7 +214,7 @@ class OrderStatusCustomerMessageService
             return false;
         }
 
-        if (in_array($source, ['owner_manager_dashboard', 'vendor_dashboard'], true)) {
+        if (in_array($source, ['owner_manager_dashboard', 'vendor_dashboard', 'logistics_coordination'], true)) {
             return false;
         }
 

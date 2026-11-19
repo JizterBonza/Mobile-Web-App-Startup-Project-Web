@@ -214,6 +214,20 @@ export default function PinLocationMap({
     }
   }, [apiKey])
 
+  function streetFromComponents(components, formattedAddress) {
+    let number = ''
+    let route = ''
+    for (const comp of components || []) {
+      const name = comp.long_name || comp.short_name || ''
+      if (comp.types.includes('street_number')) number = name
+      if (comp.types.includes('route')) route = name
+    }
+    const line = [number, route].filter(Boolean).join(' ').trim()
+    if (line) return line
+    const first = (formattedAddress || '').split(',')[0].trim()
+    return first
+  }
+
   function reverseGeocode(lat, lng) {
     if (!window.google?.maps?.Geocoder) return
     setIsGeocoding(true)
@@ -227,6 +241,7 @@ export default function PinLocationMap({
       if (status !== 'OK' || !results || results.length === 0) {
         onLocationSelectRef.current?.({
           address: '',
+          street: '',
           barangay: '',
           city: '',
           province: '',
@@ -273,6 +288,7 @@ export default function PinLocationMap({
 
       onLocationSelectRef.current?.({
         address,
+        street: streetFromComponents(r.address_components, address),
         barangay,
         city,
         province,

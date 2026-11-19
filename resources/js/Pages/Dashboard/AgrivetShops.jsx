@@ -369,42 +369,15 @@ export default function AgrivetShops({ auth, agrivet, zones = [], shops = [], fl
       )}
 
       <div>
-        {/* Back + title */}
         <div className="mb-6">
           <button
             type="button"
-            onClick={() => router.visit(getBaseRoute())}
-            className="group mb-4 rounded-lg border border-[#E5E7EB] bg-white p-3 transition-all hover:bg-[#F9FAFB]"
-            title="Back to Agrivets"
+            onClick={() => router.visit(`${getBaseRoute()}/${agrivet.id}`)}
+            className="inline-flex items-center gap-2 rounded-lg border border-[#E5E7EB] bg-white px-3 py-2 text-sm text-[#6B7280] transition-colors hover:bg-[#F9FAFB] hover:text-[#102059]"
           >
-            <ArrowLeft className="h-5 w-5 text-[#6B7280] transition-colors group-hover:text-[#102059]" />
+            <ArrowLeft className="h-4 w-4" />
+            Back to {agrivet.name}
           </button>
-          <h1 className="text-2xl font-semibold text-[#102059]">{agrivet.name}</h1>
-        </div>
-
-        {/* Account Information */}
-        <div className="mb-6 rounded-lg border border-[#E5E7EB] bg-white p-6">
-          <h2 className="mb-4 text-lg font-semibold text-[#102059]">Account Information</h2>
-          <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
-            <div>
-              <label className="text-xs font-semibold uppercase tracking-wider text-[#6B7280]">
-                Owner Name
-              </label>
-              <p className="mt-1 text-sm text-[#102059]">{agrivet.owner_name || 'N/A'}</p>
-            </div>
-            <div>
-              <label className="text-xs font-semibold uppercase tracking-wider text-[#6B7280]">
-                Email Address
-              </label>
-              <p className="mt-1 text-sm text-[#102059]">{agrivet.email || 'N/A'}</p>
-            </div>
-            <div>
-              <label className="text-xs font-semibold uppercase tracking-wider text-[#6B7280]">
-                Phone Number
-              </label>
-              <p className="mt-1 text-sm text-[#102059]">{agrivet.contact_number || 'N/A'}</p>
-            </div>
-          </div>
         </div>
 
         {/* List of Stores */}
@@ -415,7 +388,8 @@ export default function AgrivetShops({ auth, agrivet, zones = [], shops = [], fl
               {shops.map((shop) => {
                 const r = ratingValue(shop)
                 const coverSrc = shopCoverUrl(shop.logo_url)
-                const statusActive = shop.shop_status === 'active'
+                const agrivetInactive = String(agrivet?.status || '').toLowerCase() === 'inactive'
+                const statusActive = !agrivetInactive && shop.shop_status === 'active'
                 const statusLabel = statusActive ? 'Active' : 'Inactive'
                 return (
                   <div
@@ -489,7 +463,11 @@ export default function AgrivetShops({ auth, agrivet, zones = [], shops = [], fl
                           >
                             <Pencil className="h-4 w-4" />
                           </button> */}
-                          {shop.shop_status === 'active' ? (
+                          {agrivetInactive ? (
+                            <span className="inline-flex items-center rounded-lg bg-[#F3F4F6] px-2.5 py-1.5 text-xs font-semibold text-[#6B7280]">
+                              Inactive with Agrivet
+                            </span>
+                          ) : shop.shop_status === 'active' ? (
                             <button
                               type="button"
                               onClick={(e) => openRemoveStore(e, shop)}

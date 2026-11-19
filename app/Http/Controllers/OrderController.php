@@ -1133,12 +1133,14 @@ class OrderController extends Controller
                 // Lock the item row for update to prevent concurrent modifications
                 $itemModel = Item::lockForUpdate()->find($item['item_id']);
 
-                if (! $itemModel) {
+                if (! $itemModel || ! $itemModel->shopAgrivetIsActive()) {
                     return response()->json([
                         'success' => false,
-                        'message' => 'Item not found',
+                        'message' => $itemModel
+                            ? "\"{$itemModel->item_name}\" is no longer available."
+                            : 'Item not found',
                         'item_id' => $item['item_id'],
-                    ], 404);
+                    ], $itemModel ? 422 : 404);
                 }
 
                 $orderedQuantity = (int) $item['quantity'];

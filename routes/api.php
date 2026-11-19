@@ -11,6 +11,7 @@ use App\Http\Controllers\CartController;
 use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\CustomerShopMessageController;
 use App\Http\Controllers\FarmApiController;
+use App\Http\Controllers\FeaturedApiController;
 use App\Http\Controllers\FarmCheckoutController;
 use App\Http\Controllers\FavoriteController;
 use App\Http\Controllers\ItemController;
@@ -94,6 +95,12 @@ Route::get('farms/nearby', [FarmApiController::class, 'nearby']);
 Route::get('farms', [FarmApiController::class, 'index']);
 Route::get('farms/{id}/listings', [FarmApiController::class, 'farmListings'])->whereNumber('id');
 Route::get('farms/{id}', [FarmApiController::class, 'show'])->whereNumber('id');
+
+// Mobile Featured Section. Same product and store objects as items/shops, farms as farm discovery.
+Route::get('featured', [FeaturedApiController::class, 'index']);
+Route::get('featured/products', [FeaturedApiController::class, 'products']);
+Route::get('featured/agrivet-stores', [FeaturedApiController::class, 'agrivetStores']);
+Route::get('featured/farms', [FeaturedApiController::class, 'farms']);
 Route::get('farm-gamefowl-listings', [FarmApiController::class, 'listings']);
 Route::get('farm-gamefowl-listings/{id}', [FarmApiController::class, 'listing'])->whereNumber('id');
 

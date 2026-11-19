@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import { useForm, router } from '@inertiajs/react'
+import { Link, useForm, router } from '@inertiajs/react'
 import { Search, Trash2, Pencil, Store, Upload, X } from 'lucide-react'
 import SuperAdminOrAdminLayout from '../../Layouts/SuperAdminOrAdminLayout'
 import { storageUrl } from '../../utils/storageUrl'
@@ -87,6 +87,7 @@ export default function AgrivetManagement({ auth, agrivets = [], flash }) {
   const [statusFilter, setStatusFilter] = useState('All')
   const [itemsPerPage, setItemsPerPage] = useState(10)
   const [currentAgrivetPage, setCurrentAgrivetPage] = useState(1)
+  const [togglingAgrivetId, setTogglingAgrivetId] = useState(null)
 
   const addForm = useForm({
     name: '',
@@ -111,19 +112,6 @@ export default function AgrivetManagement({ auth, agrivets = [], flash }) {
     permits: '',
     logo: null,
     banner: null,
-    status: 'active',
-  })
-
-  const statusToggleForm = useForm({
-    name: '',
-    registered_business_name: '',
-    owner_name: '',
-    description: '',
-    contact_number: '',
-    email: '',
-    permits: '',
-    logo_url: '',
-    banner_url: '',
     status: 'active',
   })
 
@@ -248,23 +236,28 @@ export default function AgrivetManagement({ auth, agrivets = [], flash }) {
 
   const handleStatusToggle = (e, agrivet) => {
     e.stopPropagation()
-    if (statusToggleForm.processing) return
+    if (togglingAgrivetId !== null) return
     const newStatus = agrivet.status === 'active' ? 'inactive' : 'active'
-    statusToggleForm.setData({
-      name: agrivet.name,
-      registered_business_name: agrivet.registered_business_name || '',
-      owner_name: agrivet.owner_name || '',
-      description: agrivet.description || '',
-      contact_number: agrivet.contact_number || '',
-      email: agrivet.email || '',
-      permits: agrivet.permits || '',
-      logo_url: agrivet.logo_url || '',
-      banner_url: agrivet.banner_url || '',
-      status: newStatus,
-    })
-    statusToggleForm.put(`${getBaseRoute()}/${agrivet.id}`, {
-      preserveScroll: true,
-    })
+    setTogglingAgrivetId(agrivet.id)
+    router.put(
+      `${getBaseRoute()}/${agrivet.id}`,
+      {
+        name: agrivet.name,
+        registered_business_name: agrivet.registered_business_name || '',
+        owner_name: agrivet.owner_name || '',
+        description: agrivet.description || '',
+        contact_number: agrivet.contact_number || '',
+        email: agrivet.email || '',
+        permits: agrivet.permits || '',
+        logo_url: agrivet.logo_url || '',
+        banner_url: agrivet.banner_url || '',
+        status: newStatus,
+      },
+      {
+        preserveScroll: true,
+        onFinish: () => setTogglingAgrivetId(null),
+      },
+    )
   }
 
   const handleAddAgrivet = (e) => {
@@ -523,28 +516,22 @@ export default function AgrivetManagement({ auth, agrivets = [], flash }) {
                     })
                   : 'N/A'
                 return (
-                  <div
-                    key={agrivet.id}
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => router.visit(`${getBaseRoute()}/${agrivet.id}/shops`)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault()
-                        router.visit(`${getBaseRoute()}/${agrivet.id}/shops`)
-                      }
-                    }}
-                    className="cursor-pointer px-6 py-4 transition-colors hover:bg-[#F8F9FB]"
-                  >
+                  <div key={agrivet.id} className="px-6 py-4">
                     <div className="flex items-center gap-3">
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-[#E5E7EB] bg-[#102059]">
-                        <span className="text-sm font-bold text-white">
-                          {getInitials(agrivet.name)}
-                        </span>
-                      </div>
+                      <Link
+                        href={`${getBaseRoute()}/${agrivet.id}`}
+                        className="shrink-0 no-underline"
+                        title="View details"
+                      >
+                        <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-[#E5E7EB] bg-[#102059]">
+                          <span className="text-sm font-bold text-white">
+                            {getInitials(agrivet.name)}
+                          </span>
+                        </div>
+                      </Link>
 
                       <div className="grid min-w-0 flex-1 grid-cols-1 gap-4 gap-y-3 lg:grid-cols-[1fr_200px_140px_auto] lg:items-center">
-                        <div className="min-w-0">
+                        <Link href={`${getBaseRoute()}/${agrivet.id}`} className="min-w-0 no-underline" title="View details">
                           <div className="text-sm font-bold text-[#102059]">
                             {agrivet.name || 'N/A'}
                           </div>
@@ -559,7 +546,7 @@ export default function AgrivetManagement({ auth, agrivets = [], flash }) {
                           <div className="mt-1 text-xs text-[#9CA3AF] lg:hidden">
                             {agrivet.shops_count ?? 0} shop(s) · Added {dateAdded}
                           </div>
-                        </div>
+                        </Link>
 
                         <div className="hidden items-center lg:flex">
                           <div>
@@ -574,7 +561,7 @@ export default function AgrivetManagement({ auth, agrivets = [], flash }) {
                           <button
                             type="button"
                             onClick={(e) => handleStatusToggle(e, agrivet)}
-                            disabled={statusToggleForm.processing}
+                            disabled={togglingAgrivetId === agrivet.id}
                             className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-all duration-300 disabled:opacity-50 ${
                               agrivet.status === 'active' ? 'bg-[#00C950]' : 'bg-[#D1D5DB]'
                             }`}

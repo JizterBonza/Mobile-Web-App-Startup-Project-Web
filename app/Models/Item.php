@@ -83,6 +83,23 @@ class Item extends Model
     }
 
     /**
+     * Hide products whose store belongs to an inactive Agrivet.
+     */
+    public function scopeWhereShopAgrivetIsActive($query)
+    {
+        return $query->whereHas('shop', function ($shop) {
+            $shop->whereAgrivetIsActive();
+        });
+    }
+
+    public function shopAgrivetIsActive(): bool
+    {
+        $shop = $this->relationLoaded('shop') ? $this->shop : $this->shop()->first();
+
+        return $shop instanceof Shop && $shop->agrivetIsActive();
+    }
+
+    /**
      * Catalog product this shop listing was created from.
      */
     public function productCatalog()

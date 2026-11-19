@@ -828,9 +828,9 @@ class FarmCheckoutTest extends TestCase
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->component('Dashboard/ShippingPartnerDashboard')
-                ->where('stats.assigned', 1)
-                ->where('stats.needsSchedule', 0)
+                ->where('stats.prepared', 0)
                 ->where('orders.0.id', $order->order_id)
+                ->where('orders.0.tab', null)
                 ->where('orders.0.canSchedule', false)
                 ->where('orders.0.farmName', 'Test Farm')
             );
@@ -842,7 +842,8 @@ class FarmCheckoutTest extends TestCase
             ->get('/dashboard/shipping-partner')
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
-                ->where('stats.needsSchedule', 0)
+                ->where('stats.prepared', 0)
+                ->where('orders.0.tab', null)
                 ->where('orders.0.canSchedule', false)
                 ->where('orders.0.prepared', false)
             );
@@ -854,7 +855,8 @@ class FarmCheckoutTest extends TestCase
             ->get('/dashboard/shipping-partner')
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
-                ->where('stats.needsSchedule', 1)
+                ->where('stats.prepared', 1)
+                ->where('orders.0.tab', 'prepared')
                 ->where('orders.0.canSchedule', true)
                 ->where('orders.0.prepared', true)
                 ->has('orders.0.items', 1)
@@ -874,6 +876,17 @@ class FarmCheckoutTest extends TestCase
         $this->assertSame('2026-11-10', $fresh->pickup_date->toDateString());
         $this->assertSame('ready_for_pickup', $fresh->status);
         $this->assertSame(270000, $fresh->per_box_cents);
+
+        $this->actingAs($this->partner)
+            ->get('/dashboard/shipping-partner')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('stats.prepared', 0)
+                ->where('stats.forPickup', 1)
+                ->where('orders.0.tab', 'for_pickup')
+                ->where('orders.0.showTransitAction', true)
+                ->where('orders.0.canPickUp', false)
+            );
     }
 
     private function user(string $type, ?int $farmId = null): User

@@ -713,9 +713,9 @@ export default function OwnerManagerOrdersPanel({
                   <div>
                     <label className="text-xs text-[#6B7280]">Pickup Date</label>
                     <p className="text-[#102059] font-medium">
-                      {order.farmSummary.releaseImmediate
-                        ? (order.farmSummary.riderPickupDate || "—")
-                        : (order.farmSummary.pickupDate || "Not scheduled")}
+                      {order.farmSummary.pickupDate
+                        || (order.farmSummary.releaseImmediate ? order.farmSummary.riderPickupDate : null)
+                        || (order.farmSummary.releaseImmediate ? "—" : "Not scheduled")}
                     </p>
                   </div>
                 </div>

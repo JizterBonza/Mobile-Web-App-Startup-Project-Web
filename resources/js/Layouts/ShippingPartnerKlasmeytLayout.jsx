@@ -20,6 +20,7 @@ export default function ShippingPartnerKlasmeytLayout({
             <Head title={title} />
             <div className="klasmeyt-landing min-h-screen bg-[#F8F9FB]">
                 <DashboardHeader
+                    showRefresh
                     navigationItems={SHIPPING_PARTNER_NAV}
                     userName={auth.user.name}
                     userEmail={auth.user.email}

@@ -3,10 +3,15 @@
 namespace App\Http\Controllers;
 
 use App\Models\ActivityLog;
+use App\Models\FarmGamefowlListing;
 use App\Models\GamefowlCatalog;
 use App\Models\GamefowlLookup;
 use App\Models\User;
+use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 
@@ -20,41 +25,6 @@ class GamefowlCatalogController extends Controller
     public function inactive()
     {
         return $this->renderListing(GamefowlCatalog::STATUS_INACTIVE);
-    }
-
-    public function create()
-    {
-        return Inertia::render('Dashboard/RegisterGamefowl', $this->formOptions());
-    }
-
-    public function store(Request $request)
-    {
-        $validated = $this->validateEntry($request, true);
-        $images = $this->resolveImages($request);
-
-        if (count($images) < 5) {
-            return back()->withInput()->withErrors(['images' => 'Please upload all 5 gamefowl images.']);
-        }
-
-        $gamefowl = GamefowlCatalog::create([
-            'name' => $validated['name'],
-            'bloodline_id' => $validated['bloodline_id'],
-            'age_type_id' => $validated['age_type_id'],
-            'class_id' => $validated['class_id'],
-            'sex' => $validated['sex'],
-            'hatch_date' => $validated['hatch_date'] ?? null,
-            'description' => $validated['description'] ?? null,
-            'images' => array_values($images),
-            'primary_image_index' => (int) $validated['primary_image_index'],
-            'status' => GamefowlCatalog::STATUS_ACTIVE,
-            'created_by' => auth()->id(),
-            'reviewed_by' => auth()->id(),
-            'reviewed_at' => now(),
-        ]);
-
-        ActivityLog::log('created', "Gamefowl catalog entry created: {$gamefowl->name}", $gamefowl, null, $gamefowl->toArray());
-
-        return redirect($this->basePath())->with('success', 'Gamefowl registered in the catalog.');
     }
 
     public function show($id)
@@ -127,6 +97,95 @@ class GamefowlCatalogController extends Controller
             : 'Gamefowl enabled.';
 
         return redirect()->back()->with('success', $message);
+    }
+
+    /**
+     * Remove a catalog gamefowl so farms can no longer add or sell it.
+     * Listings already on an order stay in order history and are taken off the farm list.
+     */
+    public function destroy($id)
+    {
+        $gamefowl = GamefowlCatalog::listed()->findOrFail($id);
+        $oldValues = $gamefowl->toArray();
+        $images = $gamefowl->images ?? [];
+        $name = $gamefowl->name;
+        $status = $gamefowl->status;
+        $removedListings = 0;
+        $keptForOrders = false;
+
+        try {
+            DB::transaction(function () use ($gamefowl, $oldValues, $name, &$removedListings, &$keptForOrders) {
+                $listings = FarmGamefowlListing::query()
+                    ->where(function ($query) use ($gamefowl) {
+                        $query->where('gamefowl_catalog_id', $gamefowl->id)
+                            ->orWhereJsonContains('bundle_catalog_ids', $gamefowl->id)
+                            ->orWhereJsonContains('bundle_catalog_ids', (string) $gamefowl->id);
+                    })
+                    ->lockForUpdate()
+                    ->get();
+
+                $orderedIds = $this->orderedListingIds($listings->pluck('id')->all());
+
+                foreach ($listings as $listing) {
+                    $removedListings++;
+                    if (in_array((int) $listing->id, $orderedIds, true)) {
+                        $keptForOrders = true;
+                        $listing->update(['status' => 'removed']);
+                        if (Schema::hasTable('farm_cart_items')) {
+                            DB::table('farm_cart_items')->where('listing_id', $listing->id)->delete();
+                        }
+                        continue;
+                    }
+
+                    $listing->delete();
+                }
+
+                if ($keptForOrders) {
+                    $gamefowl->update(['status' => GamefowlCatalog::STATUS_DELETED]);
+                    ActivityLog::log(
+                        'deleted',
+                        "Gamefowl catalog entry deleted: {$name}",
+                        $gamefowl,
+                        $oldValues,
+                        $gamefowl->fresh()->toArray()
+                    );
+
+                    return;
+                }
+
+                ActivityLog::log(
+                    'deleted',
+                    "Gamefowl catalog entry deleted: {$name}",
+                    null,
+                    $oldValues,
+                    null
+                );
+                $gamefowl->delete();
+            });
+        } catch (QueryException $exception) {
+            report($exception);
+
+            return redirect()->back()->with(
+                'error',
+                'Could not delete this gamefowl because a farm listing is still tied to an order. Try again.'
+            );
+        }
+
+        if (! $keptForOrders) {
+            foreach ($images as $image) {
+                $this->deleteGamefowlImageIfUnused(is_string($image) ? $image : null);
+            }
+        }
+
+        $message = $removedListings > 0
+            ? 'Gamefowl deleted. It was removed from farm lists, so farms can no longer add or sell it.'
+            : 'Gamefowl deleted from the catalog. Farms can no longer add or sell it.';
+
+        $target = $status === GamefowlCatalog::STATUS_INACTIVE
+            ? $this->basePath().'/inactive'
+            : $this->basePath();
+
+        return redirect($target)->with('success', $message);
     }
 
     public function requests()
@@ -387,6 +446,48 @@ class GamefowlCatalogController extends Controller
         $segment = auth()->user()?->user_type === 'admin' ? 'admin' : 'super-admin';
 
         return "/dashboard/{$segment}/gamefowls";
+    }
+
+    /**
+     * @param  list<int>  $listingIds
+     * @return list<int>
+     */
+    private function orderedListingIds(array $listingIds): array
+    {
+        if ($listingIds === [] || ! Schema::hasTable('farm_order_items')) {
+            return [];
+        }
+
+        return DB::table('farm_order_items')
+            ->whereIn('listing_id', $listingIds)
+            ->pluck('listing_id')
+            ->map(fn ($id) => (int) $id)
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    private function deleteGamefowlImageIfUnused(?string $url): void
+    {
+        if (! $url) {
+            return;
+        }
+
+        $path = ltrim(str_replace('/storage/', '', $url), '/');
+
+        if (! str_starts_with($path, 'gamefowl-catalog/') || str_contains($path, 'placeholder')) {
+            return;
+        }
+
+        $stillUsed = GamefowlCatalog::query()
+            ->whereJsonContains('images', $url)
+            ->exists();
+
+        if ($stillUsed || ! Storage::disk('public')->exists($path)) {
+            return;
+        }
+
+        Storage::disk('public')->delete($path);
     }
 
     /**

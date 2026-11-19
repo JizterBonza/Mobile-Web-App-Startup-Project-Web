@@ -7,6 +7,8 @@ use App\Http\Controllers\AgrivetController;
 use App\Http\Controllers\AppReleaseController;
 use App\Http\Controllers\BreederController;
 use App\Http\Controllers\FarmController;
+use App\Http\Controllers\FeaturedSectionController;
+use App\Http\Controllers\LogisticsCoordinationController;
 use App\Http\Controllers\GamefowlCatalogController;
 use App\Http\Controllers\GamefowlLookupController;
 use App\Http\Controllers\VendorController;
@@ -22,11 +24,14 @@ use App\Http\Controllers\ZoneController;
 use App\Http\Controllers\SuperAdminProductController;
 use App\Http\Controllers\ProductCatalogRequestController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\ShippingPartnerController;
 use App\Http\Controllers\ShippingPartnerDashboardController;
 use App\Http\Controllers\ShopMessageController;
 use App\Http\Controllers\SupportTicketController;
 use App\Http\Controllers\VoucherController;
 use App\Http\Controllers\PayoutRecordController;
+use App\Http\Controllers\RefundController;
+use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\KlasrumCategoryController;
 use App\Http\Controllers\KlasrumContentController;
 use App\Http\Controllers\KlasrumPostEngagementController;
@@ -34,6 +39,10 @@ use App\Http\Controllers\PublicStorageController;
 use App\Http\Controllers\PublicAppDownloadController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
+
+Route::post('/dashboard/notifications/{id}/open', [NotificationController::class, 'open'])
+    ->middleware(['auth', 'session.valid'])
+    ->name('dashboard.notifications.open');
 
 Route::get('/', function () {
     $dashboard = auth()->user()?->getWebDashboardUrl();
@@ -150,8 +159,6 @@ foreach (['super_admin' => 'super-admin', 'admin' => 'admin'] as $gamefowlRole =
         ->prefix("dashboard/{$gamefowlSegment}")
         ->name("dashboard.{$gamefowlSegment}.")
         ->group(function () {
-            Route::get('gamefowls/create', [GamefowlCatalogController::class, 'create'])->name('gamefowls.create');
-            Route::post('gamefowls', [GamefowlCatalogController::class, 'store'])->name('gamefowls.store');
             Route::get('gamefowls', [GamefowlCatalogController::class, 'index'])->name('gamefowls');
             Route::get('gamefowls/inactive', [GamefowlCatalogController::class, 'inactive'])->name('gamefowls.inactive');
             Route::get('gamefowls/requests', [GamefowlCatalogController::class, 'requests'])->name('gamefowls.requests');
@@ -176,6 +183,7 @@ foreach (['super_admin' => 'super-admin', 'admin' => 'admin'] as $gamefowlRole =
             Route::get('gamefowls/{id}/edit', [GamefowlCatalogController::class, 'edit'])->name('gamefowls.edit');
             Route::put('gamefowls/{id}', [GamefowlCatalogController::class, 'update'])->name('gamefowls.update');
             Route::patch('gamefowls/{id}/status', [GamefowlCatalogController::class, 'updateStatus'])->name('gamefowls.status');
+            Route::delete('gamefowls/{id}', [GamefowlCatalogController::class, 'destroy'])->name('gamefowls.destroy');
             Route::get('gamefowls/{id}', [GamefowlCatalogController::class, 'show'])->name('gamefowls.show');
         });
 }
@@ -191,6 +199,10 @@ Route::put('/dashboard/super-admin/products/{id}', [SuperAdminProductController:
 Route::patch('/dashboard/super-admin/products/{id}/status', [SuperAdminProductController::class, 'updateStatus'])
     ->middleware(['auth', 'session.valid', 'user.type:super_admin'])
     ->name('dashboard.super-admin.products.status');
+
+Route::delete('/dashboard/super-admin/products/{id}', [SuperAdminProductController::class, 'destroy'])
+    ->middleware(['auth', 'session.valid', 'user.type:super_admin'])
+    ->name('dashboard.super-admin.products.destroy');
 
 Route::get('/dashboard/super-admin/products/{id}', [SuperAdminProductController::class, 'show'])
     ->middleware(['auth', 'session.valid', 'user.type:super_admin'])
@@ -216,6 +228,7 @@ Route::middleware(['auth', 'session.valid', 'user.type:super_admin'])->prefix('d
     Route::get('/vendor-registration', [UserController::class, 'vendorRegistration'])->name('vendor-registration');
     Route::get('/veterinarian-registration', [UserController::class, 'veterinarianRegistration'])->name('veterinarian-registration');
     Route::get('/rider-registration', [UserController::class, 'riderRegistration'])->name('rider-registration');
+    Route::get('/shipping-partner-registration', [UserController::class, 'shippingPartnerRegistration'])->name('shipping-partner-registration');
     Route::get('/breeder-registration', [BreederController::class, 'create'])->name('breeder-registration');
     Route::post('/breeder-registration', [BreederController::class, 'store'])->name('breeder-registration.store');
     Route::post('/clear-all-data', [UserController::class, 'clearAllPlatformData'])->name('clear-all-data');
@@ -250,15 +263,26 @@ Route::middleware(['auth', 'session.valid', 'user.type:super_admin'])->prefix('d
     Route::post('/{id}/shops/{shopId}/vendors/{vendorId}/reassign', [AgrivetController::class, 'reassignVendor'])->name('shops.vendors.reassign');
     Route::patch('/{id}/shops/{shopId}/vendors/{vendorId}/status', [AgrivetController::class, 'updateVendorStatus'])->name('shops.vendors.status');
 
+    Route::get('/{id}', [AgrivetController::class, 'show'])->whereNumber('id')->name('show');
     Route::put('/{id}', [AgrivetController::class, 'update'])->name('update');
     Route::delete('/{id}', [AgrivetController::class, 'destroy'])->name('destroy');
 });
 
 // Farm Management Routes
+Route::middleware(['auth', 'session.valid', 'user.type:super_admin'])->prefix('dashboard/super-admin/shipping-partners')->name('dashboard.super-admin.shipping-partners.')->group(function () {
+    Route::get('/', [ShippingPartnerController::class, 'index'])->name('index');
+    Route::post('/{id}/users', [ShippingPartnerController::class, 'storeUser'])->name('users.store');
+    Route::post('/{id}/users/add-existing', [ShippingPartnerController::class, 'addExistingUser'])->name('users.add-existing');
+    Route::put('/{id}', [ShippingPartnerController::class, 'update'])->name('update');
+    Route::delete('/{id}', [ShippingPartnerController::class, 'destroy'])->name('destroy');
+    Route::get('/{id}', [ShippingPartnerController::class, 'show'])->name('show');
+});
+
 Route::middleware(['auth', 'session.valid', 'user.type:super_admin'])->prefix('dashboard/super-admin/farms')->name('dashboard.super-admin.farms.')->group(function () {
     Route::get('/', [FarmController::class, 'index'])->name('index');
     Route::get('/create', [FarmController::class, 'create'])->name('create');
     Route::post('/setup-wizard', [FarmController::class, 'storeSetupWizard'])->name('setup-wizard.store');
+    Route::get('/{id}', [FarmController::class, 'show'])->whereNumber('id')->name('show');
     Route::put('/{id}', [FarmController::class, 'update'])->name('update');
     Route::delete('/{id}', [FarmController::class, 'destroy'])->name('destroy');
 });
@@ -285,6 +309,13 @@ Route::middleware(['auth', 'session.valid', 'user.type:super_admin'])->prefix('d
     Route::get('/', [ActivityLogController::class, 'index'])->name('index');
     Route::get('/{id}', [ActivityLogController::class, 'show'])->name('show');
 });
+
+Route::get('/dashboard/super-admin/refunds', [RefundController::class, 'index'])
+    ->middleware(['auth', 'session.valid', 'user.type:super_admin'])
+    ->name('dashboard.super-admin.refunds');
+Route::post('/dashboard/super-admin/refunds/{refund}/refunded', [RefundController::class, 'markRefunded'])
+    ->middleware(['auth', 'session.valid', 'user.type:super_admin'])
+    ->name('dashboard.super-admin.refunds.refunded');
 
 Route::get('/dashboard/super-admin/payout-records', [PayoutRecordController::class, 'index'])
     ->middleware(['auth', 'session.valid', 'user.type:super_admin'])
@@ -345,6 +376,38 @@ Route::middleware(['auth', 'session.valid', 'user.type:super_admin'])->prefix('d
     Route::put('/{id}', [VoucherController::class, 'update'])->name('update');
     Route::delete('/{id}', [VoucherController::class, 'destroy'])->name('destroy');
 });
+
+// Logistics Coordination: Agrivet store orders and products (Super Admin and Admin)
+foreach (['super_admin' => 'super-admin', 'admin' => 'admin'] as $logisticsRole => $logisticsSegment) {
+    Route::middleware(['auth', 'session.valid', "user.type:{$logisticsRole}"])
+        ->prefix("dashboard/{$logisticsSegment}/logistics")
+        ->name("dashboard.{$logisticsSegment}.logistics.")
+        ->group(function () {
+            Route::get('/', [LogisticsCoordinationController::class, 'orders'])->name('orders');
+            Route::get('/products', [LogisticsCoordinationController::class, 'products'])->name('products');
+            Route::patch('/orders/{orderId}/accept', [LogisticsCoordinationController::class, 'acceptOrder'])->whereNumber('orderId')->name('orders.accept');
+            Route::patch('/orders/{orderId}/decline', [LogisticsCoordinationController::class, 'declineOrder'])->whereNumber('orderId')->name('orders.decline');
+            Route::patch('/orders/{orderId}/ready', [LogisticsCoordinationController::class, 'markOrderReady'])->whereNumber('orderId')->name('orders.ready');
+            Route::patch('/orders/{orderId}/done-store-pickup', [LogisticsCoordinationController::class, 'doneStorePickup'])->whereNumber('orderId')->name('orders.done-store-pickup');
+            Route::patch('/orders/{orderId}/items/{orderItemId}/done-preparing', [LogisticsCoordinationController::class, 'donePreparingItem'])
+                ->whereNumber(['orderId', 'orderItemId'])
+                ->name('orders.items.done-preparing');
+        });
+}
+
+// Featured Section for the mobile app (Super Admin and Admin share one list)
+foreach (['super_admin' => 'super-admin', 'admin' => 'admin'] as $featuredRole => $featuredSegment) {
+    Route::middleware(['auth', 'session.valid', "user.type:{$featuredRole}"])
+        ->prefix("dashboard/{$featuredSegment}/featured")
+        ->name("dashboard.{$featuredSegment}.featured.")
+        ->group(function () {
+            Route::get('/', [FeaturedSectionController::class, 'index'])->name('index');
+            Route::post('/', [FeaturedSectionController::class, 'store'])->name('store');
+            Route::put('/reorder', [FeaturedSectionController::class, 'reorder'])->name('reorder');
+            Route::patch('/{featuredEntry}/active', [FeaturedSectionController::class, 'toggle'])->whereNumber('featuredEntry')->name('toggle');
+            Route::delete('/{featuredEntry}', [FeaturedSectionController::class, 'destroy'])->whereNumber('featuredEntry')->name('destroy');
+        });
+}
 
 // Super Admin Support
 Route::get('/dashboard/super-admin/support', [DashboardController::class, 'superAdminSupport'])
@@ -468,6 +531,10 @@ Route::patch('/dashboard/admin/products/{id}/status', [SuperAdminProductControll
     ->middleware(['auth', 'session.valid', 'user.type:admin'])
     ->name('dashboard.admin.products.status');
 
+Route::delete('/dashboard/admin/products/{id}', [SuperAdminProductController::class, 'destroy'])
+    ->middleware(['auth', 'session.valid', 'user.type:admin'])
+    ->name('dashboard.admin.products.destroy');
+
 Route::get('/dashboard/admin/products/{id}', [SuperAdminProductController::class, 'show'])
     ->middleware(['auth', 'session.valid', 'user.type:admin'])
     ->name('dashboard.admin.products.show');
@@ -478,6 +545,7 @@ Route::middleware(['auth', 'session.valid', 'user.type:admin'])->prefix('dashboa
     Route::get('/vendor-registration', [UserController::class, 'vendorRegistration'])->name('vendor-registration');
     Route::get('/veterinarian-registration', [UserController::class, 'veterinarianRegistration'])->name('veterinarian-registration');
     Route::get('/rider-registration', [UserController::class, 'riderRegistration'])->name('rider-registration');
+    Route::get('/shipping-partner-registration', [UserController::class, 'shippingPartnerRegistration'])->name('shipping-partner-registration');
     Route::get('/breeder-registration', [BreederController::class, 'create'])->name('breeder-registration');
     Route::post('/breeder-registration', [BreederController::class, 'store'])->name('breeder-registration.store');
     Route::post('/', [UserController::class, 'store'])->name('store');
@@ -511,15 +579,26 @@ Route::middleware(['auth', 'session.valid', 'user.type:admin'])->prefix('dashboa
     Route::post('/{id}/shops/{shopId}/vendors/{vendorId}/reassign', [AgrivetController::class, 'reassignVendor'])->name('shops.vendors.reassign');
     Route::patch('/{id}/shops/{shopId}/vendors/{vendorId}/status', [AgrivetController::class, 'updateVendorStatus'])->name('shops.vendors.status');
 
+    Route::get('/{id}', [AgrivetController::class, 'show'])->whereNumber('id')->name('show');
     Route::put('/{id}', [AgrivetController::class, 'update'])->name('update');
     Route::delete('/{id}', [AgrivetController::class, 'destroy'])->name('destroy');
 });
 
 // Admin Farm Management Routes
+Route::middleware(['auth', 'session.valid', 'user.type:admin'])->prefix('dashboard/admin/shipping-partners')->name('dashboard.admin.shipping-partners.')->group(function () {
+    Route::get('/', [ShippingPartnerController::class, 'index'])->name('index');
+    Route::post('/{id}/users', [ShippingPartnerController::class, 'storeUser'])->name('users.store');
+    Route::post('/{id}/users/add-existing', [ShippingPartnerController::class, 'addExistingUser'])->name('users.add-existing');
+    Route::put('/{id}', [ShippingPartnerController::class, 'update'])->name('update');
+    Route::delete('/{id}', [ShippingPartnerController::class, 'destroy'])->name('destroy');
+    Route::get('/{id}', [ShippingPartnerController::class, 'show'])->name('show');
+});
+
 Route::middleware(['auth', 'session.valid', 'user.type:admin'])->prefix('dashboard/admin/farms')->name('dashboard.admin.farms.')->group(function () {
     Route::get('/', [FarmController::class, 'index'])->name('index');
     Route::get('/create', [FarmController::class, 'create'])->name('create');
     Route::post('/setup-wizard', [FarmController::class, 'storeSetupWizard'])->name('setup-wizard.store');
+    Route::get('/{id}', [FarmController::class, 'show'])->whereNumber('id')->name('show');
     Route::put('/{id}', [FarmController::class, 'update'])->name('update');
     Route::delete('/{id}', [FarmController::class, 'destroy'])->name('destroy');
 });
@@ -546,6 +625,13 @@ Route::middleware(['auth', 'session.valid', 'user.type:admin'])->prefix('dashboa
     Route::get('/', [ActivityLogController::class, 'index'])->name('index');
     Route::get('/{id}', [ActivityLogController::class, 'show'])->name('show');
 });
+
+Route::get('/dashboard/admin/refunds', [RefundController::class, 'index'])
+    ->middleware(['auth', 'session.valid', 'user.type:admin'])
+    ->name('dashboard.admin.refunds');
+Route::post('/dashboard/admin/refunds/{refund}/refunded', [RefundController::class, 'markRefunded'])
+    ->middleware(['auth', 'session.valid', 'user.type:admin'])
+    ->name('dashboard.admin.refunds.refunded');
 
 Route::get('/dashboard/admin/payout-records', [PayoutRecordController::class, 'index'])
     ->middleware(['auth', 'session.valid', 'user.type:admin'])

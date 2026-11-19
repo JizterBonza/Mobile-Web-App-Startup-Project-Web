@@ -16,6 +16,7 @@ use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 use Inertia\Inertia;
 
 class FarmController extends Controller
@@ -64,6 +65,36 @@ class FarmController extends Controller
 
         return Inertia::render('Dashboard/FarmManagement', [
             'farms' => $farms,
+        ]);
+    }
+
+    /**
+     * Company details and the logins connected to this farm.
+     */
+    public function show(int $id)
+    {
+        $farm = Farm::findOrFail($id);
+        $users = User::with(['userDetail', 'userCredential'])
+            ->where('farm_id', $farm->id)
+            ->get();
+        $address = collect([$farm->address, $farm->city, $farm->province])->filter()->implode(', ');
+
+        return Inertia::render('Dashboard/FarmShow', [
+            'farm' => [
+                'id' => $farm->id,
+                'name' => $farm->name,
+                'registered_business_name' => $farm->registered_business_name,
+                'owner_name' => $farm->owner_name,
+                'address' => $address !== '' ? $address : null,
+                'contact_number' => $farm->contact_number,
+                'email' => $farm->email,
+                'operating_days' => $farm->operating_days,
+                'operating_hours' => $farm->operating_hours,
+                'permits' => $this->readablePermits($farm->permits),
+                'status' => $farm->status,
+                'created_at' => $farm->created_at?->format('Y-m-d H:i:s'),
+                'users' => $this->mapConnectedUsers($users),
+            ],
         ]);
     }
 
@@ -158,7 +189,7 @@ class FarmController extends Controller
                     'permits' => $permitsPayload,
                     'logo_url' => $logoUrl,
                     'banner_url' => $bannerUrl,
-                    'address' => $validated['street'].', '.$validated['barangay'],
+                    'address' => $this->farmAddress($validated['street'], $validated['barangay']),
                     'city' => $validated['city'],
                     'province' => $validated['province'],
                     'postal_code' => $validated['zip_code'],
@@ -171,7 +202,7 @@ class FarmController extends Controller
                     'status' => 'active',
                 ]);
 
-                $ownerUsername = explode('@', $validated['email'])[0].'_'.time();
+                $ownerUsername = $this->ownerUsername($validated['email']);
 
                 $ownerDetail = UserDetail::create([
                     'first_name' => $validated['first_name'],
@@ -230,7 +261,13 @@ class FarmController extends Controller
             $msg = 'Failed to create farm. Please try again.';
             $sql = $e instanceof QueryException ? $e->getMessage() : '';
 
-            if (config('app.debug')) {
+            if ($sql !== '' && str_contains($sql, 'Data too long')) {
+                if (str_contains($sql, 'address')) {
+                    $msg = 'The street and barangay together are too long. Shorten the street to the road name, then submit again.';
+                } elseif (str_contains($sql, 'mobile_number')) {
+                    $msg = 'The phone number is too long. Use at most 30 characters.';
+                }
+            } elseif (config('app.debug')) {
                 $msg = $e->getMessage();
             } elseif ($sql !== '') {
                 if (str_contains($sql, 'farm_id') && str_contains($sql, 'Unknown column')) {
@@ -342,6 +379,27 @@ class FarmController extends Controller
         }
     }
 
+    private function farmAddress(string $street, string $barangay): string
+    {
+        $street = trim($street);
+        $barangay = trim($barangay);
+        $address = $street;
+
+        if ($barangay !== '' && ! str_contains(mb_strtolower($street), mb_strtolower($barangay))) {
+            $address = $street.', '.$barangay;
+        }
+
+        return Str::limit($address, 500, '');
+    }
+
+    private function ownerUsername(string $email): string
+    {
+        $local = preg_replace('/[^A-Za-z0-9._-]/', '', explode('@', $email)[0] ?? '') ?: 'owner';
+        $suffix = '_'.time();
+
+        return substr($local, 0, 100 - strlen($suffix)).$suffix;
+    }
+
     private function indexRoute(): string
     {
         return auth()->user()->user_type === 'admin'
@@ -352,5 +410,66 @@ class FarmController extends Controller
     private function storeFarmImage(UploadedFile $file, string $folder): string
     {
         return $file->store("farms/{$folder}", 'public');
+    }
+
+    /**
+     * @param  \Illuminate\Support\Collection<int, User>  $users
+     * @return \Illuminate\Support\Collection<int, array<string, mixed>>
+     */
+    private function mapConnectedUsers($users)
+    {
+        return $users
+            ->sortByDesc(fn (User $user) => $user->created_at?->getTimestamp() ?? 0)
+            ->values()
+            ->map(function (User $user) {
+                $detail = $user->userDetail;
+                $name = $detail
+                    ? trim(implode(' ', array_filter([
+                        $detail->first_name,
+                        $detail->middle_name,
+                        $detail->last_name,
+                    ])))
+                    : '';
+
+                return [
+                    'id' => $user->id,
+                    'name' => $name !== '' ? $name : null,
+                    'email' => $detail?->email,
+                    'mobile_number' => $detail?->mobile_number,
+                    'username' => $user->userCredential?->username,
+                    'user_type' => $user->user_type,
+                    'status' => $user->status,
+                    'created_at' => $user->created_at?->format('Y-m-d H:i:s'),
+                ];
+            })
+            ->values();
+    }
+
+    private function readablePermits(?string $permits): ?string
+    {
+        if ($permits === null || trim($permits) === '') {
+            return null;
+        }
+
+        $trimmed = trim($permits);
+        if (! str_starts_with($trimmed, '{')) {
+            return $permits;
+        }
+
+        $parsed = json_decode($trimmed, true);
+        if (! is_array($parsed)) {
+            return $permits;
+        }
+
+        $notes = trim((string) ($parsed['notes'] ?? ''));
+        if ($notes !== '') {
+            return $notes;
+        }
+
+        if (! empty($parsed['permit_document_url'])) {
+            return 'Permit on file';
+        }
+
+        return null;
     }
 }

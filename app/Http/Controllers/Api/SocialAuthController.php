@@ -120,7 +120,7 @@ class SocialAuthController extends Controller
             if (! $user->isActive()) {
                 return $this->failureResponse(
                     $mobileRedirectUri,
-                    User::INACTIVE_ACCOUNT_MESSAGE,
+                    $user->inactiveMessage(),
                     'account_inactive',
                     403
                 );
@@ -398,7 +398,7 @@ class SocialAuthController extends Controller
         if (! $user->isActive()) {
             return response()->json([
                 'success' => false,
-                'message' => User::INACTIVE_ACCOUNT_MESSAGE,
+                'message' => $user->inactiveMessage(),
             ], 403);
         }
 
