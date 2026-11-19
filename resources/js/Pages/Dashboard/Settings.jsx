@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { useForm, Link } from '@inertiajs/react'
+import { Link, router, useForm } from '@inertiajs/react'
+import { ChevronLeft } from 'lucide-react'
 import SuperAdminOrAdminLayout from '../../Layouts/SuperAdminOrAdminLayout'
 
 function formatDateTime(value) {
@@ -67,6 +68,22 @@ export default function Settings({ auth, userData, flash }) {
 
   return (
     <SuperAdminOrAdminLayout auth={auth} title="Settings">
+      {auth?.user?.user_type === 'vendor' && (
+        <div className="mb-4 flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => router.visit('/dashboard/vendor')}
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#9CA3AF] text-white transition-colors hover:bg-[#6B7280]"
+            title="Back to Dashboard"
+            aria-label="Back to Dashboard"
+            style={{ borderRadius: '20px' }}
+          >
+            <ChevronLeft className="h-5 w-5" strokeWidth={2.5} />
+          </button>
+          <h1 className="text-2xl font-bold text-[#1F2937]">Security Settings</h1>
+        </div>
+      )}
+
       {/* Success Alert */}
       {flash?.success && (
         <div className="alert alert-success alert-dismissible fade show">

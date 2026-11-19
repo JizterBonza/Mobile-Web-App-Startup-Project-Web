@@ -15,6 +15,26 @@ class DisplayDateTime
         return self::parse($value)?->toIso8601String();
     }
 
+    /**
+     * Interpret a datetime-local value (no offset) as display-timezone wall time
+     * and return that instant in the application timezone for storage.
+     */
+    public static function fromLocalInput(mixed $value): Carbon
+    {
+        $displayTimezone = (string) config('app.display_timezone', 'Asia/Manila');
+        $appTimezone = (string) config('app.timezone', 'UTC');
+
+        if ($value instanceof Carbon) {
+            return $value->copy()->timezone($appTimezone);
+        }
+
+        if ($value instanceof DateTimeInterface) {
+            return Carbon::instance($value)->timezone($appTimezone);
+        }
+
+        return Carbon::parse((string) $value, $displayTimezone)->timezone($appTimezone);
+    }
+
     public static function parse(mixed $value): ?Carbon
     {
         if ($value === null || $value === '') {
