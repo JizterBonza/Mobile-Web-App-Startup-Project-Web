@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { MapPin, Search } from "lucide-react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
+import { requestCurrentPosition } from "../utils/currentLocation";
 
 // Fix for default marker icon issue in Leaflet
 delete (L.Icon.Default.prototype as any)._getIconUrl;
@@ -32,7 +33,10 @@ export function LocationPicker({ onLocationSelect, initialPosition }: LocationPi
   const mapRef = useRef<L.Map | null>(null);
   const markerRef = useRef<L.Marker | null>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
-  const defaultCenter: [number, number] = initialPosition || [14.5995, 120.9842]; // Manila, Philippines
+  const hasInitialPosition = Array.isArray(initialPosition) && initialPosition.length === 2;
+  const defaultCenter: [number, number] = hasInitialPosition
+    ? initialPosition
+    : [14.5995, 120.9842]; // Manila, Philippines — used until geolocation returns
 
   useEffect(() => {
     if (!mapContainerRef.current || mapRef.current) return;
@@ -63,8 +67,23 @@ export function LocationPicker({ onLocationSelect, initialPosition }: LocationPi
 
     mapRef.current = map;
 
+    let cancelCurrentLocation = false;
+    let userMovedMap = false;
+    map.on("dragstart", () => {
+      userMovedMap = true;
+    });
+    if (!hasInitialPosition) {
+      requestCurrentPosition()
+        .then(({ lat, lng }) => {
+          if (cancelCurrentLocation || userMovedMap || mapRef.current !== map) return;
+          map.setView([lat, lng], 15);
+        })
+        .catch(() => {});
+    }
+
     // Cleanup
     return () => {
+      cancelCurrentLocation = true;
       if (mapRef.current) {
         mapRef.current.remove();
         mapRef.current = null;

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { requestCurrentPosition } from '../utils/currentLocation'
 
 /**
  * ZoneDrawMap – draw a zone boundary (polygon) on a Google Map.
@@ -175,10 +176,15 @@ export default function ZoneDrawMap({
     }
 
     extendPath(boundary)
-    otherZonesRef.current.forEach((zone) => extendPath(zone.boundary))
+    // An empty drawing should stay on the device location. Fitting every
+    // reference zone would zoom the new map away from where the user is.
+    if (hasPoints) {
+      otherZonesRef.current.forEach((zone) => extendPath(zone.boundary))
+    }
 
-    if (!hasPoints) return
+    if (!hasPoints) return false
     map.fitBounds(bounds, { top: 40, right: 40, bottom: 40, left: 40 })
+    return true
   }, [])
 
   const renderOtherZones = useCallback((map) => {
@@ -313,9 +319,25 @@ export default function ZoneDrawMap({
       renderPolygon(initialBoundary, map)
     }
 
-    fitMapToContent(map, hasInitial ? initialBoundary : [])
+    const fitted = fitMapToContent(map, hasInitial ? initialBoundary : [])
+    let cancelCurrentLocation = false
+    let userMovedMap = false
+    const dragListener = map.addListener('dragstart', () => {
+      userMovedMap = true
+    })
+    if (!fitted) {
+      requestCurrentPosition()
+        .then((pos) => {
+          if (cancelCurrentLocation || userMovedMap || mapInstanceRef.current !== map) return
+          map.setCenter(pos)
+          map.setZoom(DEFAULT_ZOOM)
+        })
+        .catch(() => {})
+    }
 
     return () => {
+      cancelCurrentLocation = true
+      window.google?.maps?.event.removeListener(dragListener)
       if (mapClickListenerRef.current) {
         window.google.maps.event.removeListener(mapClickListenerRef.current)
         mapClickListenerRef.current = null
