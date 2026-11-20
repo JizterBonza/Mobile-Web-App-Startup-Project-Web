@@ -86,20 +86,12 @@ class GamefowlLookupController extends Controller
 
     private function store(Request $request, string $type)
     {
-        $validated = $request->validate([
-            'name' => [
-                'required',
-                'string',
-                'max:150',
-                Rule::unique('gamefowl_lookups', 'name')->where('type', $type),
-            ],
-            'description' => 'nullable|string',
-            'status' => 'required|string|in:active,inactive',
-        ]);
+        $validated = $request->validate($this->rules($type));
 
         $lookup = GamefowlLookup::create([
             ...$validated,
             'type' => $type,
+            'rate' => $this->rateFor($type, $validated),
         ]);
 
         ActivityLog::log('created', "{$this->kindMeta($type)['singular']} created: {$lookup->name}", $lookup, null, $lookup->toArray());
@@ -112,16 +104,8 @@ class GamefowlLookupController extends Controller
         $lookup = GamefowlLookup::query()->where('type', $type)->findOrFail($id);
         $oldValues = $lookup->toArray();
 
-        $validated = $request->validate([
-            'name' => [
-                'required',
-                'string',
-                'max:150',
-                Rule::unique('gamefowl_lookups', 'name')->where('type', $type)->ignore($lookup->id),
-            ],
-            'description' => 'nullable|string',
-            'status' => 'required|string|in:active,inactive',
-        ]);
+        $validated = $request->validate($this->rules($type, $lookup->id));
+        $validated['rate'] = $this->rateFor($type, $validated);
 
         $lookup->update($validated);
 
@@ -147,6 +131,43 @@ class GamefowlLookupController extends Controller
         $lookup->delete();
 
         return redirect()->back()->with('success', "{$this->kindMeta($type)['singular']} deleted successfully.");
+    }
+
+    /**
+     * Rate is stored only for bloodline categories. Other lookup types always keep it null.
+     *
+     * @return array<string, mixed>
+     */
+    private function rules(string $type, $ignoreId = null): array
+    {
+        $rules = [
+            'name' => [
+                'required',
+                'string',
+                'max:150',
+                Rule::unique('gamefowl_lookups', 'name')->where('type', $type)->ignore($ignoreId),
+            ],
+            'description' => 'nullable|string',
+            'status' => 'required|string|in:active,inactive',
+        ];
+
+        if ($type === GamefowlLookup::TYPE_BLOODLINE) {
+            $rules['rate'] = 'required|numeric|min:0|max:100';
+        }
+
+        return $rules;
+    }
+
+    /**
+     * @param  array<string, mixed>  $validated
+     */
+    private function rateFor(string $type, array $validated): ?string
+    {
+        if ($type !== GamefowlLookup::TYPE_BLOODLINE) {
+            return null;
+        }
+
+        return number_format((float) $validated['rate'], 2, '.', '');
     }
 
     /**
