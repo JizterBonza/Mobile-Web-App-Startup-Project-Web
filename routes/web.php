@@ -20,6 +20,7 @@ use App\Http\Controllers\PaymentMethodController;
 use App\Http\Controllers\ContactMessageController;
 use App\Http\Controllers\DeliveryMethodController;
 use App\Http\Controllers\DeliveryRevenueSettingController;
+use App\Http\Controllers\DistrictController;
 use App\Http\Controllers\ZoneController;
 use App\Http\Controllers\SuperAdminProductController;
 use App\Http\Controllers\ProductCatalogRequestController;
@@ -361,6 +362,14 @@ Route::middleware(['auth', 'session.valid', 'user.type:super_admin'])->prefix('d
     Route::delete('/{id}', [DeliveryRevenueSettingController::class, 'destroy'])->name('destroy');
 });
 
+// Super Admin Districts
+Route::middleware(['auth', 'session.valid', 'user.type:super_admin'])->prefix('dashboard/super-admin/districts')->name('dashboard.super-admin.districts.')->group(function () {
+    Route::get('/', [DistrictController::class, 'index'])->name('index');
+    Route::post('/', [DistrictController::class, 'store'])->name('store');
+    Route::put('/{id}', [DistrictController::class, 'update'])->name('update');
+    Route::delete('/{id}', [DistrictController::class, 'destroy'])->name('destroy');
+});
+
 // Super Admin Zones
 Route::middleware(['auth', 'session.valid', 'user.type:super_admin'])->prefix('dashboard/super-admin/zones')->name('dashboard.super-admin.zones.')->group(function () {
     Route::get('/', [ZoneController::class, 'index'])->name('index');
@@ -675,6 +684,14 @@ Route::middleware(['auth', 'session.valid', 'user.type:admin'])->prefix('dashboa
     Route::put('/{id}', [DeliveryRevenueSettingController::class, 'update'])->name('update');
     Route::post('/{id}/activate', [DeliveryRevenueSettingController::class, 'activate'])->name('activate');
     Route::delete('/{id}', [DeliveryRevenueSettingController::class, 'destroy'])->name('destroy');
+});
+
+// Admin Districts
+Route::middleware(['auth', 'session.valid', 'user.type:admin'])->prefix('dashboard/admin/districts')->name('dashboard.admin.districts.')->group(function () {
+    Route::get('/', [DistrictController::class, 'index'])->name('index');
+    Route::post('/', [DistrictController::class, 'store'])->name('store');
+    Route::put('/{id}', [DistrictController::class, 'update'])->name('update');
+    Route::delete('/{id}', [DistrictController::class, 'destroy'])->name('destroy');
 });
 
 // Admin Zones

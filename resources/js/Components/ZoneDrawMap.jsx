@@ -99,6 +99,7 @@ export default function ZoneDrawMap({
   height = 400,
   className = '',
   active = true,
+  areaNoun = 'zone',
 }) {
   const mapRef = useRef(null)
   const mapInstanceRef = useRef(null)
@@ -446,7 +447,7 @@ export default function ZoneDrawMap({
           className="border rounded bg-light d-flex align-items-center justify-content-center text-muted"
           style={{ height: `${height}px` }}
         >
-          <span><i className="fas fa-map mr-2"></i>Configure Google Maps API key to draw zones.</span>
+          <span><i className="fas fa-map mr-2"></i>Configure Google Maps API key to draw {areaNoun}s.</span>
         </div>
       ) : !isGoogleLoaded ? (
         <div
@@ -506,17 +507,17 @@ export default function ZoneDrawMap({
             className="w-100 rounded border"
             style={{ height: `${height}px`, minHeight: 300, cursor: isDrawing ? 'crosshair' : undefined }}
             role="application"
-            aria-label="Map to draw zone boundary"
+            aria-label={`Map to draw ${areaNoun} boundary`}
           />
           <p className="mt-1 mb-0 small text-muted">
             {otherZones.length > 0 && (
               <span className="d-block">
-                Gray areas show existing zones for reference. Your zone is drawn in blue.
+                Gray areas show existing {areaNoun}s for reference. Your {areaNoun} is drawn in blue.
               </span>
             )}
             {isDrawing
-              ? 'Click on the map to place each corner of the zone. Use "Finish polygon" when you have at least 3 points.'
-              : 'Use "Draw boundary" to outline the zone on the map.'}
+              ? `Click on the map to place each corner of the ${areaNoun}. Use "Finish polygon" when you have at least 3 points.`
+              : `Use "Draw boundary" to outline the ${areaNoun} on the map.`}
           </p>
         </>
       )}
