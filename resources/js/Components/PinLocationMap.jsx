@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { requestCurrentPosition } from '../utils/currentLocation'
 
 /**
  * PinLocationMap Component
@@ -327,6 +328,21 @@ export default function PinLocationMap({
 
     mapInstanceRef.current = map
 
+    let cancelCurrentLocation = false
+    let userMovedMap = false
+    const dragListener = map.addListener('dragstart', () => {
+      userMovedMap = true
+    })
+    if (!hasInitial) {
+      requestCurrentPosition()
+        .then((pos) => {
+          if (cancelCurrentLocation || userMovedMap || mapInstanceRef.current !== map) return
+          map.setCenter(pos)
+          map.setZoom(DEFAULT_ZOOM)
+        })
+        .catch(() => {})
+    }
+
     if (hasInitial) {
       const marker = new window.google.maps.Marker({
         position: center,
@@ -424,6 +440,8 @@ export default function PinLocationMap({
     shopLabelOverlaysRef.current = shopLabelOverlays
 
     return () => {
+      cancelCurrentLocation = true
+      window.google.maps.event.removeListener(dragListener)
       polygonsRef.current.forEach((p) => p.setMap(null))
       polygonsRef.current = []
       zoneLabelOverlaysRef.current.forEach((o) => o.setMap(null))

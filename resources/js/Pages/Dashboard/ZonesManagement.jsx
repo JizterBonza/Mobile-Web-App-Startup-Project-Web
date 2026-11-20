@@ -13,7 +13,7 @@ function getInitials(name) {
   return name.slice(0, 2).toUpperCase()
 }
 
-export default function ZonesManagement({ auth, zones = [], flash }) {
+export default function ZonesManagement({ auth, zones = [], districts = [], flash }) {
   const [showAddModal, setShowAddModal] = useState(false)
   const [showAddModalAnimation, setShowAddModalAnimation] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
@@ -28,14 +28,16 @@ export default function ZonesManagement({ auth, zones = [], flash }) {
   const [searchQuery, setSearchQuery] = useState('')
   const [sortBy, setSortBy] = useState('name')
   const [statusFilter, setStatusFilter] = useState('All')
+  const [districtFilter, setDistrictFilter] = useState('All')
+  const [assignmentNotice, setAssignmentNotice] = useState('')
   const [itemsPerPage, setItemsPerPage] = useState(10)
   const [currentPage, setCurrentPage] = useState(1)
 
   const [togglingZoneId, setTogglingZoneId] = useState(null)
   const [isDeleting, setIsDeleting] = useState(false)
 
-  const addForm = useForm({ name: '', description: '', boundary: [], status: 'active' })
-  const editForm = useForm({ name: '', description: '', boundary: [], status: 'active' })
+  const addForm = useForm({ district_id: '', name: '', description: '', boundary: [], status: 'active' })
+  const editForm = useForm({ district_id: '', name: '', description: '', boundary: [], status: 'active' })
 
   useEffect(() => {
     if (showAddModal) setTimeout(() => setShowAddModalAnimation(true), 10)
@@ -57,7 +59,7 @@ export default function ZonesManagement({ auth, zones = [], flash }) {
     setTimeout(() => {
       setShowAddModal(false)
       addForm.reset()
-      addForm.setData({ name: '', description: '', boundary: [], status: 'active' })
+      addForm.setData({ district_id: '', name: '', description: '', boundary: [], status: 'active' })
     }, 300)
   }
 
@@ -102,12 +104,18 @@ export default function ZonesManagement({ auth, zones = [], flash }) {
   const handleStatusToggle = (e, zone) => {
     e.stopPropagation()
     if (togglingZoneId !== null) return
+    if (!zone.district_id) {
+      setAssignmentNotice('Assign this zone to a district before changing its status.')
+      return
+    }
+    setAssignmentNotice('')
     const isActive = zone.status_label === 'active' || zone.status === true
     const newStatus = isActive ? 'inactive' : 'active'
     setTogglingZoneId(zone.id)
     router.put(
       `${baseRoute}/${zone.id}`,
       {
+        district_id: zone.district_id,
         name: zone.name,
         description: zone.description || '',
         boundary: Array.isArray(zone.boundary) ? zone.boundary : [],
@@ -133,6 +141,7 @@ export default function ZonesManagement({ auth, zones = [], flash }) {
   const handleEditZone = (zone) => {
     setSelectedZone(zone)
     editForm.setData({
+      district_id: zone.district_id ? String(zone.district_id) : '',
       name: String(zone.name || ''),
       description: String(zone.description || ''),
       boundary: Array.isArray(zone.boundary) && zone.boundary.length ? zone.boundary : [],
@@ -181,9 +190,23 @@ export default function ZonesManagement({ auth, zones = [], flash }) {
     [zones]
   )
 
+  const districtBoundaryRef = (districtId) => {
+    const district = districts.find((d) => String(d.id) === String(districtId))
+    if (!district || !Array.isArray(district.boundary) || district.boundary.length < 3) return []
+    return [{ id: `district-${district.id}`, name: `District: ${district.name}`, boundary: district.boundary }]
+  }
+
+  const addMapReferenceZones = useMemo(
+    () => [...districtBoundaryRef(addForm.data.district_id), ...zonesWithBoundary],
+    [districts, addForm.data.district_id, zonesWithBoundary]
+  )
+
   const editMapReferenceZones = useMemo(
-    () => zonesWithBoundary.filter((z) => z.id !== selectedZone?.id),
-    [zonesWithBoundary, selectedZone?.id]
+    () => [
+      ...districtBoundaryRef(editForm.data.district_id),
+      ...zonesWithBoundary.filter((z) => z.id !== selectedZone?.id),
+    ],
+    [districts, editForm.data.district_id, zonesWithBoundary, selectedZone?.id]
   )
 
   const sortedZones = useMemo(() => {
@@ -192,26 +215,32 @@ export default function ZonesManagement({ auth, zones = [], flash }) {
       const isActive = z.status_label === 'active' || z.status === true
       if (statusFilter === 'Active' && !isActive) return false
       if (statusFilter === 'Inactive' && isActive) return false
+      if (districtFilter === 'Unassigned' && z.district_id) return false
+      if (districtFilter !== 'All' && districtFilter !== 'Unassigned' && String(z.district_id) !== districtFilter) return false
       if (!q) return true
       const name = (z.name || '').toLowerCase()
       const desc = (z.description || '').toLowerCase()
-      return name.includes(q) || desc.includes(q)
+      const districtName = (z.district_name || '').toLowerCase()
+      return name.includes(q) || desc.includes(q) || districtName.includes(q)
     })
     list = [...list].sort((a, b) => {
+      if (sortBy === 'district') {
+        return (a.district_name || '').localeCompare(b.district_name || '') || (a.name || '').localeCompare(b.name || '')
+      }
       if (sortBy === 'name') return (a.name || '').localeCompare(b.name || '')
       const ta = a.created_at ? new Date(a.created_at).getTime() : 0
       const tb = b.created_at ? new Date(b.created_at).getTime() : 0
       return tb - ta
     })
     return list
-  }, [zones, searchQuery, sortBy, statusFilter])
+  }, [zones, searchQuery, sortBy, statusFilter, districtFilter])
 
   const totalPages = Math.max(1, Math.ceil(sortedZones.length / itemsPerPage))
   const startIndex = (currentPage - 1) * itemsPerPage
   const endIndex = startIndex + itemsPerPage
   const displayedZones = sortedZones.slice(startIndex, endIndex)
 
-  useEffect(() => { setCurrentPage(1) }, [searchQuery, sortBy, statusFilter, itemsPerPage])
+  useEffect(() => { setCurrentPage(1) }, [searchQuery, sortBy, statusFilter, districtFilter, itemsPerPage])
   useEffect(() => {
     if (currentPage > totalPages) setCurrentPage(Math.max(1, totalPages))
   }, [currentPage, totalPages])
@@ -257,7 +286,7 @@ export default function ZonesManagement({ auth, zones = [], flash }) {
           <div>
             <h1 className="mb-2 text-2xl font-semibold text-[#102059]">Zones</h1>
             <p className="text-sm text-[#6B7280]">
-              Manage delivery zones in the system
+              Manage delivery zones. Every zone belongs to a district.
             </p>
           </div>
           <button
@@ -276,7 +305,7 @@ export default function ZonesManagement({ auth, zones = [], flash }) {
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#9CA3AF]" />
               <input
                 type="text"
-                placeholder="Search zone name or description..."
+                placeholder="Search zone, description, or district..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full rounded-lg border border-[#E5E7EB] bg-[#ffffff] py-2 pl-10 pr-4 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[#102059]"
@@ -285,7 +314,15 @@ export default function ZonesManagement({ auth, zones = [], flash }) {
             <div className="flex flex-wrap gap-3">
               <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className={filterSelectClass}>
                 <option value="name">Sort by Name</option>
+                <option value="district">Sort by District</option>
                 <option value="date">Sort by Date Added</option>
+              </select>
+              <select value={districtFilter} onChange={(e) => setDistrictFilter(e.target.value)} className={filterSelectClass}>
+                <option value="All">All Districts</option>
+                <option value="Unassigned">Unassigned</option>
+                {districts.map((d) => (
+                  <option key={d.id} value={String(d.id)}>{d.name}</option>
+                ))}
               </select>
               <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className={filterSelectClass}>
                 <option value="All">All Status</option>
@@ -305,6 +342,20 @@ export default function ZonesManagement({ auth, zones = [], flash }) {
             </div>
           </div>
         </div>
+
+        {assignmentNotice && (
+          <div className="alert alert-warning alert-dismissible fade show" role="alert">
+            {assignmentNotice}
+            <button
+              type="button"
+              className="close"
+              aria-label="Close"
+              onClick={() => setAssignmentNotice('')}
+            >
+              <span aria-hidden="true">&times;</span>
+            </button>
+          </div>
+        )}
 
         {/* List */}
         <div className="rounded-lg border border-[#E5E7EB] bg-white">
@@ -331,6 +382,9 @@ export default function ZonesManagement({ auth, zones = [], flash }) {
                                 ? z.description.slice(0, 60) + '…'
                                 : z.description
                               : null}
+                            <span className="block text-xs text-[#244693]">
+                              {z.district_name || 'No district'}
+                            </span>
                             <span className="block text-xs text-[#9CA3AF] sm:inline sm:ml-2">
                               {z.shops_count ?? 0} shop(s)
                             </span>
@@ -412,6 +466,8 @@ export default function ZonesManagement({ auth, zones = [], flash }) {
               of <span className="font-semibold text-[#102059]">{sortedZones.length}</span> zones
               {searchQuery && ` matching "${searchQuery}"`}
               {statusFilter !== 'All' && ` with status "${statusFilter}"`}
+              {districtFilter === 'Unassigned' && ' without a district'}
+              {districtFilter !== 'All' && districtFilter !== 'Unassigned' && ` in "${districts.find((d) => String(d.id) === districtFilter)?.name || 'district'}"`}
             </p>
 
             {totalPages > 1 && (
@@ -453,6 +509,24 @@ export default function ZonesManagement({ auth, zones = [], flash }) {
                 <form onSubmit={handleAddZone}>
                   <div className="modal-body">
                     <div className="form-group">
+                      <label>District <span className="text-danger">*</span></label>
+                      <select
+                        className={`form-control ${addForm.errors.district_id ? 'is-invalid' : ''}`}
+                        value={addForm.data.district_id}
+                        onChange={(e) => addForm.setData('district_id', e.target.value)}
+                        required
+                      >
+                        <option value="">Select a district</option>
+                        {districts.map((d) => (
+                          <option key={d.id} value={d.id}>{d.name}</option>
+                        ))}
+                      </select>
+                      {addForm.errors.district_id && <div className="invalid-feedback">{addForm.errors.district_id}</div>}
+                      {districts.length === 0 && (
+                        <small className="form-text text-danger">Create a district before adding a zone.</small>
+                      )}
+                    </div>
+                    <div className="form-group">
                       <label>Name <span className="text-danger">*</span></label>
                       <input
                         type="text"
@@ -480,7 +554,7 @@ export default function ZonesManagement({ auth, zones = [], flash }) {
                       <ZoneDrawMap
                         key={showAddModal ? 'add-zone-map' : 'add-zone-map-closed'}
                         initialBoundary={addForm.data.boundary}
-                        otherZones={zonesWithBoundary}
+                        otherZones={addMapReferenceZones}
                         onBoundaryChange={(boundary) => addForm.setData('boundary', boundary)}
                         height={320}
                         active={showAddModalAnimation}
@@ -527,6 +601,21 @@ export default function ZonesManagement({ auth, zones = [], flash }) {
                 </div>
                 <form onSubmit={handleUpdateZone}>
                   <div className="modal-body">
+                    <div className="form-group">
+                      <label>District <span className="text-danger">*</span></label>
+                      <select
+                        className={`form-control ${editForm.errors.district_id ? 'is-invalid' : ''}`}
+                        value={editForm.data.district_id}
+                        onChange={(e) => editForm.setData('district_id', e.target.value)}
+                        required
+                      >
+                        <option value="">Select a district</option>
+                        {districts.map((d) => (
+                          <option key={d.id} value={d.id}>{d.name}</option>
+                        ))}
+                      </select>
+                      {editForm.errors.district_id && <div className="invalid-feedback">{editForm.errors.district_id}</div>}
+                    </div>
                     <div className="form-group">
                       <label>Name <span className="text-danger">*</span></label>
                       <input

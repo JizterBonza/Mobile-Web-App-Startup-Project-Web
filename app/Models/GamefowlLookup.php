@@ -16,6 +16,14 @@ class GamefowlLookup extends Model
         'type',
         'name',
         'description',
+        'rate',
         'status',
     ];
+
+    protected function casts(): array
+    {
+        return [
+            'rate' => 'decimal:2',
+        ];
+    }
 }

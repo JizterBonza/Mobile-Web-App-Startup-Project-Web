@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { requestCurrentPosition } from '../utils/currentLocation'
 
 /**
  * ZoneDrawMap – draw a zone boundary (polygon) on a Google Map.
@@ -99,6 +100,7 @@ export default function ZoneDrawMap({
   height = 400,
   className = '',
   active = true,
+  areaNoun = 'zone',
 }) {
   const mapRef = useRef(null)
   const mapInstanceRef = useRef(null)
@@ -174,10 +176,15 @@ export default function ZoneDrawMap({
     }
 
     extendPath(boundary)
-    otherZonesRef.current.forEach((zone) => extendPath(zone.boundary))
+    // An empty drawing should stay on the device location. Fitting every
+    // reference zone would zoom the new map away from where the user is.
+    if (hasPoints) {
+      otherZonesRef.current.forEach((zone) => extendPath(zone.boundary))
+    }
 
-    if (!hasPoints) return
+    if (!hasPoints) return false
     map.fitBounds(bounds, { top: 40, right: 40, bottom: 40, left: 40 })
+    return true
   }, [])
 
   const renderOtherZones = useCallback((map) => {
@@ -312,9 +319,25 @@ export default function ZoneDrawMap({
       renderPolygon(initialBoundary, map)
     }
 
-    fitMapToContent(map, hasInitial ? initialBoundary : [])
+    const fitted = fitMapToContent(map, hasInitial ? initialBoundary : [])
+    let cancelCurrentLocation = false
+    let userMovedMap = false
+    const dragListener = map.addListener('dragstart', () => {
+      userMovedMap = true
+    })
+    if (!fitted) {
+      requestCurrentPosition()
+        .then((pos) => {
+          if (cancelCurrentLocation || userMovedMap || mapInstanceRef.current !== map) return
+          map.setCenter(pos)
+          map.setZoom(DEFAULT_ZOOM)
+        })
+        .catch(() => {})
+    }
 
     return () => {
+      cancelCurrentLocation = true
+      window.google?.maps?.event.removeListener(dragListener)
       if (mapClickListenerRef.current) {
         window.google.maps.event.removeListener(mapClickListenerRef.current)
         mapClickListenerRef.current = null
@@ -446,7 +469,7 @@ export default function ZoneDrawMap({
           className="border rounded bg-light d-flex align-items-center justify-content-center text-muted"
           style={{ height: `${height}px` }}
         >
-          <span><i className="fas fa-map mr-2"></i>Configure Google Maps API key to draw zones.</span>
+          <span><i className="fas fa-map mr-2"></i>Configure Google Maps API key to draw {areaNoun}s.</span>
         </div>
       ) : !isGoogleLoaded ? (
         <div
@@ -506,17 +529,17 @@ export default function ZoneDrawMap({
             className="w-100 rounded border"
             style={{ height: `${height}px`, minHeight: 300, cursor: isDrawing ? 'crosshair' : undefined }}
             role="application"
-            aria-label="Map to draw zone boundary"
+            aria-label={`Map to draw ${areaNoun} boundary`}
           />
           <p className="mt-1 mb-0 small text-muted">
             {otherZones.length > 0 && (
               <span className="d-block">
-                Gray areas show existing zones for reference. Your zone is drawn in blue.
+                Gray areas show existing {areaNoun}s for reference. Your {areaNoun} is drawn in blue.
               </span>
             )}
             {isDrawing
-              ? 'Click on the map to place each corner of the zone. Use "Finish polygon" when you have at least 3 points.'
-              : 'Use "Draw boundary" to outline the zone on the map.'}
+              ? `Click on the map to place each corner of the ${areaNoun}. Use "Finish polygon" when you have at least 3 points.`
+              : `Use "Draw boundary" to outline the ${areaNoun} on the map.`}
           </p>
         </>
       )}

@@ -388,6 +388,12 @@ export default function KlasmeytDashboardLayout({
                                             Delivery Methods
                                         </Link>
                                         <Link
+                                            href={`${home}/districts`}
+                                            className="block rounded-md px-3 py-2 text-sm text-white/90 hover:bg-white/10"
+                                        >
+                                            Districts
+                                        </Link>
+                                        <Link
                                             href={`${home}/zones`}
                                             className="block rounded-md px-3 py-2 text-sm text-white/90 hover:bg-white/10"
                                         >

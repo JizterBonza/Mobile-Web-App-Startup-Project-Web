@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\ActivityLog;
+use App\Models\District;
 use App\Models\Zone;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -16,22 +17,38 @@ class ZoneController extends Controller
     public function index(Request $request)
     {
         $zones = Zone::query()
+            ->with('district:id,name')
+            ->withCount('shops')
             ->orderBy('name')
             ->get()
             ->map(fn ($zone) => [
                 'id' => $zone->id,
+                'district_id' => $zone->district_id,
+                'district_name' => $zone->district?->name,
                 'name' => $zone->name,
                 'description' => $zone->description,
                 'boundary' => $zone->boundary,
                 'status' => $zone->status,
                 'status_label' => $zone->status ? 'active' : 'inactive',
-                'shops_count' => $zone->shops()->count(),
+                'shops_count' => $zone->shops_count,
                 'created_at' => $zone->created_at?->toISOString(),
                 'updated_at' => $zone->updated_at?->toISOString(),
             ]);
 
+        $districts = District::query()
+            ->orderBy('name')
+            ->get()
+            ->map(fn ($district) => [
+                'id' => $district->id,
+                'name' => $district->name,
+                'boundary' => $district->boundary,
+                'status' => $district->status,
+                'status_label' => $district->status ? 'active' : 'inactive',
+            ]);
+
         return Inertia::render('Dashboard/ZonesManagement', [
             'zones' => $zones,
+            'districts' => $districts,
             'flash' => $request->session()->get('flash', []),
         ]);
     }
@@ -42,6 +59,7 @@ class ZoneController extends Controller
     public function store(Request $request)
     {
         $validated = $request->validate([
+            'district_id' => 'required|integer|exists:districts,id',
             'name' => 'required|string|max:150',
             'description' => 'nullable|string|max:500',
             'boundary' => 'required|array',
@@ -79,6 +97,7 @@ class ZoneController extends Controller
         $oldValues = $zone->toArray();
 
         $validated = $request->validate([
+            'district_id' => 'required|integer|exists:districts,id',
             'name' => 'required|string|max:150',
             'description' => 'nullable|string|max:500',
             'boundary' => 'required|array',

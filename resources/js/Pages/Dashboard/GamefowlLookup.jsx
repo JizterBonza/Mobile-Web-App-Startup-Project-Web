@@ -13,11 +13,17 @@ function lookupPath(base, type) {
     return `${base}/classes`
 }
 
-const blankLookupForm = { name: '', description: '', status: 'active' }
+const blankLookupForm = { name: '', description: '', rate: '', status: 'active' }
+
+function formatRate(rate) {
+    if (rate === null || rate === undefined || rate === '') return '—'
+    return `${Number(rate)}%`
+}
 
 export default function GamefowlLookup({ auth, kind, items = [], flash }) {
     const base = gamefowlBase(auth?.user?.user_type)
     const path = lookupPath(base, kind?.type)
+    const isBloodline = kind?.type === 'bloodline'
     const [showAdd, setShowAdd] = useState(false)
     const [editing, setEditing] = useState(null)
     const [removing, setRemoving] = useState(null)
@@ -71,6 +77,7 @@ export default function GamefowlLookup({ auth, kind, items = [], flash }) {
         editForm.setData({
             name: item.name || '',
             description: item.description || '',
+            rate: item.rate != null ? String(item.rate) : '',
             status: item.status || 'active',
         })
     }
@@ -148,11 +155,19 @@ export default function GamefowlLookup({ auth, kind, items = [], flash }) {
                                 <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg border border-[#E5E7EB] bg-[#F0F2F5]">
                                     <Tag className="h-5 w-5 text-[#9CA3AF]" />
                                 </div>
-                                <div className="grid flex-1 grid-cols-1 gap-4 md:grid-cols-[1fr_100px_160px_80px]">
+                                <div className={`grid flex-1 grid-cols-1 gap-4 ${isBloodline ? 'md:grid-cols-[1fr_90px_100px_160px_80px]' : 'md:grid-cols-[1fr_100px_160px_80px]'}`}>
                                     <div className="min-w-0">
                                         <p className="truncate text-sm font-bold text-[#102059]">{item.name}</p>
                                         <p className="truncate text-xs text-[#6B7280]">{item.description || '—'}</p>
                                     </div>
+                                    {isBloodline && (
+                                        <div className="flex items-center">
+                                            <div>
+                                                <p className="text-xs font-semibold uppercase tracking-wider text-[#9CA3AF]">Rate</p>
+                                                <p className="mt-0.5 text-xs text-[#102059]">{formatRate(item.rate)}</p>
+                                            </div>
+                                        </div>
+                                    )}
                                     <div className="flex items-center">
                                         <div>
                                             <p className="text-xs font-semibold uppercase tracking-wider text-[#9CA3AF]">ID</p>
@@ -209,6 +224,7 @@ export default function GamefowlLookup({ auth, kind, items = [], flash }) {
                 <LookupModal
                     title={`Add ${kind?.singular}`}
                     form={addForm}
+                    showRate={isBloodline}
                     inputClass={inputClass}
                     onClose={() => { setShowAdd(false); clearAddForm() }}
                     onSubmit={(event) => {
@@ -226,6 +242,7 @@ export default function GamefowlLookup({ auth, kind, items = [], flash }) {
                 <LookupModal
                     title={`Edit ${kind?.singular}`}
                     form={editForm}
+                    showRate={isBloodline}
                     inputClass={inputClass}
                     onClose={() => setEditing(null)}
                     onSubmit={(event) => {
@@ -260,7 +277,7 @@ export default function GamefowlLookup({ auth, kind, items = [], flash }) {
     )
 }
 
-function LookupModal({ title, form, inputClass, onClose, onSubmit, submitLabel }) {
+function LookupModal({ title, form, showRate = false, inputClass, onClose, onSubmit, submitLabel }) {
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
             <div className="w-full max-w-lg rounded-lg border border-[#E5E7EB] bg-white p-6">
@@ -275,6 +292,26 @@ function LookupModal({ title, form, inputClass, onClose, onSubmit, submitLabel }
                         <label className="mb-2 block text-xs text-[#6B7280]">Description</label>
                         <textarea className={inputClass} rows={3} value={form.data.description} onChange={(event) => form.setData('description', event.target.value)} />
                     </div>
+                    {showRate && (
+                        <div>
+                            <label className="mb-2 block text-xs text-[#6B7280]">Rate (%) *</label>
+                            <div className="relative">
+                                <input
+                                    type="number"
+                                    className={`${inputClass} pr-10`}
+                                    value={form.data.rate}
+                                    onChange={(event) => form.setData('rate', event.target.value)}
+                                    min="0"
+                                    max="100"
+                                    step="0.01"
+                                    placeholder="0"
+                                    required
+                                />
+                                <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-sm text-[#6B7280]">%</span>
+                            </div>
+                            {form.errors.rate && <p className="mt-1 text-xs text-[#E20E28]">{form.errors.rate}</p>}
+                        </div>
+                    )}
                     <div>
                         <label className="mb-2 block text-xs text-[#6B7280]">Status *</label>
                         <select className={inputClass} value={form.data.status} onChange={(event) => form.setData('status', event.target.value)}>
