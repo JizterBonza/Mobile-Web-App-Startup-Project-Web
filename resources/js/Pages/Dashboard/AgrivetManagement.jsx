@@ -3,6 +3,7 @@ import { Link, useForm, router } from '@inertiajs/react'
 import { Search, Trash2, Pencil, Store, Upload, X } from 'lucide-react'
 import SuperAdminOrAdminLayout from '../../Layouts/SuperAdminOrAdminLayout'
 import { storageUrl } from '../../utils/storageUrl'
+import { formatHalfDaySchedule } from '../../utils/storeSchedule'
 
 function getInitials(name) {
   if (!name || typeof name !== 'string') return '?'
@@ -41,6 +42,7 @@ function parseAgrivetPermits(permits) {
           permitDocumentUrl: parsed.permit_document_url || null,
           operatingDays: parsed.operating_days || '',
           operatingHours: parsed.operating_hours || '',
+          halfDaySchedule: parsed.half_day_schedule || '',
           notes: parsed.notes || '',
         }
       }
@@ -57,6 +59,7 @@ function serializeAgrivetPermits(structured, notes) {
     permit_document_url: structured.permitDocumentUrl,
     operating_days: structured.operatingDays,
     operating_hours: structured.operatingHours,
+    half_day_schedule: structured.halfDaySchedule || '',
     notes: notes || '',
   })
 }
@@ -1172,6 +1175,11 @@ export default function AgrivetManagement({ auth, agrivets = [], flash }) {
                                 <p className="text-sm text-[#102059]">
                                   {editPermitsStructured.operatingHours || '—'}
                                 </p>
+                                {formatHalfDaySchedule(editPermitsStructured.halfDaySchedule) && (
+                                  <p className="mt-1 text-xs text-[#65676B]">
+                                    Half-day: {formatHalfDaySchedule(editPermitsStructured.halfDaySchedule)}
+                                  </p>
+                                )}
                               </div>
                             </div>
 

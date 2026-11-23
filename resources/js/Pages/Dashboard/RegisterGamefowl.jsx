@@ -30,6 +30,7 @@ function lookupName(items, id) {
 export default function RegisterGamefowl({ auth, bloodlines = [], ageTypes = [], classes = [], gamefowl = null, requestMode = false }) {
     const base = gamefowlBase(auth?.user?.user_type)
     const isEdit = Boolean(gamefowl?.id)
+    const flexibleImageCount = requestMode || isEdit
     const cancelHref = requestMode ? '/dashboard/owner-manager/farm?tab=gamefowl' : (isEdit ? `${base}/${gamefowl.id}` : base)
     const submitHref = requestMode ? '/dashboard/owner-manager/farm/gamefowls/request' : (isEdit ? `${base}/${gamefowl.id}` : base)
 
@@ -138,10 +139,10 @@ export default function RegisterGamefowl({ auth, bloodlines = [], ageTypes = [],
 
         if (currentStep === 2) {
             const uploadedCount = uploadedPhotos.filter(Boolean).length
-            const minimumPhotos = requestMode ? 3 : 5
+            const minimumPhotos = flexibleImageCount ? 3 : 5
             if (uploadedCount < minimumPhotos || uploadedCount > 5) {
                 setErrorMessage(
-                    requestMode
+                    flexibleImageCount
                         ? `Please upload 3 to 5 gamefowl images. You have uploaded ${uploadedCount}.`
                         : `Please upload all 5 gamefowl images. You have uploaded ${uploadedCount} out of 5.`
                 )
@@ -184,10 +185,16 @@ export default function RegisterGamefowl({ auth, bloodlines = [], ageTypes = [],
             if (isEdit) payload._method = 'put'
 
             const images = {}
+            const keptImageIndexes = []
             uploadedPhotos.forEach((slot, index) => {
                 if (slot?.file) images[index] = slot.file
+                else if (isEdit && slot?.preview && !String(slot.preview).startsWith('blob:')) keptImageIndexes.push(index)
             })
             if (!isEdit || Object.keys(images).length) payload.images = images
+            if (isEdit) {
+                payload.sync_existing_images = 1
+                payload.kept_image_indexes = keptImageIndexes
+            }
 
             return payload
         })
@@ -345,12 +352,12 @@ export default function RegisterGamefowl({ auth, bloodlines = [], ageTypes = [],
                     {currentStep === 2 && (
                         <div className="rounded-xl border border-[#E5E7EB] bg-white p-8 shadow-sm">
                             <h1 className="text-lg font-semibold text-[#111827]">Gamefowl Images</h1>
-                            <p className={`mt-1 text-sm text-[#6B7280] ${requestMode ? '' : 'mb-8'}`}>
-                                {requestMode
-                                    ? 'Upload at least 3 images of your gamefowl (maximum 5). Extra slots are optional. Select one photo as the primary thumbnail.'
+                            <p className={`mt-1 text-sm text-[#6B7280] ${flexibleImageCount ? '' : 'mb-8'}`}>
+                                {flexibleImageCount
+                                    ? `Upload at least 3 images of ${requestMode ? 'your' : 'the'} gamefowl (maximum 5). Extra slots are optional. Select one photo as the primary thumbnail.`
                                     : 'Upload 5 images of your gamefowl and select one to be the primary thumbnail.'}
                             </p>
-                            {requestMode && (
+                            {flexibleImageCount && (
                                 <p className="mt-2 mb-8 text-xs font-semibold text-[#102059]">
                                     {uploadedPhotos.filter(Boolean).length} of 5 images uploaded (minimum 3)
                                 </p>
@@ -383,7 +390,7 @@ export default function RegisterGamefowl({ auth, bloodlines = [], ageTypes = [],
                                         </label>
                                         {uploadedPhotos[index] && (
                                             <>
-                                                {requestMode && (
+                                                {flexibleImageCount && (
                                                     <button
                                                         type="button"
                                                         onClick={() => handlePhotoRemove(index)}
@@ -413,7 +420,7 @@ export default function RegisterGamefowl({ auth, bloodlines = [], ageTypes = [],
                                             <span className="text-xs font-semibold text-[#6B7280]">
                                                 {uploadedPhotos[index] && primaryPhotoIndex === index
                                                     ? <span className="text-[#D3A218]">Primary</span>
-                                                    : requestMode && !uploadedPhotos[index]
+                                                    : flexibleImageCount && !uploadedPhotos[index]
                                                         ? `Photo ${index + 1} · ${index < 3 ? 'Required' : 'Optional'}`
                                                         : `Photo ${index + 1}`
                                                 }

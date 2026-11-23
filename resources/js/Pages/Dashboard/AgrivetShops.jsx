@@ -2,8 +2,10 @@ import { useState, useEffect, useMemo } from 'react'
 import { useForm, router } from '@inertiajs/react'
 import { ArrowLeft, Plus, RotateCcw, Star, Store, Trash2, Upload } from 'lucide-react'
 import SuperAdminOrAdminLayout from '../../Layouts/SuperAdminOrAdminLayout'
+import HalfDayHoursFields from '../../Components/HalfDayHoursFields'
 import PinLocationMap from '../../Components/PinLocationMap'
 import { storageUrl } from '../../utils/storageUrl'
+import { formatHalfDaySchedule, halfDayError } from '../../utils/storeSchedule'
 
 const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 const FULL_DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
@@ -47,6 +49,7 @@ export default function AgrivetShops({ auth, agrivet, zones = [], shops = [], fl
   const [flashSuccessDismissed, setFlashSuccessDismissed] = useState(false)
   const [flashErrorDismissed, setFlashErrorDismissed] = useState(false)
   const [operatingDays, setOperatingDays] = useState([])
+  const [halfDayFormError, setHalfDayFormError] = useState('')
   const [storeImagePreview, setStoreImagePreview] = useState(null)
   const [permitImagePreview, setPermitImagePreview] = useState(null)
   const [permitIsPdf, setPermitIsPdf] = useState(false)
@@ -63,6 +66,9 @@ export default function AgrivetShops({ auth, agrivet, zones = [], shops = [], fl
     opening_time: '08:00',
     closing_time: '18:00',
     operating_days: '',
+    half_day: '',
+    half_day_opening: '',
+    half_day_closing: '',
     store_image: null,
     permit_image: null,
     shop_status: 'active',
@@ -125,6 +131,7 @@ export default function AgrivetShops({ auth, agrivet, zones = [], shops = [], fl
   const resetAddFormState = () => {
     addForm.reset()
     setOperatingDays([])
+    setHalfDayFormError('')
     setStoreImagePreview(null)
     setPermitImagePreview(null)
     setPermitIsPdf(false)
@@ -205,6 +212,17 @@ export default function AgrivetShops({ auth, agrivet, zones = [], shops = [], fl
       alert('Please set both opening and closing times for your store.')
       return
     }
+    const halfDayMessage = halfDayError({
+      day: addForm.data.half_day,
+      opening: addForm.data.half_day_opening,
+      closing: addForm.data.half_day_closing,
+      operatingDays,
+    })
+    if (halfDayMessage) {
+      setHalfDayFormError(halfDayMessage)
+      return
+    }
+    setHalfDayFormError('')
 
     const daysSorted = [...operatingDays].sort((a, b) => FULL_DAYS.indexOf(a) - FULL_DAYS.indexOf(b))
     addForm.transform((data) => ({
@@ -540,6 +558,12 @@ export default function AgrivetShops({ auth, agrivet, zones = [], shops = [], fl
                           <span className="font-semibold text-[#102059]">Hours:</span>{' '}
                           {shop.operating_hours || '—'}
                         </div>
+                        {formatHalfDaySchedule(shop.half_day_schedule) && (
+                          <div>
+                            <span className="font-semibold text-[#102059]">Half-day:</span>{' '}
+                            {formatHalfDaySchedule(shop.half_day_schedule)}
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -852,6 +876,24 @@ export default function AgrivetShops({ auth, agrivet, zones = [], shops = [], fl
                         </div>
                       </div>
                     </div>
+
+                    <HalfDayHoursFields
+                      variant="bootstrap"
+                      operatingDays={operatingDays}
+                      day={addForm.data.half_day}
+                      opening={addForm.data.half_day_opening}
+                      closing={addForm.data.half_day_closing}
+                      error={halfDayFormError || addForm.errors.half_day || addForm.errors.half_day_closing}
+                      onChange={(next) => {
+                        setHalfDayFormError('')
+                        addForm.setData((data) => ({
+                          ...data,
+                          half_day: next.day,
+                          half_day_opening: next.opening,
+                          half_day_closing: next.closing,
+                        }))
+                      }}
+                    />
 
                     <div className="row">
                       <div className="col-md-12">

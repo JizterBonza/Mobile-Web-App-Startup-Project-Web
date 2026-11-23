@@ -257,9 +257,15 @@ export default function Refunds({ auth, refunds, shops = [], summary = {}, filte
                         <div className="min-w-0">
                           <div className="text-sm font-bold text-[#102059]">{name}</div>
                           <div className="truncate text-sm text-[#6B7280]">{record.order_code}</div>
-                          <div className="mt-0.5 truncate text-xs text-[#9CA3AF]">
-                            {record.customer?.name || 'Customer'}{record.reason ? ` · ${record.reason}` : ''}
+                          <div className="mt-0.5 truncate text-xs text-[#6B7280]">
+                            {record.customer?.name || 'Customer'}
                           </div>
+                          <div className="truncate text-xs font-medium text-[#102059]">
+                            {record.customer?.contact_number || 'No contact number'}
+                          </div>
+                          {record.reason && (
+                            <div className="mt-0.5 truncate text-xs text-[#9CA3AF]">{record.reason}</div>
+                          )}
                           <div className="mt-1 text-xs text-[#9CA3AF] lg:hidden">
                             {date} {time}
                           </div>
@@ -364,8 +370,8 @@ export default function Refunds({ auth, refunds, shops = [], summary = {}, filte
                 <DetailRow label="Business" value={detail.shop.agrivet_name} />
               )}
               <DetailRow label="Customer" value={detail.customer?.name || '—'} />
+              <DetailRow label="Contact number" value={detail.customer?.contact_number || '—'} />
               <DetailRow label="Email" value={detail.customer?.email || '—'} />
-              <DetailRow label="Mobile" value={detail.customer?.mobile_number || '—'} />
               <DetailRow label="Cancelled by" value={detail.cancelled_by || '—'} />
               <DetailRow label="Reason" value={detail.reason || '—'} />
               <DetailRow label="Payment method" value={detail.payment_method || '—'} />

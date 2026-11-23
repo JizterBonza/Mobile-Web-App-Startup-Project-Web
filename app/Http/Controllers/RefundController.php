@@ -31,7 +31,8 @@ class RefundController extends Controller
 
         $query = Refund::query()->with([
             'shop.agrivet:id,name',
-            'order.orderDetail:id,order_code,payment_method,total_amount',
+            'order.orderDetail:id,order_code,payment_method,total_amount,address_id',
+            'order.orderDetail.address:id,contact_number',
             'customer.userDetail:id,first_name,last_name,email,mobile_number',
             'cancelledBy.userDetail:id,first_name,last_name',
             'refundedBy.userDetail:id,first_name,last_name',
@@ -58,7 +59,10 @@ class RefundController extends Controller
                 })->orWhereHas('customer.userDetail', function ($detail) use ($term) {
                     $detail->where('first_name', 'like', $term)
                         ->orWhere('last_name', 'like', $term)
-                        ->orWhere('email', 'like', $term);
+                        ->orWhere('email', 'like', $term)
+                        ->orWhere('mobile_number', 'like', $term);
+                })->orWhereHas('order.orderDetail.address', function ($address) use ($term) {
+                    $address->where('contact_number', 'like', $term);
                 });
             });
         }
@@ -100,6 +104,7 @@ class RefundController extends Controller
                     'name' => $this->personName($refund->customer),
                     'email' => $refund->customer?->userDetail?->email,
                     'mobile_number' => $refund->customer?->userDetail?->mobile_number,
+                    'contact_number' => $this->customerContact($refund),
                 ],
                 'cancelled_by' => $this->personName($refund->cancelledBy),
                 'amount' => $refund->amount,
@@ -191,6 +196,18 @@ class RefundController extends Controller
     {
         return $user !== null
             && in_array($user->user_type, [User::TYPE_SUPER_ADMIN, User::TYPE_ADMIN], true);
+    }
+
+    private function customerContact(Refund $refund): ?string
+    {
+        $addressContact = trim((string) ($refund->order?->orderDetail?->address?->contact_number ?? ''));
+        if ($addressContact !== '') {
+            return $addressContact;
+        }
+
+        $mobile = trim((string) ($refund->customer?->userDetail?->mobile_number ?? ''));
+
+        return $mobile !== '' ? $mobile : null;
     }
 
     private function personName(?User $user): ?string

@@ -40,6 +40,7 @@ class Shop extends Model
         'permit_url',
         'operating_days',
         'operating_hours',
+        'half_day_schedule',
         'bank_name',
         'account_name',
         'account_number',
