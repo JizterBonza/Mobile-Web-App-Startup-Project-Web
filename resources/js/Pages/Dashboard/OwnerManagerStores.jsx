@@ -4,8 +4,10 @@ import { Coins, Plus, Star, Store, Upload, X } from 'lucide-react'
 import OwnerManagerKlasmeytLayout, {
     OwnerManagerNoAgrivetAlert,
 } from '../../Layouts/OwnerManagerKlasmeytLayout'
+import HalfDayHoursFields from '../../Components/HalfDayHoursFields'
 import PinLocationMap from '../../Components/PinLocationMap'
 import { storageUrl } from '../../utils/storageUrl'
+import { formatHalfDaySchedule, halfDayError } from '../../utils/storeSchedule'
 
 const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 const FULL_DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
@@ -51,6 +53,9 @@ export default function OwnerManagerStores({ auth, agrivet, shops = [], zones = 
         opening_time: '08:00',
         closing_time: '18:00',
         operating_days: '',
+        half_day: '',
+        half_day_opening: '',
+        half_day_closing: '',
         store_image: null,
         permit_image: null,
         shop_status: 'active',
@@ -144,6 +149,16 @@ export default function OwnerManagerStores({ auth, agrivet, shops = [], zones = 
         }
         if (!addForm.data.opening_time || !addForm.data.closing_time) {
             setFormError('Please set both opening and closing times for your store.')
+            return
+        }
+        const halfDayMessage = halfDayError({
+            day: addForm.data.half_day,
+            opening: addForm.data.half_day_opening,
+            closing: addForm.data.half_day_closing,
+            operatingDays,
+        })
+        if (halfDayMessage) {
+            setFormError(halfDayMessage)
             return
         }
 
@@ -378,6 +393,14 @@ export default function OwnerManagerStores({ auth, agrivet, shops = [], zones = 
                                                     </span>{' '}
                                                     {shop.operating_hours || '—'}
                                                 </div>
+                                                {formatHalfDaySchedule(shop.half_day_schedule) && (
+                                                    <div>
+                                                        <span className="font-semibold text-[#102059]">
+                                                            Half-day:
+                                                        </span>{' '}
+                                                        {formatHalfDaySchedule(shop.half_day_schedule)}
+                                                    </div>
+                                                )}
                                             </div>
                                         </div>
                                     </div>
@@ -822,6 +845,23 @@ export default function OwnerManagerStores({ auth, agrivet, shops = [], zones = 
                                         </div>
                                     </div>
                                 </div>
+
+                                <HalfDayHoursFields
+                                    operatingDays={operatingDays}
+                                    day={addForm.data.half_day}
+                                    opening={addForm.data.half_day_opening}
+                                    closing={addForm.data.half_day_closing}
+                                    error={addForm.errors.half_day || addForm.errors.half_day_closing}
+                                    onChange={(next) => {
+                                        setFormError('')
+                                        addForm.setData((data) => ({
+                                            ...data,
+                                            half_day: next.day,
+                                            half_day_opening: next.opening,
+                                            half_day_closing: next.closing,
+                                        }))
+                                    }}
+                                />
 
                                 <div>
                                     <label className="block text-sm font-semibold text-[#102059] mb-2">

@@ -42,7 +42,9 @@ import SuperAdminOrAdminLayout from '../../Layouts/SuperAdminOrAdminLayout'
 import VendorKlasmeytLayout from '../../Layouts/VendorKlasmeytLayout'
 import PinLocationMap from '../../Components/PinLocationMap'
 import OwnerManagerOrdersPanel from '../../Components/Dashboard/OwnerManagerOrdersPanel'
+import HalfDayHoursFields from '../../Components/HalfDayHoursFields'
 import { storageUrl } from '../../utils/storageUrl'
+import { formatHalfDaySchedule, halfDayError, parseHalfDaySchedule } from '../../utils/storeSchedule'
 
 const tabOrder = ['about', 'vendors', 'products', 'insights']
 const vendorTabOrder = ['about', 'products', 'orders']
@@ -89,6 +91,19 @@ function parseTimeToInput(timeStr) {
   if (period === 'PM' && hours !== 12) hours += 12
   if (period === 'AM' && hours === 12) hours = 0
   return `${String(hours).padStart(2, '0')}:${minutes}`
+}
+
+function scheduleFieldsFromShop(shop) {
+  const hoursParts = shop?.operating_hours ? String(shop.operating_hours).split(' - ') : []
+  const halfDay = parseHalfDaySchedule(shop?.half_day_schedule)
+  return {
+    operatingDays: parseOperatingDays(shop?.operating_days),
+    openingTime: hoursParts[0] ? parseTimeToInput(hoursParts[0]) : '',
+    closingTime: hoursParts[1] ? parseTimeToInput(hoursParts[1]) : '',
+    halfDay: halfDay.day,
+    halfDayOpening: halfDay.opening,
+    halfDayClosing: halfDay.closing,
+  }
 }
 
 function vendorDisplayName(v) {
@@ -564,6 +579,7 @@ export default function AgrivetStoreInformation({
       longitude: Number.isFinite(lng) ? lng : 121.0583,
       operatingDays: shop.operating_days || '—',
       operatingHours: shop.operating_hours || '—',
+      halfDay: formatHalfDaySchedule(shop.half_day_schedule),
       bankName: shop.bank_name || '',
       accountName: shop.account_name || '',
       accountNumber: shop.account_number || '',
@@ -657,6 +673,7 @@ export default function AgrivetStoreInformation({
 
   // Edit Store Information modal state
   const [showEditStoreModal, setShowEditStoreModal] = useState(false)
+  const [scheduleError, setScheduleError] = useState('')
   const [showEditStoreConfirmModal, setShowEditStoreConfirmModal] = useState(false)
   const [showStoreStatusConfirmModal, setShowStoreStatusConfirmModal] = useState(false)
   const [isUpdatingStoreStatus, setIsUpdatingStoreStatus] = useState(false)
@@ -672,6 +689,9 @@ export default function AgrivetStoreInformation({
         operatingDays: [],
         openingTime: '',
         closingTime: '',
+        halfDay: '',
+        halfDayOpening: '',
+        halfDayClosing: '',
         bankName: '',
         accountName: '',
         accountNumber: '',
@@ -680,7 +700,6 @@ export default function AgrivetStoreInformation({
         shopLong: '',
       }
     }
-    const hoursParts = shop.operating_hours ? shop.operating_hours.split(' - ') : []
     const { street, barangay } = parseShopAddress(shop?.shop_address)
     return {
       storeName: shop.shop_name || '',
@@ -689,9 +708,7 @@ export default function AgrivetStoreInformation({
       city: shop.shop_city || '',
       province: shop.shop_province || '',
       zipCode: shop.shop_postal_code || '',
-      operatingDays: parseOperatingDays(shop.operating_days),
-      openingTime: hoursParts[0] ? parseTimeToInput(hoursParts[0]) : '',
-      closingTime: hoursParts[1] ? parseTimeToInput(hoursParts[1]) : '',
+      ...scheduleFieldsFromShop(shop),
       bankName: shop.bank_name || '',
       accountName: shop.account_name || '',
       accountNumber: shop.account_number || '',
@@ -798,8 +815,8 @@ export default function AgrivetStoreInformation({
 
   const openEditStoreModal = () => {
     if (shop) {
-      const hoursParts = shop.operating_hours ? shop.operating_hours.split(' - ') : []
       const { street, barangay } = parseShopAddress(shop.shop_address)
+      setScheduleError('')
       setEditStoreData({
         storeName: shop.shop_name || '',
         street,
@@ -807,9 +824,7 @@ export default function AgrivetStoreInformation({
         city: shop.shop_city || '',
         province: shop.shop_province || '',
         zipCode: shop.shop_postal_code || '',
-        operatingDays: parseOperatingDays(shop.operating_days),
-        openingTime: hoursParts[0] ? parseTimeToInput(hoursParts[0]) : '',
-        closingTime: hoursParts[1] ? parseTimeToInput(hoursParts[1]) : '',
+        ...scheduleFieldsFromShop(shop),
         bankName: shop.bank_name || '',
         accountName: shop.account_name || '',
         accountNumber: shop.account_number || '',
@@ -822,6 +837,17 @@ export default function AgrivetStoreInformation({
   }
 
   const handleSaveStoreInfo = () => {
+    const message = halfDayError({
+      day: editStoreData.halfDay,
+      opening: editStoreData.halfDayOpening,
+      closing: editStoreData.halfDayClosing,
+      operatingDays: editStoreData.operatingDays,
+    })
+    if (message) {
+      setScheduleError(message)
+      return
+    }
+    setScheduleError('')
     setShowEditStoreConfirmModal(true)
   }
 
@@ -855,6 +881,9 @@ export default function AgrivetStoreInformation({
       shop_postal_code: editStoreData.zipCode,
       operating_days: formatOperatingDays(editStoreData.operatingDays),
       operating_hours: formatOperatingHours(editStoreData.openingTime, editStoreData.closingTime),
+      half_day: editStoreData.halfDay,
+      half_day_opening: editStoreData.halfDayOpening,
+      half_day_closing: editStoreData.halfDayClosing,
       bank_name: editStoreData.bankName,
       account_name: editStoreData.accountName,
       account_number: editStoreData.accountNumber,
@@ -869,8 +898,9 @@ export default function AgrivetStoreInformation({
         setShowEditStoreModal(false)
         showSuccess('storeEdit', editStoreData.storeName)
       },
-      onError: () => {
+      onError: (errors) => {
         setShowEditStoreConfirmModal(false)
+        setScheduleError(errors.half_day || errors.half_day_opening || errors.half_day_closing || '')
       },
     })
   }
@@ -1600,6 +1630,15 @@ export default function AgrivetStoreInformation({
                             <p className="text-sm font-semibold text-[#102059]">{store.operatingHours}</p>
                           </div>
                         </div>
+                        {store.halfDay && (
+                          <div className="flex items-start gap-3">
+                            <Clock className="w-5 h-5 text-[#244693] mt-0.5 flex-shrink-0" />
+                            <div>
+                              <p className="text-xs text-[#65676B] mb-1">Half-day</p>
+                              <p className="text-sm font-semibold text-[#102059]">{store.halfDay}</p>
+                            </div>
+                          </div>
+                        )}
                         <div className="flex items-start gap-3">
                           <Clock className="w-5 h-5 text-[#244693] mt-0.5 flex-shrink-0" />
                           <div>
@@ -2727,6 +2766,22 @@ export default function AgrivetStoreInformation({
                     </div>
                   </div>
                 </div>
+                <HalfDayHoursFields
+                  operatingDays={editStoreData.operatingDays}
+                  day={editStoreData.halfDay}
+                  opening={editStoreData.halfDayOpening}
+                  closing={editStoreData.halfDayClosing}
+                  error={scheduleError}
+                  onChange={(next) => {
+                    setScheduleError('')
+                    setEditStoreData((current) => ({
+                      ...current,
+                      halfDay: next.day,
+                      halfDayOpening: next.opening,
+                      halfDayClosing: next.closing,
+                    }))
+                  }}
+                />
               </div>
               <div className="sticky bottom-0 bg-white border-t border-[#E5E7EB] px-6 py-4 flex items-center justify-end gap-3">
                 <button

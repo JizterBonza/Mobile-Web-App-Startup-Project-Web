@@ -3,8 +3,10 @@ import { Head, useForm, router } from '@inertiajs/react'
 import { ArrowLeft, Check, Upload, X } from 'lucide-react'
 import KlasmeytDashboardLayout from '../../Layouts/KlasmeytDashboardLayout'
 import SuperAdminKlasmeytLayout from '../../Layouts/SuperAdminKlasmeytLayout'
+import HalfDayHoursFields from '../../Components/HalfDayHoursFields'
 import PinLocationMap from '../../Components/PinLocationMap'
 import PasswordInput from '../../Components/PasswordInput'
+import { formatHalfDaySchedule, halfDayError } from '../../utils/storeSchedule'
 
 const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 const FULL_DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
@@ -62,6 +64,9 @@ export default function AddAgrivet({ auth, zones = [], flash }) {
         zip_code: '',
         opening_time: '08:00',
         closing_time: '18:00',
+        half_day: '',
+        half_day_opening: '',
+        half_day_closing: '',
         shop_lat: '',
         shop_long: '',
         store_image: null,
@@ -163,6 +168,17 @@ export default function AddAgrivet({ auth, zones = [], flash }) {
             }
             if (!form.data.opening_time || !form.data.closing_time) {
                 setErrorMessage('Please set both opening and closing times for your store.')
+                window.scrollTo({ top: 0, behavior: 'smooth' })
+                return
+            }
+            const halfDayMessage = halfDayError({
+                day: form.data.half_day,
+                opening: form.data.half_day_opening,
+                closing: form.data.half_day_closing,
+                operatingDays,
+            })
+            if (halfDayMessage) {
+                setErrorMessage(halfDayMessage)
                 window.scrollTo({ top: 0, behavior: 'smooth' })
                 return
             }
@@ -780,6 +796,24 @@ export default function AddAgrivet({ auth, zones = [], flash }) {
                                             </div>
                                         </div>
 
+                                        <HalfDayHoursFields
+                                            operatingDays={operatingDays}
+                                            day={form.data.half_day}
+                                            opening={form.data.half_day_opening}
+                                            closing={form.data.half_day_closing}
+                                            error={form.errors.half_day || form.errors.half_day_closing}
+                                            inputClass={inputClass}
+                                            onChange={(next) => {
+                                                setErrorMessage(null)
+                                                form.setData((data) => ({
+                                                    ...data,
+                                                    half_day: next.day,
+                                                    half_day_opening: next.opening,
+                                                    half_day_closing: next.closing,
+                                                }))
+                                            }}
+                                        />
+
                                         <div>
                                             <label className="mb-2 block text-xs text-[#6B7280]" htmlFor="store_image">
                                                 Store front photo <span className="text-[#E20E28]">*</span>
@@ -940,6 +974,13 @@ export default function AddAgrivet({ auth, zones = [], flash }) {
                                                             : '—'}
                                                         {' · '}
                                                         {form.data.opening_time} – {form.data.closing_time}
+                                                        {formatHalfDaySchedule(
+                                                            `${form.data.half_day}|${form.data.half_day_opening}|${form.data.half_day_closing}`,
+                                                        )
+                                                            ? ` · Half-day ${formatHalfDaySchedule(
+                                                                  `${form.data.half_day}|${form.data.half_day_opening}|${form.data.half_day_closing}`,
+                                                              )}`
+                                                            : ''}
                                                     </p>
                                                 </div>
                                                 <div>
