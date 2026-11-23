@@ -51,11 +51,16 @@ class GamefowlCatalogController extends Controller
         $gamefowl = GamefowlCatalog::listed()->findOrFail($id);
         $oldValues = $gamefowl->toArray();
         $validated = $this->validateEntry($request, false);
-        $images = $this->resolveImages($request, $gamefowl->images ?? []);
+        $keptIndexes = $request->boolean('sync_existing_images')
+            ? array_map('intval', (array) $request->input('kept_image_indexes', []))
+            : null;
+        $images = $this->resolveImages($request, $gamefowl->images ?? [], $keptIndexes);
 
-        if (count($images) < 5) {
-            return back()->withInput()->withErrors(['images' => 'Please keep or replace all 5 gamefowl images.']);
+        if (count($images) < 3 || count($images) > 5) {
+            return back()->withInput()->withErrors(['images' => 'Please upload 3 to 5 gamefowl images.']);
         }
+
+        [$packedImages, $primaryIndex] = $this->packImages($images, (int) $validated['primary_image_index']);
 
         $gamefowl->update([
             'name' => $validated['name'],
@@ -65,8 +70,8 @@ class GamefowlCatalogController extends Controller
             'sex' => $validated['sex'],
             'hatch_date' => $validated['hatch_date'] ?? null,
             'description' => $validated['description'] ?? null,
-            'images' => array_values($images),
-            'primary_image_index' => (int) $validated['primary_image_index'],
+            'images' => $packedImages,
+            'primary_image_index' => $primaryIndex,
         ]);
 
         ActivityLog::log('updated', "Gamefowl catalog entry updated: {$gamefowl->name}", $gamefowl, $oldValues, $gamefowl->fresh()->toArray());
@@ -296,22 +301,29 @@ class GamefowlCatalogController extends Controller
             'images' => $creating ? 'required|array|min:'.$minimumImages.'|max:5' : 'nullable|array|max:5',
             'images.*' => 'nullable|image|mimes:jpeg,png,jpg|max:5120',
             'primary_image_index' => 'required|integer|min:0|max:4',
+            'sync_existing_images' => 'nullable|boolean',
+            'kept_image_indexes' => 'nullable|array|max:5',
+            'kept_image_indexes.*' => 'integer|min:0|max:4',
         ]);
     }
 
     /**
      * @param  list<string>|null  $existing
+     * @param  list<int>|null  $keptIndexes  When set, only these existing slots are kept. Null keeps every existing slot that was not replaced.
      * @return array<int, string>
      */
-    private function resolveImages(Request $request, ?array $existing = null): array
+    private function resolveImages(Request $request, ?array $existing = null, ?array $keptIndexes = null): array
     {
         $existing = array_values($existing ?? []);
+        $kept = $keptIndexes === null ? null : array_map('intval', $keptIndexes);
         $paths = [];
 
         for ($i = 0; $i < 5; $i++) {
             if ($request->hasFile("images.{$i}")) {
                 $paths[$i] = '/storage/'.$request->file("images.{$i}")->store('gamefowl-catalog', 'public');
-            } elseif (! empty($existing[$i])) {
+            } elseif ($kept === null && ! empty($existing[$i])) {
+                $paths[$i] = $existing[$i];
+            } elseif ($kept !== null && in_array($i, $kept, true) && ! empty($existing[$i])) {
                 $paths[$i] = $existing[$i];
             }
         }
