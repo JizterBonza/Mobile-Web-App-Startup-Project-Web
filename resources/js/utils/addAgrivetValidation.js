@@ -26,7 +26,6 @@ export const AGRIVET_FIELD_GUIDE = {
     closing_time: 'Required. Must be later than the opening time. Overnight hours are not accepted.',
     half_day: 'Optional. Pick one operating day and set both times. Closing must be later than opening.',
     store_image: 'Required. Storefront photo as JPG, PNG, or WEBP, up to 10MB.',
-    permit_image: 'Required. Business permit as JPG, PNG, WEBP, or PDF, up to 10MB.',
 }
 
 export const AGRIVET_STEP_FIELDS = {
@@ -48,7 +47,6 @@ export const AGRIVET_STEP_FIELDS = {
         'half_day_opening',
         'half_day_closing',
         'store_image',
-        'permit_image',
     ],
 }
 
@@ -205,11 +203,6 @@ export function validateAgrivetStep(step, data, operatingDays = []) {
             errors,
             'store_image',
             fileInputError(data.store_image, { required: true, label: 'Storefront photo', maxMb: 10 }),
-        )
-        put(
-            errors,
-            'permit_image',
-            fileInputError(data.permit_image, { required: true, label: 'Business permit', allowPdf: true, maxMb: 10 }),
         )
     }
 

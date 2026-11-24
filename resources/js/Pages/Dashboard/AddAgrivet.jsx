@@ -34,10 +34,8 @@ function AddAgrivetShell({ auth, title, children }) {
 export default function AddAgrivet({ auth, zones = [], flash }) {
     const [currentStep, setCurrentStep] = useState(1)
     const [storeImagePreview, setStoreImagePreview] = useState(null)
-    const [permitImagePreview, setPermitImagePreview] = useState(null)
     const [logoPreview, setLogoPreview] = useState(null)
     const [bannerPreview, setBannerPreview] = useState(null)
-    const [permitIsPdf, setPermitIsPdf] = useState(false)
     const [errorMessage, setErrorMessage] = useState(null)
     const [fieldErrors, setFieldErrors] = useState({})
     const [operatingDays, setOperatingDays] = useState([])
@@ -80,7 +78,6 @@ export default function AddAgrivet({ auth, zones = [], flash }) {
         shop_lat: '',
         shop_long: '',
         store_image: null,
-        permit_image: null,
         operating_days: '',
     })
 
@@ -137,9 +134,9 @@ export default function AddAgrivet({ auth, zones = [], flash }) {
         reader.readAsDataURL(file)
     }
 
-    const acceptFile = (field, file, { setPreview, label, allowGif = false, allowPdf = false, maxMb, required = false }) => {
+    const acceptFile = (field, file, { setPreview, label, allowGif = false, maxMb, required = false }) => {
         if (!file) return
-        const message = fileInputError(file, { required, label, allowGif, allowPdf, maxMb })
+        const message = fileInputError(file, { required, label, allowGif, maxMb })
         if (message) {
             setFieldErrors((prev) => ({ ...prev, [field]: message }))
             setErrorMessage('This file is not an accepted upload.')
@@ -148,14 +145,6 @@ export default function AddAgrivet({ auth, zones = [], flash }) {
         form.setData(field, file)
         clearIssue(field)
         setErrorMessage(null)
-        const isPdf = allowPdf && (file.type === 'application/pdf' || /\.pdf$/i.test(file.name))
-        if (field === 'permit_image') {
-            setPermitIsPdf(isPdf)
-            if (isPdf) {
-                setPermitImagePreview(null)
-                return
-            }
-        }
         if (setPreview) readPreview(file, setPreview)
     }
 
@@ -163,17 +152,6 @@ export default function AddAgrivet({ auth, zones = [], flash }) {
         acceptFile('store_image', e.target.files?.[0], {
             setPreview: setStoreImagePreview,
             label: 'Storefront photo',
-            maxMb: 10,
-            required: true,
-        })
-        e.target.value = ''
-    }
-
-    const handlePermitImageUpload = (e) => {
-        acceptFile('permit_image', e.target.files?.[0], {
-            setPreview: setPermitImagePreview,
-            label: 'Business permit',
-            allowPdf: true,
             maxMb: 10,
             required: true,
         })
@@ -667,7 +645,7 @@ export default function AddAgrivet({ auth, zones = [], flash }) {
                                         Store Information (Main Branch)
                                     </h2>
                                     <p className="mb-6 text-xs text-[#6B7280]">
-                                        Store name, full address, operating days, hours, storefront photo, and business permit are required. The map pin is optional.
+                                        Store name, full address, operating days, hours, and storefront photo are required. The map pin is optional.
                                     </p>
                                     <div className="space-y-6">
                                         <div>
@@ -964,45 +942,6 @@ export default function AddAgrivet({ auth, zones = [], flash }) {
                                             </div>
                                             {fieldHelp('store_image')}
                                         </div>
-
-                                        <div>
-                                            <label className="mb-2 block text-xs text-[#6B7280]" htmlFor="permit_image">
-                                                Business permit <span className="text-[#E20E28]">*</span>
-                                            </label>
-                                            <div className={`cursor-pointer rounded-lg border-2 border-dashed bg-[#F8F9FB] p-8 text-center transition-colors hover:border-[#244693] ${issue('permit_image') ? 'border-red-400' : 'border-[#E5E7EB]'}`}>
-                                                <input
-                                                    id="permit_image"
-                                                    type="file"
-                                                    accept="image/jpeg,image/png,image/webp,.pdf,application/pdf"
-                                                    className="hidden"
-                                                    onChange={handlePermitImageUpload}
-                                                />
-                                                <label htmlFor="permit_image" className="cursor-pointer">
-                                                    {permitIsPdf ? (
-                                                        <div>
-                                                            <p className="mb-2 text-sm font-semibold text-[#102059]">PDF selected</p>
-                                                            <p className="text-xs text-[#6B7280]">Click to change file</p>
-                                                        </div>
-                                                    ) : permitImagePreview ? (
-                                                        <div>
-                                                            <img
-                                                                src={permitImagePreview}
-                                                                alt="Permit preview"
-                                                                className="mx-auto mb-4 max-h-64 rounded-lg"
-                                                            />
-                                                            <p className="text-xs text-[#6B7280]">Click to change file</p>
-                                                        </div>
-                                                    ) : (
-                                                        <div>
-                                                            <Upload className="mx-auto mb-3 h-10 w-10 text-[#9CA3AF]" />
-                                                            <p className="mb-1 text-sm text-[#6B7280]">Upload permit</p>
-                                                            <p className="text-xs text-[#9CA3AF]">JPG, PNG, WEBP, or PDF up to 10MB</p>
-                                                        </div>
-                                                    )}
-                                                </label>
-                                            </div>
-                                            {fieldHelp('permit_image')}
-                                        </div>
                                     </div>
                                 </div>
                             )}
@@ -1099,8 +1038,7 @@ export default function AddAgrivet({ auth, zones = [], flash }) {
                                                 <div>
                                                     <p className="mb-1 text-xs text-[#9CA3AF]">Photos</p>
                                                     <p className="text-sm text-[#102059]">
-                                                        Store: {storeImagePreview ? '✓' : '—'} · Permit:{' '}
-                                                        {permitImagePreview || permitIsPdf ? '✓' : '—'}
+                                                        Store: {storeImagePreview ? '✓' : '—'}
                                                     </p>
                                                 </div>
                                             </div>
