@@ -2472,7 +2472,9 @@ export default function AgrivetStoreInformation({
                         barangay: loc.barangay ?? prev.barangay,
                         city: loc.city ?? prev.city,
                         province: loc.province ?? prev.province,
-                        zipCode: loc.postal_code ?? prev.zipCode,
+                        zipCode: loc.postal_code
+                          ? String(loc.postal_code).replace(/\D/g, '').slice(0, 4)
+                          : prev.zipCode,
                         shopLat: loc.latitude != null ? String(loc.latitude) : '',
                         shopLong: loc.longitude != null ? String(loc.longitude) : '',
                       }))
@@ -2523,6 +2525,28 @@ export default function AgrivetStoreInformation({
                       onChange={(e) => setEditStoreData({ ...editStoreData, province: e.target.value })}
                       className="w-full px-4 py-2.5 border border-[#E5E7EB] rounded-lg text-sm text-[#102059] focus:outline-none focus:border-[#244693]"
                       placeholder="Province"
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-semibold text-[#102059] mb-2" htmlFor="edit-store-zip-code">
+                      Zip Code
+                    </label>
+                    <input
+                      id="edit-store-zip-code"
+                      type="text"
+                      inputMode="numeric"
+                      maxLength={4}
+                      value={editStoreData.zipCode}
+                      onChange={(e) =>
+                        setEditStoreData({
+                          ...editStoreData,
+                          zipCode: e.target.value.replace(/\D/g, '').slice(0, 4),
+                        })
+                      }
+                      className="w-full px-4 py-2.5 border border-[#E5E7EB] rounded-lg text-sm text-[#102059] focus:outline-none focus:border-[#244693]"
+                      placeholder="e.g. 6000"
                     />
                   </div>
                 </div>
