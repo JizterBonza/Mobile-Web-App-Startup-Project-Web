@@ -109,31 +109,82 @@ class Shop extends Model
     }
 
     /**
-     * Agrivet banner path. Not a shops column; exposed when appended for API payloads.
+     * When true, JSON uses the Agrivet logo as the profile picture
+     * and this shop's storefront photo as the cover (banner_url).
      */
-    public function getBannerUrlAttribute(): ?string
-    {
-        if (! $this->relationLoaded('agrivet')) {
-            $this->load(['agrivet' => function ($query) {
-                $query->select('id', 'banner_url');
-            }]);
-        }
+    protected bool $presentStoreProfile = false;
 
-        return $this->agrivet?->banner_url;
+    /**
+     * Storefront photo stored on the shop. This is the cover image.
+     */
+    public function storefrontPath(): ?string
+    {
+        $path = $this->attributes['logo_url'] ?? null;
+
+        return is_string($path) && trim($path) !== '' ? $path : null;
     }
 
     /**
-     * Include agrivet banner_url in JSON without nesting the agrivet.
+     * Agrivet logo, shared by every store under that Agrivet.
+     */
+    public function agrivetLogoPath(): ?string
+    {
+        $this->ensureAgrivetLogoLoaded();
+
+        $path = $this->agrivet?->logo_url;
+
+        return is_string($path) && trim($path) !== '' ? $path : null;
+    }
+
+    /**
+     * Cover path. Not a shops column; exposed when appended for API payloads.
+     */
+    public function getBannerUrlAttribute(): ?string
+    {
+        return $this->storefrontPath();
+    }
+
+    /**
+     * Profile picture is the Agrivet logo. Cover is this store's storefront.
+     * The shops.logo_url column itself stays the storefront photo.
      */
     public function includeAgrivetBanner(): static
     {
-        $this->loadMissing(['agrivet' => function ($query) {
-            $query->select('id', 'banner_url');
-        }]);
+        $this->ensureAgrivetLogoLoaded();
         $this->append('banner_url');
         $this->makeHidden('agrivet');
+        $this->presentStoreProfile = true;
 
         return $this;
+    }
+
+    public function toArray(): array
+    {
+        $array = parent::toArray();
+
+        if ($this->presentStoreProfile) {
+            $array['logo_url'] = $this->agrivetLogoPath();
+            $array['banner_url'] = $this->storefrontPath();
+        }
+
+        return $array;
+    }
+
+    private function ensureAgrivetLogoLoaded(): void
+    {
+        if (! $this->agrivet_id) {
+            return;
+        }
+
+        $agrivet = $this->relationLoaded('agrivet') ? $this->agrivet : null;
+
+        if ($agrivet && array_key_exists('logo_url', $agrivet->getAttributes())) {
+            return;
+        }
+
+        $this->load(['agrivet' => function ($query) {
+            $query->select('id', 'logo_url', 'status');
+        }]);
     }
 
     /**

@@ -715,6 +715,52 @@ class DashboardController extends Controller
             : in_array($value, ['female', 'f'], true);
     }
 
+    public function ownerManagerUpdateBranding(Request $request)
+    {
+        $agrivet = auth()->user()->managedAgrivet;
+        abort_unless($agrivet, 404);
+
+        $request->validate([
+            'logo' => 'nullable|image|mimes:jpeg,png,jpg,gif,webp|max:5120',
+            'banner' => 'nullable|image|mimes:jpeg,png,jpg,gif,webp|max:10240',
+        ]);
+
+        if (! $request->hasFile('logo') && ! $request->hasFile('banner')) {
+            return back()->withErrors([
+                'logo' => 'Choose a logo or a banner to upload.',
+            ]);
+        }
+
+        $oldValues = $agrivet->only(['logo_url', 'banner_url']);
+        $updates = [];
+
+        if ($request->hasFile('logo')) {
+            $updates['logo_url'] = $request->file('logo')->store('agrivets/logos', 'public');
+        }
+
+        if ($request->hasFile('banner')) {
+            $updates['banner_url'] = $request->file('banner')->store('agrivets/banners', 'public');
+        }
+
+        $agrivet->update($updates);
+
+        ActivityLog::log(
+            'updated',
+            "Agrivet branding updated: {$agrivet->name}",
+            $agrivet,
+            $oldValues,
+            $agrivet->fresh()->only(['logo_url', 'banner_url']),
+        );
+
+        $message = match (true) {
+            isset($updates['logo_url'], $updates['banner_url']) => 'Logo and banner updated.',
+            isset($updates['logo_url']) => 'Logo updated.',
+            default => 'Banner updated.',
+        };
+
+        return back()->with('success', $message);
+    }
+
     public function ownerManagerStores()
     {
         $user = auth()->user();

@@ -279,7 +279,7 @@ class FeaturedSectionService
         }
 
         $shops = Shop::query()
-            ->with(['agrivet:id,status,banner_url'])
+            ->with(['agrivet:id,status,logo_url'])
             ->whereIn('id', $entries->pluck('entity_id'))
             ->where('shop_status', 'active')
             ->whereAgrivetIsActive()

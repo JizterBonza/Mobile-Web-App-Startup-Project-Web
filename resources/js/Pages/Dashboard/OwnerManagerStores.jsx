@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { router, useForm } from '@inertiajs/react'
-import { Coins, Plus, Star, Store, Upload, X } from 'lucide-react'
+import { Coins, Pencil, Plus, Star, Store, Upload, X } from 'lucide-react'
+import AgrivetBrandingModal from '../../Components/Dashboard/AgrivetBrandingModal'
 import OwnerManagerKlasmeytLayout, {
     OwnerManagerNoAgrivetAlert,
 } from '../../Layouts/OwnerManagerKlasmeytLayout'
@@ -31,6 +32,7 @@ function FieldError({ message }) {
 export default function OwnerManagerStores({ auth, agrivet, shops = [], zones = [], flash }) {
     const ownerDisplayName = agrivet?.owner_name || auth.user.name
     const [showAddModal, setShowAddModal] = useState(false)
+    const [showBrandingModal, setShowBrandingModal] = useState(false)
     const [shopToRemove, setShopToRemove] = useState(null)
     const [shopToReactivate, setShopToReactivate] = useState(null)
     const [isDeleting, setIsDeleting] = useState(false)
@@ -276,6 +278,63 @@ export default function OwnerManagerStores({ auth, agrivet, shops = [], zones = 
                                 <p className="text-sm text-[#102059] mt-1">
                                     {agrivet.contact_number || '—'}
                                 </p>
+                            </div>
+                        </div>
+
+                        <div className="mt-6 border-t border-[#E5E7EB] pt-6">
+                            <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+                                <div>
+                                    <h3 className="text-sm font-semibold text-[#102059]">Logo and banner</h3>
+                                    <p className="mt-1 text-xs text-[#6B7280]">
+                                        The logo appears on every store. The banner is your agrivet profile image.
+                                    </p>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => setShowBrandingModal(true)}
+                                    className="inline-flex items-center gap-2 rounded-lg bg-[#244693] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#1a3570]"
+                                >
+                                    <Pencil className="h-4 w-4" />
+                                    Edit logo and banner
+                                </button>
+                            </div>
+                            <div className="grid grid-cols-1 items-start gap-6 md:grid-cols-[8rem_1fr]">
+                                <div>
+                                    <p className="text-xs font-semibold uppercase tracking-wider text-[#6B7280]">
+                                        Logo
+                                    </p>
+                                    <div className="mt-2 h-28 w-28 overflow-hidden rounded-full border border-[#E5E7EB] bg-[#F8F9FB]">
+                                        {storageUrl(agrivet.logo_url) ? (
+                                            <img
+                                                src={storageUrl(agrivet.logo_url)}
+                                                alt={`${agrivet.name} logo`}
+                                                className="h-full w-full object-cover"
+                                            />
+                                        ) : (
+                                            <div className="flex h-full w-full items-center justify-center">
+                                                <Store className="h-8 w-8 text-[#D1D5DB]" aria-hidden />
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                                <div>
+                                    <p className="text-xs font-semibold uppercase tracking-wider text-[#6B7280]">
+                                        Banner
+                                    </p>
+                                    <div className="mt-2 aspect-[4/1] max-h-36 overflow-hidden rounded-lg border border-[#E5E7EB] bg-[#F8F9FB]">
+                                        {storageUrl(agrivet.banner_url) ? (
+                                            <img
+                                                src={storageUrl(agrivet.banner_url)}
+                                                alt={`${agrivet.name} banner`}
+                                                className="h-full w-full object-cover"
+                                            />
+                                        ) : (
+                                            <div className="flex h-full w-full items-center justify-center">
+                                                <Store className="h-10 w-10 text-[#E5E7EB]" aria-hidden />
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -999,6 +1058,15 @@ export default function OwnerManagerStores({ auth, agrivet, shops = [], zones = 
                         </form>
                     </div>
                 </div>
+            )}
+
+            {agrivet && (
+                <AgrivetBrandingModal
+                    open={showBrandingModal}
+                    onClose={() => setShowBrandingModal(false)}
+                    logoUrl={agrivet.logo_url}
+                    bannerUrl={agrivet.banner_url}
+                />
             )}
         </OwnerManagerKlasmeytLayout>
     )
