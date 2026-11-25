@@ -1014,6 +1014,7 @@ class AgrivetController extends Controller
                 'email' => $agrivet->email,
                 'contact_number' => $agrivet->contact_number,
                 'status' => $agrivet->status,
+                'logo_url' => $agrivet->logo_url,
             ],
             'shop' => [
                 'id' => $shop->id,

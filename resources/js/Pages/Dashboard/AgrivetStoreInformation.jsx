@@ -576,8 +576,9 @@ export default function AgrivetStoreInformation({
       halfDay: formatHalfDaySchedule(shop.half_day_schedule),
       contactNumber: shop.contact_number || '',
       coverPhoto: shopPermitUrl(shop.logo_url),
+      profilePhoto: storageUrl(agrivet?.logo_url),
     }
-  }, [shop, agrivetInactive])
+  }, [shop, agrivet, agrivetInactive])
 
   const [activeTab, setActiveTab] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -1424,14 +1425,28 @@ export default function AgrivetStoreInformation({
             </div>
 
             {/* Page Info */}
-            <div className="px-0 pt-6 pb-4 border-b border-[#E5E7EB]">
-              <div>
-                <h1 className="text-[32px] font-bold text-[#102059] leading-tight mb-1">{store.storeName}</h1>
-                <p className="text-sm text-[#65676B] mb-3">
-                  {agrivet.name} {agrivet.status ? `(${asTitleStatus(agrivet.status)})` : ''}
-                </p>
+            <div className="border-b border-[#E5E7EB] px-0 pb-4">
+              <div className="flex items-end gap-5">
+                <div className="-mt-14 h-28 w-28 shrink-0 overflow-hidden rounded-full border-4 border-white bg-[#F8F9FB] shadow-md">
+                  {store.profilePhoto ? (
+                    <img
+                      src={store.profilePhoto}
+                      alt={`${agrivet.name} logo`}
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <div className="flex h-full w-full items-center justify-center">
+                      <Store className="h-10 w-10 text-[#D1D5DB]" aria-hidden />
+                    </div>
+                  )}
+                </div>
+                <div className="min-w-0 flex-1 pt-4">
+                  <h1 className="text-[32px] font-bold text-[#102059] leading-tight mb-1">{store.storeName}</h1>
+                  <p className="text-sm text-[#65676B] mb-3">
+                    {agrivet.name} {agrivet.status ? `(${asTitleStatus(agrivet.status)})` : ''}
+                  </p>
 
-                <div className="flex items-center gap-3 justify-between">
+                  <div className="flex items-center gap-3 justify-between">
                   <div className="flex items-center gap-3">
                     <button
                       type="button"
@@ -1473,6 +1488,7 @@ export default function AgrivetStoreInformation({
                     </button>
                   )}
                 </div>
+              </div>
               </div>
             </div>
 
