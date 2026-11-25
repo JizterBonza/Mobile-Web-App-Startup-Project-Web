@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\Farm;
 use App\Models\FarmGamefowlListing;
 use App\Models\GamefowlCatalog;
+use App\Models\GamefowlLookup;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 
@@ -38,7 +39,38 @@ class FarmListingDiscoveryService
             })->sortBy($rank);
         }
 
+        if (filled($data['bloodline_id'] ?? null)) {
+            $bloodlineId = (int) $data['bloodline_id'];
+            $listings = $listings->filter(
+                fn (array $listing) => $this->listingHasBloodline($listing, $bloodlineId)
+            );
+        }
+
         return $listings->values();
+    }
+
+    /**
+     * Active bloodline categories this farm is selling, including bundle members.
+     */
+    public function bloodlines(int $farmId): Collection
+    {
+        $ids = $this->listings(['farm_id' => $farmId])
+            ->flatMap(fn (array $listing) => $this->listingBloodlineIds($listing))
+            ->unique()
+            ->values();
+
+        if ($ids->isEmpty()) {
+            return collect();
+        }
+
+        return GamefowlLookup::query()
+            ->where('type', GamefowlLookup::TYPE_BLOODLINE)
+            ->where('status', 'active')
+            ->whereIn('id', $ids)
+            ->orderBy('name')
+            ->get(['id', 'name', 'rate'])
+            ->map(fn (GamefowlLookup $lookup) => $lookup->only(['id', 'name', 'rate']))
+            ->values();
     }
 
     public function find(int $id): ?array
@@ -135,6 +167,25 @@ class FarmListingDiscoveryService
             'latitude', 'longitude', 'operating_days', 'operating_hours',
             'logo_url', 'banner_url', 'cover_url', 'status',
         ]);
+    }
+
+    private function listingHasBloodline(array $listing, int $bloodlineId): bool
+    {
+        return $this->listingBloodlineIds($listing)->contains($bloodlineId);
+    }
+
+    /**
+     * @param  array<string, mixed>  $listing
+     * @return Collection<int, int>
+     */
+    private function listingBloodlineIds(array $listing): Collection
+    {
+        $ids = collect([$listing['gamefowl']['bloodline']['id'] ?? null]);
+        foreach ($listing['bundle_members'] as $member) {
+            $ids->push($member['bloodline']['id'] ?? null);
+        }
+
+        return $ids->filter()->map(fn ($id) => (int) $id)->values();
     }
 
     private function birdPayload(GamefowlCatalog $bird): array
