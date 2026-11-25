@@ -6,7 +6,16 @@ import SuperAdminKlasmeytLayout from '../../Layouts/SuperAdminKlasmeytLayout'
 import HalfDayHoursFields from '../../Components/HalfDayHoursFields'
 import PinLocationMap from '../../Components/PinLocationMap'
 import PasswordInput from '../../Components/PasswordInput'
-import { formatHalfDaySchedule, halfDayError } from '../../utils/storeSchedule'
+import { formatHalfDaySchedule } from '../../utils/storeSchedule'
+import {
+    AGRIVET_FIELD_GUIDE,
+    AGRIVET_STEP_FIELDS,
+    fileInputError,
+    firstInvalidAgrivetStep,
+    normalizeServerErrors,
+    stepForAgrivetErrors,
+    validateAgrivetStep,
+} from '../../utils/addAgrivetValidation'
 
 const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 const FULL_DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
@@ -25,11 +34,10 @@ function AddAgrivetShell({ auth, title, children }) {
 export default function AddAgrivet({ auth, zones = [], flash }) {
     const [currentStep, setCurrentStep] = useState(1)
     const [storeImagePreview, setStoreImagePreview] = useState(null)
-    const [permitImagePreview, setPermitImagePreview] = useState(null)
     const [logoPreview, setLogoPreview] = useState(null)
     const [bannerPreview, setBannerPreview] = useState(null)
-    const [permitIsPdf, setPermitIsPdf] = useState(false)
     const [errorMessage, setErrorMessage] = useState(null)
+    const [fieldErrors, setFieldErrors] = useState({})
     const [operatingDays, setOperatingDays] = useState([])
     const isSubmittingRef = useRef(false)
 
@@ -70,7 +78,6 @@ export default function AddAgrivet({ auth, zones = [], flash }) {
         shop_lat: '',
         shop_long: '',
         store_image: null,
-        permit_image: null,
         operating_days: '',
     })
 
@@ -81,38 +88,85 @@ export default function AddAgrivet({ auth, zones = [], flash }) {
         { number: 4, title: 'Review & Confirm' },
     ]
 
-    const handleStoreImageUpload = (e) => {
-        const file = e.target.files?.[0]
-        if (file) {
-            form.setData('store_image', file)
-            const reader = new FileReader()
-            reader.onloadend = () => setStoreImagePreview(reader.result)
-            reader.readAsDataURL(file)
-        }
+    const serverErrors = useMemo(() => normalizeServerErrors(form.errors), [form.errors])
+    const visibleErrors = { ...serverErrors, ...fieldErrors }
+    const bannerItems = Object.entries(visibleErrors).filter(([key]) => {
+        if (currentStep === 4) return true
+        return AGRIVET_STEP_FIELDS[currentStep]?.includes(key)
+    })
+
+    const issue = (key) => visibleErrors[key] || ''
+
+    const clearIssue = (key) => {
+        form.clearErrors(key)
+        setFieldErrors((prev) => {
+            if (!prev[key]) return prev
+            const next = { ...prev }
+            delete next[key]
+            return next
+        })
     }
 
-    const handlePermitImageUpload = (e) => {
-        const file = e.target.files?.[0]
-        if (file) {
-            form.setData('permit_image', file)
-            const isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name)
-            setPermitIsPdf(isPdf)
-            if (isPdf) {
-                setPermitImagePreview(null)
-                return
+    const updateField = (key, value) => {
+        form.setData(key, value)
+        clearIssue(key)
+        setErrorMessage(null)
+    }
+
+    const showStepErrors = (errors, message) => {
+        setFieldErrors(errors)
+        setErrorMessage(message)
+        const firstKey = Object.keys(errors)[0]
+        window.requestAnimationFrame(() => {
+            const target = firstKey ? document.getElementById(firstKey) : null
+            if (target) {
+                target.scrollIntoView({ behavior: 'smooth', block: 'center' })
+                if (typeof target.focus === 'function') target.focus()
+            } else {
+                window.scrollTo({ top: 0, behavior: 'smooth' })
             }
-            const reader = new FileReader()
-            reader.onloadend = () => setPermitImagePreview(reader.result)
-            reader.readAsDataURL(file)
-        }
+        })
     }
 
-    const handleImageUpload = (field, file, setPreview) => {
-        if (!file) return
-        form.setData(field, file)
+    const readPreview = (file, setPreview) => {
         const reader = new FileReader()
         reader.onloadend = () => setPreview(reader.result)
         reader.readAsDataURL(file)
+    }
+
+    const acceptFile = (field, file, { setPreview, label, allowGif = false, maxMb, required = false }) => {
+        if (!file) return
+        const message = fileInputError(file, { required, label, allowGif, maxMb })
+        if (message) {
+            setFieldErrors((prev) => ({ ...prev, [field]: message }))
+            setErrorMessage('This file is not an accepted upload.')
+            return
+        }
+        form.setData(field, file)
+        clearIssue(field)
+        setErrorMessage(null)
+        if (setPreview) readPreview(file, setPreview)
+    }
+
+    const handleStoreImageUpload = (e) => {
+        acceptFile('store_image', e.target.files?.[0], {
+            setPreview: setStoreImagePreview,
+            label: 'Storefront photo',
+            maxMb: 10,
+            required: true,
+        })
+        e.target.value = ''
+    }
+
+    const handleImageUpload = (field, event, setPreview) => {
+        const file = event.target.files?.[0]
+        event.target.value = ''
+        acceptFile(field, file, {
+            setPreview,
+            label: field === 'banner' ? 'Banner' : 'Logo',
+            allowGif: true,
+            maxMb: field === 'banner' ? 10 : 5,
+        })
     }
 
     const handleSubmit = (e) => {
@@ -122,12 +176,17 @@ export default function AddAgrivet({ auth, zones = [], flash }) {
             return
         }
         if (currentStep !== 4) {
+            nextStep(e)
             return
         }
-        if (!form.data.store_image || !form.data.permit_image) {
-            alert('Please upload both store photo and business permit.')
+
+        const invalid = firstInvalidAgrivetStep(form.data, operatingDays)
+        if (invalid) {
+            setCurrentStep(invalid.step)
+            showStepErrors(invalid.errors, 'Some fields still need a proper value before this agrivet can be saved.')
             return
         }
+
         isSubmittingRef.current = true
         const daysSorted = [...operatingDays].sort((a, b) => FULL_DAYS.indexOf(a) - FULL_DAYS.indexOf(b))
 
@@ -140,6 +199,14 @@ export default function AddAgrivet({ auth, zones = [], flash }) {
         form.post(`${baseRoute}/setup-wizard`, {
             forceFormData: true,
             preserveScroll: true,
+            onError: (errors) => {
+                const mapped = normalizeServerErrors(errors)
+                const step = stepForAgrivetErrors(mapped)
+                setCurrentStep(step)
+                setFieldErrors(mapped)
+                setErrorMessage('The registration was not saved. Update the fields listed below.')
+                window.scrollTo({ top: 0, behavior: 'smooth' })
+            },
             onFinish: () => {
                 isSubmittingRef.current = false
                 // Reset transform so it doesn't affect other submissions.
@@ -153,39 +220,18 @@ export default function AddAgrivet({ auth, zones = [], flash }) {
             e.preventDefault()
             e.stopPropagation()
         }
-        setErrorMessage(null)
-
-        if (currentStep === 3) {
-            if (!form.data.store_image || !form.data.permit_image) {
-                setErrorMessage('Please upload both store photo and business permit before proceeding.')
-                window.scrollTo({ top: 0, behavior: 'smooth' })
-                return
-            }
-            if (operatingDays.length === 0) {
-                setErrorMessage('Please select at least one operating day for your store.')
-                window.scrollTo({ top: 0, behavior: 'smooth' })
-                return
-            }
-            if (!form.data.opening_time || !form.data.closing_time) {
-                setErrorMessage('Please set both opening and closing times for your store.')
-                window.scrollTo({ top: 0, behavior: 'smooth' })
-                return
-            }
-            const halfDayMessage = halfDayError({
-                day: form.data.half_day,
-                opening: form.data.half_day_opening,
-                closing: form.data.half_day_closing,
-                operatingDays,
-            })
-            if (halfDayMessage) {
-                setErrorMessage(halfDayMessage)
-                window.scrollTo({ top: 0, behavior: 'smooth' })
-                return
-            }
-        }
 
         if (currentStep < 4) {
+            const errors = validateAgrivetStep(currentStep, form.data, operatingDays)
+            if (Object.keys(errors).length) {
+                showStepErrors(errors, 'These fields need a proper value before you can continue.')
+                return
+            }
+            form.clearErrors(...(AGRIVET_STEP_FIELDS[currentStep] || []))
+            setFieldErrors({})
+            setErrorMessage(null)
             setCurrentStep(currentStep + 1)
+            window.scrollTo({ top: 0, behavior: 'smooth' })
         }
     }
 
@@ -194,8 +240,11 @@ export default function AddAgrivet({ auth, zones = [], flash }) {
             e.preventDefault()
             e.stopPropagation()
         }
+        setErrorMessage(null)
+        setFieldErrors({})
         if (currentStep > 1) {
             setCurrentStep(currentStep - 1)
+            window.scrollTo({ top: 0, behavior: 'smooth' })
         }
     }
 
@@ -203,10 +252,21 @@ export default function AddAgrivet({ auth, zones = [], flash }) {
         setOperatingDays((prev) =>
             prev.includes(fullDay) ? prev.filter((d) => d !== fullDay) : [...prev, fullDay],
         )
+        clearIssue('operating_days')
+        setErrorMessage(null)
     }
 
     const inputClass =
         'w-full rounded-lg border border-[#E5E7EB] bg-[#F8F9FB] px-4 py-2.5 text-sm outline-none ring-[#244693]/30 transition-all focus:border-[#244693] focus:ring-2'
+
+    const fieldClass = (key) => `${inputClass} ${issue(key) ? 'border-red-400' : ''}`
+
+    const fieldHelp = (key) => (
+        <>
+            <p className="mt-1 text-xs text-[#9CA3AF]">{AGRIVET_FIELD_GUIDE[key]}</p>
+            {issue(key) ? <p className="mt-1 text-xs font-medium text-red-600">{issue(key)}</p> : null}
+        </>
+    )
 
     return (
         <AddAgrivetShell auth={auth} title="Add Agrivet">
@@ -293,17 +353,30 @@ export default function AddAgrivet({ auth, zones = [], flash }) {
                             </div>
                         </div>
 
-                        {errorMessage && (
+                        {(errorMessage || bannerItems.length > 0) && (
                             <div className="mb-6 rounded-lg border border-[#E20E28] bg-[#FEE2E2] p-4">
                                 <div className="flex items-start gap-3">
                                     <X className="mt-0.5 h-5 w-5 shrink-0 text-[#E20E28]" />
                                     <div className="flex-1">
-                                        <p className="mb-1 text-sm font-semibold text-[#E20E28]">Required</p>
-                                        <p className="text-sm text-[#991B1B]">{errorMessage}</p>
+                                        <p className="mb-1 text-sm font-semibold text-[#E20E28]">Check these fields</p>
+                                        <p className="text-sm text-[#991B1B]">
+                                            {errorMessage || 'These fields need a proper value before you can continue.'}
+                                        </p>
+                                        {bannerItems.length > 0 && (
+                                            <ul className="mt-2 list-disc space-y-1 pl-4 text-sm text-[#991B1B]">
+                                                {bannerItems.map(([key, text]) => (
+                                                    <li key={key}>{text}</li>
+                                                ))}
+                                            </ul>
+                                        )}
                                     </div>
                                     <button
                                         type="button"
-                                        onClick={() => setErrorMessage(null)}
+                                        onClick={() => {
+                                            setErrorMessage(null)
+                                            setFieldErrors({})
+                                            form.clearErrors()
+                                        }}
                                         className="shrink-0 text-[#E20E28] transition-colors hover:text-[#991B1B]"
                                     >
                                         <X className="h-4 w-4" />
@@ -312,12 +385,15 @@ export default function AddAgrivet({ auth, zones = [], flash }) {
                             </div>
                         )}
 
-                        <form onSubmit={handleSubmit}>
+                        <form onSubmit={handleSubmit} noValidate>
                             {currentStep === 1 && (
                                 <div className="rounded-lg border border-[#E5E7EB] bg-white p-8">
-                                    <h2 className="mb-6 border-b border-[#E5E7EB] pb-4 text-sm font-semibold text-[#102059]">
+                                    <h2 className="mb-2 border-b border-[#E5E7EB] pb-4 text-sm font-semibold text-[#102059]">
                                         Account Information
                                     </h2>
+                                    <p className="mb-6 text-xs text-[#6B7280]">
+                                        Fields marked * are required. Each field below says what a proper value looks like.
+                                    </p>
                                     <div className="space-y-6">
                                         <div className="grid gap-4 md:grid-cols-2">
                                             <div>
@@ -327,15 +403,15 @@ export default function AddAgrivet({ auth, zones = [], flash }) {
                                                 <input
                                                     id="first_name"
                                                     type="text"
-                                                    required
-                                                    className={`${inputClass} ${form.errors.first_name ? 'border-red-400' : ''}`}
+                                                    maxLength={100}
+                                                    autoComplete="given-name"
+                                                    aria-invalid={Boolean(issue('first_name'))}
+                                                    className={fieldClass('first_name')}
                                                     value={form.data.first_name}
-                                                    onChange={(e) => form.setData('first_name', e.target.value)}
+                                                    onChange={(e) => updateField('first_name', e.target.value)}
                                                     style={{ boxShadow: 'none' }}
                                                 />
-                                                {form.errors.first_name && (
-                                                    <p className="mt-1 text-xs text-red-600">{form.errors.first_name}</p>
-                                                )}
+                                                {fieldHelp('first_name')}
                                             </div>
                                             <div>
                                                 <label className="mb-2 block text-xs text-[#6B7280]" htmlFor="middle_name">
@@ -344,11 +420,15 @@ export default function AddAgrivet({ auth, zones = [], flash }) {
                                                 <input
                                                     id="middle_name"
                                                     type="text"
-                                                    className={inputClass}
+                                                    maxLength={100}
+                                                    autoComplete="additional-name"
+                                                    aria-invalid={Boolean(issue('middle_name'))}
+                                                    className={fieldClass('middle_name')}
                                                     value={form.data.middle_name}
-                                                    onChange={(e) => form.setData('middle_name', e.target.value)}
+                                                    onChange={(e) => updateField('middle_name', e.target.value)}
                                                     style={{ boxShadow: 'none' }}
                                                 />
+                                                {fieldHelp('middle_name')}
                                             </div>
                                         </div>
                                         <div>
@@ -358,15 +438,15 @@ export default function AddAgrivet({ auth, zones = [], flash }) {
                                             <input
                                                 id="last_name"
                                                 type="text"
-                                                required
-                                                className={`${inputClass} ${form.errors.last_name ? 'border-red-400' : ''}`}
+                                                maxLength={100}
+                                                autoComplete="family-name"
+                                                aria-invalid={Boolean(issue('last_name'))}
+                                                className={fieldClass('last_name')}
                                                 value={form.data.last_name}
-                                                onChange={(e) => form.setData('last_name', e.target.value)}
+                                                onChange={(e) => updateField('last_name', e.target.value)}
                                                 style={{ boxShadow: 'none' }}
                                             />
-                                            {form.errors.last_name && (
-                                                <p className="mt-1 text-xs text-red-600">{form.errors.last_name}</p>
-                                            )}
+                                            {fieldHelp('last_name')}
                                         </div>
                                         <div>
                                             <label className="mb-2 block text-xs text-[#6B7280]" htmlFor="email">
@@ -375,15 +455,16 @@ export default function AddAgrivet({ auth, zones = [], flash }) {
                                             <input
                                                 id="email"
                                                 type="email"
-                                                required
-                                                className={`${inputClass} ${form.errors.email ? 'border-red-400' : ''}`}
+                                                maxLength={255}
+                                                autoComplete="email"
+                                                placeholder="name@example.com"
+                                                aria-invalid={Boolean(issue('email'))}
+                                                className={fieldClass('email')}
                                                 value={form.data.email}
-                                                onChange={(e) => form.setData('email', e.target.value)}
+                                                onChange={(e) => updateField('email', e.target.value)}
                                                 style={{ boxShadow: 'none' }}
                                             />
-                                            {form.errors.email && (
-                                                <p className="mt-1 text-xs text-red-600">{form.errors.email}</p>
-                                            )}
+                                            {fieldHelp('email')}
                                         </div>
                                         <div className="grid gap-4 md:grid-cols-2">
                                             <div>
@@ -393,15 +474,13 @@ export default function AddAgrivet({ auth, zones = [], flash }) {
                                                 <PasswordInput
                                                     id="password"
                                                     autoComplete="new-password"
-                                                    required
-                                                    className={`${inputClass} ${form.errors.password ? 'border-red-400' : ''}`}
+                                                    aria-invalid={Boolean(issue('password'))}
+                                                    className={fieldClass('password')}
                                                     value={form.data.password}
-                                                    onChange={(e) => form.setData('password', e.target.value)}
+                                                    onChange={(e) => updateField('password', e.target.value)}
                                                     style={{ boxShadow: 'none' }}
                                                 />
-                                                {form.errors.password && (
-                                                    <p className="mt-1 text-xs text-red-600">{form.errors.password}</p>
-                                                )}
+                                                {fieldHelp('password')}
                                             </div>
                                             <div>
                                                 <label
@@ -413,15 +492,13 @@ export default function AddAgrivet({ auth, zones = [], flash }) {
                                                 <PasswordInput
                                                     id="password_confirmation"
                                                     autoComplete="new-password"
-                                                    required
-                                                    className={`${inputClass} ${form.errors.password_confirmation ? 'border-red-400' : ''}`}
+                                                    aria-invalid={Boolean(issue('password_confirmation'))}
+                                                    className={fieldClass('password_confirmation')}
                                                     value={form.data.password_confirmation}
-                                                    onChange={(e) => form.setData('password_confirmation', e.target.value)}
+                                                    onChange={(e) => updateField('password_confirmation', e.target.value)}
                                                     style={{ boxShadow: 'none' }}
                                                 />
-                                                {form.errors.password_confirmation && (
-                                                    <p className="mt-1 text-xs text-red-600">{form.errors.password_confirmation}</p>
-                                                )}
+                                                {fieldHelp('password_confirmation')}
                                             </div>
                                         </div>
                                         <div>
@@ -431,15 +508,17 @@ export default function AddAgrivet({ auth, zones = [], flash }) {
                                             <input
                                                 id="phone_number"
                                                 type="tel"
-                                                required
-                                                className={`${inputClass} ${form.errors.phone_number ? 'border-red-400' : ''}`}
+                                                inputMode="tel"
+                                                maxLength={30}
+                                                autoComplete="tel"
+                                                placeholder="09171234567"
+                                                aria-invalid={Boolean(issue('phone_number'))}
+                                                className={fieldClass('phone_number')}
                                                 value={form.data.phone_number}
-                                                onChange={(e) => form.setData('phone_number', e.target.value)}
+                                                onChange={(e) => updateField('phone_number', e.target.value)}
                                                 style={{ boxShadow: 'none' }}
                                             />
-                                            {form.errors.phone_number && (
-                                                <p className="mt-1 text-xs text-red-600">{form.errors.phone_number}</p>
-                                            )}
+                                            {fieldHelp('phone_number')}
                                         </div>
                                     </div>
                                 </div>
@@ -447,9 +526,12 @@ export default function AddAgrivet({ auth, zones = [], flash }) {
 
                             {currentStep === 2 && (
                                 <div className="rounded-lg border border-[#E5E7EB] bg-white p-8">
-                                    <h2 className="mb-6 border-b border-[#E5E7EB] pb-4 text-sm font-semibold text-[#102059]">
+                                    <h2 className="mb-2 border-b border-[#E5E7EB] pb-4 text-sm font-semibold text-[#102059]">
                                         Business Information
                                     </h2>
+                                    <p className="mb-6 text-xs text-[#6B7280]">
+                                        The agrivet name is required. Description, logo, and banner can be left blank.
+                                    </p>
                                     <div className="space-y-6">
                                         <div>
                                             <label className="mb-2 block text-xs text-[#6B7280]" htmlFor="agrivet_name">
@@ -457,49 +539,45 @@ export default function AddAgrivet({ auth, zones = [], flash }) {
                                             </label>
                                             <input
                                                 id="agrivet_name"
-                                                required
-                                                className={`${inputClass} ${form.errors.agrivet_name ? 'border-red-400' : ''}`}
+                                                maxLength={150}
+                                                aria-invalid={Boolean(issue('agrivet_name'))}
+                                                className={fieldClass('agrivet_name')}
                                                 value={form.data.agrivet_name}
-                                                onChange={(e) => form.setData('agrivet_name', e.target.value)}
+                                                onChange={(e) => updateField('agrivet_name', e.target.value)}
                                                 style={{ boxShadow: 'none' }}
                                             />
-                                            {form.errors.agrivet_name && (
-                                                <p className="mt-1 text-xs text-red-600">{form.errors.agrivet_name}</p>
-                                            )}
+                                            {fieldHelp('agrivet_name')}
                                         </div>
 
                                         <div>
                                             <label className="mb-2 block text-xs text-[#6B7280]" htmlFor="description">
-                                                Business Description
+                                                Business Description <span className="text-[#9CA3AF]">(Optional)</span>
                                             </label>
                                             <textarea
                                                 id="description"
                                                 rows={4}
-                                                className={`${inputClass} ${form.errors.description ? 'border-red-400' : ''}`}
+                                                aria-invalid={Boolean(issue('description'))}
+                                                className={fieldClass('description')}
                                                 value={form.data.description}
-                                                onChange={(e) => form.setData('description', e.target.value)}
+                                                onChange={(e) => updateField('description', e.target.value)}
                                                 placeholder="Describe your agrivet business, products, and services..."
                                                 style={{ boxShadow: 'none' }}
                                             />
-                                            {form.errors.description && (
-                                                <p className="mt-1 text-xs text-red-600">{form.errors.description}</p>
-                                            )}
+                                            {fieldHelp('description')}
                                         </div>
 
                                         <div className="grid gap-6 md:grid-cols-2">
                                             <div>
                                                 <label className="mb-2 block text-xs text-[#6B7280]" htmlFor="logo">
-                                                    Logo
+                                                    Logo <span className="text-[#9CA3AF]">(Optional)</span>
                                                 </label>
-                                                <div className="cursor-pointer rounded-lg border-2 border-dashed border-[#E5E7EB] bg-[#F8F9FB] p-6 text-center transition-colors hover:border-[#244693]">
+                                                <div className={`cursor-pointer rounded-lg border-2 border-dashed bg-[#F8F9FB] p-6 text-center transition-colors hover:border-[#244693] ${issue('logo') ? 'border-red-400' : 'border-[#E5E7EB]'}`}>
                                                     <input
                                                         id="logo"
                                                         type="file"
-                                                        accept="image/*"
+                                                        accept="image/jpeg,image/png,image/gif,image/webp"
                                                         className="hidden"
-                                                        onChange={(e) =>
-                                                            handleImageUpload('logo', e.target.files?.[0], setLogoPreview)
-                                                        }
+                                                        onChange={(e) => handleImageUpload('logo', e, setLogoPreview)}
                                                     />
                                                     <label htmlFor="logo" className="cursor-pointer">
                                                         {logoPreview ? (
@@ -515,29 +593,25 @@ export default function AddAgrivet({ auth, zones = [], flash }) {
                                                             <div>
                                                                 <Upload className="mx-auto mb-2 h-8 w-8 text-[#9CA3AF]" />
                                                                 <p className="mb-1 text-sm text-[#6B7280]">Upload logo</p>
-                                                                <p className="text-xs text-[#9CA3AF]">PNG, JPG, WEBP up to 5MB</p>
+                                                                <p className="text-xs text-[#9CA3AF]">JPG, PNG, GIF, or WEBP up to 5MB</p>
                                                             </div>
                                                         )}
                                                     </label>
                                                 </div>
-                                                {form.errors.logo && (
-                                                    <p className="mt-1 text-xs text-red-600">{form.errors.logo}</p>
-                                                )}
+                                                {fieldHelp('logo')}
                                             </div>
 
                                             <div>
                                                 <label className="mb-2 block text-xs text-[#6B7280]" htmlFor="banner">
-                                                    Banner
+                                                    Banner <span className="text-[#9CA3AF]">(Optional)</span>
                                                 </label>
-                                                <div className="cursor-pointer rounded-lg border-2 border-dashed border-[#E5E7EB] bg-[#F8F9FB] p-6 text-center transition-colors hover:border-[#244693]">
+                                                <div className={`cursor-pointer rounded-lg border-2 border-dashed bg-[#F8F9FB] p-6 text-center transition-colors hover:border-[#244693] ${issue('banner') ? 'border-red-400' : 'border-[#E5E7EB]'}`}>
                                                     <input
                                                         id="banner"
                                                         type="file"
-                                                        accept="image/*"
+                                                        accept="image/jpeg,image/png,image/gif,image/webp"
                                                         className="hidden"
-                                                        onChange={(e) =>
-                                                            handleImageUpload('banner', e.target.files?.[0], setBannerPreview)
-                                                        }
+                                                        onChange={(e) => handleImageUpload('banner', e, setBannerPreview)}
                                                     />
                                                     <label htmlFor="banner" className="cursor-pointer">
                                                         {bannerPreview ? (
@@ -553,14 +627,12 @@ export default function AddAgrivet({ auth, zones = [], flash }) {
                                                             <div>
                                                                 <Upload className="mx-auto mb-2 h-8 w-8 text-[#9CA3AF]" />
                                                                 <p className="mb-1 text-sm text-[#6B7280]">Upload banner</p>
-                                                                <p className="text-xs text-[#9CA3AF]">PNG, JPG, WEBP up to 10MB</p>
+                                                                <p className="text-xs text-[#9CA3AF]">JPG, PNG, GIF, or WEBP up to 10MB</p>
                                                             </div>
                                                         )}
                                                     </label>
                                                 </div>
-                                                {form.errors.banner && (
-                                                    <p className="mt-1 text-xs text-red-600">{form.errors.banner}</p>
-                                                )}
+                                                {fieldHelp('banner')}
                                             </div>
                                         </div>
                                     </div>
@@ -569,9 +641,12 @@ export default function AddAgrivet({ auth, zones = [], flash }) {
 
                             {currentStep === 3 && (
                                 <div className="rounded-lg border border-[#E5E7EB] bg-white p-8">
-                                    <h2 className="mb-6 border-b border-[#E5E7EB] pb-4 text-sm font-semibold text-[#102059]">
+                                    <h2 className="mb-2 border-b border-[#E5E7EB] pb-4 text-sm font-semibold text-[#102059]">
                                         Store Information (Main Branch)
                                     </h2>
+                                    <p className="mb-6 text-xs text-[#6B7280]">
+                                        Store name, full address, operating days, hours, and storefront photo are required. The map pin is optional.
+                                    </p>
                                     <div className="space-y-6">
                                         <div>
                                             <label className="mb-2 block text-xs text-[#6B7280]" htmlFor="store_name">
@@ -579,15 +654,14 @@ export default function AddAgrivet({ auth, zones = [], flash }) {
                                             </label>
                                             <input
                                                 id="store_name"
-                                                required
-                                                className={`${inputClass} ${form.errors.store_name ? 'border-red-400' : ''}`}
+                                                maxLength={150}
+                                                aria-invalid={Boolean(issue('store_name'))}
+                                                className={fieldClass('store_name')}
                                                 value={form.data.store_name}
-                                                onChange={(e) => form.setData('store_name', e.target.value)}
+                                                onChange={(e) => updateField('store_name', e.target.value)}
                                                 style={{ boxShadow: 'none' }}
                                             />
-                                            {form.errors.store_name && (
-                                                <p className="mt-1 text-xs text-red-600">{form.errors.store_name}</p>
-                                            )}
+                                            {fieldHelp('store_name')}
                                         </div>
 
                                         <div>
@@ -600,23 +674,22 @@ export default function AddAgrivet({ auth, zones = [], flash }) {
                                                 initialLat={form.data.shop_lat}
                                                 initialLng={form.data.shop_long}
                                                 onLocationSelect={(loc) => {
-                                                    form.setData('shop_lat', loc.latitude != null ? String(loc.latitude) : '')
-                                                    form.setData('shop_long', loc.longitude != null ? String(loc.longitude) : '')
-                                                    if (loc.city) {
-                                                        form.setData('city', loc.city)
-                                                    }
-                                                    if (loc.province) {
-                                                        form.setData('province', loc.province)
-                                                    }
-                                                    if (loc.postal_code) {
-                                                        form.setData('zip_code', loc.postal_code)
-                                                    }
-                                                    if (loc.address) {
-                                                        form.setData('street', loc.address)
-                                                    }
-                                                    if (loc.barangay) {
-                                                        form.setData('barangay', loc.barangay)
-                                                    }
+                                                    form.setData((data) => ({
+                                                        ...data,
+                                                        shop_lat: loc.latitude != null ? String(loc.latitude) : '',
+                                                        shop_long: loc.longitude != null ? String(loc.longitude) : '',
+                                                        ...(loc.city ? { city: loc.city } : {}),
+                                                        ...(loc.province ? { province: loc.province } : {}),
+                                                        ...(loc.postal_code
+                                                            ? { zip_code: String(loc.postal_code).replace(/\D/g, '').slice(0, 4) }
+                                                            : {}),
+                                                        ...(loc.address ? { street: loc.address } : {}),
+                                                        ...(loc.barangay ? { barangay: loc.barangay } : {}),
+                                                    }))
+                                                    ;['shop_lat', 'shop_long', 'city', 'province', 'zip_code', 'street', 'barangay'].forEach(
+                                                        (key) => clearIssue(key),
+                                                    )
+                                                    setErrorMessage(null)
                                                 }}
                                             />
                                         </div>
@@ -631,15 +704,14 @@ export default function AddAgrivet({ auth, zones = [], flash }) {
                                                     type="number"
                                                     step="any"
                                                     inputMode="decimal"
-                                                    placeholder="e.g. 14.5995"
-                                                    className={`${inputClass} ${form.errors.shop_lat ? 'border-red-400' : ''}`}
+                                                    placeholder="e.g. 10.3157"
+                                                    aria-invalid={Boolean(issue('shop_lat'))}
+                                                    className={fieldClass('shop_lat')}
                                                     value={form.data.shop_lat}
-                                                    onChange={(e) => form.setData('shop_lat', e.target.value)}
+                                                    onChange={(e) => updateField('shop_lat', e.target.value)}
                                                     style={{ boxShadow: 'none' }}
                                                 />
-                                                {form.errors.shop_lat && (
-                                                    <p className="mt-1 text-xs text-red-600">{form.errors.shop_lat}</p>
-                                                )}
+                                                {fieldHelp('shop_lat')}
                                             </div>
                                             <div>
                                                 <label className="mb-2 block text-xs text-[#6B7280]" htmlFor="shop_long">
@@ -650,15 +722,14 @@ export default function AddAgrivet({ auth, zones = [], flash }) {
                                                     type="number"
                                                     step="any"
                                                     inputMode="decimal"
-                                                    placeholder="e.g. 120.9842"
-                                                    className={`${inputClass} ${form.errors.shop_long ? 'border-red-400' : ''}`}
+                                                    placeholder="e.g. 123.8854"
+                                                    aria-invalid={Boolean(issue('shop_long'))}
+                                                    className={fieldClass('shop_long')}
                                                     value={form.data.shop_long}
-                                                    onChange={(e) => form.setData('shop_long', e.target.value)}
+                                                    onChange={(e) => updateField('shop_long', e.target.value)}
                                                     style={{ boxShadow: 'none' }}
                                                 />
-                                                {form.errors.shop_long && (
-                                                    <p className="mt-1 text-xs text-red-600">{form.errors.shop_long}</p>
-                                                )}
+                                                {fieldHelp('shop_long')}
                                             </div>
                                         </div>
 
@@ -669,12 +740,14 @@ export default function AddAgrivet({ auth, zones = [], flash }) {
                                                 </label>
                                                 <input
                                                     id="street"
-                                                    required
-                                                    className={`${inputClass} ${form.errors.street ? 'border-red-400' : ''}`}
+                                                    maxLength={255}
+                                                    aria-invalid={Boolean(issue('street'))}
+                                                    className={fieldClass('street')}
                                                     value={form.data.street}
-                                                    onChange={(e) => form.setData('street', e.target.value)}
+                                                    onChange={(e) => updateField('street', e.target.value)}
                                                     style={{ boxShadow: 'none' }}
                                                 />
+                                                {fieldHelp('street')}
                                             </div>
                                             <div>
                                                 <label className="mb-2 block text-xs text-[#6B7280]" htmlFor="barangay">
@@ -682,12 +755,14 @@ export default function AddAgrivet({ auth, zones = [], flash }) {
                                                 </label>
                                                 <input
                                                     id="barangay"
-                                                    required
-                                                    className={`${inputClass} ${form.errors.barangay ? 'border-red-400' : ''}`}
+                                                    maxLength={255}
+                                                    aria-invalid={Boolean(issue('barangay'))}
+                                                    className={fieldClass('barangay')}
                                                     value={form.data.barangay}
-                                                    onChange={(e) => form.setData('barangay', e.target.value)}
+                                                    onChange={(e) => updateField('barangay', e.target.value)}
                                                     style={{ boxShadow: 'none' }}
                                                 />
+                                                {fieldHelp('barangay')}
                                             </div>
                                             <div className="grid gap-4 md:grid-cols-2">
                                                 <div>
@@ -696,12 +771,14 @@ export default function AddAgrivet({ auth, zones = [], flash }) {
                                                     </label>
                                                     <input
                                                         id="city"
-                                                        required
-                                                        className={`${inputClass} ${form.errors.city ? 'border-red-400' : ''}`}
+                                                        maxLength={100}
+                                                        aria-invalid={Boolean(issue('city'))}
+                                                        className={fieldClass('city')}
                                                         value={form.data.city}
-                                                        onChange={(e) => form.setData('city', e.target.value)}
+                                                        onChange={(e) => updateField('city', e.target.value)}
                                                         style={{ boxShadow: 'none' }}
                                                     />
+                                                    {fieldHelp('city')}
                                                 </div>
                                                 <div>
                                                     <label className="mb-2 block text-xs text-[#6B7280]" htmlFor="province">
@@ -709,12 +786,14 @@ export default function AddAgrivet({ auth, zones = [], flash }) {
                                                     </label>
                                                     <input
                                                         id="province"
-                                                        required
-                                                        className={`${inputClass} ${form.errors.province ? 'border-red-400' : ''}`}
+                                                        maxLength={100}
+                                                        aria-invalid={Boolean(issue('province'))}
+                                                        className={fieldClass('province')}
                                                         value={form.data.province}
-                                                        onChange={(e) => form.setData('province', e.target.value)}
+                                                        onChange={(e) => updateField('province', e.target.value)}
                                                         style={{ boxShadow: 'none' }}
                                                     />
+                                                    {fieldHelp('province')}
                                                 </div>
                                             </div>
                                             <div>
@@ -723,20 +802,28 @@ export default function AddAgrivet({ auth, zones = [], flash }) {
                                                 </label>
                                                 <input
                                                     id="zip_code"
-                                                    required
-                                                    className={`${inputClass} ${form.errors.zip_code ? 'border-red-400' : ''}`}
+                                                    inputMode="numeric"
+                                                    maxLength={4}
+                                                    placeholder="6000"
+                                                    aria-invalid={Boolean(issue('zip_code'))}
+                                                    className={fieldClass('zip_code')}
                                                     value={form.data.zip_code}
-                                                    onChange={(e) => form.setData('zip_code', e.target.value)}
+                                                    onChange={(e) => updateField('zip_code', e.target.value.replace(/\D/g, '').slice(0, 4))}
                                                     style={{ boxShadow: 'none' }}
                                                 />
+                                                {fieldHelp('zip_code')}
                                             </div>
                                         </div>
 
                                         <div>
-                                            <label className="mb-3 block text-xs text-[#6B7280]">
+                                            <label className="mb-3 block text-xs text-[#6B7280]" htmlFor="operating_days">
                                                 Operating Days <span className="text-[#E20E28]">*</span>
                                             </label>
-                                            <div className="rounded-lg border border-[#E5E7EB] bg-[#F8F9FB] p-4">
+                                            <div
+                                                id="operating_days"
+                                                tabIndex={-1}
+                                                className={`rounded-lg border bg-[#F8F9FB] p-4 ${issue('operating_days') ? 'border-red-400' : 'border-[#E5E7EB]'}`}
+                                            >
                                                 <div className="grid grid-cols-7 gap-2">
                                                     {DAY_LABELS.map((day, index) => {
                                                         const fullDay = FULL_DAYS[index]
@@ -758,6 +845,7 @@ export default function AddAgrivet({ auth, zones = [], flash }) {
                                                     })}
                                                 </div>
                                             </div>
+                                            {fieldHelp('operating_days')}
                                         </div>
 
                                         <div>
@@ -772,12 +860,13 @@ export default function AddAgrivet({ auth, zones = [], flash }) {
                                                     <input
                                                         id="opening_time"
                                                         type="time"
-                                                        required
-                                                        className={inputClass}
+                                                        aria-invalid={Boolean(issue('opening_time'))}
+                                                        className={fieldClass('opening_time')}
                                                         value={form.data.opening_time}
-                                                        onChange={(e) => form.setData('opening_time', e.target.value)}
+                                                        onChange={(e) => updateField('opening_time', e.target.value)}
                                                         style={{ boxShadow: 'none' }}
                                                     />
+                                                    {fieldHelp('opening_time')}
                                                 </div>
                                                 <div>
                                                     <label className="mb-2 block text-xs text-[#6B7280]" htmlFor="closing_time">
@@ -786,43 +875,49 @@ export default function AddAgrivet({ auth, zones = [], flash }) {
                                                     <input
                                                         id="closing_time"
                                                         type="time"
-                                                        required
-                                                        className={inputClass}
+                                                        aria-invalid={Boolean(issue('closing_time'))}
+                                                        className={fieldClass('closing_time')}
                                                         value={form.data.closing_time}
-                                                        onChange={(e) => form.setData('closing_time', e.target.value)}
+                                                        onChange={(e) => updateField('closing_time', e.target.value)}
                                                         style={{ boxShadow: 'none' }}
                                                     />
+                                                    {fieldHelp('closing_time')}
                                                 </div>
                                             </div>
                                         </div>
 
-                                        <HalfDayHoursFields
-                                            operatingDays={operatingDays}
-                                            day={form.data.half_day}
-                                            opening={form.data.half_day_opening}
-                                            closing={form.data.half_day_closing}
-                                            error={form.errors.half_day || form.errors.half_day_closing}
-                                            inputClass={inputClass}
-                                            onChange={(next) => {
-                                                setErrorMessage(null)
-                                                form.setData((data) => ({
-                                                    ...data,
-                                                    half_day: next.day,
-                                                    half_day_opening: next.opening,
-                                                    half_day_closing: next.closing,
-                                                }))
-                                            }}
-                                        />
+                                        <div id="half_day" tabIndex={-1}>
+                                            <HalfDayHoursFields
+                                                operatingDays={operatingDays}
+                                                day={form.data.half_day}
+                                                opening={form.data.half_day_opening}
+                                                closing={form.data.half_day_closing}
+                                                error={issue('half_day') || issue('half_day_opening') || issue('half_day_closing')}
+                                                inputClass={inputClass}
+                                                onChange={(next) => {
+                                                    setErrorMessage(null)
+                                                    clearIssue('half_day')
+                                                    clearIssue('half_day_opening')
+                                                    clearIssue('half_day_closing')
+                                                    form.setData((data) => ({
+                                                        ...data,
+                                                        half_day: next.day,
+                                                        half_day_opening: next.opening,
+                                                        half_day_closing: next.closing,
+                                                    }))
+                                                }}
+                                            />
+                                        </div>
 
                                         <div>
                                             <label className="mb-2 block text-xs text-[#6B7280]" htmlFor="store_image">
                                                 Store front photo <span className="text-[#E20E28]">*</span>
                                             </label>
-                                            <div className="cursor-pointer rounded-lg border-2 border-dashed border-[#E5E7EB] bg-[#F8F9FB] p-8 text-center transition-colors hover:border-[#244693]">
+                                            <div className={`cursor-pointer rounded-lg border-2 border-dashed bg-[#F8F9FB] p-8 text-center transition-colors hover:border-[#244693] ${issue('store_image') ? 'border-red-400' : 'border-[#E5E7EB]'}`}>
                                                 <input
                                                     id="store_image"
                                                     type="file"
-                                                    accept="image/*"
+                                                    accept="image/jpeg,image/png,image/webp"
                                                     className="hidden"
                                                     onChange={handleStoreImageUpload}
                                                 />
@@ -840,55 +935,12 @@ export default function AddAgrivet({ auth, zones = [], flash }) {
                                                         <div>
                                                             <Upload className="mx-auto mb-3 h-10 w-10 text-[#9CA3AF]" />
                                                             <p className="mb-1 text-sm text-[#6B7280]">Upload store photo</p>
-                                                            <p className="text-xs text-[#9CA3AF]">PNG, JPG up to 10MB</p>
+                                                            <p className="text-xs text-[#9CA3AF]">JPG, PNG, or WEBP up to 10MB</p>
                                                         </div>
                                                     )}
                                                 </label>
                                             </div>
-                                            {form.errors.store_image && (
-                                                <p className="mt-1 text-xs text-red-600">{form.errors.store_image}</p>
-                                            )}
-                                        </div>
-
-                                        <div>
-                                            <label className="mb-2 block text-xs text-[#6B7280]" htmlFor="permit_image">
-                                                Business permit <span className="text-[#E20E28]">*</span>
-                                            </label>
-                                            <div className="cursor-pointer rounded-lg border-2 border-dashed border-[#E5E7EB] bg-[#F8F9FB] p-8 text-center transition-colors hover:border-[#244693]">
-                                                <input
-                                                    id="permit_image"
-                                                    type="file"
-                                                    accept="image/*,.pdf"
-                                                    className="hidden"
-                                                    onChange={handlePermitImageUpload}
-                                                />
-                                                <label htmlFor="permit_image" className="cursor-pointer">
-                                                    {permitIsPdf ? (
-                                                        <div>
-                                                            <p className="mb-2 text-sm font-semibold text-[#102059]">PDF selected</p>
-                                                            <p className="text-xs text-[#6B7280]">Click to change file</p>
-                                                        </div>
-                                                    ) : permitImagePreview ? (
-                                                        <div>
-                                                            <img
-                                                                src={permitImagePreview}
-                                                                alt="Permit preview"
-                                                                className="mx-auto mb-4 max-h-64 rounded-lg"
-                                                            />
-                                                            <p className="text-xs text-[#6B7280]">Click to change file</p>
-                                                        </div>
-                                                    ) : (
-                                                        <div>
-                                                            <Upload className="mx-auto mb-3 h-10 w-10 text-[#9CA3AF]" />
-                                                            <p className="mb-1 text-sm text-[#6B7280]">Upload permit</p>
-                                                            <p className="text-xs text-[#9CA3AF]">PNG, JPG, PDF up to 10MB</p>
-                                                        </div>
-                                                    )}
-                                                </label>
-                                            </div>
-                                            {form.errors.permit_image && (
-                                                <p className="mt-1 text-xs text-red-600">{form.errors.permit_image}</p>
-                                            )}
+                                            {fieldHelp('store_image')}
                                         </div>
                                     </div>
                                 </div>
@@ -986,8 +1038,7 @@ export default function AddAgrivet({ auth, zones = [], flash }) {
                                                 <div>
                                                     <p className="mb-1 text-xs text-[#9CA3AF]">Photos</p>
                                                     <p className="text-sm text-[#102059]">
-                                                        Store: {storeImagePreview ? '✓' : '—'} · Permit:{' '}
-                                                        {permitImagePreview || permitIsPdf ? '✓' : '—'}
+                                                        Store: {storeImagePreview ? '✓' : '—'}
                                                     </p>
                                                 </div>
                                             </div>

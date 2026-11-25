@@ -93,6 +93,7 @@ Route::get('shops/{id}', [ShopController::class, 'show']);
 Route::get('farms/search', [FarmApiController::class, 'search']);
 Route::get('farms/nearby', [FarmApiController::class, 'nearby']);
 Route::get('farms', [FarmApiController::class, 'index']);
+Route::get('farms/{id}/bloodlines', [FarmApiController::class, 'bloodlines'])->whereNumber('id');
 Route::get('farms/{id}/listings', [FarmApiController::class, 'farmListings'])->whereNumber('id');
 Route::get('farms/{id}', [FarmApiController::class, 'show'])->whereNumber('id');
 

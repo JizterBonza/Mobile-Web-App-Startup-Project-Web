@@ -215,8 +215,11 @@ class FarmPaymentService
                 if (! $order->held_at) {
                     $order->status = 'awaiting_farm_confirmation';
                 }
+                $depositNotice = (int) $order->deposit_cents === (int) $order->subtotal_cents
+                    ? 'The full chicken payment is verified. The farm can now confirm the order.'
+                    : 'The 30% chicken deposit is verified. The farm can now confirm the order.';
                 foreach ($workflow->recipients($order, true) as $id) {
-                    $workflow->notice($order, $id, 'deposit_paid', 'The 30% chicken deposit is verified. The farm can now confirm the order.');
+                    $workflow->notice($order, $id, 'deposit_paid', $depositNotice);
                 }
             }
             $paid = $workflow->paidCents($order);

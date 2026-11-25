@@ -289,17 +289,19 @@ class FarmCheckoutService
                 'catalog' => GamefowlCatalog::whereIn('id', $catalogIds)->orderBy('id')->get(['id', 'name', 'sex', 'images'])->toArray(),
             ];
         }
-        abort_if($subtotal < 2 || $subtotal > 9999999999, 422, 'Chicken subtotal is outside the supported payment range.');
+        abort_if($subtotal < 100 || $subtotal > 9999999999, 422, 'Chicken subtotal is outside the supported payment range.');
         $address = null;
         if ($input['fulfillment_method'] === 'delivery') {
             $address = Address::where('user_id', $user->id)->where('is_active', true)->find($input['shipping_address_id']);
             abort_unless($address, 422, 'Delivery address must be an active address belonging to this customer.');
         }
         $boxes = (int) ceil($birds / 2);
+        // PayMongo accepts at least ₱1. A 30% deposit on a subtotal under ₱4 can fall below that, so those orders are paid in full.
+        $deposit = $subtotal < 400 ? $subtotal : (int) round($subtotal * 0.3, 0, PHP_ROUND_HALF_UP);
 
         return [
             'farm_id' => $farm->id, 'bird_count' => $birds, 'box_count' => $boxes,
-            'subtotal_cents' => $subtotal, 'deposit_cents' => (int) round($subtotal * 0.3, 0, PHP_ROUND_HALF_UP),
+            'subtotal_cents' => $subtotal, 'deposit_cents' => $deposit,
             'estimate_min_cents' => $address ? $boxes * 250000 : 0,
             'estimate_max_cents' => $address ? $boxes * 350000 : 0,
             'earliest_release_date' => $release->toDateString(),
