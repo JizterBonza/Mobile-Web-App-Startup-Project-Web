@@ -41,6 +41,7 @@ import SuperAdminOrAdminLayout from '../../Layouts/SuperAdminOrAdminLayout'
 import VendorKlasmeytLayout from '../../Layouts/VendorKlasmeytLayout'
 import PinLocationMap from '../../Components/PinLocationMap'
 import OwnerManagerOrdersPanel from '../../Components/Dashboard/OwnerManagerOrdersPanel'
+import AgrivetBrandingModal from '../../Components/Dashboard/AgrivetBrandingModal'
 import HalfDayHoursFields from '../../Components/HalfDayHoursFields'
 import { storageUrl } from '../../utils/storageUrl'
 import { formatHalfDaySchedule, halfDayError, parseHalfDaySchedule } from '../../utils/storeSchedule'
@@ -653,6 +654,8 @@ export default function AgrivetStoreInformation({
         } else {
           showSuccess('add', flash.success)
         }
+      } else if (lower.includes('logo') || lower.includes('banner')) {
+        showSuccess('branding', flash.success)
       } else if (lower.includes('reactivated') || lower.includes('deactivated')) {
         showSuccess('status', store.storeName)
       } else if (lower.includes('cover photo') || lower.includes('shop updated') || lower.includes('business permit')) {
@@ -710,6 +713,7 @@ export default function AgrivetStoreInformation({
 
   // Cover photo modal state
   const [showEditCoverPhotoModal, setShowEditCoverPhotoModal] = useState(false)
+  const [showBrandingModal, setShowBrandingModal] = useState(false)
   const [coverPhotoPreview, setCoverPhotoPreview] = useState(null)
   const [coverPhotoFile, setCoverPhotoFile] = useState(null)
   const [showCoverPhotoConfirmModal, setShowCoverPhotoConfirmModal] = useState(false)
@@ -1363,9 +1367,11 @@ export default function AgrivetStoreInformation({
                             ? 'Store Status Updated'
                             : successMessageType === 'product'
                               ? getProductSuccessTitle(successVendorName)
-                              : successMessageType === 'storeEdit'
-                                ? 'Store Information Updated'
-                                : 'Vendor Status Updated'}
+                              : successMessageType === 'branding'
+                                ? 'Logo and Banner Updated'
+                                : successMessageType === 'storeEdit'
+                                  ? 'Store Information Updated'
+                                  : 'Vendor Status Updated'}
                   </h3>
                   <p className="text-xs text-white/90 mt-0.5">
                     {successMessageType === 'add'
@@ -1378,9 +1384,11 @@ export default function AgrivetStoreInformation({
                             ? `${successVendorName} is now ${store.status}`
                             : successMessageType === 'product'
                               ? successVendorName
-                              : successMessageType === 'storeEdit'
-                                ? `${successVendorName}'s information has been successfully updated`
-                                : `${successVendorName}'s status has been updated`}
+                              : successMessageType === 'branding'
+                                ? successVendorName
+                                : successMessageType === 'storeEdit'
+                                  ? `${successVendorName}'s information has been successfully updated`
+                                  : `${successVendorName}'s status has been updated`}
                   </p>
                 </div>
                 <button onClick={() => setShowSuccessMessage(false)} className="p-1.5 hover:bg-white/20 rounded transition-colors">
@@ -1427,17 +1435,29 @@ export default function AgrivetStoreInformation({
             {/* Page Info */}
             <div className="border-b border-[#E5E7EB] px-0 pb-4">
               <div className="flex items-end gap-5">
-                <div className="-mt-14 h-28 w-28 shrink-0 overflow-hidden rounded-full border-4 border-white bg-[#F8F9FB] shadow-md">
-                  {store.profilePhoto ? (
-                    <img
-                      src={store.profilePhoto}
-                      alt={`${agrivet.name} logo`}
-                      className="h-full w-full object-cover"
-                    />
-                  ) : (
-                    <div className="flex h-full w-full items-center justify-center">
-                      <Store className="h-10 w-10 text-[#D1D5DB]" aria-hidden />
-                    </div>
+                <div className="relative -mt-14 h-28 w-28 shrink-0">
+                  <div className="h-full w-full overflow-hidden rounded-full border-4 border-white bg-[#F8F9FB] shadow-md">
+                    {store.profilePhoto ? (
+                      <img
+                        src={store.profilePhoto}
+                        alt={`${agrivet.name} logo`}
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <div className="flex h-full w-full items-center justify-center">
+                        <Store className="h-10 w-10 text-[#D1D5DB]" aria-hidden />
+                      </div>
+                    )}
+                  </div>
+                  {isOwnerManager && (
+                    <button
+                      type="button"
+                      className="absolute bottom-1 right-1 flex h-8 w-8 items-center justify-center rounded-full border border-[#E5E7EB] bg-white shadow-md transition-all hover:scale-110"
+                      onClick={() => setShowBrandingModal(true)}
+                      title="Update logo and banner"
+                    >
+                      <Pencil className="h-4 w-4 text-[#244693]" />
+                    </button>
                   )}
                 </div>
                 <div className="min-w-0 flex-1 pt-4">
@@ -2764,6 +2784,15 @@ export default function AgrivetStoreInformation({
               </div>
             </div>
           </div>
+        )}
+
+        {isOwnerManager && (
+          <AgrivetBrandingModal
+            open={showBrandingModal}
+            onClose={() => setShowBrandingModal(false)}
+            logoUrl={agrivet?.logo_url}
+            bannerUrl={agrivet?.banner_url}
+          />
         )}
 
         {/* Update Cover Photo Modal */}

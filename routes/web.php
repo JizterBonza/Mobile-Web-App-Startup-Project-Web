@@ -447,6 +447,7 @@ Route::middleware(['auth', 'session.valid', 'user.type:owner_manager'])->prefix(
     Route::put('/farm', [DashboardController::class, 'ownerManagerUpdateFarm'])->name('farm.update');
     Route::patch('/farm/status', [DashboardController::class, 'ownerManagerUpdateFarmStatus'])->name('farm.status');
     Route::post('/farm/cover', [DashboardController::class, 'ownerManagerUpdateFarmCover'])->name('farm.cover');
+    Route::post('/branding', [DashboardController::class, 'ownerManagerUpdateBranding'])->name('branding');
     Route::get('/stores', [DashboardController::class, 'ownerManagerStores'])->name('stores');
     Route::post('/stores', [DashboardController::class, 'ownerManagerStoreShop'])->name('stores.store');
     Route::get('/stores/{shopId}/store-information', [DashboardController::class, 'ownerManagerStoreInformation'])->name('stores.store-information');
