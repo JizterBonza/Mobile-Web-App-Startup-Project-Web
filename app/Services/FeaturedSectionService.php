@@ -229,11 +229,14 @@ class FeaturedSectionService
      *
      * @return array{products: Collection, agrivet_stores: Collection, farms: Collection}
      */
-    public function publicPayload(): array
+    /**
+     * @param  array<int, int>  $zoneIds
+     */
+    public function publicPayload(array $zoneIds): array
     {
         return [
             'products' => $this->publicProducts(),
-            'agrivet_stores' => $this->publicStores(),
+            'agrivet_stores' => $this->publicStores($zoneIds),
             'farms' => $this->publicFarms(),
         ];
     }
@@ -271,8 +274,15 @@ class FeaturedSectionService
         });
     }
 
-    public function publicStores(): Collection
+    /**
+     * @param  array<int, int>  $zoneIds
+     */
+    public function publicStores(array $zoneIds): Collection
     {
+        if ($zoneIds === []) {
+            return collect();
+        }
+
         $entries = $this->activeEntries(FeaturedEntry::SECTION_AGRIVET_STORE);
         if ($entries->isEmpty()) {
             return collect();
@@ -283,6 +293,7 @@ class FeaturedSectionService
             ->whereIn('id', $entries->pluck('entity_id'))
             ->where('shop_status', 'active')
             ->whereAgrivetIsActive()
+            ->whereIn('zone_id', $zoneIds)
             ->get()
             ->keyBy('id');
 
