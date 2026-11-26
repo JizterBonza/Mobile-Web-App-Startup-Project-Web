@@ -6,6 +6,7 @@ use App\Models\Farm;
 use App\Models\Item;
 use App\Models\Shop;
 use App\Services\FarmListingDiscoveryService;
+use App\Support\FuzzySearch;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 
@@ -35,7 +36,7 @@ class SearchController extends Controller
         }
 
         $searchTerm = $request->input('q');
-        $limit = $request->input('limit') ?? 10;
+        $limit = (int) ($request->input('limit') ?? 10);
         $type = $request->input('type');
 
         $items = collect();
@@ -55,7 +56,7 @@ class SearchController extends Controller
             $farms = $this->searchFarms($searchTerm, $limit);
         }
 
-        // Temporarily hide gamefowl listings from main search results.
+        // Hide gamefowl listings from combined search. Items, shops, and partner farms stay visible.
         // if ($type === null || $type === 'gamefowl') {
         //     $gamefowl = $discovery->search($searchTerm, $limit);
         // }
@@ -82,11 +83,8 @@ class SearchController extends Controller
     {
         $query = Item::query()
             ->whereShopAgrivetIsActive()
-            ->where('item_status', 'active')
-            ->where(function ($q) use ($searchTerm) {
-                $q->where('item_name', 'like', '%' . $searchTerm . '%')
-                    ->orWhere('item_description', 'like', '%' . $searchTerm . '%');
-            });
+            ->where('item_status', 'active');
+        FuzzySearch::constrain($query, $searchTerm, ['item_name', 'item_description']);
 
         if ($request->filled('shop_id')) {
             $query->where('shop_id', $request->shop_id);
@@ -104,17 +102,20 @@ class SearchController extends Controller
             $query->where('item_price', '<=', $request->max_price);
         }
 
-        return $query
-            ->select(['id', 'product_catalog_id', 'item_name', 'item_images', 'item_price', 'category', 'discount_percent', 'discount_type', 'discount_expires_at', 'is_bundle'])
-            ->orderByRaw('CASE
-                WHEN item_name LIKE ? THEN 1
-                WHEN item_name LIKE ? THEN 2
-                ELSE 3
-            END', [$searchTerm, $searchTerm . '%'])
-            ->orderBy('average_rating', 'desc')
-            ->orderBy('sold_count', 'desc')
-            ->limit($limit)
-            ->get()
+        FuzzySearch::orderByNameRelevance($query, $searchTerm, 'item_name');
+
+        return FuzzySearch::rank(
+            $query
+                ->select(['id', 'product_catalog_id', 'item_name', 'item_description', 'item_images', 'item_price', 'category', 'discount_percent', 'discount_type', 'discount_expires_at', 'is_bundle', 'average_rating', 'sold_count'])
+                ->orderBy('average_rating', 'desc')
+                ->orderBy('sold_count', 'desc')
+                ->limit(FuzzySearch::CANDIDATE_LIMIT)
+                ->get(),
+            $searchTerm,
+            'item_name',
+            ['item_description']
+        )
+            ->take($limit)
             ->map(fn (Item $item) => [
                 'item_id' => $item->id,
                 'item_name' => $item->item_name,
@@ -125,24 +126,24 @@ class SearchController extends Controller
 
     private function searchShops(string $searchTerm, int $limit)
     {
-        return Shop::query()
+        $query = Shop::query()
             ->whereAgrivetIsActive()
-            ->where('shop_status', 'active')
-            ->where(function ($q) use ($searchTerm) {
-                $q->where('shop_name', 'like', '%' . $searchTerm . '%')
-                    ->orWhere('shop_description', 'like', '%' . $searchTerm . '%')
-                    ->orWhere('shop_address', 'like', '%' . $searchTerm . '%');
-            })
-            ->select(['id', 'shop_name', 'logo_url'])
-            ->orderByRaw('CASE
-                WHEN shop_name LIKE ? THEN 1
-                WHEN shop_name LIKE ? THEN 2
-                ELSE 3
-            END', [$searchTerm, $searchTerm . '%'])
-            ->orderBy('average_rating', 'desc')
-            ->orderBy('total_reviews', 'desc')
-            ->limit($limit)
-            ->get()
+            ->where('shop_status', 'active');
+        FuzzySearch::constrain($query, $searchTerm, ['shop_name', 'shop_description', 'shop_address']);
+        FuzzySearch::orderByNameRelevance($query, $searchTerm, 'shop_name');
+
+        return FuzzySearch::rank(
+            $query
+                ->select(['id', 'shop_name', 'shop_description', 'shop_address', 'logo_url', 'average_rating', 'total_reviews'])
+                ->orderBy('average_rating', 'desc')
+                ->orderBy('total_reviews', 'desc')
+                ->limit(FuzzySearch::CANDIDATE_LIMIT)
+                ->get(),
+            $searchTerm,
+            'shop_name',
+            ['shop_description', 'shop_address']
+        )
+            ->take($limit)
             ->map(fn (Shop $shop) => [
                 'shop_id' => $shop->id,
                 'name' => $shop->shop_name,
@@ -152,23 +153,22 @@ class SearchController extends Controller
 
     private function searchFarms(string $searchTerm, int $limit)
     {
-        return Farm::query()
-            ->where('status', 'active')
-            ->where(function ($q) use ($searchTerm) {
-                $q->where('name', 'like', '%' . $searchTerm . '%')
-                    ->orWhere('description', 'like', '%' . $searchTerm . '%')
-                    ->orWhere('address', 'like', '%' . $searchTerm . '%');
-            })
-            ->select(['id', 'name', 'logo_url'])
-            ->orderByRaw('CASE
-                WHEN name LIKE ? THEN 1
-                WHEN name LIKE ? THEN 2
-                ELSE 3
-            END', [$searchTerm, $searchTerm . '%'])
-            ->latest()
-            ->orderByDesc('id')
-            ->limit($limit)
-            ->get()
+        $query = Farm::query()->where('status', 'active');
+        FuzzySearch::constrain($query, $searchTerm, ['name', 'description', 'address']);
+        FuzzySearch::orderByNameRelevance($query, $searchTerm, 'name');
+
+        return FuzzySearch::rank(
+            $query
+                ->select(['id', 'name', 'description', 'address', 'logo_url'])
+                ->latest()
+                ->orderByDesc('id')
+                ->limit(FuzzySearch::CANDIDATE_LIMIT)
+                ->get(),
+            $searchTerm,
+            'name',
+            ['description', 'address']
+        )
+            ->take($limit)
             ->map(fn (Farm $farm) => [
                 'farm_id' => $farm->id,
                 'name' => $farm->name,
