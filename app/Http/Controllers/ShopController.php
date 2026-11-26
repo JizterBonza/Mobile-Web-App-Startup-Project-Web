@@ -487,7 +487,7 @@ class ShopController extends Controller
      * @param Request $request
      * @return \Illuminate\Http\JsonResponse
      */
-    public function nearby(Request $request)
+    public function nearby(Request $request, ShopZoneCoverageService $coverage)
     {
         $validator = Validator::make($request->all(), [
             'lat' => 'required|numeric|between:-90,90',
@@ -508,8 +508,9 @@ class ShopController extends Controller
         $userLong = (float) $request->long;
         $limit = (int) $request->input('limit', 20);
         $radiusKm = $request->filled('radius_km') ? (float) $request->radius_km : null;
+        $zoneIds = $coverage->zoneIdsContainingPoint($userLat, $userLong);
 
-        $shops = Shop::query()
+        $shops = $zoneIds === [] ? collect() : Shop::query()
             ->with(['agrivet' => function ($query) {
                 $query->select('id', 'logo_url', 'status');
             }])
@@ -517,6 +518,7 @@ class ShopController extends Controller
             ->whereAgrivetIsActive()
             ->whereNotNull('shop_lat')
             ->whereNotNull('shop_long')
+            ->whereIn('zone_id', $zoneIds)
             ->get()
             ->map(function (Shop $shop) use ($userLat, $userLong) {
                 $distanceKm = GeoDistance::kmBetween(
@@ -563,11 +565,13 @@ class ShopController extends Controller
      * @param Request $request
      * @return \Illuminate\Http\JsonResponse
      */
-    public function search(Request $request)
+    public function search(Request $request, ShopZoneCoverageService $coverage)
     {
         $validator = Validator::make($request->all(), [
             'q' => 'required|string|min:2|max:100',
             'limit' => 'nullable|integer|min:1|max:50',
+            'lat' => 'nullable|numeric|between:-90,90',
+            'long' => 'nullable|numeric|between:-180,180',
         ]);
 
         if ($validator->fails()) {
@@ -578,14 +582,28 @@ class ShopController extends Controller
             ], 422);
         }
 
+        $zoneIds = $request->filled('lat') && $request->filled('long')
+            ? $coverage->zoneIdsContainingPoint((float) $request->input('lat'), (float) $request->input('long'))
+            : [];
+        $searchTerm = $request->input('q');
+
+        if ($zoneIds === []) {
+            return response()->json([
+                'success' => true,
+                'data' => [],
+                'count' => 0,
+                'query' => $searchTerm,
+            ]);
+        }
+
         $query = Shop::query()->with(['agrivet' => function ($query) {
             $query->select('id', 'logo_url', 'status');
         }]);
 
-        // Only search active shops of an active Agrivet
-        $query->where('shop_status', 'active')->whereAgrivetIsActive();
-
-        $searchTerm = $request->input('q');
+        // Only search active shops of an active Agrivet inside a matching zone.
+        $query->where('shop_status', 'active')
+            ->whereAgrivetIsActive()
+            ->whereIn('zone_id', $zoneIds);
         FuzzySearch::constrain($query, $searchTerm, ['shop_name', 'shop_description', 'shop_address']);
 
         FuzzySearch::orderByNameRelevance($query, $searchTerm, 'shop_name');

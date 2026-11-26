@@ -168,6 +168,7 @@ foreach (['super_admin' => 'super-admin', 'admin' => 'admin'] as $gamefowlRole =
 
             Route::get('gamefowls/bloodlines', [GamefowlLookupController::class, 'bloodlines'])->name('gamefowls.bloodlines');
             Route::post('gamefowls/bloodlines', [GamefowlLookupController::class, 'storeBloodline'])->name('gamefowls.bloodlines.store');
+            Route::get('gamefowls/bloodlines/{id}/rate-history', [GamefowlLookupController::class, 'bloodlineRateHistory'])->name('gamefowls.bloodlines.rate-history');
             Route::put('gamefowls/bloodlines/{id}', [GamefowlLookupController::class, 'updateBloodline'])->name('gamefowls.bloodlines.update');
             Route::delete('gamefowls/bloodlines/{id}', [GamefowlLookupController::class, 'destroyBloodline'])->name('gamefowls.bloodlines.destroy');
 

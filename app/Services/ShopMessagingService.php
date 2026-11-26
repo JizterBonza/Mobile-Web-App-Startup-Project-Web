@@ -536,7 +536,7 @@ class ShopMessagingService
         $name = ($listing->is_bundle && filled($listing->bundle_name))
             ? $listing->bundle_name
             : ($gamefowl?->bloodline?->name ?: $gamefowl?->name ?: 'Gamefowl');
-        $price = round((float) $listing->price, 2);
+        $price = $listing->getCustomerUnitPrice();
 
         return [
             'listing_id' => (int) $listing->id,

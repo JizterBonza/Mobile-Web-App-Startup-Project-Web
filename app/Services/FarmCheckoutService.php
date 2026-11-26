@@ -56,7 +56,8 @@ class FarmCheckoutService
                         'id' => $entry->id, 'listing_id' => $listing->id,
                         'name' => $listing->is_bundle ? $listing->bundle_name : $listing->gamefowl?->name,
                         'quantity' => $entry->quantity, 'selling_unit' => $listing->selling_unit,
-                        'bird_count' => $birds, 'unit_price' => self::money(self::cents($listing->price)),
+                        'bird_count' => $birds, 'unit_price' => self::money(self::cents($listing->getCustomerUnitPrice())),
+                        'markup_percent' => $listing->getMarkupPercent(),
                         'available_birds' => max(0, $listing->stock - $listing->reserved_stock),
                         'available' => $listing->status === 'active' && $listing->farm->status === 'active'
                             && $listing->stock - $listing->reserved_stock >= $birds,
@@ -232,6 +233,8 @@ class FarmCheckoutService
                 $farmOrder->items()->create([
                     'listing_id' => $item['listing_id'], 'quantity' => $item['quantity'],
                     'bird_count' => $item['bird_count'], 'unit_price_cents' => $item['unit_price_cents'],
+                    'vendor_unit_price_cents' => $item['vendor_unit_price_cents'],
+                    'platform_fee_cents' => $item['platform_fee_cents'],
                     'snapshot' => $item,
                 ]);
                 FarmGamefowlListing::whereKey($item['listing_id'])->increment('reserved_stock', $item['bird_count']);
@@ -271,7 +274,9 @@ class FarmCheckoutService
                 422, 'A gamefowl in this listing is unavailable.');
             $count = $entry->quantity * self::birdsPerUnit($listing->selling_unit);
             abort_if($listing->stock - $listing->reserved_stock < $count, 409, 'Insufficient available birds.');
-            $price = self::cents($listing->price);
+            $vendorCents = self::cents($listing->getFarmUnitPrice());
+            $price = self::cents($listing->getCustomerUnitPrice());
+            $feePerUnitCents = max(0, $price - $vendorCents);
             if ($listing->release_option === 'Set Release Date') {
                 abort_unless($listing->release_date, 422, 'Listing release date is missing.');
                 $release = $release->max(Carbon::parse($listing->release_date->toDateString(), 'Asia/Manila'));
@@ -281,6 +286,9 @@ class FarmCheckoutService
             $items[] = [
                 'listing_id' => $listing->id, 'quantity' => $entry->quantity,
                 'bird_count' => $count, 'unit_price_cents' => $price,
+                'vendor_unit_price_cents' => $vendorCents,
+                'markup_percent' => $listing->getMarkupPercent(),
+                'platform_fee_cents' => $feePerUnitCents * $entry->quantity,
                 'name' => $listing->is_bundle ? $listing->bundle_name : $listing->gamefowl->name,
                 'selling_unit' => $listing->selling_unit, 'is_bundle' => (bool) $listing->is_bundle,
                 'bundle_catalog_ids' => $listing->bundle_catalog_ids ?? [],

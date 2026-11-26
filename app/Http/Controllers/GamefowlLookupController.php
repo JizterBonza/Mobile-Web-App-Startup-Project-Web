@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\ActivityLog;
 use App\Models\GamefowlCatalog;
 use App\Models\GamefowlLookup;
+use App\Models\GamefowlLookupRateLog;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
@@ -29,6 +30,49 @@ class GamefowlLookupController extends Controller
     public function destroyBloodline($id)
     {
         return $this->destroy(GamefowlLookup::TYPE_BLOODLINE, $id);
+    }
+
+    /**
+     * Fetch rate change history for a bloodline.
+     */
+    public function bloodlineRateHistory($id)
+    {
+        $lookup = GamefowlLookup::query()
+            ->where('type', GamefowlLookup::TYPE_BLOODLINE)
+            ->findOrFail($id);
+
+        $logs = GamefowlLookupRateLog::query()
+            ->with([
+                'user:id,user_detail_id',
+                'user.userDetail:id,first_name,last_name,email',
+            ])
+            ->where('gamefowl_lookup_id', $lookup->id)
+            ->orderByDesc('created_at')
+            ->get()
+            ->map(function (GamefowlLookupRateLog $log) {
+                $detail = $log->user?->userDetail;
+                $userName = $detail
+                    ? trim(($detail->first_name ?? '').' '.($detail->last_name ?? '')) ?: ($detail->email ?? null)
+                    : null;
+
+                return [
+                    'id' => $log->id,
+                    'old_rate' => $log->old_rate,
+                    'new_rate' => $log->new_rate,
+                    'changed_by' => $userName ?: ($log->user_id ? "User #{$log->user_id}" : 'System'),
+                    'created_at' => $log->created_at?->toIso8601String(),
+                ];
+            });
+
+        return response()->json([
+            'success' => true,
+            'bloodline' => [
+                'id' => $lookup->id,
+                'name' => $lookup->name,
+                'rate' => $lookup->rate,
+            ],
+            'data' => $logs,
+        ]);
     }
 
     public function ageTypes(Request $request)
@@ -94,6 +138,18 @@ class GamefowlLookupController extends Controller
             'rate' => $this->rateFor($type, $validated),
         ]);
 
+        if ($type === GamefowlLookup::TYPE_BLOODLINE) {
+            GamefowlLookup::flushRatesCache();
+            GamefowlLookupRateLog::logChange($lookup, null, (float) $lookup->rate);
+            ActivityLog::log(
+                'bloodline_rate_changed',
+                "Initial bloodline rate set for {$lookup->name}: {$lookup->rate}%",
+                $lookup,
+                null,
+                ['rate' => $lookup->rate]
+            );
+        }
+
         ActivityLog::log('created', "{$this->kindMeta($type)['singular']} created: {$lookup->name}", $lookup, null, $lookup->toArray());
 
         return redirect()->back()->with('success', "{$this->kindMeta($type)['singular']} created successfully.");
@@ -103,11 +159,36 @@ class GamefowlLookupController extends Controller
     {
         $lookup = GamefowlLookup::query()->where('type', $type)->findOrFail($id);
         $oldValues = $lookup->toArray();
+        $oldRate = $oldValues['rate'] ?? null;
 
         $validated = $request->validate($this->rules($type, $lookup->id));
         $validated['rate'] = $this->rateFor($type, $validated);
 
         $lookup->update($validated);
+
+        if ($type === GamefowlLookup::TYPE_BLOODLINE) {
+            GamefowlLookup::flushRatesCache();
+            $newRate = (float) $lookup->rate;
+            $rateChanged = $oldRate === null
+                || bccomp(number_format((float) $oldRate, 2, '.', ''), number_format($newRate, 2, '.', ''), 2) !== 0;
+
+            if ($rateChanged) {
+                GamefowlLookupRateLog::logChange(
+                    $lookup,
+                    $oldRate !== null ? (float) $oldRate : null,
+                    $newRate
+                );
+
+                $oldLabel = $oldRate !== null ? "{$oldRate}%" : 'none';
+                ActivityLog::log(
+                    'bloodline_rate_changed',
+                    "Bloodline rate changed for {$lookup->name}: {$oldLabel} → {$newRate}%",
+                    $lookup,
+                    ['rate' => $oldRate],
+                    ['rate' => $newRate]
+                );
+            }
+        }
 
         ActivityLog::log('updated', "{$this->kindMeta($type)['singular']} updated: {$lookup->name}", $lookup, $oldValues, $lookup->fresh()->toArray());
 
@@ -129,6 +210,10 @@ class GamefowlLookupController extends Controller
 
         ActivityLog::log('deleted', "{$this->kindMeta($type)['singular']} deleted: {$lookup->name}", null, $lookup->toArray(), null);
         $lookup->delete();
+
+        if ($type === GamefowlLookup::TYPE_BLOODLINE) {
+            GamefowlLookup::flushRatesCache();
+        }
 
         return redirect()->back()->with('success', "{$this->kindMeta($type)['singular']} deleted successfully.");
     }

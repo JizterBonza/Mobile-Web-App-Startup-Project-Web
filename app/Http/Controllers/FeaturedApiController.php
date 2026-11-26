@@ -3,7 +3,9 @@
 namespace App\Http\Controllers;
 
 use App\Services\FeaturedSectionService;
+use App\Services\ShopZoneCoverageService;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 
 class FeaturedApiController extends Controller
 {
@@ -12,9 +14,14 @@ class FeaturedApiController extends Controller
     /**
      * Mobile Featured Section: products, Agrivet stores, and farms chosen by an admin.
      */
-    public function index(): JsonResponse
+    public function index(Request $request, ShopZoneCoverageService $coverage): JsonResponse
     {
-        $payload = $this->featured->publicPayload();
+        $zoneIds = $coverage->zoneIdsForRequest($request);
+        if ($zoneIds instanceof JsonResponse) {
+            return $zoneIds;
+        }
+
+        $payload = $this->featured->publicPayload($zoneIds);
 
         return response()->json([
             'success' => true,
@@ -31,9 +38,14 @@ class FeaturedApiController extends Controller
         return $this->collection($this->featured->publicProducts());
     }
 
-    public function agrivetStores(): JsonResponse
+    public function agrivetStores(Request $request, ShopZoneCoverageService $coverage): JsonResponse
     {
-        return $this->collection($this->featured->publicStores());
+        $zoneIds = $coverage->zoneIdsForRequest($request);
+        if ($zoneIds instanceof JsonResponse) {
+            return $zoneIds;
+        }
+
+        return $this->collection($this->featured->publicStores($zoneIds));
     }
 
     public function farms(): JsonResponse

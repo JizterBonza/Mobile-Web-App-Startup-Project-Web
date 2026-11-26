@@ -6,6 +6,7 @@ use App\Models\Farm;
 use App\Models\Item;
 use App\Models\Shop;
 use App\Services\FarmListingDiscoveryService;
+use App\Services\ShopZoneCoverageService;
 use App\Support\FuzzySearch;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
@@ -15,7 +16,7 @@ class SearchController extends Controller
     /**
      * Search items, stores (shops), partner farms, and gamefowl listings in a single request.
      */
-    public function index(Request $request, FarmListingDiscoveryService $discovery)
+    public function index(Request $request, FarmListingDiscoveryService $discovery, ShopZoneCoverageService $coverage)
     {
         $validator = Validator::make($request->all(), [
             'q' => 'required|string|min:2|max:100',
@@ -25,6 +26,8 @@ class SearchController extends Controller
             'min_price' => 'nullable|numeric|min:0',
             'max_price' => 'nullable|numeric|min:0',
             'limit' => 'nullable|integer|min:1|max:50',
+            'lat' => 'nullable|numeric|between:-90,90',
+            'long' => 'nullable|numeric|between:-180,180',
         ]);
 
         if ($validator->fails()) {
@@ -49,7 +52,10 @@ class SearchController extends Controller
         }
 
         if ($type === null || $type === 'shops') {
-            $shops = $this->searchShops($searchTerm, $limit);
+            $zoneIds = $request->filled('lat') && $request->filled('long')
+                ? $coverage->zoneIdsContainingPoint((float) $request->input('lat'), (float) $request->input('long'))
+                : [];
+            $shops = $this->searchShops($searchTerm, $limit, $zoneIds);
         }
 
         if ($type === null || $type === 'farms') {
@@ -124,11 +130,19 @@ class SearchController extends Controller
             ]);
     }
 
-    private function searchShops(string $searchTerm, int $limit)
+    /**
+     * @param  array<int, int>  $zoneIds
+     */
+    private function searchShops(string $searchTerm, int $limit, array $zoneIds)
     {
+        if ($zoneIds === []) {
+            return collect();
+        }
+
         $query = Shop::query()
             ->whereAgrivetIsActive()
-            ->where('shop_status', 'active');
+            ->where('shop_status', 'active')
+            ->whereIn('zone_id', $zoneIds);
         FuzzySearch::constrain($query, $searchTerm, ['shop_name', 'shop_description', 'shop_address']);
         FuzzySearch::orderByNameRelevance($query, $searchTerm, 'shop_name');
 
