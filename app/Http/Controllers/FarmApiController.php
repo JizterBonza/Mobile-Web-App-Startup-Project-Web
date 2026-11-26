@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Farm;
 use App\Models\GamefowlLookup;
 use App\Services\FarmListingDiscoveryService;
+use App\Support\FuzzySearch;
 use App\Support\GeoDistance;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
@@ -39,14 +40,16 @@ class FarmApiController extends Controller
             'limit' => 'nullable|integer|min:1|max:50',
         ]);
         $term = $data['q'];
-        $farms = Farm::query()->where('status', 'active')
-            ->where(function (Builder $query) use ($term) {
-                $query->where('name', 'like', '%'.$term.'%')
-                    ->orWhere('description', 'like', '%'.$term.'%')
-                    ->orWhere('address', 'like', '%'.$term.'%');
-            })
-            ->orderByRaw('CASE WHEN name = ? THEN 0 WHEN name LIKE ? THEN 1 ELSE 2 END', [$term, $term.'%'])
-            ->latest()->orderByDesc('id')->limit($data['limit'] ?? 20)->get()
+        $query = Farm::query()->where('status', 'active');
+        FuzzySearch::constrain($query, $term, ['name', 'description', 'address']);
+        FuzzySearch::orderByNameRelevance($query, $term, 'name');
+        $farms = FuzzySearch::rank(
+            $query->latest()->orderByDesc('id')->limit(FuzzySearch::CANDIDATE_LIMIT)->get(),
+            $term,
+            'name',
+            ['description', 'address']
+        )
+            ->take($data['limit'] ?? 20)
             ->map(fn (Farm $farm) => $this->discovery->farmPayload($farm));
 
         return $this->collectionResponse($farms, ['query' => $term]);

@@ -15,6 +15,7 @@ use App\Models\ShopConversationAttachment;
 use App\Models\ShopConversationMessage;
 use App\Models\ShopConversationRead;
 use App\Models\User;
+use App\Support\FuzzySearch;
 use App\Support\PublicStorage;
 use Carbon\Carbon;
 use Illuminate\Http\UploadedFile;
@@ -413,18 +414,19 @@ class ShopMessagingService
             return [];
         }
 
-        $query = Item::query()
+        $items = Item::query()
             ->where('shop_id', $shop->id)
             ->where('item_status', 'active')
             ->whereShopAgrivetIsActive()
-            ->orderBy('item_name');
+            ->orderBy('item_name')
+            ->get();
 
         $term = trim((string) $search);
         if ($term !== '') {
-            $query->where('item_name', 'like', '%'.$term.'%');
+            $items = FuzzySearch::rank($items, $term, 'item_name');
         }
 
-        return $query->get()->map(function (Item $item) {
+        return $items->map(function (Item $item) {
             $metadata = $this->productMetadataFromItem($item);
 
             return [
@@ -449,26 +451,37 @@ class ShopMessagingService
      */
     public function listFarmListingsForPicker(Farm $farm, ?string $search = null): array
     {
-        $query = FarmGamefowlListing::query()
+        $listings = FarmGamefowlListing::query()
             ->where('farm_id', $farm->id)
             ->where('status', 'active')
             ->with(['gamefowl.bloodline'])
-            ->orderByDesc('id');
+            ->orderByDesc('id')
+            ->get();
 
         $term = trim((string) $search);
         if ($term !== '') {
-            $query->where(function ($inner) use ($term) {
-                $inner->where('bundle_name', 'like', '%'.$term.'%')
-                    ->orWhereHas('gamefowl', function ($gamefowl) use ($term) {
-                        $gamefowl->where('name', 'like', '%'.$term.'%')
-                            ->orWhereHas('bloodline', function ($bloodline) use ($term) {
-                                $bloodline->where('name', 'like', '%'.$term.'%');
-                            });
-                    });
-            });
+            $listings = FuzzySearch::rank(
+                $listings->map(function (FarmGamefowlListing $listing) {
+                    $gamefowl = $listing->gamefowl;
+                    $display = ($listing->is_bundle && filled($listing->bundle_name))
+                        ? $listing->bundle_name
+                        : ($gamefowl?->bloodline?->name ?: $gamefowl?->name ?: '');
+
+                    return [
+                        'listing' => $listing,
+                        'picker_name' => $display,
+                        'picker_bird' => $gamefowl?->name ?? '',
+                        'picker_bloodline' => $gamefowl?->bloodline?->name ?? '',
+                        'picker_bundle' => $listing->bundle_name ?? '',
+                    ];
+                }),
+                $term,
+                'picker_name',
+                ['picker_bird', 'picker_bloodline', 'picker_bundle']
+            )->map(fn (array $row) => $row['listing']);
         }
 
-        return $query->get()->map(function (FarmGamefowlListing $listing) {
+        return $listings->map(function (FarmGamefowlListing $listing) {
             $metadata = $this->listingMetadata($listing);
 
             return [

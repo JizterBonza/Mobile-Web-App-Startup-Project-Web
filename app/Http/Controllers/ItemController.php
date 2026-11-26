@@ -9,6 +9,7 @@ use App\Models\Item;
 use App\Models\OrderItem;
 use App\Models\RatingReview;
 use App\Models\Shop;
+use App\Support\FuzzySearch;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 
@@ -513,12 +514,8 @@ class ItemController extends Controller
         // Only search active items by default
         $query->where('item_status', 'active');
 
-        // Search by item name and description
         $searchTerm = $request->input('q');
-        $query->where(function($q) use ($searchTerm) {
-            $q->where('item_name', 'like', '%' . $searchTerm . '%')
-            ->orWhere('item_description', 'like', '%' . $searchTerm . '%');
-        });
+        FuzzySearch::constrain($query, $searchTerm, ['item_name', 'item_description']);
 
         // Filter by shop_id if provided
         if ($request->filled('shop_id')) {
@@ -539,18 +536,17 @@ class ItemController extends Controller
             $query->where('item_price', '<=', $request->max_price);
         }
 
-        // Order by relevance (exact match first, then by rating, then by sold count)
-        $query->orderByRaw("CASE 
-            WHEN item_name LIKE ? THEN 1 
-            WHEN item_name LIKE ? THEN 2 
-            ELSE 3 
-        END", [$searchTerm, $searchTerm . '%'])
-        ->orderBy('average_rating', 'desc')
-        ->orderBy('sold_count', 'desc');
+        FuzzySearch::orderByNameRelevance($query, $searchTerm, 'item_name');
+        $query->orderBy('average_rating', 'desc')
+            ->orderBy('sold_count', 'desc');
 
-        // Limit results (default 20, max 50)
-        $limit = $request->input('limit', 20);
-        $items = $query->limit($limit)->get();
+        $limit = (int) ($request->input('limit') ?? 20);
+        $items = FuzzySearch::rank(
+            $query->limit(FuzzySearch::CANDIDATE_LIMIT)->get(),
+            $searchTerm,
+            'item_name',
+            ['item_description']
+        )->take($limit)->values();
 
         return response()->json([
             'success' => true,

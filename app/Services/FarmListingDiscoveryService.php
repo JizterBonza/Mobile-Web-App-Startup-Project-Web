@@ -6,6 +6,7 @@ use App\Models\Farm;
 use App\Models\FarmGamefowlListing;
 use App\Models\GamefowlCatalog;
 use App\Models\GamefowlLookup;
+use App\Support\FuzzySearch;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 
@@ -23,20 +24,7 @@ class FarmListingDiscoveryService
 
         $listings = $this->visibleListings($query);
         if (filled($data['search'] ?? null)) {
-            $term = mb_strtolower($data['search']);
-            $rank = function (array $listing) use ($term): int {
-                $name = mb_strtolower($listing['name']);
-
-                return $name === $term ? 0 : (str_starts_with($name, $term) ? 1 : 2);
-            };
-            $listings = $listings->filter(function (array $listing) use ($term) {
-                $names = collect([$listing['name'], $listing['gamefowl']['name'], $listing['gamefowl']['bloodline']['name'] ?? '']);
-                foreach ($listing['bundle_members'] as $member) {
-                    $names->push($member['name'], $member['bloodline']['name'] ?? '');
-                }
-
-                return $names->contains(fn ($name) => str_contains(mb_strtolower($name), $term));
-            })->sortBy($rank);
+            $listings = $this->rankListings($listings, (string) $data['search']);
         }
 
         if (filled($data['bloodline_id'] ?? null)) {
@@ -80,14 +68,39 @@ class FarmListingDiscoveryService
 
     public function search(string $term, int $limit): Collection
     {
-        return $this->listings(['search' => $term])->take($limit)->map(fn (array $listing) => [
-            'listing_id' => $listing['id'],
-            'farm_id' => $listing['farm_id'],
-            'name' => $listing['name'],
-            'image' => $listing['image'],
-            'price' => $listing['price'],
-            'is_bundle' => $listing['is_bundle'],
-        ])->values();
+        return $this->rankListings($this->visibleListings($this->listingQuery()), $term)
+            ->take($limit)
+            ->map(fn (array $listing) => [
+                'listing_id' => $listing['id'],
+                'farm_id' => $listing['farm_id'],
+                'name' => $listing['name'],
+                'image' => $listing['image'],
+                'price' => $listing['price'],
+                'is_bundle' => $listing['is_bundle'],
+            ])->values();
+    }
+
+    private function rankListings(Collection $listings, string $term): Collection
+    {
+        $rows = $listings->map(function (array $listing) {
+            $members = collect($listing['bundle_members'] ?? []);
+
+            return $listing + [
+                'search_gamefowl' => $listing['gamefowl']['name'] ?? '',
+                'search_bloodline' => $listing['gamefowl']['bloodline']['name'] ?? '',
+                'search_members' => $members
+                    ->map(fn (array $member) => trim(($member['name'] ?? '').' '.($member['bloodline']['name'] ?? '')))
+                    ->implode(' '),
+            ];
+        });
+
+        return FuzzySearch::rank($rows, $term, 'name', ['search_gamefowl', 'search_bloodline', 'search_members'])
+            ->map(function (array $listing) {
+                unset($listing['search_gamefowl'], $listing['search_bloodline'], $listing['search_members']);
+
+                return $listing;
+            })
+            ->values();
     }
 
     private function listingQuery(): Builder

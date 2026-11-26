@@ -7,6 +7,7 @@ use App\Models\RatingReview;
 use App\Models\Shop;
 use App\Models\Zone;
 use App\Services\ShopZoneCoverageService;
+use App\Support\FuzzySearch;
 use App\Support\GeoDistance;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
@@ -584,26 +585,20 @@ class ShopController extends Controller
         // Only search active shops of an active Agrivet
         $query->where('shop_status', 'active')->whereAgrivetIsActive();
 
-        // Search by shop name and description
         $searchTerm = $request->input('q');
-        $query->where(function($q) use ($searchTerm) {
-            $q->where('shop_name', 'like', '%' . $searchTerm . '%')
-              ->orWhere('shop_description', 'like', '%' . $searchTerm . '%')
-              ->orWhere('shop_address', 'like', '%' . $searchTerm . '%');
-        });
+        FuzzySearch::constrain($query, $searchTerm, ['shop_name', 'shop_description', 'shop_address']);
 
-        // Order by relevance (exact match first, then by rating)
-        $query->orderByRaw("CASE 
-            WHEN shop_name LIKE ? THEN 1 
-            WHEN shop_name LIKE ? THEN 2 
-            ELSE 3 
-        END", [$searchTerm, $searchTerm . '%'])
-        ->orderBy('average_rating', 'desc')
-        ->orderBy('total_reviews', 'desc');
+        FuzzySearch::orderByNameRelevance($query, $searchTerm, 'shop_name');
+        $query->orderBy('average_rating', 'desc')
+            ->orderBy('total_reviews', 'desc');
 
-        // Limit results (default 20, max 50)
-        $limit = $request->input('limit', 20);
-        $shops = $query->limit($limit)->get();
+        $limit = (int) ($request->input('limit') ?? 20);
+        $shops = FuzzySearch::rank(
+            $query->limit(FuzzySearch::CANDIDATE_LIMIT)->get(),
+            $searchTerm,
+            'shop_name',
+            ['shop_description', 'shop_address']
+        )->take($limit)->values();
         $shops->each->includeAgrivetBanner();
 
         return response()->json([

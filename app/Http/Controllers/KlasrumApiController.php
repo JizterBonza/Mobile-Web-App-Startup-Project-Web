@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\KlasrumCategory;
 use App\Models\KlasrumContent;
+use App\Support\FuzzySearch;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -38,20 +39,29 @@ class KlasrumApiController extends Controller
             $query->where('category_id', $request->integer('category_id'));
         }
 
-        if ($request->filled('search')) {
-            $search = $request->string('search')->toString();
+        $search = $request->filled('search') ? trim($request->string('search')->toString()) : '';
+        if (mb_strlen($search) >= 2) {
+            FuzzySearch::constrain($query, $search, ['title', 'description', 'heading']);
+            FuzzySearch::orderByNameRelevance($query, $search, 'title');
+            $query->limit(FuzzySearch::CANDIDATE_LIMIT);
+        } elseif ($search !== '') {
             $query->where(function ($builder) use ($search) {
-                $builder->where('title', 'like', '%' . $search . '%')
-                    ->orWhere('description', 'like', '%' . $search . '%')
-                    ->orWhere('heading', 'like', '%' . $search . '%');
+                $builder->where('title', 'like', '%'.$search.'%')
+                    ->orWhere('description', 'like', '%'.$search.'%')
+                    ->orWhere('heading', 'like', '%'.$search.'%');
             });
         }
 
         $contents = $query
             ->orderByDesc('published_at')
             ->orderByDesc('id')
-            ->get()
-            ->map(fn (KlasrumContent $content) => $content->toMobileListArray());
+            ->get();
+
+        if ($search !== '') {
+            $contents = FuzzySearch::rank($contents, $search, 'title', ['description', 'heading']);
+        }
+
+        $contents = $contents->map(fn (KlasrumContent $content) => $content->toMobileListArray());
 
         return response()->json([
             'success' => true,
