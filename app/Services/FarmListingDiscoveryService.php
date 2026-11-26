@@ -136,6 +136,15 @@ class FarmListingDiscoveryService
             return count($ids) > 0 && collect($ids)->every(fn ($id) => $members->has($id));
         })->map(function (FarmGamefowlListing $listing) use ($members) {
             $bird = $listing->gamefowl;
+            if ($listing->is_bundle) {
+                $listing->setRelation(
+                    'bundleMembers',
+                    collect($listing->bundle_catalog_ids ?? [])
+                        ->map(fn ($id) => $members->get($id))
+                        ->filter()
+                        ->values()
+                );
+            }
 
             return [
                 'id' => $listing->id,
@@ -143,7 +152,8 @@ class FarmListingDiscoveryService
                 'farm' => $this->farmPayload($listing->farm),
                 'gamefowl_catalog_id' => $listing->gamefowl_catalog_id,
                 'name' => $listing->is_bundle ? $listing->bundle_name : $bird->name,
-                'price' => $listing->price,
+                'price' => $listing->getCustomerUnitPrice(),
+                'markup_percent' => $listing->getMarkupPercent(),
                 'stock' => $listing->stock,
                 'available_birds' => max(0, $listing->stock - (int) $listing->reserved_stock),
                 'selling_unit' => $listing->selling_unit,

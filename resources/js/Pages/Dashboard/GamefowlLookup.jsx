@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, router, useForm } from '@inertiajs/react'
-import { ArrowLeft, Pencil, Plus, Search, Tag, Trash2 } from 'lucide-react'
+import { ArrowLeft, History, Pencil, Plus, Search, Tag, Trash2 } from 'lucide-react'
 import SuperAdminOrAdminLayout from '../../Layouts/SuperAdminOrAdminLayout'
 
 function gamefowlBase(userType) {
@@ -27,6 +27,10 @@ export default function GamefowlLookup({ auth, kind, items = [], flash }) {
     const [showAdd, setShowAdd] = useState(false)
     const [editing, setEditing] = useState(null)
     const [removing, setRemoving] = useState(null)
+    const [rateHistoryItem, setRateHistoryItem] = useState(null)
+    const [rateHistoryLogs, setRateHistoryLogs] = useState([])
+    const [rateHistoryLoading, setRateHistoryLoading] = useState(false)
+    const [rateHistoryError, setRateHistoryError] = useState('')
     const [showSuccessAlert, setShowSuccessAlert] = useState(true)
     const [showErrorAlert, setShowErrorAlert] = useState(true)
     const [searchQuery, setSearchQuery] = useState('')
@@ -80,6 +84,36 @@ export default function GamefowlLookup({ auth, kind, items = [], flash }) {
             rate: item.rate != null ? String(item.rate) : '',
             status: item.status || 'active',
         })
+    }
+
+    const openRateHistory = async (item) => {
+        setRateHistoryItem(item)
+        setRateHistoryLogs([])
+        setRateHistoryError('')
+        setRateHistoryLoading(true)
+
+        try {
+            const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content')
+            const response = await fetch(`${path}/${item.id}/rate-history`, {
+                headers: {
+                    Accept: 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
+                    ...(csrfToken ? { 'X-CSRF-TOKEN': csrfToken } : {}),
+                },
+            })
+
+            if (!response.ok) throw new Error('Failed to load rate history')
+
+            const payload = await response.json()
+            setRateHistoryLogs(payload.data || [])
+            if (payload.bloodline) {
+                setRateHistoryItem((current) => ({ ...current, ...payload.bloodline }))
+            }
+        } catch {
+            setRateHistoryError('Unable to load rate history. Please try again.')
+        } finally {
+            setRateHistoryLoading(false)
+        }
     }
 
     return (
@@ -189,6 +223,11 @@ export default function GamefowlLookup({ auth, kind, items = [], flash }) {
                                     </div>
                                 </div>
                                 <div className="flex flex-shrink-0 items-center gap-2">
+                                    {isBloodline && (
+                                        <button type="button" onClick={() => openRateHistory(item)} className="flex h-8 w-8 items-center justify-center rounded-lg border border-[#E5E7EB] text-[#6B7280] hover:border-[#102059] hover:text-[#102059]" title="Rate history">
+                                            <History className="h-3.5 w-3.5" />
+                                        </button>
+                                    )}
                                     <button type="button" onClick={() => openEdit(item)} className="flex h-8 w-8 items-center justify-center rounded-lg border border-[#E5E7EB] text-[#6B7280] hover:border-[#102059] hover:text-[#102059]" title="Edit">
                                         <Pencil className="h-3.5 w-3.5" />
                                     </button>
@@ -251,6 +290,56 @@ export default function GamefowlLookup({ auth, kind, items = [], flash }) {
                     }}
                     submitLabel={editForm.processing ? 'Updating...' : `Update ${kind?.singular}`}
                 />
+            )}
+
+            {rateHistoryItem && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+                    <div className="flex max-h-[85vh] w-full max-w-2xl flex-col rounded-lg border border-[#E5E7EB] bg-white p-6">
+                        <div className="mb-4 flex items-start justify-between gap-4">
+                            <div>
+                                <h3 className="text-lg font-bold text-[#102059]">Rate History — {rateHistoryItem.name}</h3>
+                                <p className="mt-1 text-sm text-[#6B7280]">
+                                    Current rate: <span className="font-semibold text-[#102059]">{formatRate(rateHistoryItem.rate)}</span>
+                                </p>
+                            </div>
+                            <button type="button" onClick={() => setRateHistoryItem(null)} className="text-xl leading-none text-[#6B7280] hover:text-[#102059]">×</button>
+                        </div>
+                        <div className="overflow-auto">
+                            {rateHistoryLoading && <p className="text-sm text-[#6B7280]">Loading rate history...</p>}
+                            {rateHistoryError && (
+                                <div className="rounded-lg border border-[#E20E28]/30 bg-[#FEE2E2] px-4 py-3 text-sm text-[#E20E28]">{rateHistoryError}</div>
+                            )}
+                            {!rateHistoryLoading && !rateHistoryError && rateHistoryLogs.length === 0 && (
+                                <p className="text-sm text-[#6B7280]">No rate changes recorded yet.</p>
+                            )}
+                            {!rateHistoryLoading && !rateHistoryError && rateHistoryLogs.length > 0 && (
+                                <table className="w-full text-left text-sm">
+                                    <thead>
+                                        <tr className="border-b border-[#E5E7EB] text-xs uppercase tracking-wider text-[#9CA3AF]">
+                                            <th className="py-2 pr-3 font-semibold">Date</th>
+                                            <th className="py-2 pr-3 font-semibold">Previous Rate</th>
+                                            <th className="py-2 pr-3 font-semibold">New Rate</th>
+                                            <th className="py-2 font-semibold">Changed By</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {rateHistoryLogs.map((log) => (
+                                            <tr key={log.id} className="border-b border-[#F3F4F6]">
+                                                <td className="py-2 pr-3 text-[#102059]">{log.created_at ? new Date(log.created_at).toLocaleString() : '—'}</td>
+                                                <td className="py-2 pr-3 text-[#102059]">{log.old_rate != null ? formatRate(log.old_rate) : 'Initial set'}</td>
+                                                <td className="py-2 pr-3 text-[#102059]">{formatRate(log.new_rate)}</td>
+                                                <td className="py-2 text-[#102059]">{log.changed_by || '—'}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            )}
+                        </div>
+                        <div className="mt-4 flex justify-end">
+                            <button type="button" onClick={() => setRateHistoryItem(null)} className="rounded-lg border border-[#E5E7EB] px-4 py-2 text-sm text-[#6B7280]">Close</button>
+                        </div>
+                    </div>
+                </div>
             )}
 
             {removing && (

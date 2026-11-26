@@ -87,7 +87,7 @@ class FarmOrderService
 
         $products = $order->items->map(function ($item) use ($prepared, $section) {
             $snapshot = is_array($item->snapshot) ? $item->snapshot : [];
-            $price = (float) FarmCheckoutService::money($item->unit_price_cents);
+            $price = (float) FarmCheckoutService::money($item->farmUnitPriceCents());
 
             return [
                 'id' => (int) $item->id,
