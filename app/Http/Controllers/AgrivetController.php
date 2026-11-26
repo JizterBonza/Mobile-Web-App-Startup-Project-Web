@@ -22,6 +22,7 @@ use App\Http\Controllers\Concerns\PreventsDisabledCatalogRestock;
 use App\Services\StoreInsightsService;
 use App\Services\UserWelcomeEmailService;
 use App\Support\PublicStorage;
+use App\Support\StoreSchedule;
 
 class AgrivetController extends Controller
 {
@@ -135,7 +136,7 @@ class AgrivetController extends Controller
     }
 
     /**
-     * Persist wizard: agrivet + primary shop, with uploaded store/permit images.
+     * Persist wizard: agrivet + primary shop, with the uploaded storefront photo.
      */
     public function storeSetupWizard(Request $request)
     {
@@ -162,8 +163,7 @@ class AgrivetController extends Controller
             'shop_lat' => 'nullable|numeric',
             'shop_long' => 'nullable|numeric',
             'store_image' => 'required|file|mimes:jpeg,jpg,png,webp|max:10240',
-            'permit_image' => 'required|file|mimes:jpeg,jpg,png,webp,pdf|max:10240',
-        ]);
+        ] + StoreSchedule::rules());
 
         $currentUser = auth()->user();
         $redirectRoute = $currentUser->user_type === 'admin'
@@ -172,11 +172,11 @@ class AgrivetController extends Controller
 
         $ownerManager = null;
         $ownerUsername = null;
+        $halfDaySchedule = StoreSchedule::encode($validated, $validated['operating_days']);
 
         try {
-            DB::transaction(function () use ($request, $validated, &$ownerManager, &$ownerUsername) {
+            DB::transaction(function () use ($request, $validated, $halfDaySchedule, &$ownerManager, &$ownerUsername) {
                 $storePath = $request->file('store_image')->store('shops/covers', 'public');
-                $permitPath = $request->file('permit_image')->store('shops/permits', 'public');
 
                 $logoUrl = $request->hasFile('logo')
                     ? $this->storeAgrivetImage($request->file('logo'), 'logos')
@@ -184,8 +184,6 @@ class AgrivetController extends Controller
                 $bannerUrl = $request->hasFile('banner')
                     ? $this->storeAgrivetImage($request->file('banner'), 'banners')
                     : null;
-
-                $permitPublicUrl = PublicStorage::url($permitPath);
 
                 $ownerParts = array_filter([
                     $validated['first_name'],
@@ -195,9 +193,9 @@ class AgrivetController extends Controller
                 $ownerName = implode(' ', $ownerParts);
 
                 $permitsPayload = json_encode([
-                    'permit_document_url' => $permitPublicUrl,
                     'operating_days' => $validated['operating_days'],
                     'operating_hours' => $validated['opening_time'].' - '.$validated['closing_time'],
+                    'half_day_schedule' => $halfDaySchedule,
                 ]);
 
                 $lat = $request->filled('shop_lat') ? (float) $request->shop_lat : null;
@@ -226,12 +224,17 @@ class AgrivetController extends Controller
 
                 $daysLabel = $validated['operating_days'];
                 $hoursLabel = $validated['opening_time'].' - '.$validated['closing_time'];
+                $halfDayLabel = StoreSchedule::label($halfDaySchedule);
+                $scheduleDescription = "Operating days: {$daysLabel}. Hours: {$hoursLabel}";
+                if ($halfDayLabel) {
+                    $scheduleDescription .= ". Half-day: {$halfDayLabel}";
+                }
 
                 Shop::create([
                     'agrivet_id' => $agrivet->id,
                     'zone_id' => $zoneId,
                     'shop_name' => $validated['store_name'],
-                    'shop_description' => "Operating days: {$daysLabel}. Hours: {$hoursLabel}",
+                    'shop_description' => $scheduleDescription,
                     'shop_address' => $validated['street'].', '.$validated['barangay'],
                     'shop_city' => $validated['city'],
                     'shop_postal_code' => $validated['zip_code'],
@@ -243,9 +246,10 @@ class AgrivetController extends Controller
                     'total_reviews' => 0,
                     'shop_status' => 'active',
                     'logo_url' => $storePath,
-                    'permit_url' => $permitPath,
+                    'permit_url' => null,
                     'operating_days' => $daysLabel,
                     'operating_hours' => $hoursLabel,
+                    'half_day_schedule' => $halfDaySchedule,
                 ]);
 
                 $ownerUsername = explode('@', $validated['email'])[0].'_'.time();
@@ -506,6 +510,7 @@ class AgrivetController extends Controller
                 'shop_status' => $shop->shop_status,
                 'operating_days' => $shop->operating_days,
                 'operating_hours' => $shop->operating_hours,
+                'half_day_schedule' => $shop->half_day_schedule,
                 'bank_name' => $shop->bank_name,
                 'account_name' => $shop->account_name,
                 'account_number' => $shop->account_number,
@@ -540,6 +545,8 @@ class AgrivetController extends Controller
             abort(403);
         }
 
+        $collectsPermitAndBank = $currentUser->user_type === 'owner_manager';
+
         $validated = $request->validate([
             'shop_name' => 'required|string|max:150',
             'street' => 'required|string|max:255',
@@ -555,11 +562,13 @@ class AgrivetController extends Controller
             'shop_status' => 'nullable|string|in:active,inactive',
             'zone_id' => 'nullable|exists:zones,id',
             'store_image' => 'required|file|mimes:jpeg,jpg,png,webp|max:10240',
-            'permit_image' => 'required|file|mimes:jpeg,jpg,png,webp,pdf|max:10240',
+            'permit_image' => ($collectsPermitAndBank ? 'required' : 'nullable').'|file|mimes:jpeg,jpg,png,webp,pdf|max:10240',
             'bank_name' => 'nullable|string|max:150',
             'account_name' => 'nullable|string|max:150',
             'account_number' => 'nullable|string|max:50|regex:/^[0-9]+$/',
-        ]);
+        ] + StoreSchedule::rules());
+
+        $halfDaySchedule = StoreSchedule::encode($validated, $validated['operating_days']);
 
         // If shop has coordinates, set zone_id to the zone whose boundary contains this point
         $zoneId = $request->zone_id;
@@ -572,7 +581,9 @@ class AgrivetController extends Controller
 
         try {
             $storePath = $request->file('store_image')->store('shops/covers', 'public');
-            $permitPath = $request->file('permit_image')->store('shops/permits', 'public');
+            $permitPath = $collectsPermitAndBank && $request->hasFile('permit_image')
+                ? $request->file('permit_image')->store('shops/permits', 'public')
+                : null;
             $operatingHours = $validated['opening_time'].' - '.$validated['closing_time'];
 
             $shop = Shop::create([
@@ -594,9 +605,10 @@ class AgrivetController extends Controller
                 'permit_url' => $permitPath,
                 'operating_days' => $validated['operating_days'],
                 'operating_hours' => $operatingHours,
-                'bank_name' => $validated['bank_name'] ?? null,
-                'account_name' => $validated['account_name'] ?? null,
-                'account_number' => $validated['account_number'] ?? null,
+                'half_day_schedule' => $halfDaySchedule,
+                'bank_name' => $collectsPermitAndBank ? ($validated['bank_name'] ?? null) : null,
+                'account_name' => $collectsPermitAndBank ? ($validated['account_name'] ?? null) : null,
+                'account_number' => $collectsPermitAndBank ? ($validated['account_number'] ?? null) : null,
             ]);
 
             ActivityLog::log('created', "Shop created: {$shop->shop_name} (Agrivet: {$agrivet->name})", $shop, null, $shop->toArray());
@@ -645,7 +657,18 @@ class AgrivetController extends Controller
             'bank_name' => 'nullable|string|max:150',
             'account_name' => 'nullable|string|max:150',
             'account_number' => 'nullable|string|max:50|regex:/^[0-9]+$/',
-        ]);
+        ] + StoreSchedule::rules());
+
+        $updatesHalfDay = $request->exists('half_day')
+            || $request->exists('half_day_opening')
+            || $request->exists('half_day_closing');
+        $halfDaySchedule = null;
+        if ($updatesHalfDay) {
+            $halfDaySchedule = StoreSchedule::encode(
+                $request->only(['half_day', 'half_day_opening', 'half_day_closing']),
+                (string) ($request->input('operating_days') ?? $shop->operating_days ?? '')
+            );
+        }
 
         // If shop has coordinates, set zone_id to the zone whose boundary contains this point
         $zoneId = $shop->zone_id;
@@ -687,6 +710,10 @@ class AgrivetController extends Controller
                 $updateData['shop_lat'] = $request->filled('shop_lat') ? $request->shop_lat : null;
                 $updateData['shop_long'] = $request->filled('shop_long') ? $request->shop_long : null;
                 $updateData['zone_id'] = $zoneId;
+            }
+
+            if ($updatesHalfDay) {
+                $updateData['half_day_schedule'] = $halfDaySchedule;
             }
 
             $shop->update($updateData);
@@ -987,6 +1014,8 @@ class AgrivetController extends Controller
                 'email' => $agrivet->email,
                 'contact_number' => $agrivet->contact_number,
                 'status' => $agrivet->status,
+                'logo_url' => $agrivet->logo_url,
+                'banner_url' => $agrivet->banner_url,
             ],
             'shop' => [
                 'id' => $shop->id,
@@ -1008,6 +1037,7 @@ class AgrivetController extends Controller
                 'permit_url' => $shop->permit_url,
                 'operating_days' => $shop->operating_days,
                 'operating_hours' => $shop->operating_hours,
+                'half_day_schedule' => $shop->half_day_schedule,
                 'bank_name' => $shop->bank_name,
                 'account_name' => $shop->account_name,
                 'account_number' => $shop->account_number,

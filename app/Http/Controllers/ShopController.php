@@ -74,7 +74,7 @@ class ShopController extends Controller
         $query->whereAgrivetIsActive()->orderBy('created_at', 'desc');
 
         $shops = $query->with(['agrivet' => function ($query) {
-            $query->select('id', 'banner_url');
+            $query->select('id', 'logo_url', 'status');
         }])->get();
         $shops->each->includeAgrivetBanner();
 
@@ -95,7 +95,7 @@ class ShopController extends Controller
     {
         $shop = Shop::query()
             ->with(['agrivet' => function ($query) {
-                $query->select('id', 'banner_url', 'status');
+                $query->select('id', 'logo_url', 'status');
             }])
             ->find($id);
 
@@ -122,7 +122,7 @@ class ShopController extends Controller
     {
         $shop = Shop::with([
             'agrivet' => function ($query) {
-                $query->select('id', 'banner_url', 'status');
+                $query->select('id', 'logo_url', 'status');
             },
             'items' => function ($query) {
                 $query->where('item_status', 'active')
@@ -153,7 +153,7 @@ class ShopController extends Controller
     {
         $shops = Shop::query()
             ->with(['agrivet' => function ($query) {
-                $query->select('id', 'banner_url', 'status');
+                $query->select('id', 'logo_url', 'status');
             }])
             ->where('agrivet_id', $agrivetId)
             ->whereAgrivetIsActive()
@@ -363,7 +363,7 @@ class ShopController extends Controller
     {
         $shop = Shop::with([
             'agrivet' => function ($query) {
-                $query->select('id', 'banner_url');
+                $query->select('id', 'logo_url');
             },
             'ratingReviews' => function ($query) {
                 $query->orderBy('created_at', 'desc')
@@ -386,7 +386,8 @@ class ShopController extends Controller
             'shop_lat', 'shop_long', 'contact_number',
             'average_rating', 'total_reviews', 'shop_status', 'created_at', 'updated_at'
         ]);
-        $shopData['banner_url'] = $shop->agrivet?->banner_url;
+        $shopData['logo_url'] = $shop->agrivetLogoPath();
+        $shopData['banner_url'] = $shop->storefrontPath();
 
         // Add reviews
         $shopData['reviews'] = $shop->ratingReviews->map(function ($review) {
@@ -509,7 +510,7 @@ class ShopController extends Controller
 
         $shops = Shop::query()
             ->with(['agrivet' => function ($query) {
-                $query->select('id', 'banner_url', 'status');
+                $query->select('id', 'logo_url', 'status');
             }])
             ->where('shop_status', 'active')
             ->whereAgrivetIsActive()
@@ -577,7 +578,7 @@ class ShopController extends Controller
         }
 
         $query = Shop::query()->with(['agrivet' => function ($query) {
-            $query->select('id', 'banner_url');
+            $query->select('id', 'logo_url', 'status');
         }]);
 
         // Only search active shops of an active Agrivet

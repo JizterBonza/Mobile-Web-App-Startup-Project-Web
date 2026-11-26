@@ -7,7 +7,6 @@ import {
   Filter,
   Heart,
   Info,
-  Landmark,
   MapPin,
   Package,
   Pencil,
@@ -42,7 +41,10 @@ import SuperAdminOrAdminLayout from '../../Layouts/SuperAdminOrAdminLayout'
 import VendorKlasmeytLayout from '../../Layouts/VendorKlasmeytLayout'
 import PinLocationMap from '../../Components/PinLocationMap'
 import OwnerManagerOrdersPanel from '../../Components/Dashboard/OwnerManagerOrdersPanel'
+import AgrivetBrandingModal from '../../Components/Dashboard/AgrivetBrandingModal'
+import HalfDayHoursFields from '../../Components/HalfDayHoursFields'
 import { storageUrl } from '../../utils/storageUrl'
+import { formatHalfDaySchedule, halfDayError, parseHalfDaySchedule } from '../../utils/storeSchedule'
 
 const tabOrder = ['about', 'vendors', 'products', 'insights']
 const vendorTabOrder = ['about', 'products', 'orders']
@@ -89,6 +91,19 @@ function parseTimeToInput(timeStr) {
   if (period === 'PM' && hours !== 12) hours += 12
   if (period === 'AM' && hours === 12) hours = 0
   return `${String(hours).padStart(2, '0')}:${minutes}`
+}
+
+function scheduleFieldsFromShop(shop) {
+  const hoursParts = shop?.operating_hours ? String(shop.operating_hours).split(' - ') : []
+  const halfDay = parseHalfDaySchedule(shop?.half_day_schedule)
+  return {
+    operatingDays: parseOperatingDays(shop?.operating_days),
+    openingTime: hoursParts[0] ? parseTimeToInput(hoursParts[0]) : '',
+    closingTime: hoursParts[1] ? parseTimeToInput(hoursParts[1]) : '',
+    halfDay: halfDay.day,
+    halfDayOpening: halfDay.opening,
+    halfDayClosing: halfDay.closing,
+  }
 }
 
 function vendorDisplayName(v) {
@@ -181,11 +196,6 @@ function formatShopAddress(street, barangay) {
 
 function shopPermitUrl(permitUrl) {
   return storageUrl(permitUrl)
-}
-
-function isPermitPdf(url) {
-  if (!url) return false
-  return /\.pdf(\?|$)/i.test(url)
 }
 
 function InsightTrendBadge({ trend }) {
@@ -564,15 +574,12 @@ export default function AgrivetStoreInformation({
       longitude: Number.isFinite(lng) ? lng : 121.0583,
       operatingDays: shop.operating_days || '—',
       operatingHours: shop.operating_hours || '—',
-      bankName: shop.bank_name || '',
-      accountName: shop.account_name || '',
-      accountNumber: shop.account_number || '',
+      halfDay: formatHalfDaySchedule(shop.half_day_schedule),
       contactNumber: shop.contact_number || '',
       coverPhoto: shopPermitUrl(shop.logo_url),
-      permitPhoto: shopPermitUrl(shop.permit_url),
-      permitIsPdf: isPermitPdf(shopPermitUrl(shop.permit_url)),
+      profilePhoto: storageUrl(agrivet?.logo_url),
     }
-  }, [shop, agrivetInactive])
+  }, [shop, agrivet, agrivetInactive])
 
   const [activeTab, setActiveTab] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -647,6 +654,8 @@ export default function AgrivetStoreInformation({
         } else {
           showSuccess('add', flash.success)
         }
+      } else if (lower.includes('logo') || lower.includes('banner')) {
+        showSuccess('branding', flash.success)
       } else if (lower.includes('reactivated') || lower.includes('deactivated')) {
         showSuccess('status', store.storeName)
       } else if (lower.includes('cover photo') || lower.includes('shop updated') || lower.includes('business permit')) {
@@ -657,6 +666,7 @@ export default function AgrivetStoreInformation({
 
   // Edit Store Information modal state
   const [showEditStoreModal, setShowEditStoreModal] = useState(false)
+  const [scheduleError, setScheduleError] = useState('')
   const [showEditStoreConfirmModal, setShowEditStoreConfirmModal] = useState(false)
   const [showStoreStatusConfirmModal, setShowStoreStatusConfirmModal] = useState(false)
   const [isUpdatingStoreStatus, setIsUpdatingStoreStatus] = useState(false)
@@ -672,6 +682,9 @@ export default function AgrivetStoreInformation({
         operatingDays: [],
         openingTime: '',
         closingTime: '',
+        halfDay: '',
+        halfDayOpening: '',
+        halfDayClosing: '',
         bankName: '',
         accountName: '',
         accountNumber: '',
@@ -680,7 +693,6 @@ export default function AgrivetStoreInformation({
         shopLong: '',
       }
     }
-    const hoursParts = shop.operating_hours ? shop.operating_hours.split(' - ') : []
     const { street, barangay } = parseShopAddress(shop?.shop_address)
     return {
       storeName: shop.shop_name || '',
@@ -689,9 +701,7 @@ export default function AgrivetStoreInformation({
       city: shop.shop_city || '',
       province: shop.shop_province || '',
       zipCode: shop.shop_postal_code || '',
-      operatingDays: parseOperatingDays(shop.operating_days),
-      openingTime: hoursParts[0] ? parseTimeToInput(hoursParts[0]) : '',
-      closingTime: hoursParts[1] ? parseTimeToInput(hoursParts[1]) : '',
+      ...scheduleFieldsFromShop(shop),
       bankName: shop.bank_name || '',
       accountName: shop.account_name || '',
       accountNumber: shop.account_number || '',
@@ -703,15 +713,10 @@ export default function AgrivetStoreInformation({
 
   // Cover photo modal state
   const [showEditCoverPhotoModal, setShowEditCoverPhotoModal] = useState(false)
+  const [showBrandingModal, setShowBrandingModal] = useState(false)
   const [coverPhotoPreview, setCoverPhotoPreview] = useState(null)
   const [coverPhotoFile, setCoverPhotoFile] = useState(null)
   const [showCoverPhotoConfirmModal, setShowCoverPhotoConfirmModal] = useState(false)
-
-  const [showEditPermitModal, setShowEditPermitModal] = useState(false)
-  const [permitPreview, setPermitPreview] = useState(null)
-  const [permitFile, setPermitFile] = useState(null)
-  const [permitPreviewIsPdf, setPermitPreviewIsPdf] = useState(false)
-  const [showPermitConfirmModal, setShowPermitConfirmModal] = useState(false)
 
   // Vendors UI state
   const [showReassignModal, setShowReassignModal] = useState(false)
@@ -798,8 +803,8 @@ export default function AgrivetStoreInformation({
 
   const openEditStoreModal = () => {
     if (shop) {
-      const hoursParts = shop.operating_hours ? shop.operating_hours.split(' - ') : []
       const { street, barangay } = parseShopAddress(shop.shop_address)
+      setScheduleError('')
       setEditStoreData({
         storeName: shop.shop_name || '',
         street,
@@ -807,9 +812,7 @@ export default function AgrivetStoreInformation({
         city: shop.shop_city || '',
         province: shop.shop_province || '',
         zipCode: shop.shop_postal_code || '',
-        operatingDays: parseOperatingDays(shop.operating_days),
-        openingTime: hoursParts[0] ? parseTimeToInput(hoursParts[0]) : '',
-        closingTime: hoursParts[1] ? parseTimeToInput(hoursParts[1]) : '',
+        ...scheduleFieldsFromShop(shop),
         bankName: shop.bank_name || '',
         accountName: shop.account_name || '',
         accountNumber: shop.account_number || '',
@@ -822,6 +825,17 @@ export default function AgrivetStoreInformation({
   }
 
   const handleSaveStoreInfo = () => {
+    const message = halfDayError({
+      day: editStoreData.halfDay,
+      opening: editStoreData.halfDayOpening,
+      closing: editStoreData.halfDayClosing,
+      operatingDays: editStoreData.operatingDays,
+    })
+    if (message) {
+      setScheduleError(message)
+      return
+    }
+    setScheduleError('')
     setShowEditStoreConfirmModal(true)
   }
 
@@ -855,9 +869,9 @@ export default function AgrivetStoreInformation({
       shop_postal_code: editStoreData.zipCode,
       operating_days: formatOperatingDays(editStoreData.operatingDays),
       operating_hours: formatOperatingHours(editStoreData.openingTime, editStoreData.closingTime),
-      bank_name: editStoreData.bankName,
-      account_name: editStoreData.accountName,
-      account_number: editStoreData.accountNumber,
+      half_day: editStoreData.halfDay,
+      half_day_opening: editStoreData.halfDayOpening,
+      half_day_closing: editStoreData.halfDayClosing,
       contact_number: editStoreData.contactNumber,
       shop_lat: editStoreData.shopLat || null,
       shop_long: editStoreData.shopLong || null,
@@ -869,8 +883,9 @@ export default function AgrivetStoreInformation({
         setShowEditStoreModal(false)
         showSuccess('storeEdit', editStoreData.storeName)
       },
-      onError: () => {
+      onError: (errors) => {
         setShowEditStoreConfirmModal(false)
+        setScheduleError(errors.half_day || errors.half_day_opening || errors.half_day_closing || '')
       },
     })
   }
@@ -904,52 +919,6 @@ export default function AgrivetStoreInformation({
       },
       onError: () => {
         setShowCoverPhotoConfirmModal(false)
-      },
-    })
-  }
-
-  const resetPermitModalState = () => {
-    setPermitPreview(null)
-    setPermitFile(null)
-    setPermitPreviewIsPdf(false)
-  }
-
-  const handlePermitUpload = (e) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-
-    setPermitFile(file)
-    const isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name)
-    setPermitPreviewIsPdf(isPdf)
-
-    if (isPdf) {
-      setPermitPreview(null)
-      return
-    }
-
-    const reader = new FileReader()
-    reader.onloadend = () => setPermitPreview(reader.result)
-    reader.readAsDataURL(file)
-  }
-
-  const handleSavePermit = () => {
-    if (!permitFile) return
-    setShowPermitConfirmModal(true)
-  }
-
-  const handleConfirmSavePermit = () => {
-    const permitPhotoUrl = `${shopBasePath}/permit-photo`
-    router.post(permitPhotoUrl, { permit_image: permitFile }, {
-      forceFormData: true,
-      preserveScroll: true,
-      onSuccess: () => {
-        setShowPermitConfirmModal(false)
-        setShowEditPermitModal(false)
-        resetPermitModalState()
-        showSuccess('storeEdit', store.storeName)
-      },
-      onError: () => {
-        setShowPermitConfirmModal(false)
       },
     })
   }
@@ -1398,9 +1367,11 @@ export default function AgrivetStoreInformation({
                             ? 'Store Status Updated'
                             : successMessageType === 'product'
                               ? getProductSuccessTitle(successVendorName)
-                              : successMessageType === 'storeEdit'
-                                ? 'Store Information Updated'
-                                : 'Vendor Status Updated'}
+                              : successMessageType === 'branding'
+                                ? 'Logo and Banner Updated'
+                                : successMessageType === 'storeEdit'
+                                  ? 'Store Information Updated'
+                                  : 'Vendor Status Updated'}
                   </h3>
                   <p className="text-xs text-white/90 mt-0.5">
                     {successMessageType === 'add'
@@ -1413,9 +1384,11 @@ export default function AgrivetStoreInformation({
                             ? `${successVendorName} is now ${store.status}`
                             : successMessageType === 'product'
                               ? successVendorName
-                              : successMessageType === 'storeEdit'
-                                ? `${successVendorName}'s information has been successfully updated`
-                                : `${successVendorName}'s status has been updated`}
+                              : successMessageType === 'branding'
+                                ? successVendorName
+                                : successMessageType === 'storeEdit'
+                                  ? `${successVendorName}'s information has been successfully updated`
+                                  : `${successVendorName}'s status has been updated`}
                   </p>
                 </div>
                 <button onClick={() => setShowSuccessMessage(false)} className="p-1.5 hover:bg-white/20 rounded transition-colors">
@@ -1460,14 +1433,40 @@ export default function AgrivetStoreInformation({
             </div>
 
             {/* Page Info */}
-            <div className="px-0 pt-6 pb-4 border-b border-[#E5E7EB]">
-              <div>
-                <h1 className="text-[32px] font-bold text-[#102059] leading-tight mb-1">{store.storeName}</h1>
-                <p className="text-sm text-[#65676B] mb-3">
-                  {agrivet.name} {agrivet.status ? `(${asTitleStatus(agrivet.status)})` : ''}
-                </p>
+            <div className="border-b border-[#E5E7EB] px-0 pb-4">
+              <div className="flex items-end gap-5">
+                <div className="relative -mt-14 h-28 w-28 shrink-0">
+                  <div className="h-full w-full overflow-hidden rounded-full border-4 border-white bg-[#F8F9FB] shadow-md">
+                    {store.profilePhoto ? (
+                      <img
+                        src={store.profilePhoto}
+                        alt={`${agrivet.name} logo`}
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <div className="flex h-full w-full items-center justify-center">
+                        <Store className="h-10 w-10 text-[#D1D5DB]" aria-hidden />
+                      </div>
+                    )}
+                  </div>
+                  {isOwnerManager && (
+                    <button
+                      type="button"
+                      className="absolute bottom-1 right-1 flex h-8 w-8 items-center justify-center rounded-full border border-[#E5E7EB] bg-white shadow-md transition-all hover:scale-110"
+                      onClick={() => setShowBrandingModal(true)}
+                      title="Update logo and banner"
+                    >
+                      <Pencil className="h-4 w-4 text-[#244693]" />
+                    </button>
+                  )}
+                </div>
+                <div className="min-w-0 flex-1 pt-4">
+                  <h1 className="text-[32px] font-bold text-[#102059] leading-tight mb-1">{store.storeName}</h1>
+                  <p className="text-sm text-[#65676B] mb-3">
+                    {agrivet.name} {agrivet.status ? `(${asTitleStatus(agrivet.status)})` : ''}
+                  </p>
 
-                <div className="flex items-center gap-3 justify-between">
+                  <div className="flex items-center gap-3 justify-between">
                   <div className="flex items-center gap-3">
                     <button
                       type="button"
@@ -1509,6 +1508,7 @@ export default function AgrivetStoreInformation({
                     </button>
                   )}
                 </div>
+              </div>
               </div>
             </div>
 
@@ -1600,6 +1600,15 @@ export default function AgrivetStoreInformation({
                             <p className="text-sm font-semibold text-[#102059]">{store.operatingHours}</p>
                           </div>
                         </div>
+                        {store.halfDay && (
+                          <div className="flex items-start gap-3">
+                            <Clock className="w-5 h-5 text-[#244693] mt-0.5 flex-shrink-0" />
+                            <div>
+                              <p className="text-xs text-[#65676B] mb-1">Half-day</p>
+                              <p className="text-sm font-semibold text-[#102059]">{store.halfDay}</p>
+                            </div>
+                          </div>
+                        )}
                         <div className="flex items-start gap-3">
                           <Clock className="w-5 h-5 text-[#244693] mt-0.5 flex-shrink-0" />
                           <div>
@@ -1607,73 +1616,6 @@ export default function AgrivetStoreInformation({
                             <p className="text-sm font-semibold text-[#102059]">{store.operatingDays}</p>
                           </div>
                         </div>
-                      </div>
-                    </div>
-
-                    <div className="bg-white rounded-lg border border-[#E5E7EB] p-4">
-                      <h2 className="text-xl font-bold text-[#102059] mb-4">Bank Details</h2>
-                      <div className="space-y-3">
-                        <div className="flex items-start gap-3">
-                          <Landmark className="w-5 h-5 text-[#244693] mt-0.5 flex-shrink-0" />
-                          <div>
-                            <p className="text-xs text-[#65676B] mb-1">Bank Name</p>
-                            <p className="text-sm font-semibold text-[#102059]">{store.bankName || '—'}</p>
-                          </div>
-                        </div>
-                        <div className="flex items-start gap-3">
-                          <Landmark className="w-5 h-5 text-[#244693] mt-0.5 flex-shrink-0" />
-                          <div>
-                            <p className="text-xs text-[#65676B] mb-1">Account Name</p>
-                            <p className="text-sm font-semibold text-[#102059]">{store.accountName || '—'}</p>
-                          </div>
-                        </div>
-                        <div className="flex items-start gap-3">
-                          <Landmark className="w-5 h-5 text-[#244693] mt-0.5 flex-shrink-0" />
-                          <div>
-                            <p className="text-xs text-[#65676B] mb-1">Account Number</p>
-                            <p className="text-sm font-semibold text-[#102059]">{store.accountNumber || '—'}</p>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="bg-white rounded-lg border border-[#E5E7EB] p-4">
-                      <h2 className="text-xl font-bold text-[#102059] mb-4">Business Permit</h2>
-                      <div className="rounded-lg overflow-hidden border border-[#E5E7EB] relative">
-                        {store.permitIsPdf ? (
-                          <div className="flex flex-col items-center justify-center gap-3 bg-[#F9FAFB] p-10">
-                            <p className="text-sm font-semibold text-[#102059]">PDF document uploaded</p>
-                            {store.permitPhoto && (
-                              <a
-                                href={store.permitPhoto}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-sm font-semibold text-[#244693] hover:underline"
-                              >
-                                View business permit
-                              </a>
-                            )}
-                          </div>
-                        ) : (
-                          <img
-                            src={
-                              store.permitPhoto ||
-                              'https://images.unsplash.com/photo-1524995997946-a1c2e315a42f?auto=format&fit=crop&w=1200&q=60'
-                            }
-                            alt="Business Permit"
-                            className="w-full h-auto object-cover"
-                          />
-                        )}
-                        {!isVendor && (
-                          <button
-                            type="button"
-                            className="absolute top-3 right-3 w-10 h-10 bg-white/90 hover:bg-white rounded-full flex items-center justify-center shadow-lg transition-all hover:scale-110"
-                            onClick={() => setShowEditPermitModal(true)}
-                            title="Update business permit"
-                          >
-                            <Pencil className="w-5 h-5 text-[#244693]" />
-                          </button>
-                        )}
                       </div>
                     </div>
                   </div>
@@ -2566,7 +2508,9 @@ export default function AgrivetStoreInformation({
                         barangay: loc.barangay ?? prev.barangay,
                         city: loc.city ?? prev.city,
                         province: loc.province ?? prev.province,
-                        zipCode: loc.postal_code ?? prev.zipCode,
+                        zipCode: loc.postal_code
+                          ? String(loc.postal_code).replace(/\D/g, '').slice(0, 4)
+                          : prev.zipCode,
                         shopLat: loc.latitude != null ? String(loc.latitude) : '',
                         shopLong: loc.longitude != null ? String(loc.longitude) : '',
                       }))
@@ -2620,40 +2564,26 @@ export default function AgrivetStoreInformation({
                     />
                   </div>
                 </div>
-                <div>
-                  <label className="block text-sm font-semibold text-[#102059] mb-2">Bank Details</label>
-                  <div className="grid grid-cols-3 gap-4">
-                    <div>
-                      <label className="block text-xs text-[#65676B] mb-1">Bank Name</label>
-                      <input
-                        type="text"
-                        value={editStoreData.bankName}
-                        onChange={(e) => setEditStoreData({ ...editStoreData, bankName: e.target.value })}
-                        className="w-full px-4 py-2.5 border border-[#E5E7EB] rounded-lg text-sm text-[#102059] focus:outline-none focus:border-[#244693]"
-                        placeholder="e.g. BDO, BPI"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs text-[#65676B] mb-1">Account Name</label>
-                      <input
-                        type="text"
-                        value={editStoreData.accountName}
-                        onChange={(e) => setEditStoreData({ ...editStoreData, accountName: e.target.value })}
-                        className="w-full px-4 py-2.5 border border-[#E5E7EB] rounded-lg text-sm text-[#102059] focus:outline-none focus:border-[#244693]"
-                        placeholder="Account holder name"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs text-[#65676B] mb-1">Account Number</label>
-                      <input
-                        type="text"
-                        inputMode="numeric"
-                        value={editStoreData.accountNumber}
-                        onChange={(e) => setEditStoreData({ ...editStoreData, accountNumber: e.target.value.replace(/\D/g, '') })}
-                        className="w-full px-4 py-2.5 border border-[#E5E7EB] rounded-lg text-sm text-[#102059] focus:outline-none focus:border-[#244693]"
-                        placeholder="Account number"
-                      />
-                    </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-semibold text-[#102059] mb-2" htmlFor="edit-store-zip-code">
+                      Zip Code
+                    </label>
+                    <input
+                      id="edit-store-zip-code"
+                      type="text"
+                      inputMode="numeric"
+                      maxLength={4}
+                      value={editStoreData.zipCode}
+                      onChange={(e) =>
+                        setEditStoreData({
+                          ...editStoreData,
+                          zipCode: e.target.value.replace(/\D/g, '').slice(0, 4),
+                        })
+                      }
+                      className="w-full px-4 py-2.5 border border-[#E5E7EB] rounded-lg text-sm text-[#102059] focus:outline-none focus:border-[#244693]"
+                      placeholder="e.g. 6000"
+                    />
                   </div>
                 </div>
                 <div>
@@ -2727,6 +2657,22 @@ export default function AgrivetStoreInformation({
                     </div>
                   </div>
                 </div>
+                <HalfDayHoursFields
+                  operatingDays={editStoreData.operatingDays}
+                  day={editStoreData.halfDay}
+                  opening={editStoreData.halfDayOpening}
+                  closing={editStoreData.halfDayClosing}
+                  error={scheduleError}
+                  onChange={(next) => {
+                    setScheduleError('')
+                    setEditStoreData((current) => ({
+                      ...current,
+                      halfDay: next.day,
+                      halfDayOpening: next.opening,
+                      halfDayClosing: next.closing,
+                    }))
+                  }}
+                />
               </div>
               <div className="sticky bottom-0 bg-white border-t border-[#E5E7EB] px-6 py-4 flex items-center justify-end gap-3">
                 <button
@@ -2840,6 +2786,15 @@ export default function AgrivetStoreInformation({
           </div>
         )}
 
+        {isOwnerManager && (
+          <AgrivetBrandingModal
+            open={showBrandingModal}
+            onClose={() => setShowBrandingModal(false)}
+            logoUrl={agrivet?.logo_url}
+            bannerUrl={agrivet?.banner_url}
+          />
+        )}
+
         {/* Update Cover Photo Modal */}
         {showEditCoverPhotoModal && (
           <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
@@ -2917,110 +2872,6 @@ export default function AgrivetStoreInformation({
                 <button
                   className="px-4 py-2.5 bg-[#244693] text-white text-sm font-semibold rounded-lg hover:bg-[#1a3570] transition-colors"
                   onClick={handleConfirmSaveCoverPhoto}
-                >
-                  Confirm
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Update Business Permit Modal */}
-        {showEditPermitModal && (
-          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-            <div className="bg-white rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-              <div className="sticky top-0 bg-white border-b border-[#E5E7EB] px-6 py-4 flex items-center justify-between">
-                <h3 className="text-xl font-bold text-[#102059]">Update Business Permit</h3>
-                <button
-                  type="button"
-                  className="w-8 h-8 bg-[#F0F2F5] hover:bg-[#E5E7EB] rounded-full flex items-center justify-center text-[#65676B] transition-colors"
-                  onClick={() => {
-                    setShowEditPermitModal(false)
-                    resetPermitModalState()
-                  }}
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-              <div className="p-6 space-y-6">
-                <div>
-                  <label className="block text-sm font-semibold text-[#102059] mb-3">Upload New Business Permit</label>
-                  <input
-                    type="file"
-                    accept="image/*,.pdf"
-                    onChange={handlePermitUpload}
-                    className="w-full px-4 py-2.5 border border-[#E5E7EB] rounded-lg text-sm text-[#102059] focus:outline-none focus:border-[#244693] file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-[#244693] file:text-white hover:file:bg-[#1a3570] file:cursor-pointer"
-                  />
-                  <p className="text-xs text-[#65676B] mt-2">PNG, JPG, WEBP, or PDF up to 10MB</p>
-                </div>
-                {permitPreviewIsPdf && permitFile && (
-                  <div className="rounded-lg border border-[#E5E7EB] bg-[#F9FAFB] p-6 text-center">
-                    <p className="text-sm font-semibold text-[#102059]">PDF selected: {permitFile.name}</p>
-                  </div>
-                )}
-                {permitPreview && !permitPreviewIsPdf && (
-                  <div>
-                    <label className="block text-sm font-semibold text-[#102059] mb-3">Preview</label>
-                    <div className="rounded-lg overflow-hidden border border-[#E5E7EB]">
-                      <img src={permitPreview} alt="Business Permit Preview" className="w-full h-auto object-cover" />
-                    </div>
-                  </div>
-                )}
-              </div>
-              <div className="sticky bottom-0 bg-white border-t border-[#E5E7EB] px-6 py-4 flex items-center justify-end gap-3">
-                <button
-                  type="button"
-                  className="px-4 py-2.5 bg-white text-[#65676B] border border-[#E5E7EB] text-sm font-semibold rounded-lg hover:bg-[#F9FAFB] transition-colors"
-                  onClick={() => {
-                    setShowEditPermitModal(false)
-                    resetPermitModalState()
-                  }}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  className="px-4 py-2.5 bg-[#244693] text-white text-sm font-semibold rounded-lg hover:bg-[#1a3570] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  onClick={handleSavePermit}
-                  disabled={!permitFile}
-                >
-                  Save Changes
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Business Permit Confirm Modal */}
-        {showPermitConfirmModal && (
-          <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4">
-            <div className="bg-white rounded-xl max-w-md w-full p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-xl font-bold text-[#102059]">Update Business Permit</h3>
-                <button
-                  type="button"
-                  className="w-8 h-8 bg-[#F0F2F5] hover:bg-[#E5E7EB] rounded-full flex items-center justify-center text-[#65676B] transition-colors"
-                  onClick={() => setShowPermitConfirmModal(false)}
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-              <p className="text-sm text-[#65676B] leading-relaxed">
-                Are you sure you want to update the business permit for{' '}
-                <span className="font-semibold text-[#102059]">{store.storeName}</span>?
-              </p>
-              <div className="flex items-center justify-end mt-6 gap-2">
-                <button
-                  type="button"
-                  className="px-4 py-2.5 bg-white border border-[#E5E7EB] text-sm font-semibold rounded-lg hover:bg-[#F9FAFB] transition-colors"
-                  onClick={() => setShowPermitConfirmModal(false)}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  className="px-4 py-2.5 bg-[#244693] text-white text-sm font-semibold rounded-lg hover:bg-[#1a3570] transition-colors"
-                  onClick={handleConfirmSavePermit}
                 >
                   Confirm
                 </button>

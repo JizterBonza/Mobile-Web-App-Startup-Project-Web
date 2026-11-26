@@ -2,8 +2,10 @@ import { useState, useEffect, useMemo } from 'react'
 import { useForm, router } from '@inertiajs/react'
 import { ArrowLeft, Plus, RotateCcw, Star, Store, Trash2, Upload } from 'lucide-react'
 import SuperAdminOrAdminLayout from '../../Layouts/SuperAdminOrAdminLayout'
+import HalfDayHoursFields from '../../Components/HalfDayHoursFields'
 import PinLocationMap from '../../Components/PinLocationMap'
 import { storageUrl } from '../../utils/storageUrl'
+import { formatHalfDaySchedule, halfDayError } from '../../utils/storeSchedule'
 
 const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 const FULL_DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
@@ -47,9 +49,8 @@ export default function AgrivetShops({ auth, agrivet, zones = [], shops = [], fl
   const [flashSuccessDismissed, setFlashSuccessDismissed] = useState(false)
   const [flashErrorDismissed, setFlashErrorDismissed] = useState(false)
   const [operatingDays, setOperatingDays] = useState([])
+  const [halfDayFormError, setHalfDayFormError] = useState('')
   const [storeImagePreview, setStoreImagePreview] = useState(null)
-  const [permitImagePreview, setPermitImagePreview] = useState(null)
-  const [permitIsPdf, setPermitIsPdf] = useState(false)
 
   const addForm = useForm({
     shop_name: '',
@@ -63,12 +64,11 @@ export default function AgrivetShops({ auth, agrivet, zones = [], shops = [], fl
     opening_time: '08:00',
     closing_time: '18:00',
     operating_days: '',
+    half_day: '',
+    half_day_opening: '',
+    half_day_closing: '',
     store_image: null,
-    permit_image: null,
     shop_status: 'active',
-    bank_name: '',
-    account_name: '',
-    account_number: '',
   })
 
   const editForm = useForm({
@@ -125,9 +125,8 @@ export default function AgrivetShops({ auth, agrivet, zones = [], shops = [], fl
   const resetAddFormState = () => {
     addForm.reset()
     setOperatingDays([])
+    setHalfDayFormError('')
     setStoreImagePreview(null)
-    setPermitImagePreview(null)
-    setPermitIsPdf(false)
   }
 
   // Modal close handlers with animation
@@ -197,14 +196,25 @@ export default function AgrivetShops({ auth, agrivet, zones = [], shops = [], fl
       alert('Please select at least one operating day for your store.')
       return
     }
-    if (!addForm.data.store_image || !addForm.data.permit_image) {
-      alert('Please upload both store photo and business permit.')
+    if (!addForm.data.store_image) {
+      alert('Please upload a store photo.')
       return
     }
     if (!addForm.data.opening_time || !addForm.data.closing_time) {
       alert('Please set both opening and closing times for your store.')
       return
     }
+    const halfDayMessage = halfDayError({
+      day: addForm.data.half_day,
+      opening: addForm.data.half_day_opening,
+      closing: addForm.data.half_day_closing,
+      operatingDays,
+    })
+    if (halfDayMessage) {
+      setHalfDayFormError(halfDayMessage)
+      return
+    }
+    setHalfDayFormError('')
 
     const daysSorted = [...operatingDays].sort((a, b) => FULL_DAYS.indexOf(a) - FULL_DAYS.indexOf(b))
     addForm.transform((data) => ({
@@ -229,22 +239,6 @@ export default function AgrivetShops({ auth, agrivet, zones = [], shops = [], fl
       addForm.setData('store_image', file)
       const reader = new FileReader()
       reader.onloadend = () => setStoreImagePreview(reader.result)
-      reader.readAsDataURL(file)
-    }
-  }
-
-  const handlePermitImageUpload = (e) => {
-    const file = e.target.files?.[0]
-    if (file) {
-      addForm.setData('permit_image', file)
-      const isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name)
-      setPermitIsPdf(isPdf)
-      if (isPdf) {
-        setPermitImagePreview(null)
-        return
-      }
-      const reader = new FileReader()
-      reader.onloadend = () => setPermitImagePreview(reader.result)
       reader.readAsDataURL(file)
     }
   }
@@ -540,6 +534,12 @@ export default function AgrivetShops({ auth, agrivet, zones = [], shops = [], fl
                           <span className="font-semibold text-[#102059]">Hours:</span>{' '}
                           {shop.operating_hours || '—'}
                         </div>
+                        {formatHalfDaySchedule(shop.half_day_schedule) && (
+                          <div>
+                            <span className="font-semibold text-[#102059]">Half-day:</span>{' '}
+                            {formatHalfDaySchedule(shop.half_day_schedule)}
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -853,57 +853,23 @@ export default function AgrivetShops({ auth, agrivet, zones = [], shops = [], fl
                       </div>
                     </div>
 
-                    <div className="row">
-                      <div className="col-md-12">
-                        <h6 className="text-muted mb-3">Bank Details <span className="text-muted">(optional)</span></h6>
-                      </div>
-                      <div className="col-md-4">
-                        <div className="form-group">
-                          <label>Bank Name</label>
-                          <input
-                            type="text"
-                            className={`form-control ${addForm.errors.bank_name ? 'is-invalid' : ''}`}
-                            value={addForm.data.bank_name}
-                            onChange={(e) => addForm.setData('bank_name', e.target.value)}
-                            placeholder="e.g. BDO, BPI"
-                          />
-                          {addForm.errors.bank_name && (
-                            <div className="invalid-feedback">{addForm.errors.bank_name}</div>
-                          )}
-                        </div>
-                      </div>
-                      <div className="col-md-4">
-                        <div className="form-group">
-                          <label>Account Name</label>
-                          <input
-                            type="text"
-                            className={`form-control ${addForm.errors.account_name ? 'is-invalid' : ''}`}
-                            value={addForm.data.account_name}
-                            onChange={(e) => addForm.setData('account_name', e.target.value)}
-                            placeholder="Account holder name"
-                          />
-                          {addForm.errors.account_name && (
-                            <div className="invalid-feedback">{addForm.errors.account_name}</div>
-                          )}
-                        </div>
-                      </div>
-                      <div className="col-md-4">
-                        <div className="form-group">
-                          <label>Account Number</label>
-                          <input
-                            type="text"
-                            inputMode="numeric"
-                            className={`form-control ${addForm.errors.account_number ? 'is-invalid' : ''}`}
-                            value={addForm.data.account_number}
-                            onChange={(e) => addForm.setData('account_number', e.target.value.replace(/\D/g, ''))}
-                            placeholder="Account number"
-                          />
-                          {addForm.errors.account_number && (
-                            <div className="invalid-feedback">{addForm.errors.account_number}</div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
+                    <HalfDayHoursFields
+                      variant="bootstrap"
+                      operatingDays={operatingDays}
+                      day={addForm.data.half_day}
+                      opening={addForm.data.half_day_opening}
+                      closing={addForm.data.half_day_closing}
+                      error={halfDayFormError || addForm.errors.half_day || addForm.errors.half_day_closing}
+                      onChange={(next) => {
+                        setHalfDayFormError('')
+                        addForm.setData((data) => ({
+                          ...data,
+                          half_day: next.day,
+                          half_day_opening: next.opening,
+                          half_day_closing: next.closing,
+                        }))
+                      }}
+                    />
 
                     <div className="form-group">
                       <label>Store front photo <span className="text-danger">*</span></label>
@@ -940,49 +906,6 @@ export default function AgrivetShops({ auth, agrivet, zones = [], shops = [], fl
                       </div>
                       {addForm.errors.store_image && (
                         <div className="text-danger small mt-1">{addForm.errors.store_image}</div>
-                      )}
-                    </div>
-
-                    <div className="form-group mb-0">
-                      <label>Business permit <span className="text-danger">*</span></label>
-                      <div
-                        className="rounded border border-dashed bg-light p-4 text-center"
-                        style={{ cursor: 'pointer' }}
-                      >
-                        <input
-                          id="add_permit_image"
-                          type="file"
-                          accept="image/*,.pdf"
-                          className="d-none"
-                          onChange={handlePermitImageUpload}
-                        />
-                        <label htmlFor="add_permit_image" className="mb-0 w-100" style={{ cursor: 'pointer' }}>
-                          {permitIsPdf ? (
-                            <div>
-                              <p className="font-weight-bold mb-1">PDF selected</p>
-                              <p className="text-muted small mb-0">Click to change file</p>
-                            </div>
-                          ) : permitImagePreview ? (
-                            <div>
-                              <img
-                                src={permitImagePreview}
-                                alt="Permit preview"
-                                className="img-fluid rounded mb-3"
-                                style={{ maxHeight: '16rem' }}
-                              />
-                              <p className="text-muted small mb-0">Click to change file</p>
-                            </div>
-                          ) : (
-                            <div>
-                              <Upload className="mx-auto mb-2 text-muted" size={40} />
-                              <p className="mb-1">Upload permit</p>
-                              <p className="text-muted small mb-0">PNG, JPG, PDF up to 10MB</p>
-                            </div>
-                          )}
-                        </label>
-                      </div>
-                      {addForm.errors.permit_image && (
-                        <div className="text-danger small mt-1">{addForm.errors.permit_image}</div>
                       )}
                     </div>
                   </div>

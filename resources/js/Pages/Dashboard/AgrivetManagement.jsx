@@ -3,6 +3,7 @@ import { Link, useForm, router } from '@inertiajs/react'
 import { Search, Trash2, Pencil, Store, Upload, X } from 'lucide-react'
 import SuperAdminOrAdminLayout from '../../Layouts/SuperAdminOrAdminLayout'
 import { storageUrl } from '../../utils/storageUrl'
+import { formatHalfDaySchedule } from '../../utils/storeSchedule'
 
 function getInitials(name) {
   if (!name || typeof name !== 'string') return '?'
@@ -41,6 +42,7 @@ function parseAgrivetPermits(permits) {
           permitDocumentUrl: parsed.permit_document_url || null,
           operatingDays: parsed.operating_days || '',
           operatingHours: parsed.operating_hours || '',
+          halfDaySchedule: parsed.half_day_schedule || '',
           notes: parsed.notes || '',
         }
       }
@@ -57,6 +59,7 @@ function serializeAgrivetPermits(structured, notes) {
     permit_document_url: structured.permitDocumentUrl,
     operating_days: structured.operatingDays,
     operating_hours: structured.operatingHours,
+    half_day_schedule: structured.halfDaySchedule || '',
     notes: notes || '',
   })
 }
@@ -87,6 +90,7 @@ export default function AgrivetManagement({ auth, agrivets = [], flash }) {
   const [statusFilter, setStatusFilter] = useState('All')
   const [itemsPerPage, setItemsPerPage] = useState(10)
   const [currentAgrivetPage, setCurrentAgrivetPage] = useState(1)
+  const [togglingAgrivetId, setTogglingAgrivetId] = useState(null)
 
   const addForm = useForm({
     name: '',
@@ -111,19 +115,6 @@ export default function AgrivetManagement({ auth, agrivets = [], flash }) {
     permits: '',
     logo: null,
     banner: null,
-    status: 'active',
-  })
-
-  const statusToggleForm = useForm({
-    name: '',
-    registered_business_name: '',
-    owner_name: '',
-    description: '',
-    contact_number: '',
-    email: '',
-    permits: '',
-    logo_url: '',
-    banner_url: '',
     status: 'active',
   })
 
@@ -248,23 +239,28 @@ export default function AgrivetManagement({ auth, agrivets = [], flash }) {
 
   const handleStatusToggle = (e, agrivet) => {
     e.stopPropagation()
-    if (statusToggleForm.processing) return
+    if (togglingAgrivetId !== null) return
     const newStatus = agrivet.status === 'active' ? 'inactive' : 'active'
-    statusToggleForm.setData({
-      name: agrivet.name,
-      registered_business_name: agrivet.registered_business_name || '',
-      owner_name: agrivet.owner_name || '',
-      description: agrivet.description || '',
-      contact_number: agrivet.contact_number || '',
-      email: agrivet.email || '',
-      permits: agrivet.permits || '',
-      logo_url: agrivet.logo_url || '',
-      banner_url: agrivet.banner_url || '',
-      status: newStatus,
-    })
-    statusToggleForm.put(`${getBaseRoute()}/${agrivet.id}`, {
-      preserveScroll: true,
-    })
+    setTogglingAgrivetId(agrivet.id)
+    router.put(
+      `${getBaseRoute()}/${agrivet.id}`,
+      {
+        name: agrivet.name,
+        registered_business_name: agrivet.registered_business_name || '',
+        owner_name: agrivet.owner_name || '',
+        description: agrivet.description || '',
+        contact_number: agrivet.contact_number || '',
+        email: agrivet.email || '',
+        permits: agrivet.permits || '',
+        logo_url: agrivet.logo_url || '',
+        banner_url: agrivet.banner_url || '',
+        status: newStatus,
+      },
+      {
+        preserveScroll: true,
+        onFinish: () => setTogglingAgrivetId(null),
+      },
+    )
   }
 
   const handleAddAgrivet = (e) => {
@@ -568,7 +564,7 @@ export default function AgrivetManagement({ auth, agrivets = [], flash }) {
                           <button
                             type="button"
                             onClick={(e) => handleStatusToggle(e, agrivet)}
-                            disabled={statusToggleForm.processing}
+                            disabled={togglingAgrivetId === agrivet.id}
                             className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-all duration-300 disabled:opacity-50 ${
                               agrivet.status === 'active' ? 'bg-[#00C950]' : 'bg-[#D1D5DB]'
                             }`}
@@ -1179,6 +1175,11 @@ export default function AgrivetManagement({ auth, agrivets = [], flash }) {
                                 <p className="text-sm text-[#102059]">
                                   {editPermitsStructured.operatingHours || '—'}
                                 </p>
+                                {formatHalfDaySchedule(editPermitsStructured.halfDaySchedule) && (
+                                  <p className="mt-1 text-xs text-[#65676B]">
+                                    Half-day: {formatHalfDaySchedule(editPermitsStructured.halfDaySchedule)}
+                                  </p>
+                                )}
                               </div>
                             </div>
 

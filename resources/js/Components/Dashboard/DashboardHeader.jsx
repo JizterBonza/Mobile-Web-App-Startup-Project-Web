@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, router, useForm, usePage } from '@inertiajs/react'
-import { Bell, ChevronDown, CreditCard, History, LogOut, Map, MessageSquareMore, RefreshCw, Settings, Ship, SlidersHorizontal, Smartphone, Ticket, Truck, Undo2, Wallet } from 'lucide-react'
+import { Bell, ChevronDown, CreditCard, History, LogOut, Map, MapPinned, MessageSquareMore, Package, RefreshCw, Settings, Ship, SlidersHorizontal, Smartphone, Star, Ticket, Truck, Undo2, Wallet } from 'lucide-react'
 import primaryLogo from '../../../../Logo/Primary Logo.png'
 
 /**
@@ -463,6 +463,8 @@ export const SUPER_ADMIN_HEADER_NAV = [
 ]
 
 export const SUPER_ADMIN_DROPDOWN_NAV = [
+    { label: 'Logistics Coordination', href: '/dashboard/super-admin/logistics', Icon: Package },
+    { label: 'Featured Section', href: '/dashboard/super-admin/featured', Icon: Star },
     { label: 'Shipping Partners', href: '/dashboard/super-admin/shipping-partners', Icon: Ship },
     { label: 'Activity Logs', href: '/dashboard/super-admin/activity-logs', Icon: History },
     { label: 'Refunds', href: '/dashboard/super-admin/refunds', Icon: Undo2 },
@@ -472,6 +474,7 @@ export const SUPER_ADMIN_DROPDOWN_NAV = [
     { label: 'Contact Messages', href: '/dashboard/super-admin/contact-messages', Icon: MessageSquareMore },
     { label: 'Delivery Methods', href: '/dashboard/super-admin/delivery-methods', Icon: Truck },
     { label: 'Delivery Revenue Settings', href: '/dashboard/super-admin/delivery-revenue-settings', Icon: SlidersHorizontal },
+    { label: 'Districts', href: '/dashboard/super-admin/districts', Icon: MapPinned },
     { label: 'Zones', href: '/dashboard/super-admin/zones', Icon: Map },
     { label: 'APK Management', id: 'apk-management', href: '/dashboard/super-admin/apk-management', Icon: Smartphone },
 ]
@@ -497,6 +500,8 @@ export const ADMIN_HEADER_NAV = [
 ]
 
 export const ADMIN_DROPDOWN_NAV = [
+    { label: 'Logistics Coordination', href: '/dashboard/admin/logistics', Icon: Package },
+    { label: 'Featured Section', href: '/dashboard/admin/featured', Icon: Star },
     { label: 'Shipping Partners', href: '/dashboard/admin/shipping-partners', Icon: Ship },
     { label: 'Activity Logs', href: '/dashboard/admin/activity-logs', Icon: History },
     { label: 'Refunds', href: '/dashboard/admin/refunds', Icon: Undo2 },
@@ -506,6 +511,7 @@ export const ADMIN_DROPDOWN_NAV = [
     { label: 'Contact Messages', href: '/dashboard/admin/contact-messages', Icon: MessageSquareMore },
     { label: 'Delivery Methods', href: '/dashboard/admin/delivery-methods', Icon: Truck },
     { label: 'Delivery Revenue Settings', href: '/dashboard/admin/delivery-revenue-settings', Icon: SlidersHorizontal },
+    { label: 'Districts', href: '/dashboard/admin/districts', Icon: MapPinned },
     { label: 'Zones', href: '/dashboard/admin/zones', Icon: Map },
 ]
 

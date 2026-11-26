@@ -285,6 +285,12 @@ export default function AdminLayout({ children, auth, title = 'Dashboard' }) {
                       </Link>
                     </li>
                     <li className="nav-item">
+                      <Link href="/dashboard/admin/districts" className="nav-link">
+                        <i className="nav-icon fas fa-map"></i>
+                        <p>Districts</p>
+                      </Link>
+                    </li>
+                    <li className="nav-item">
                       <Link href="/dashboard/admin/zones" className="nav-link">
                         <i className="nav-icon fas fa-map-marked-alt"></i>
                         <p>Zones</p>

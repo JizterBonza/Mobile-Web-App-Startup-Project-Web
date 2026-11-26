@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { router } from '@inertiajs/react'
+import { ChevronLeft } from 'lucide-react'
 import SuperAdminOrAdminLayout from '../../Layouts/SuperAdminOrAdminLayout'
 import OwnerManagerKlasmeytLayout from '../../Layouts/OwnerManagerKlasmeytLayout'
 import VendorKlasmeytLayout from '../../Layouts/VendorKlasmeytLayout'
@@ -202,7 +203,21 @@ export default function PayoutRecords({
       <div>
         <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <h1 className="mb-2 text-2xl font-semibold text-[#102059]">Payout Records</h1>
+            <div className="mb-2 flex items-center gap-3">
+              {auth?.user?.user_type === 'vendor' && (
+                <button
+                  type="button"
+                  onClick={() => router.visit('/dashboard/vendor')}
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#9CA3AF] text-white transition-colors hover:bg-[#6B7280]"
+                  title="Back to Dashboard"
+                  aria-label="Back to Dashboard"
+                  style={{ borderRadius: '20px' }}
+                >
+                  <ChevronLeft className="h-5 w-5" strokeWidth={2.5} />
+                </button>
+              )}
+              <h1 className="text-2xl font-semibold text-[#102059]">Payout Records</h1>
+            </div>
             <p className="text-sm text-[#6B7280]">
               Disbursements recorded from shop wallets to vendor bank accounts
             </p>

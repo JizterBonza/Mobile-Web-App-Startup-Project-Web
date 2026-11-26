@@ -7,6 +7,8 @@ use App\Http\Controllers\AgrivetController;
 use App\Http\Controllers\AppReleaseController;
 use App\Http\Controllers\BreederController;
 use App\Http\Controllers\FarmController;
+use App\Http\Controllers\FeaturedSectionController;
+use App\Http\Controllers\LogisticsCoordinationController;
 use App\Http\Controllers\GamefowlCatalogController;
 use App\Http\Controllers\GamefowlLookupController;
 use App\Http\Controllers\VendorController;
@@ -18,6 +20,7 @@ use App\Http\Controllers\PaymentMethodController;
 use App\Http\Controllers\ContactMessageController;
 use App\Http\Controllers\DeliveryMethodController;
 use App\Http\Controllers\DeliveryRevenueSettingController;
+use App\Http\Controllers\DistrictController;
 use App\Http\Controllers\ZoneController;
 use App\Http\Controllers\SuperAdminProductController;
 use App\Http\Controllers\ProductCatalogRequestController;
@@ -359,6 +362,14 @@ Route::middleware(['auth', 'session.valid', 'user.type:super_admin'])->prefix('d
     Route::delete('/{id}', [DeliveryRevenueSettingController::class, 'destroy'])->name('destroy');
 });
 
+// Super Admin Districts
+Route::middleware(['auth', 'session.valid', 'user.type:super_admin'])->prefix('dashboard/super-admin/districts')->name('dashboard.super-admin.districts.')->group(function () {
+    Route::get('/', [DistrictController::class, 'index'])->name('index');
+    Route::post('/', [DistrictController::class, 'store'])->name('store');
+    Route::put('/{id}', [DistrictController::class, 'update'])->name('update');
+    Route::delete('/{id}', [DistrictController::class, 'destroy'])->name('destroy');
+});
+
 // Super Admin Zones
 Route::middleware(['auth', 'session.valid', 'user.type:super_admin'])->prefix('dashboard/super-admin/zones')->name('dashboard.super-admin.zones.')->group(function () {
     Route::get('/', [ZoneController::class, 'index'])->name('index');
@@ -374,6 +385,38 @@ Route::middleware(['auth', 'session.valid', 'user.type:super_admin'])->prefix('d
     Route::put('/{id}', [VoucherController::class, 'update'])->name('update');
     Route::delete('/{id}', [VoucherController::class, 'destroy'])->name('destroy');
 });
+
+// Logistics Coordination: Agrivet store orders and products (Super Admin and Admin)
+foreach (['super_admin' => 'super-admin', 'admin' => 'admin'] as $logisticsRole => $logisticsSegment) {
+    Route::middleware(['auth', 'session.valid', "user.type:{$logisticsRole}"])
+        ->prefix("dashboard/{$logisticsSegment}/logistics")
+        ->name("dashboard.{$logisticsSegment}.logistics.")
+        ->group(function () {
+            Route::get('/', [LogisticsCoordinationController::class, 'orders'])->name('orders');
+            Route::get('/products', [LogisticsCoordinationController::class, 'products'])->name('products');
+            Route::patch('/orders/{orderId}/accept', [LogisticsCoordinationController::class, 'acceptOrder'])->whereNumber('orderId')->name('orders.accept');
+            Route::patch('/orders/{orderId}/decline', [LogisticsCoordinationController::class, 'declineOrder'])->whereNumber('orderId')->name('orders.decline');
+            Route::patch('/orders/{orderId}/ready', [LogisticsCoordinationController::class, 'markOrderReady'])->whereNumber('orderId')->name('orders.ready');
+            Route::patch('/orders/{orderId}/done-store-pickup', [LogisticsCoordinationController::class, 'doneStorePickup'])->whereNumber('orderId')->name('orders.done-store-pickup');
+            Route::patch('/orders/{orderId}/items/{orderItemId}/done-preparing', [LogisticsCoordinationController::class, 'donePreparingItem'])
+                ->whereNumber(['orderId', 'orderItemId'])
+                ->name('orders.items.done-preparing');
+        });
+}
+
+// Featured Section for the mobile app (Super Admin and Admin share one list)
+foreach (['super_admin' => 'super-admin', 'admin' => 'admin'] as $featuredRole => $featuredSegment) {
+    Route::middleware(['auth', 'session.valid', "user.type:{$featuredRole}"])
+        ->prefix("dashboard/{$featuredSegment}/featured")
+        ->name("dashboard.{$featuredSegment}.featured.")
+        ->group(function () {
+            Route::get('/', [FeaturedSectionController::class, 'index'])->name('index');
+            Route::post('/', [FeaturedSectionController::class, 'store'])->name('store');
+            Route::put('/reorder', [FeaturedSectionController::class, 'reorder'])->name('reorder');
+            Route::patch('/{featuredEntry}/active', [FeaturedSectionController::class, 'toggle'])->whereNumber('featuredEntry')->name('toggle');
+            Route::delete('/{featuredEntry}', [FeaturedSectionController::class, 'destroy'])->whereNumber('featuredEntry')->name('destroy');
+        });
+}
 
 // Super Admin Support
 Route::get('/dashboard/super-admin/support', [DashboardController::class, 'superAdminSupport'])
@@ -404,6 +447,7 @@ Route::middleware(['auth', 'session.valid', 'user.type:owner_manager'])->prefix(
     Route::put('/farm', [DashboardController::class, 'ownerManagerUpdateFarm'])->name('farm.update');
     Route::patch('/farm/status', [DashboardController::class, 'ownerManagerUpdateFarmStatus'])->name('farm.status');
     Route::post('/farm/cover', [DashboardController::class, 'ownerManagerUpdateFarmCover'])->name('farm.cover');
+    Route::post('/branding', [DashboardController::class, 'ownerManagerUpdateBranding'])->name('branding');
     Route::get('/stores', [DashboardController::class, 'ownerManagerStores'])->name('stores');
     Route::post('/stores', [DashboardController::class, 'ownerManagerStoreShop'])->name('stores.store');
     Route::get('/stores/{shopId}/store-information', [DashboardController::class, 'ownerManagerStoreInformation'])->name('stores.store-information');
@@ -641,6 +685,14 @@ Route::middleware(['auth', 'session.valid', 'user.type:admin'])->prefix('dashboa
     Route::put('/{id}', [DeliveryRevenueSettingController::class, 'update'])->name('update');
     Route::post('/{id}/activate', [DeliveryRevenueSettingController::class, 'activate'])->name('activate');
     Route::delete('/{id}', [DeliveryRevenueSettingController::class, 'destroy'])->name('destroy');
+});
+
+// Admin Districts
+Route::middleware(['auth', 'session.valid', 'user.type:admin'])->prefix('dashboard/admin/districts')->name('dashboard.admin.districts.')->group(function () {
+    Route::get('/', [DistrictController::class, 'index'])->name('index');
+    Route::post('/', [DistrictController::class, 'store'])->name('store');
+    Route::put('/{id}', [DistrictController::class, 'update'])->name('update');
+    Route::delete('/{id}', [DistrictController::class, 'destroy'])->name('destroy');
 });
 
 // Admin Zones

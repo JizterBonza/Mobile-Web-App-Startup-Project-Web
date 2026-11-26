@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Farm;
+use App\Models\GamefowlLookup;
 use App\Services\FarmListingDiscoveryService;
 use App\Support\GeoDistance;
 use Illuminate\Database\Eloquent\Builder;
@@ -10,6 +11,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
 class FarmApiController extends Controller
@@ -89,14 +91,31 @@ class FarmApiController extends Controller
             : $this->notFound('Farm');
     }
 
-    public function farmListings(int $id): JsonResponse
+    public function bloodlines(int $id): JsonResponse
     {
         $farm = Farm::query()->where('status', 'active')->find($id);
         if (! $farm) {
             return $this->notFound('Farm');
         }
 
-        $listings = $this->discovery->listings(['farm_id' => $id]);
+        return $this->collectionResponse($this->discovery->bloodlines($id));
+    }
+
+    public function farmListings(Request $request, int $id): JsonResponse
+    {
+        $farm = Farm::query()->where('status', 'active')->find($id);
+        if (! $farm) {
+            return $this->notFound('Farm');
+        }
+
+        $data = $this->validateQuery($request, [
+            'bloodline_id' => $this->bloodlineIdRule(),
+        ]);
+
+        $listings = $this->discovery->listings([
+            'farm_id' => $id,
+            ...$this->bloodlineFilter($data),
+        ]);
 
         return response()->json([
             'success' => true,
@@ -110,6 +129,7 @@ class FarmApiController extends Controller
             'farm_id' => 'nullable|integer|min:1',
             'search' => 'nullable|string|max:100',
             'is_bundle' => 'nullable|boolean',
+            'bloodline_id' => $this->bloodlineIdRule(),
         ]);
 
         return $this->collectionResponse($this->discovery->listings($data));
@@ -122,6 +142,31 @@ class FarmApiController extends Controller
         return $listing
             ? response()->json(['success' => true, 'data' => $listing])
             : $this->notFound('Listing');
+    }
+
+    /**
+     * @return array<int, mixed>
+     */
+    private function bloodlineIdRule(): array
+    {
+        return [
+            'nullable',
+            'integer',
+            Rule::exists('gamefowl_lookups', 'id')->where('type', GamefowlLookup::TYPE_BLOODLINE),
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @return array<string, int>
+     */
+    private function bloodlineFilter(array $data): array
+    {
+        if (! filled($data['bloodline_id'] ?? null)) {
+            return [];
+        }
+
+        return ['bloodline_id' => (int) $data['bloodline_id']];
     }
 
     private function validateQuery(Request $request, array $rules): array

@@ -573,8 +573,12 @@ class FarmOrderService
                 'shipping_fee' => FarmCheckoutService::money($shipping),
             ]);
             $fee = FarmCheckoutService::money($shipping);
-            $remaining = FarmCheckoutService::money(max(0, (int) $order->total_cents - $this->paidCents($order)));
-            $this->notice($order, $order->customer_id, 'balance_due', "Pickup is set for {$pickupDate}. Please pay the remaining balance of {$remaining}.");
+            $remainingCents = max(0, (int) $order->total_cents - $this->paidCents($order));
+            $remaining = FarmCheckoutService::money($remainingCents);
+            $balanceNotice = $remainingCents === 0
+                ? "Pickup is set for {$pickupDate}."
+                : "Pickup is set for {$pickupDate}. Please pay the remaining balance of {$remaining}.";
+            $this->notice($order, $order->customer_id, 'balance_due', $balanceNotice);
             foreach (User::where('farm_id', $order->farm_id)->where('user_type', User::TYPE_OWNER_MANAGER)->pluck('id') as $ownerId) {
                 $this->notice($order, (int) $ownerId, 'pickup_date_set', "Pickup is set for {$pickupDate}. Shipping fee is {$fee}.");
             }
@@ -601,7 +605,8 @@ class FarmOrderService
         if ($order->fulfillment_method === 'delivery' && ! $admin) {
             abort_unless($this->preparingCompleted($order), 409, 'The farm must finish preparing the order before pickup can be scheduled.');
         }
-        abort_if($order->fully_paid_at, 409, 'Fully paid orders require a separate adjustment process.');
+        $pickupAlreadyPaid = $order->fulfillment_method === 'pickup' && $this->paidCents($order) >= (int) $order->subtotal_cents;
+        abort_if($order->fully_paid_at && ! $pickupAlreadyPaid, 409, 'Fully paid orders require a separate adjustment process.');
         abort_if($order->held_at && ! $admin, 409, 'An administrator must resolve this order hold.');
         $date = Carbon::createFromFormat('!Y-m-d', $pickupDate, 'Asia/Manila');
         abort_if($date->lt(Carbon::now('Asia/Manila')->startOfDay()->addDays(2)), 422, 'Pickup must be at least two calendar days ahead.');
@@ -720,9 +725,16 @@ class FarmOrderService
             'schedule_version' => $order->schedule_version, 'created_at' => now(), 'updated_at' => now(),
         ]);
         if ($inserted) {
+            $order->loadMissing('order.orderDetail');
+            $orderCode = trim((string) ($order->order?->orderDetail?->order_code ?? ''));
+
             Notification::createForUser(
                 $userId, 'farm_'.$event, 'Farm Order Update', $message, Notification::CATEGORY_ORDER,
-                $order->order, ['order_id' => $order->order_id, 'schedule_version' => $order->schedule_version],
+                $order->order, [
+                    'order_id' => $order->order_id,
+                    'order_code' => $orderCode !== '' ? $orderCode : null,
+                    'schedule_version' => $order->schedule_version,
+                ],
                 '/farm-orders/'.$order->order_id,
             );
         }
